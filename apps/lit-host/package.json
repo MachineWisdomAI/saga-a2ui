@@ -12,7 +12,10 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
-    "lit": "^3.3.3"
+    "@a2ui/lit": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "lit": "^3.3.3",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
