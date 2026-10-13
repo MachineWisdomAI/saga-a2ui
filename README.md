@@ -35,3 +35,18 @@ This is an npm workspace skeleton; the root is private and is never published. T
 ## License
 
 The SDK uses [Apache-2.0](LICENSE). Preserve applicable third-party licenses and notices when adding dependencies or extracted code.
+
+## Local development
+
+Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No global tools are needed.
+
+    npm ci                              # install from the committed lockfile
+    npm start                           # Vite dev server at http://127.0.0.1:5173
+    npm run build                       # build the Lit app into apps/lit-host/dist
+    npm run typecheck                   # tsc --noEmit
+    npx playwright install chromium    # one-time browser download for the check below
+    npm run test:browser                # serves the built page and checks the visible title
+
+`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) runs typecheck, build and the browser check on every pull request.
+
+The only application is `apps/lit-host` (private, version 0.0.0, not published). The workspace root stays private and no SDK packages exist yet; the app is not enrolled with version-policy tooling because this repository has no `docs/version-policy.md` or updater yet.
