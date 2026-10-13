@@ -1,0 +1,11 @@
+# Local MachineWisdom agent/review artifacts
+.wise-agents/
+
+# Local credentials and generated files
+.env
+.env.*
+!.env.example
+.DS_Store
+node_modules/
+dist/
+coverage/

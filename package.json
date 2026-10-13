@@ -1,0 +1,13 @@
+{
+  "name": "saga-a2ui-workspace",
+  "private": true,
+  "description": "SAGA A2UI SDK workspace",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MachineWisdomAI/saga-a2ui.git"
+  }
+}
