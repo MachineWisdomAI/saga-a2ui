@@ -26,3 +26,4 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 - Apache-2.0 applies to SDK code; preserve third-party notices.
 - The plan is approved. Refine one task at a time; begin with the small Lit host slice after bootstrap. Do not repeat the entire planning process.
 - No packages or runtime behavior exist yet. Add build/test instructions with the first implementation.
+- Follow CONTRIBUTING.md for document names: supersedable documents use `YYYY-MM-DD_title_vN.ext`; evergreen guides keep stable names.
