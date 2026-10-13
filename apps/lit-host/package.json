@@ -1,0 +1,22 @@
+{
+  "name": "@saga-a2ui/lit-host-app",
+  "private": true,
+  "description": "Minimal Lit application used to prove the workspace builds and renders",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.4"
+  }
+}

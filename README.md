@@ -6,7 +6,7 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Repository setup is underway. No SDK packages, runnable example, or host compatibility are available yet. This repository starts private and is intended to become public after a separate publication decision.
+Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. No SDK packages or host compatibility are available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
 
 The first implementation will exercise a small Lit application in ChatGPT and Claude. React and Lynx remain Stage A targets; Alexa+ enters the initial host investigation.
 
@@ -30,8 +30,23 @@ FaithfulCard is planned to display supplied Markdown without rewriting or silent
 
 ## Development
 
-This is an npm workspace skeleton; the root is private and is never published. There are no build/test commands until the first implementation establishes a working dependency recipe. See [contributing](CONTRIBUTING.md) and [package layout](packages/README.md).
+This is an npm workspace skeleton; the root is private and is never published. Build and test commands for the local Lit application are under Local development below. See [contributing](CONTRIBUTING.md) and [package layout](packages/README.md).
 
 ## License
 
 The SDK uses [Apache-2.0](LICENSE). Preserve applicable third-party licenses and notices when adding dependencies or extracted code.
+
+## Local development
+
+Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No global tools are needed.
+
+    npm ci                              # install from the committed lockfile
+    npm start                           # Vite dev server at http://127.0.0.1:5173
+    npm run build                       # build the Lit app into apps/lit-host/dist
+    npm run typecheck                   # tsc --noEmit
+    npx playwright install chromium    # one-time browser download for the check below
+    npm run test:browser                # serves the built page and checks the visible title
+
+`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) runs typecheck, build and the browser check on every pull request.
+
+The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private and no SDK packages exist yet.
