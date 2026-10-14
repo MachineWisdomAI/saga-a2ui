@@ -50,3 +50,14 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
 `test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) runs typecheck, build and the browser check on every pull request.
 
 The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private and no SDK packages exist yet.
+
+### Fixture rendering (A2UI v0.9)
+
+`apps/lit-host` renders a developer-authored A2UI v0.9 surface from synthetic public data. Tested, exactly pinned versions: `@a2ui/lit` 0.13.0, `@a2ui/web_core` 0.13.0 (both Apache-2.0), `zod` 3.25.76 (required by both), `lit` 3.3.3, Node 22.12.0+. The optional peer `@a2ui/markdown-it` is deliberately not installed.
+
+- `src/catalog.ts`: application-owned catalog (`SagaPanel`: a title and a plain-text description bound to the data model).
+- `src/fixture.ts`: initial messages (`createSurface`, `updateComponents`, `updateDataModel`).
+- `src/main.ts`: `<saga-app>` feeds messages to one `MessageProcessor`; later `updateDataModel` messages change the visible text in place.
+- Invalid messages, unknown catalogs/components or wrongly typed properties produce a visible "Could not render this content" alert. Values render only as Lit text bindings, so supplied markup stays inert text. No Markdown is applied to the description.
+
+`e2e/fixture.spec.ts` drives the real processor through the page (`window.sagaSend`) and asserts rendered output. Recipe (same commands as above): `npm ci && npm run typecheck && npm run build && npx playwright install chromium && npm run test:browser`.
