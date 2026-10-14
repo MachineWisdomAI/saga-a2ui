@@ -37,7 +37,7 @@ function contentSecurityPolicy(csp: HostedResource['csp']): string {
     "default-src 'none'",
     `script-src 'unsafe-inline' ${resources}`.trim(), // the view is one inline script
     `style-src 'unsafe-inline' ${resources}`.trim(),
-    `img-src ${resources}`.trim() || "img-src 'none'",
+    `img-src ${resources || "'none'"}`,
     `connect-src ${csp.connectDomains.join(' ') || "'none'"}`,
     "base-uri 'none'",
     "form-action 'none'",
