@@ -18,19 +18,13 @@ mw-git-guard.sh install --repo .
 
 GitHub branch protections apply independently of these local hooks.
 
-## Epic acceptance
+## Review
 
 This repository owns SDK source, implementation issues, pull requests and contributor documentation. The separate private backstage repository holds internal planning and acceptance records; it is not a contributor destination. SDK issues and PRs must contain enough non-confidential context to implement and review the work without backstage access.
 
-For an epic acceptance PR, the First Officer coordinates the following gates and records evidence against the exact final code revisions:
+Every code PR must meet [CODING_STANDARDS.md](CODING_STANDARDS.md) and pass relevant checks on the reviewed commit. Reviewers inspect the changed code and affected interfaces, not just test results. Material standards violations require a bounded correction before approval even when CI passes; stylistic preferences remain non-blocking. Refactoring belongs in the implementation's red–green–refactor cycle.
 
-1. Run `codex-security:security-diff-scan` in a Daybreak cloud session on the latest epic code. Follow confirmed or plausible findings through `codex-security:fix-finding` with Hermes Helmet, then run `codex-security:validation` again in Daybreak on the repaired candidate. Account for every finding and coverage gap; record a no-findings result when no repair is needed. Scan and validate subsequent code changes before acceptance.
-2. Independently review [coding standards](CODING_STANDARDS.md), including the refactor step of red-green-refactor, and verify required checks after changes. Record a justified no-change result when no refactor is needed.
-3. Review engineering designs with `mw-writing-tech-specs` and human-facing documentation with `mw-writing-for-human-readers`, preserving technical meaning, evidence and approval state.
-4. Run `retro` over the epic's delivery and review history. Record code, writing and process improvements with their disposition: applied, deferred to a follow-up, rejected with a reason, or awaiting a decision. Revalidate affected gates after accepted changes.
-5. Review the closeout evidence and merge only after current-head reviews, required checks and acceptance gates pass, within the operator's authority. An explicit hold for human acceptance blocks merging until lifted.
-
-Contributors provide reproducible checks and clear documentation; the First Officer owns the specialist security sessions, orchestration and acceptance decision. Missing required evidence leaves acceptance open. Keep security-sensitive details in authorized private channels and include only safe summaries in SDK PRs. Package publication, production deployment and repository visibility changes require their own authority.
+Provide reproducible checks, clear documentation and any acceptance evidence required by the issue. Preserve explicit human acceptance and merge holds. Package publication, production deployment and repository visibility changes require their own authority.
 
 ## PR descriptions and artifacts
 
