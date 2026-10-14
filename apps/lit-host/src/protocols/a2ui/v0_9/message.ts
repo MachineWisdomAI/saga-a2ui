@@ -18,7 +18,8 @@ export interface A2uiMessageVisitor<Result> {
 }
 
 /**
- * A message that passed schema validation. Produced only by a decoder, never by casting.
+ * A message that passed schema validation. Produced only by a decoder, never by casting;
+ * no constructor is exported, so the decoder's schema check cannot be bypassed.
  * The wrapped value is a deep-frozen private copy, so neither the caller's original input
  * nor a visitor can change what was validated.
  */
@@ -26,31 +27,3 @@ export interface ValidatedMessage {
   /** Invoke the visitor operation for this message's case and return its result. */
   accept<Result>(visitor: A2uiMessageVisitor<Result>): Result;
 }
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
-  }
-  return value;
-}
-
-/** Wrap an already schema-validated message of one case. The caller owns the validation. */
-export const validatedMessage = {
-  createSurface: (message: CreateSurfaceMessage): ValidatedMessage => {
-    const frozen = deepFreeze(structuredClone(message));
-    return { accept: (visitor) => visitor.createSurface(frozen) };
-  },
-  updateComponents: (message: UpdateComponentsMessage): ValidatedMessage => {
-    const frozen = deepFreeze(structuredClone(message));
-    return { accept: (visitor) => visitor.updateComponents(frozen) };
-  },
-  updateDataModel: (message: UpdateDataModelMessage): ValidatedMessage => {
-    const frozen = deepFreeze(structuredClone(message));
-    return { accept: (visitor) => visitor.updateDataModel(frozen) };
-  },
-  deleteSurface: (message: DeleteSurfaceMessage): ValidatedMessage => {
-    const frozen = deepFreeze(structuredClone(message));
-    return { accept: (visitor) => visitor.deleteSurface(frozen) };
-  },
-} as const;

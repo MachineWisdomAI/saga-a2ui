@@ -1,4 +1,4 @@
-import { Catalog, type ComponentApi } from '@a2ui/web_core/v0_9';
+import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { a2uiV0_9Decoder } from './decoder.js';
@@ -97,6 +97,31 @@ describe('decoder', () => {
     }
   });
 
+  it('rejects an empty component list, which the schema forbids', () => {
+    const result = decode(components([]));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure.kind).toBe('malformed');
+  });
+
+  it('exposes no unchecked message constructor', async () => {
+    const exported = Object.keys(await import('./message.js'));
+    expect(exported).toEqual([]);
+  });
+
+  it.each([
+    [
+      'a value that cannot be copied',
+      { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { unsupported: () => undefined } } },
+      'malformed',
+    ],
+    ['a bigint version', { version: 1n, deleteSurface: { surfaceId: 's' } }, 'unsupported-version'],
+    ['a cyclic version', (() => { const v: unknown[] = []; v.push(v); return { version: v, deleteSurface: { surfaceId: 's' } }; })(), 'unsupported-version'],
+  ])('returns a typed failure instead of throwing for %s', (_name, input, kind) => {
+    const result = decode(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure.kind).toBe(kind);
+  });
+
   it('rejects the whole input when any message in a batch is invalid', () => {
     expect(decode([create, { version: 'v0.9', notAMessage: {} }]).ok).toBe(false);
   });
@@ -120,6 +145,7 @@ describe('message session', () => {
 
   it('applies successive data-model updates from frozen validated messages', () => {
     const session = newSession();
+    const created = surfaceOf(session);
     expect(
       session.ingest([
         create,
@@ -128,13 +154,19 @@ describe('message session', () => {
         { version: 'v0.9', updateDataModel: { surfaceId: 's', path: '/title', value: 'Two' } },
       ]),
     ).toEqual({ ok: true });
+    const surface = created[0] as SurfaceModel<ComponentApi>;
+    expect(surface.dataModel.get('/title')).toBe('Two');
   });
 
   it('accepts a partial update of an existing component, resolving its type from state', () => {
     const session = newSession();
+    const created = surfaceOf(session);
     session.ingest([create, rootPanel]);
     const result = session.ingest(components([{ id: 'root', title: 'Partial title' }]));
     expect(result).toEqual({ ok: true });
+    const root = (created[0] as SurfaceModel<ComponentApi>).componentsModel.get('root');
+    expect(root?.type).toBe('Panel');
+    expect(root?.properties).toMatchObject({ title: 'Partial title' });
   });
 
   it('rejects a new component of an unknown type, including inside a wrapper', () => {
@@ -172,6 +204,17 @@ describe('message session', () => {
     const failed = session.ingest({ version: 'v0.9', notAMessage: {} });
     expect(failed.ok).toBe(false);
     if (!failed.ok) expect(failed.failure.kind).toBe('malformed');
+    expect(session.ingest([create, rootPanel]).ok).toBe(true);
+  });
+
+  it('reports uncopyable or odd input through ingest and still accepts valid input afterwards', () => {
+    const session = newSession();
+    for (const bad of [
+      { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { f: () => undefined } } },
+      { version: 1n, deleteSurface: { surfaceId: 's' } },
+    ]) {
+      expect(session.ingest(bad).ok).toBe(false);
+    }
     expect(session.ingest([create, rootPanel]).ok).toBe(true);
   });
 

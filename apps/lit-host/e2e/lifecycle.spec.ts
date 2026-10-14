@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId('panel-title')).toHaveText('Sample title');
 });
 
-test('a partial update keeps the existing component type and other fields', async ({ page }) => {
+test('a partial update keeps the existing component type and shows the new title', async ({ page }) => {
   await sagaSend(page, [
     {
       version: 'v0.9',

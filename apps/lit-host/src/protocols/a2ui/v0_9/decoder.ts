@@ -6,7 +6,13 @@ import {
   formatZodIssue,
 } from '@a2ui/web_core/v0_9';
 import type { z } from 'zod';
-import { validatedMessage, type ValidatedMessage } from './message.js';
+import type {
+  CreateSurfaceMessage,
+  DeleteSurfaceMessage,
+  UpdateComponentsMessage,
+  UpdateDataModelMessage,
+} from '@a2ui/web_core/v0_9';
+import type { ValidatedMessage } from './message.js';
 
 /** Why input was rejected. `message` is plain text that is safe to display. */
 export interface DecodeFailure {
@@ -35,6 +41,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const malformed = (message: string): DecodeFailure => ({ kind: 'malformed', message });
 
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+/**
+ * Wrap a message that `decodeCase` has just validated against its upstream schema. Private
+ * to this module: these builders do not validate, so they must stay unreachable from callers.
+ * The copy may throw (e.g. a function inside an any-valued field); `decodeCase` reports that.
+ */
+const validatedMessage = {
+  createSurface: (message: CreateSurfaceMessage): ValidatedMessage => {
+    const frozen = deepFreeze(structuredClone(message));
+    return { accept: (visitor) => visitor.createSurface(frozen) };
+  },
+  updateComponents: (message: UpdateComponentsMessage): ValidatedMessage => {
+    const frozen = deepFreeze(structuredClone(message));
+    return { accept: (visitor) => visitor.updateComponents(frozen) };
+  },
+  updateDataModel: (message: UpdateDataModelMessage): ValidatedMessage => {
+    const frozen = deepFreeze(structuredClone(message));
+    return { accept: (visitor) => visitor.updateDataModel(frozen) };
+  },
+  deleteSurface: (message: DeleteSurfaceMessage): ValidatedMessage => {
+    const frozen = deepFreeze(structuredClone(message));
+    return { accept: (visitor) => visitor.deleteSurface(frozen) };
+  },
+} as const;
+
 /** Validate one message with the public upstream schema for its case. */
 function decodeCase<Schema extends z.ZodTypeAny>(
   tag: string,
@@ -46,16 +84,26 @@ function decodeCase<Schema extends z.ZodTypeAny>(
   if (!parsed.success) {
     return malformed(`Invalid ${tag} message: ${parsed.error.errors.map(formatZodIssue).join(', ')}`);
   }
-  return build(parsed.data);
+  try {
+    return build(parsed.data);
+  } catch {
+    return malformed(`Invalid ${tag} message: it contains a value that cannot be copied.`);
+  }
+}
+
+/** Display text for an arbitrary version value; never throws (e.g. for bigint or cycles). */
+function describeVersion(version: unknown): string {
+  try {
+    return JSON.stringify(version) ?? String(version);
+  } catch {
+    return typeof version;
+  }
 }
 
 function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
   if (!isRecord(raw)) return malformed('Each message must be an object.');
   if (!SUPPORTED_VERSIONS.includes(raw.version)) {
-    return {
-      kind: 'unsupported-version',
-      message: `Unsupported A2UI version: ${JSON.stringify(raw.version)}. Supported: v0.9.`,
-    };
+    return { kind: 'unsupported-version', message: `Unsupported A2UI version: ${describeVersion(raw.version)}. Supported: v0.9.` };
   }
   // The only place wire tags are inspected. Upstream schemas are strict, so a message with
   // extra operations or fields fails validation of its case.
