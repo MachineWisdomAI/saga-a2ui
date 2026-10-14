@@ -1,4 +1,5 @@
-import { SAGA_CATALOG_ID } from './catalog.js';
+import type { A2uiMessage } from '@a2ui/web_core/v0_9';
+import { SAGA_CATALOG_ID } from './contract.js';
 
 export const SURFACE_ID = 'fixture';
 
@@ -26,11 +27,11 @@ export const initialFixture = [
       value: { title: 'Sample title', description: 'A synthetic description shown as plain text.' },
     },
   },
-] as const;
+] satisfies readonly A2uiMessage[];
 
 export const updatedFixture = [
   {
     version: 'v0.9',
     updateDataModel: { surfaceId: SURFACE_ID, path: '/title', value: 'Updated sample title' },
   },
-] as const;
+] satisfies readonly A2uiMessage[];
