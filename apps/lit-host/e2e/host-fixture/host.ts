@@ -1,4 +1,5 @@
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
+import { contentSecurityPolicy, type ResourceCsp } from './csp.js';
 
 // Test-only local host. It stands in for a chat host just enough to exercise the MCP Apps
 // bridge: it mounts the server's resource HTML in a sandboxed iframe, applies a CSP built from
@@ -7,10 +8,7 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 
 export interface HostedResource {
   readonly html: string;
-  readonly csp: {
-    readonly connectDomains: readonly string[];
-    readonly resourceDomains: readonly string[];
-  };
+  readonly csp: ResourceCsp;
 }
 
 declare global {
@@ -29,19 +27,6 @@ declare global {
     /** Delivers a tool result to the mounted view. */
     deliverToolResult?: (result: Parameters<AppBridge['sendToolResult']>[0]) => Promise<void>;
   }
-}
-
-function contentSecurityPolicy(csp: HostedResource['csp']): string {
-  const resources = csp.resourceDomains.join(' ');
-  return [
-    "default-src 'none'",
-    `script-src 'unsafe-inline' ${resources}`.trim(), // the view is one inline script
-    `style-src 'unsafe-inline' ${resources}`.trim(),
-    `img-src ${resources || "'none'"}`,
-    `connect-src ${csp.connectDomains.join(' ') || "'none'"}`,
-    "base-uri 'none'",
-    "form-action 'none'",
-  ].join('; ');
 }
 
 let bridge: AppBridge | undefined;
