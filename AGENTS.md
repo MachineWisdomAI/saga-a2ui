@@ -19,18 +19,9 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 - Keep durable non-trivial specs, plans, decisions, status, and handoffs in FAVA Trails. Promote finalized truth and sync it.
 - Do not build “shared-something” helper identities. Use shared-all or shared-none; give shared artifacts one owner and one documented repair path.
 
-## Codebase Design
+## Coding Standards
 
-Keep changes small enough for a maintainer learning TypeScript and frontend development to read and explain. Use the `codebase-design` skill when designing or restructuring modules and their interfaces, when available; the following rules apply in every environment.
-
-- A **module** has an interface and an implementation. Its **interface** includes accepted inputs, invariants, ordering, errors, and configuration. A **seam** is where behavior can be replaced through an interface; an **adapter** supplies that behavior. Seek **depth**: useful behavior behind a small interface, with knowledge and fixes kept local.
-- Introduce a module when it hides meaningful complexity from callers. Keep simple operations direct; extract when there is a concrete responsibility or actual variation, rather than adding pass-through wrappers or anticipating future adapters. A private function can be enough.
-- Prefer descriptive names, ordinary control flow, and explicit intermediate values where they clarify intent. Explain non-obvious invariants and library constraints in comments. PR descriptions should explain why unfamiliar TypeScript or frontend mechanisms are needed.
-- Keep unchecked external data as `unknown` until validated at the ingestion seam. Give normalization and validation one clear owner, using public library schemas or processor validation where they satisfy the contract. Add application checks for demonstrated gaps; keep wire-shape checks out of rendering logic.
-- Make input types match the supported protocol versions and payload forms. Prefer named public library types over reconstructing equivalent types. Check authored fixtures with a type annotation or `satisfies`. Type assertions do not validate data: replace `as unknown as T` escapes with compatible types or validation; isolate any necessary interop assertion and explain the invariant that makes it safe.
-- After validation, narrow to the message variant and use its typed fields. `Array.isArray` is appropriate for unchecked input or a supported single-or-array interface; repeated nested shape checks on validated values suggest a missing contract. Distinguish skipping an unrelated message variant from rejecting a malformed message, and preserve documented failure behavior.
-- Separate pure decisions from effects where useful; accept dependencies when callers or tests need to vary them. Test observable behavior through the same interface callers use, including relevant invalid input and recovery. Keep real browser tests for rendering and lifecycle behavior.
-- During review, trace each new abstraction, assertion, and defensive check to a current requirement or library constraint. Simplify what adds no useful behavior, while preserving supported input forms, safety checks, and failure semantics. Keep unrelated refactors separate.
+Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before designing, implementing, refactoring, or reviewing code. Use the `codebase-design` skill for module/interface design when available; the repository standards apply without it.
 
 ## Repo Notes
 

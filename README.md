@@ -14,6 +14,7 @@ The first implementation will exercise a small Lit application in ChatGPT and Cl
 
 | Package | Responsibility |
 | --- | --- |
+| `@saga-a2ui/core` | Renderer-independent value objects and processing interfaces, with protocol-specific implementations in separate modules |
 | `@saga-a2ui/mcp` | MCP app integration, data and action boundaries, and protocol error mapping |
 | `@saga-a2ui/components` | Optional renderer-neutral component definitions and Markdown behavior, starting with FaithfulCard |
 | `@saga-a2ui/lit` | Lit renderer integration |
