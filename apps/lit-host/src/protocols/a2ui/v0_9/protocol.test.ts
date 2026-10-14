@@ -122,6 +122,26 @@ describe('decoder', () => {
     if (!result.ok) expect(result.failure.kind).toBe(kind);
   });
 
+  it('returns malformed instead of throwing when inspecting the input throws', () => {
+    const throwingProperty = {
+      version: 'v0.9',
+      get deleteSurface(): never {
+        throw new Error('invalid caller property');
+      },
+    };
+    const throwingList = {
+      get messages(): never {
+        throw new Error('invalid caller property');
+      },
+    };
+    for (const input of [throwingProperty, [throwingProperty], throwingList]) {
+      const result = decode(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.failure.kind).toBe('malformed');
+    }
+    expect(decode(create).ok).toBe(true);
+  });
+
   it('rejects the whole input when any message in a batch is invalid', () => {
     expect(decode([create, { version: 'v0.9', notAMessage: {} }]).ok).toBe(false);
   });
@@ -212,6 +232,12 @@ describe('message session', () => {
     for (const bad of [
       { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { f: () => undefined } } },
       { version: 1n, deleteSurface: { surfaceId: 's' } },
+      {
+        version: 'v0.9',
+        get deleteSurface(): never {
+          throw new Error('invalid caller property');
+        },
+      },
     ]) {
       expect(session.ingest(bad).ok).toBe(false);
     }

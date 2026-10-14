@@ -133,17 +133,29 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   return [input];
 }
 
-/** Decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`. */
+function decodeInput(input: unknown): DecodeResult {
+  const raws = rawMessages(input);
+  if (!Array.isArray(raws)) return { ok: false, failure: raws as DecodeFailure };
+  const messages: ValidatedMessage[] = [];
+  for (const raw of raws) {
+    const decoded = decodeMessage(raw);
+    if ('kind' in decoded) return { ok: false, failure: decoded };
+    messages.push(decoded);
+  }
+  return { ok: true, messages };
+}
+
+/**
+ * Decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
+ * The whole operation sits behind one failure boundary: anything that throws while
+ * inspecting or parsing caller input (e.g. a throwing getter) becomes a malformed result.
+ */
 export const a2uiV0_9Decoder: MessageDecoder = {
   decode(input) {
-    const raws = rawMessages(input);
-    if (!Array.isArray(raws)) return { ok: false, failure: raws as DecodeFailure };
-    const messages: ValidatedMessage[] = [];
-    for (const raw of raws) {
-      const decoded = decodeMessage(raw);
-      if ('kind' in decoded) return { ok: false, failure: decoded };
-      messages.push(decoded);
+    try {
+      return decodeInput(input);
+    } catch {
+      return { ok: false, failure: malformed('Input could not be inspected or parsed.') };
     }
-    return { ok: true, messages };
   },
 };
