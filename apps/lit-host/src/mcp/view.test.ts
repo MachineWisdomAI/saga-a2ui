@@ -161,6 +161,58 @@ describe('episode view result handling', () => {
     expect(h.title()).toBe('Before');
   });
 
+  it('clears the prior surface when the session rejects a later result', async () => {
+    const h = harness();
+    let reject = false;
+    const app = new App({ name: 'reject-view', version: '0.0.0' }, {}, { autoResize: false });
+    const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+    toClean.push({ app, bridge });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge.connect(hostSide);
+    await connectEpisodeView({
+      app,
+      transport: viewSide,
+      // Rejects episode data only; the panel-removal message still reaches the real session.
+      deliver: (input) =>
+        reject && (input as { updateDataModel?: unknown }[]).some((m) => m.updateDataModel)
+          ? { ok: false, failure: { kind: 'rejected', message: 'Controlled ingestion rejection' } }
+          : h.session.ingest(input),
+      showProblem: (message) => h.problems.push(message),
+    });
+    await bridge.sendToolResult(episode('ep-001', 'Before'));
+    await expect.poll(() => h.title()).toBe('Before');
+    reject = true;
+    await bridge.sendToolResult(episode('ep-002', 'Rejected'));
+    await expect.poll(() => h.surface()).toBeUndefined();
+    expect(h.problems.at(-1)).toBe('Controlled ingestion rejection');
+    reject = false;
+    await bridge.sendToolResult(episode('ep-003', 'Recovered'));
+    await expect.poll(() => h.title()).toBe('Recovered');
+    expect(h.problems.at(-1)).toBeUndefined();
+  });
+
+  it('closes the app on dispose after host teardown so it can reconnect', async () => {
+    const h = harness();
+    const view = await h.connect();
+    await h.bridge.sendToolResult(episode('ep-001', 'Before'));
+    await expect.poll(() => h.title()).toBe('Before');
+    await h.bridge.teardownResource({});
+    view.dispose();
+
+    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+    toClean.push({ bridge: bridge2 });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge2.connect(hostSide);
+    await connectEpisodeView({
+      app: h.app,
+      transport: viewSide,
+      deliver: (input) => h.session.ingest(input),
+      showProblem: (message) => h.problems.push(message),
+    });
+    await bridge2.sendToolResult(episode('ep-002', 'Again'));
+    await expect.poll(() => h.title()).toBe('Again');
+  });
+
   it('delivers each result once after reconnecting the same app', async () => {
     const h = harness();
     const first = await h.connect();

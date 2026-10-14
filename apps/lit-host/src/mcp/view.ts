@@ -41,13 +41,16 @@ const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: {
  *   before supplying data.
  * - An error or non-episode result removes the panel and shows a plain-text fallback, so
  *   stale content is never left beside a problem.
- * - `dispose()` removes the listener and closes the connection; it also runs when `connect`
- *   fails. A host teardown request releases the listener and the host then ends the connection. Connecting the same `App` again
- *   starts with exactly one listener.
+ * - A result the session rejects is treated like any other failure: panel removed, reason shown.
+ * - `dispose()` removes the listener and closes the connection once, even after a host teardown
+ *   request has already stopped delivery; it also runs when `connect` fails. Teardown only stops
+ *   delivery, because the host ends the connection after its request is answered. Connecting
+ *   the same `App` again starts with exactly one listener.
  */
 export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
   const { app } = deps;
-  let disposed = false;
+  let disposed = false; // delivery has stopped
+  let closed = false; // the App's transport close has been requested
   let panelShown = true;
 
   const showFailure = (problem: string) => {
@@ -66,8 +69,9 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
 
     const data = panelData(episode.data);
     const outcome = deps.deliver(panelShown ? data : [...panelSurface, ...data]);
-    if (outcome.ok) panelShown = true;
-    deps.showProblem(outcome.ok ? undefined : outcome.failure.message);
+    if (!outcome.ok) return showFailure(outcome.failure.message);
+    panelShown = true;
+    deps.showProblem(undefined);
   };
 
   const release = () => {
@@ -77,8 +81,9 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
   };
   const connection: EpisodeViewConnection = {
     dispose() {
-      if (disposed) return;
       release();
+      if (closed) return;
+      closed = true;
       void app.close().catch(() => undefined);
     },
   };
