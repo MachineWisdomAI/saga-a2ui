@@ -4,7 +4,7 @@ Work in a feature branch or dedicated worktree and open a pull request. Keep eac
 
 Read [AGENTS.md](AGENTS.md) for repository rules and [CODING_STANDARDS.md](CODING_STANDARDS.md) for package ownership, module interfaces, and TypeScript design. Use normal TypeScript and renderer tools. Record the checks actually run; package installation, local rendering and real-host behavior are separate evidence.
 
-Use README.md for current build, test and dependency commands. Do not publish placeholder packages. When a package gains an owned version, enroll it with the MachineWisdom version-policy tooling and document the resulting release process.
+Use README.md for current build, test and dependency commands. Do not publish placeholder packages. Follow [the version policy](docs/version-policy.md) when introducing an owned version and for every subsequent bump.
 
 Keep private customer material, credentials, business records and internal planning out of this repository, including its history. Contributions must have appropriate redistribution rights; retain third-party license obligations.
 
@@ -31,3 +31,7 @@ For an epic acceptance PR, the First Officer coordinates the following gates and
 5. Review the closeout evidence and merge only after current-head reviews, required checks and acceptance gates pass, within the operator's authority. An explicit hold for human acceptance blocks merging until lifted.
 
 Contributors provide reproducible checks and clear documentation; the First Officer owns the specialist security sessions, orchestration and acceptance decision. Missing required evidence leaves acceptance open. Keep security-sensitive details in authorized private channels and include only safe summaries in SDK PRs. Package publication, production deployment and repository visibility changes require their own authority.
+
+## PR descriptions and artifacts
+
+Follow [change hygiene](docs/change-hygiene.md) for concise PR descriptions, proportional evidence collection and Git LFS storage. Retain only evidence that supports a specific acceptance claim; keep disposable captures ignored.

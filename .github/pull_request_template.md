@@ -1,10 +1,14 @@
 ## Change
 
-Describe the problem, resulting behavior and related SDK issue.
+Describe the concrete problem, resulting behavior and related SDK issue. Explain the final change and its rationale; update this description when scope changes.
 
 ## Validation
 
 Record checks performed and any remaining limits. For code changes, explain the standards/refactor review or why no refactor was needed.
+
+## Version and retained artifacts
+
+State the version-policy result (including unversioned when applicable). If artifacts are retained, explain what each proves, confirm LFS pointer checks and upload, and omit redundant or disposable captures. See [change hygiene](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/docs/change-hygiene.md).
 
 ## Epic acceptance
 
