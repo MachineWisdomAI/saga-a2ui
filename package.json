@@ -6,7 +6,8 @@
     "start": "npm run start -w @saga-a2ui/lit-host-app",
     "build": "npm run build -w @saga-a2ui/lit-host-app",
     "typecheck": "npm run typecheck -w @saga-a2ui/lit-host-app",
-    "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app"
+    "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app",
+    "test:headless": "npm run test:headless -w @saga-a2ui/lit-host-app"
   },
   "license": "Apache-2.0",
   "engines": {
