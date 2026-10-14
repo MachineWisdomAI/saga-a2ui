@@ -1,6 +1,6 @@
 # Coding standards
 
-SAGA must be understandable one small change at a time. A maintainer learning TypeScript and frontend development should be able to follow the flow and explain why each module exists. Optimize for explicit responsibilities, useful types, and local reasoning.
+SAGA code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning.
 
 ## Responsibility determines placement
 
@@ -46,6 +46,12 @@ Seek **depth**: substantial useful behavior behind a small interface. A decoder 
 
 Prefer interfaces describing operations over bags of getters, flags, or callbacks whose ordering callers must reconstruct. Pass dependencies explicitly at construction or through a typed function parameter. Keep pure decisions separate from I/O and renderer effects. A module can be a function or class; inheritance hierarchies, dependency-injection containers, and pass-through wrappers are not required for depth.
 
+## DRY and established libraries
+
+**DRY: give each rule one authoritative implementation.** Reuse the module that owns a validation rule, protocol interpretation, or state transition instead of copying it into each adapter. Consolidate repeated knowledge at the correct package and module. Similar-looking code with different responsibilities need not share an abstraction; avoid a flag-driven universal helper that couples unrelated behavior merely to remove a few repeated lines.
+
+Prefer standard platform APIs and official or widely used, maintained libraries to implementing established functionality ourselves. Check existing dependencies and supported upstream interfaces first. Choose for contract fit, TypeScript support, maintenance, licensing, and runtime/package compatibility. Keep required third-party registration inside its integration seam. When custom code is necessary, identify the concrete gap and implement only the missing behavior in its owning module. A wrapper should enforce a useful SAGA contract, not rename a library's methods.
+
 ## Protocol input becomes a value object
 
 Treat unchecked input as `unknown`. The protocol decoder validates the supported version and envelope, then produces typed values or an explicit failure. Reuse public upstream schemas and validation where they meet the contract; add SAGA checks only for requirements they leave uncovered. Do not build a second general-purpose A2UI interpreter or generic binding engine.
@@ -76,9 +82,23 @@ Type assertions do not validate data. Replace `as unknown as T` escapes with com
 
 Comments explain non-obvious constraints and decisions. PR descriptions explain unfamiliar mechanisms and why the chosen interface is useful. Brevity does not justify combining parsing, policy, state mutation, and rendering into one method. Equally, pattern names do not justify scattering a simple operation across many files.
 
-## Verify through the interface
+## Red–green–refactor
+
+Develop behavior changes in small, complete cycles:
+
+1. **Red:** write one meaningful test of the required behavior through its interface. Run it and confirm that it fails because the behavior is missing or wrong, not because the test setup is broken. For a bug, reproduce the failure before fixing it.
+2. **Green:** implement only what is needed to satisfy that behavior, and run the affected tests. Preserve the assertion rather than weakening it to match the implementation.
+3. **Refactor:** while tests are green, improve names, remove duplicated knowledge, and simplify module responsibilities without changing observable behavior. Rerun the affected tests before starting the next cycle.
+
+Work one behavior at a time rather than writing a large speculative test suite followed by all the implementation. For a pure refactor, start from passing behavioral tests and add missing characterization coverage first where needed. Documentation-only changes use documentation checks; the cycle does not require manufacturing runtime tests for them.
+
+## Test functionality; prefer quality over quantity
 
 Test a module through the interface callers use. Protocol tests cover the supported forms and meaningful rejection cases, field preservation, and relevant update semantics. Strategy implementations share behavioral contract tests where their promises are the same; host limitations remain explicit. Visitor changes need typechecking and observable coverage of the affected cases.
+
+Tests must permit a different correct implementation. Assert returned values, visible state, documented failures, and consequential effects. Avoid private-method tests, source-text assertions, incidental DOM structure, and mocks that prescribe the internal helper-call sequence. Assert effect counts or ordering only when they are part of the contract, such as preventing a duplicated action. Use test doubles at external or nondeterministic seams, not to replace the behavior being tested.
+
+Choose expected results from the requirement, a worked example, or an independently verified fixture; do not recompute them with the production algorithm or approve snapshots without checking their meaning. Each test should catch a distinct meaningful failure. Favor representative behavior, consequential edge cases, and recovery over test counts or coverage percentages. Consolidate redundant tests and retire tests of superseded internals once behavioral coverage protects the contract. Coverage can reveal gaps; it is not proof of correctness or a reason to test trivia.
 
 Exercise renderer-independent processing without a DOM or renderer imports. Keep browser tests for rendering, bindings, events, accessibility, and lifecycle. Verify server/view separation through the actual package exports and built artifacts when those packages exist. Keep actual-host acceptance separate from protocol and browser checks.
 
