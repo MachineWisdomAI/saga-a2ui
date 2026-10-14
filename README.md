@@ -16,7 +16,7 @@ The first implementation will exercise a small Lit application in ChatGPT and Cl
 | --- | --- |
 | `@saga-a2ui/core` | Renderer-independent value objects and processing interfaces, with protocol-specific implementations in separate modules |
 | `@saga-a2ui/mcp` | MCP app integration, data and action boundaries, and protocol error mapping |
-| `@saga-a2ui/components` | Optional renderer-neutral component definitions and Markdown behavior, starting with FaithfulCard |
+| `@saga-a2ui/components` | Optional renderer-neutral component contracts and shared component behavior |
 | `@saga-a2ui/lit` | Lit renderer integration |
 | `@saga-a2ui/react` | React renderer integration |
 | `@saga-a2ui/lynx` | Lynx renderer integration |
@@ -27,7 +27,7 @@ Developers retain their normal renderer tools and write the code that calls thei
 
 **Standard** permits validated HTTPS links through the host and images from explicitly allowed HTTPS hosts. **Strict** displays link and image references as inert text. Both preserve ordinary Markdown formatting and retain server authorization and data-sharing checks. Application code controls the policy.
 
-FaithfulCard is planned to display supplied Markdown without rewriting or silent truncation. Ansari-specific branding and presentation rules remain in Ansari.
+The planned FaithfulCard component displays supplied Markdown without rewriting or silent truncation. Ansari-specific branding and presentation rules remain in Ansari.
 
 ## Development
 

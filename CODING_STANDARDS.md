@@ -14,7 +14,9 @@ The following ownership is the target for SDK extraction. Packages are planned, 
 | `@saga-a2ui/core` | Renderer-independent value objects, processing interfaces, and shared behavior; protocol implementations in named protocol modules | Lit/React/Lynx, DOM access, MCP transport, application business rules |
 | `@saga-a2ui/mcp` | MCP/MCP Apps delivery, resource identity, host capability negotiation and lifecycle; separate server, view, and policy exports | Visual-tree interpretation and renderer selection |
 | `@saga-a2ui/lit`, `react`, `lynx` | Framework rendering, binding integration, events, accessibility, mounting, and disposal | Raw protocol parsing, backend authorization, and host-name branching |
-| `@saga-a2ui/components` | Optional neutral component contracts and shared content interpretation, including fidelity rules | Renderer implementations, MCP delivery, and application-specific branding |
+| `@saga-a2ui/components` | Optional renderer-neutral contracts and shared component behavior | Renderer implementations, MCP delivery, and application-specific branding |
+
+Each component owns its specific contract and behavior. One component's requirements must not define the whole components package or become requirements for unrelated components.
 
 Core is not a miscellaneous utilities package. Put a reusable operation in its owning module; a function used by several files does not automatically belong in core. Application business meaning remains outside SAGA. A visual tree must not become the source of truth for entitlements, domain actions, or future voice interactions.
 
