@@ -15,8 +15,17 @@ export interface HostedResource {
 
 declare global {
   interface Window {
-    /** Mounts the view and resolves once the view has completed its bridge handshake. */
-    mountView?: (resource: HostedResource) => Promise<void>;
+    /**
+     * Mounts the view and resolves once the view has completed its bridge handshake.
+     * `resultDuringInitialization` is sent from the bridge's `oninitialized` callback, i.e.
+     * while the view's `connect` is still completing, to control delivery order.
+     */
+    mountView?: (
+      resource: HostedResource,
+      options?: { resultDuringInitialization?: Parameters<AppBridge['sendToolResult']>[0] },
+    ) => Promise<void>;
+    /** Asks the mounted view to tear down (`ui/resource-teardown`); the iframe stays in place. */
+    teardownView?: () => Promise<void>;
     /** Delivers a tool result to the mounted view. */
     deliverToolResult?: (result: Parameters<AppBridge['sendToolResult']>[0]) => Promise<void>;
   }
@@ -37,7 +46,7 @@ function contentSecurityPolicy(csp: HostedResource['csp']): string {
 
 let bridge: AppBridge | undefined;
 
-window.mountView = async (resource) => {
+window.mountView = async (resource, options) => {
   const frame = document.createElement('iframe');
   // No allow-same-origin: the view runs in an opaque origin and cannot reach this page.
   frame.setAttribute('sandbox', 'allow-scripts');
@@ -50,8 +59,12 @@ window.mountView = async (resource) => {
   bridge = new AppBridge(null, { name: 'local-host-fixture', version: '0.0.0' }, {});
   const initialized = new Promise<void>((resolve) => {
     if (!bridge) throw new Error('bridge missing');
-    bridge.oninitialized = () => resolve();
+    bridge.oninitialized = () => {
+      if (options?.resultDuringInitialization) void bridge?.sendToolResult(options.resultDuringInitialization);
+      resolve();
+    };
   });
+  document.querySelector('iframe')?.remove(); // a remount replaces the previous view
   document.body.append(frame);
   if (!frame.contentWindow) throw new Error('iframe has no window');
   await bridge.connect(new PostMessageTransport(frame.contentWindow, frame.contentWindow));
@@ -61,4 +74,9 @@ window.mountView = async (resource) => {
 window.deliverToolResult = async (result) => {
   if (!bridge) throw new Error('mountView has not run');
   await bridge.sendToolResult(result);
+};
+
+window.teardownView = async () => {
+  if (!bridge) throw new Error('mountView has not run');
+  await bridge.teardownResource({});
 };

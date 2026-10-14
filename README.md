@@ -91,3 +91,14 @@ Modules in `apps/lit-host/src`:
 - `mcp/listener.ts`: application-owned loopback Streamable HTTP hosting (`POST /mcp`, stateless, JSON responses, Host-header DNS-rebinding protection, no auth because the tool is public).
 - `mcp/view.ts`, `view-main.ts`, `view.html`: the view connects the MCP Apps `App` bridge, then turns each tool result into an A2UI data-model update and hands it to the existing session. Decoding stays in `protocols/a2ui`; rendering stays in `lit/`. `vite.view.config.ts` builds it to one HTML file with no server imports.
 - `e2e/host-fixture`, `e2e/mcp-view.spec.ts`: a test-only local host with a real `AppBridge` and a `sandbox="allow-scripts"` iframe. The spec makes real `tools/call` and `resources/read` requests over HTTP, delivers the result, and checks the wire result, rendered title, CSP and resource linkage. `e2e/view-bundle.spec.ts` checks the built artifacts for server code and credentials. The fixture is not evidence of compatibility with any actual host.
+
+### MCP result lifecycle in the view (MCP2)
+
+`connectEpisodeView` (`apps/lit-host/src/mcp/view.ts`) owns the bridge connection's lifetime and nothing else: A2UI decoding stays in `protocols/a2ui`, and the session and surface lifetime stay with `saga-app`. It uses only the upstream `App` API from `@modelcontextprotocol/ext-apps`; there is no extra host handshake and no second fetch of the answer (the host delivers the result it already has).
+
+- Initialization: the `toolresult` listener (`addEventListener`) and `onteardown` are registered before `app.connect`, so a result the host sends right after the handshake is rendered exactly once.
+- Replacement: each valid public result is applied as a data-model update and replaces the one shown.
+- Failure: an error result, a result that is not a public episode (including undeclared fields) or an ingest failure removes the panel surface and shows a plain-text fallback in `[data-testid="view-problem"]`. The next valid result recreates the surface and clears the fallback.
+- Teardown: the resolved `EpisodeViewConnection.dispose()` removes the listener and closes the `App`; it also runs if `connect` fails. A host `ui/resource-teardown` request releases the listener and answers the host, which then ends the connection. Results arriving afterwards are ignored. Connecting the same `App` again starts with exactly one listener, so delivery is not duplicated.
+
+Tests: `src/mcp/view.test.ts` (`npm run test:headless`) joins a real `App` and `AppBridge` over an in-memory transport with a real A2UI session. `e2e/mcp-view.spec.ts` (`npm run test:browser`) controls delivery order through the test-only host fixture's real `AppBridge` against the built view: a result sent during initialization, replacement, each failure kind with recovery, delivery after teardown, and remount. Account or selection isolation is a separate, later concern.

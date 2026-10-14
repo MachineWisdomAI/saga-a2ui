@@ -115,13 +115,86 @@ test('a CSP-blocked network request from the view fails', async ({ page }) => {
   expect(violated).toBe('connect-src');
 });
 
-test('an error result leaves the rendered title unchanged and explains the problem', async ({ page }) => {
+test('an error result clears the rendered title and explains the problem', async ({ page }) => {
   const view = await mountedView(page);
   await deliver(page, 'ep-001');
+  await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
   const failed = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId: 'missing' } });
   expect(failed.isError).toBe(true);
   await page.evaluate((payload) => window.deliverToolResult?.(payload), failed as never);
 
   await expect(view.getByTestId('view-problem')).toBeVisible();
-  await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
+  await expect(view.getByTestId('panel-title')).toHaveCount(0);
+  await expect(view.locator('a2ui-surface')).toHaveCount(0);
+});
+
+test.describe('result lifecycle through the bridge', () => {
+  const sendRaw = (page: Page, payload: unknown) =>
+    page.evaluate((result) => window.deliverToolResult?.(result), payload as never);
+  const episode = (title: string) => ({
+    content: [],
+    structuredContent: { episodeId: 'ep-x', title, description: 'Plain text.' },
+  });
+
+  test('a result sent during initialization renders once and a later result replaces it', async ({ page }) => {
+    await page.goto('/host-fixture/index.html');
+    await page.evaluate(
+      (args) => window.mountView?.(args.resource, { resultDuringInitialization: args.early }),
+      { resource: await readView(), early: episode('Early title') },
+    );
+    const view = page.frameLocator('iframe[title="MCP App view"]');
+    await expect(view.getByTestId('panel-title')).toHaveText('Early title');
+    await expect(view.locator('a2ui-surface')).toHaveCount(1);
+    await expect(view.getByTestId('panel-title')).toHaveCount(1);
+
+    await sendRaw(page, episode('Later title'));
+    await expect(view.getByTestId('panel-title')).toHaveText('Later title');
+    await expect(view.locator('a2ui-surface')).toHaveCount(1);
+  });
+
+  for (const [name, bad] of [
+    ['an error result', { isError: true, content: [] }],
+    ['a non-episode result', { content: [], structuredContent: { surprise: true } }],
+    ['a result with an undeclared field', { content: [], structuredContent: { ...episode('T').structuredContent, secret: 'x' } }],
+    ['a result with no structured content', { content: [{ type: 'text', text: 'plain' }] }],
+  ] as const) {
+    test(`${name} clears the prior surface, shows a fallback, and a valid result recovers`, async ({ page }) => {
+      const view = await mountedView(page);
+      await sendRaw(page, episode('Prior title'));
+      await expect(view.getByTestId('panel-title')).toHaveText('Prior title');
+
+      await sendRaw(page, bad);
+      await expect(view.getByTestId('view-problem')).toBeVisible();
+      await expect(view.getByTestId('view-problem')).not.toBeEmpty();
+      await expect(view.getByTestId('panel-title')).toHaveCount(0);
+      await expect(view.locator('a2ui-surface')).toHaveCount(0);
+
+      await sendRaw(page, episode('Recovered title'));
+      await expect(view.getByTestId('panel-title')).toHaveText('Recovered title');
+      await expect(view.getByTestId('view-problem')).toBeHidden();
+      await expect(view.locator('a2ui-surface')).toHaveCount(1);
+    });
+  }
+
+  test('a result arriving after host teardown is ignored', async ({ page }) => {
+    const view = await mountedView(page);
+    await sendRaw(page, episode('Before teardown'));
+    await expect(view.getByTestId('panel-title')).toHaveText('Before teardown');
+
+    await page.evaluate(() => window.teardownView?.());
+    await sendRaw(page, episode('After teardown')).catch(() => undefined);
+    await sendRaw(page, { isError: true, content: [] }).catch(() => undefined);
+    await page.waitForTimeout(300);
+    await expect(view.getByTestId('panel-title')).toHaveText('Before teardown');
+    await expect(view.getByTestId('view-problem')).toBeHidden();
+  });
+
+  test('remounting the view delivers each result once', async ({ page }) => {
+    await mountedView(page);
+    const view = await mountedView(page); // replaces the first iframe and bridge
+    await sendRaw(page, episode('After remount'));
+    await expect(view.getByTestId('panel-title')).toHaveText('After remount');
+    await expect(view.getByTestId('panel-title')).toHaveCount(1);
+    await expect(view.locator('a2ui-surface')).toHaveCount(1);
+  });
 });
