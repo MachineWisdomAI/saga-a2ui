@@ -19,11 +19,15 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 - Keep durable non-trivial specs, plans, decisions, status, and handoffs in FAVA Trails. Promote finalized truth and sync it.
 - Do not build “shared-something” helper identities. Use shared-all or shared-none; give shared artifacts one owner and one documented repair path.
 
+## Coding Standards
+
+Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before designing, implementing, refactoring, or reviewing code. Use the `codebase-design` skill for module/interface design when available; the repository standards apply without it.
+
 ## Repo Notes
 
 - This is the SDK source repository. It is private initially; making it public requires a separate explicit instruction.
 - Keep internal plans, customer records and sensitive research out of this repository and its history.
 - Apache-2.0 applies to SDK code; preserve third-party notices.
-- The plan is approved. Refine one task at a time; begin with the small Lit host slice after bootstrap. Do not repeat the entire planning process.
-- No packages or runtime behavior exist yet. Add build/test instructions with the first implementation.
+- The plan is approved. Refine one task at a time and keep implementation within the selected ticket. Do not repeat the entire planning process.
+- The private Lit application renders a fixed A2UI fixture. No SDK packages exist yet. Use README.md for current build and browser-test commands.
 - Follow CONTRIBUTING.md for document names: supersedable documents use `YYYY-MM-DD_title_vN.ext`; evergreen guides keep stable names.
