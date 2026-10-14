@@ -81,9 +81,9 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
   };
   const connection: EpisodeViewConnection = {
     dispose() {
-      release();
-      if (closed) return;
+      if (closed) return; // completed disposal must not touch a later connection's handlers
       closed = true;
+      release();
       void app.close().catch(() => undefined);
     },
   };

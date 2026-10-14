@@ -240,6 +240,30 @@ describe('episode view result handling', () => {
     expect(h.deliveries).toHaveLength(1);
   });
 
+  it('ignores a repeated dispose of an old connection after the app reconnects', async () => {
+    const h = harness();
+    const first = await h.connect();
+    first.dispose();
+    await h.app.close();
+    await h.bridge.close();
+
+    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+    toClean.push({ bridge: bridge2 });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge2.connect(hostSide);
+    await connectEpisodeView({
+      app: h.app,
+      transport: viewSide,
+      deliver: (input) => h.session.ingest(input),
+      showProblem: (message) => h.problems.push(message),
+    });
+
+    first.dispose();
+    await bridge2.sendToolResult(episode('ep-001', 'Still live'));
+    await expect.poll(() => h.title()).toBe('Still live');
+    await expect(bridge2.teardownResource({})).resolves.toBeDefined();
+  });
+
   it('releases its handlers when the connection fails', async () => {
     const h = harness();
     const [viewSide] = InMemoryTransport.createLinkedPair();
