@@ -34,6 +34,22 @@ export function identityFromAuthInfo(authInfo: AuthInfo | undefined): VerifiedId
   return claims.success ? Object.freeze({ accountId: claims.data.accountId, signInId: claims.data.signInId }) : undefined;
 }
 
+/**
+ * Copies the accepted request's authorization into an object this request owns. A verifier may
+ * reuse or mutate the `AuthInfo` it returns — a cached token record, for example — and the
+ * transport reads `req.auth` only after the request body arrives. Attaching the verifier's own
+ * object would then let a later request's claims decide an earlier request's user. The copy is
+ * frozen so nothing downstream can mutate it either; the validated identity is written last so
+ * it always describes the credential this request was authenticated with.
+ */
+function snapshotAuthInfo(authInfo: AuthInfo, identity: VerifiedIdentity): AuthInfo {
+  return Object.freeze({
+    ...authInfo,
+    scopes: [...authInfo.scopes],
+    extra: Object.freeze({ ...authInfo.extra, accountId: identity.accountId, signInId: identity.signInId }),
+  });
+}
+
 function reject(status: 401 | 403, error: string, description: string, scope?: string): AuthDecision {
   const parts = [`realm="${REALM}"`, `error="${error}"`, `error_description="${description}"`];
   if (scope) parts.push(`scope="${scope}"`);
@@ -69,6 +85,7 @@ export async function authenticate(
   if (!authInfo.scopes.includes(SUBSCRIPTIONS_SCOPE)) {
     return reject(403, 'insufficient_scope', 'User sign-in required', SUBSCRIPTIONS_SCOPE);
   }
-  if (!identityFromAuthInfo(authInfo)) return reject(403, 'insufficient_scope', 'User sign-in required', SUBSCRIPTIONS_SCOPE);
-  return { ok: true, authInfo };
+  const identity = identityFromAuthInfo(authInfo);
+  if (!identity) return reject(403, 'insufficient_scope', 'User sign-in required', SUBSCRIPTIONS_SCOPE);
+  return { ok: true, authInfo: snapshotAuthInfo(authInfo, identity) };
 }

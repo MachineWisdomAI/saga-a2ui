@@ -13,6 +13,13 @@ export interface ToolResultViewDependencies {
   readonly transport: Transport;
   /** Handles each delivered result. Never called after the connection is disposed. */
   readonly onToolResult: (result: ToolResult) => void;
+  /**
+   * Optional. Called when the host reports that a tool call is starting (`toolinput`). A result
+   * is the answer to a call; this is the only signal that a round trip began, so a view that must
+   * tell a fresh call apart from a delayed or uncorrelated delivery needs it. Registering it
+   * before `connect` keeps it in the same lifetime as `onToolResult`.
+   */
+  readonly onToolInput?: () => void;
 }
 
 /** A connected view. Ends the bridge connection and stops all delivery. */
@@ -40,9 +47,13 @@ export async function connectToolResultView(deps: ToolResultViewDependencies): P
   const onToolResult = (result: ToolResult) => {
     if (!disposed) deps.onToolResult(result);
   };
+  const onToolInput = () => {
+    if (!disposed) deps.onToolInput?.();
+  };
   const release = () => {
     disposed = true;
     app.removeEventListener('toolresult', onToolResult);
+    if (deps.onToolInput) app.removeEventListener('toolinput', onToolInput);
     app.onteardown = undefined;
   };
   const connection: ToolResultViewConnection = {
@@ -54,6 +65,7 @@ export async function connectToolResultView(deps: ToolResultViewDependencies): P
     },
   };
 
+  if (deps.onToolInput) app.addEventListener('toolinput', onToolInput);
   app.addEventListener('toolresult', onToolResult);
   // The host closes the connection after its teardown request is answered, so only release here.
   app.onteardown = async () => {

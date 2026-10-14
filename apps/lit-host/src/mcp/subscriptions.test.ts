@@ -1,9 +1,13 @@
+import { request } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from './dev-auth.js';
 import { SUBSCRIPTIONS_TOOL_NAME, SubscriptionsResultSchema } from './subscriptions.js';
+import { SUBSCRIPTIONS_SCOPE } from './request-auth.js';
 import type { AccountSubscriptions, SubscriptionBackend } from './subscriptions-server.js';
 
 // Everything here goes through the real listener over HTTP with real bearer credentials.
@@ -145,6 +149,103 @@ describe('subscriptions for the verified request identity', () => {
     const result = await list(await h.connect(DEV_TOKENS.alice));
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toBeUndefined();
+  });
+});
+
+describe('identity is immutable per request', () => {
+  // A verifier is free to reuse one `AuthInfo` object across calls — a cached token record, for
+  // example. The identity accepted for a request must survive that: the transport reads `req.auth`
+  // only after the body arrives, so a retained verifier object would let a later request's claims
+  // decide an earlier request's user. Reproduced over the real listener with a paused request.
+  it('keeps each request bound to the identity its verifier accepted for it', async () => {
+    const reused: AuthInfo = {
+      token: 'reused',
+      clientId: 'shared-client',
+      scopes: [SUBSCRIPTIONS_SCOPE],
+      expiresAt: Date.now() / 1000 + 3600,
+      extra: { accountId: DEV_ACCOUNTS.alice, signInId: 'sign-in-alice' },
+    };
+    const lookups: string[] = [];
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        backend: {
+          async listSubscriptions(accountId) {
+            lookups.push(accountId);
+            return accounts[accountId] as AccountSubscriptions | undefined;
+          },
+        },
+        verifier: {
+          async verifyAccessToken(token) {
+            const account = token === 'alice-token' ? DEV_ACCOUNTS.alice : token === 'bob-token' ? DEV_ACCOUNTS.bob : undefined;
+            if (!account) throw new InvalidTokenError('Unknown credential');
+            reused.extra = { accountId: account, signInId: `sign-in-${account}` };
+            return reused;
+          },
+        },
+      },
+    });
+    cleanup.listener = listener;
+
+    const url = new URL(listener.subscriptionsUrl ?? '');
+    const body = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} },
+    });
+    // A request the test can pause: headers and part of the body go out first, the rest later.
+    const send = (token: string) => {
+      let settle!: (value: { status: number; text: string }) => void;
+      const done = new Promise<{ status: number; text: string }>((resolve) => {
+        settle = resolve;
+      });
+      const req = request(
+        {
+          host: url.hostname,
+          port: Number(url.port),
+          path: url.pathname,
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            authorization: `Bearer ${token}`,
+            'content-length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          let text = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            text += chunk;
+          });
+          res.on('end', () => settle({ status: res.statusCode ?? 0, text }));
+        },
+      );
+      return { req, done };
+    };
+
+    // Alice's headers and first body byte: the server authenticates her and waits for the rest.
+    const alice = send('alice-token');
+    alice.req.write(body.slice(0, 1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Bob's request completes while Alice's body is still paused; the shared verifier object now
+    // names Bob. Alice's call must still read Alice's account.
+    const bob = send('bob-token');
+    bob.req.end(body);
+    const bobResponse = await bob.done;
+    alice.req.end(body.slice(1));
+    const aliceResponse = await alice.done;
+
+    expect(bobResponse.status).toBe(200);
+    expect(aliceResponse.status).toBe(200);
+    expect(JSON.parse(aliceResponse.text).result.structuredContent.displayName).toBe('Alice');
+    expect(JSON.parse(bobResponse.text).result.structuredContent.displayName).toBe('Bob');
+    expect([...lookups].sort()).toEqual([DEV_ACCOUNTS.alice, DEV_ACCOUNTS.bob].sort());
   });
 });
 

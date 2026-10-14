@@ -24,36 +24,54 @@ export interface SubscriptionsViewDependencies {
  * the label says only whether the data on screen is still from the sign-in it started with. It
  * never grants access; the server authorizes every call from the verified request.
  *
- * Any error result clears the view and releases the pin. The tool's sign-in message shows the
- * sign-in-required state, and the next valid result starts a new pinned session.
+ * Any error result clears the view and releases the pin, and the view stays invalid until an
+ * authenticated round trip — a fresh tool call — supplies the evidence that the session is
+ * usable again. While invalid, a result that no new call started is ignored: after auth or
+ * session loss, a delayed copy of an earlier result must not revive the private view. The next
+ * call's valid result reestablishes the pin, so a refused or failed read recovers safely.
  */
 export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): Promise<ToolResultViewConnection> {
   let pinnedSession: string | undefined;
-  let invalidated = false;
+  let invalidated = false; // private rendering blocked until a new round trip succeeds
+  let roundTripOpen = false; // a tool call started and its result has not arrived yet
+  let delivered = false; // a result has already been delivered to this view
 
-  const invalidate = (message: string) => {
-    invalidated = true;
+  const clear = (state: SubscriptionsViewState) => {
     pinnedSession = undefined;
-    deps.show({ kind: 'problem', message });
+    deps.show(state);
   };
 
   return connectToolResultView({
     app: deps.app,
     transport: deps.transport,
+    onToolInput() {
+      roundTripOpen = true;
+    },
     onToolResult(result) {
+      // A result the host delivers without a preceding call — the first one — still counts as
+      // evidence; every result after that is trusted only when a fresh call started it.
+      const fresh = roundTripOpen || !delivered;
+      roundTripOpen = false;
+      delivered = true;
+
       if (result.isError) {
+        invalidated = true;
         const signInRequired = result.content?.some((part) => part.type === 'text' && part.text === SIGN_IN_REQUIRED_TEXT);
-        pinnedSession = undefined;
-        invalidated = false;
-        return deps.show(signInRequired ? { kind: 'sign-in-required' } : { kind: 'problem', message: 'The tool reported an error.' });
+        return clear(signInRequired ? { kind: 'sign-in-required' } : { kind: 'problem', message: 'The tool reported an error.' });
       }
-      if (invalidated) return;
+      // While invalid, only a result a new round trip started may reestablish the pin.
+      if (invalidated && !fresh) return;
       const parsed = SubscriptionsResultSchema.safeParse(result.structuredContent);
-      if (!parsed.success) return invalidate('The tool result was not a subscriptions result.');
+      if (!parsed.success) {
+        invalidated = true;
+        return clear({ kind: 'problem', message: 'The tool result was not a subscriptions result.' });
+      }
       if (pinnedSession !== undefined && parsed.data.viewSession !== pinnedSession) {
-        return invalidate('Your session changed. Reload to see your subscriptions.');
+        invalidated = true;
+        return clear({ kind: 'problem', message: 'Your session changed. Reload to see your subscriptions.' });
       }
       pinnedSession = parsed.data.viewSession;
+      invalidated = false;
       deps.show({ kind: 'subscriptions', subscriptions: parsed.data });
     },
   });

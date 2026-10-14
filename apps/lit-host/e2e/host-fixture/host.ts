@@ -28,6 +28,8 @@ declare global {
     teardownView?: () => Promise<void>;
     /** Delivers a tool result to the mounted view. */
     deliverToolResult?: (result: Parameters<AppBridge['sendToolResult']>[0]) => Promise<void>;
+    /** Reports that a tool call is starting, as a host does before the result arrives. */
+    deliverToolInput?: (params: Parameters<AppBridge['sendToolInput']>[0]) => Promise<void>;
   }
 }
 
@@ -74,6 +76,11 @@ window.mountView = async (resource, options) => {
 window.deliverToolResult = async (result) => {
   if (!bridge) throw new Error('mountView has not run');
   await bridge.sendToolResult(result);
+};
+
+window.deliverToolInput = async (params) => {
+  if (!bridge) throw new Error('mountView has not run');
+  await bridge.sendToolInput(params);
 };
 
 window.teardownView = async () => {

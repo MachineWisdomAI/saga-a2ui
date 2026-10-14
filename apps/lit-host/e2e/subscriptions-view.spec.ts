@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
-import { SUBSCRIPTIONS_TOOL_NAME, SUBSCRIPTIONS_VIEW_URI } from '../src/mcp/subscriptions.js';
+import { SUBSCRIPTIONS_TOOL_NAME, SUBSCRIPTIONS_VIEW_URI, SIGN_IN_REQUIRED_TEXT } from '../src/mcp/subscriptions.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: real listener with real bearer credentials -> real tools/call and resources/read ->
@@ -106,17 +106,53 @@ test('a changed sign-in clears the private view and it stays cleared', async ({ 
   await bob.close();
 });
 
-test('an unauthorized result shows sign-in required and removes private data', async ({ page }) => {
+test('a refused credential clears the private view, a delayed prior result cannot revive it, and a fresh round trip recovers', async ({ page }) => {
   const alice = await connect(DEV_TOKENS.alice);
   const view = await mountedView(page, alice);
-  await send(page, await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} }));
+  const authorized = await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
+  await send(page, authorized);
   await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(1);
 
-  await send(page, { isError: true, content: [{ type: 'text', text: 'Sign in to see your subscriptions.' }] });
+  // The host's next call carries a credential the listener refuses. This is the real 401 path: the
+  // listener answers with an HTTP error and a challenge before any tool handler runs, so no tool
+  // result is ever produced for it. A host surfaces that refusal to the view as the sign-in message.
+  const refused = await fetch(listener.subscriptionsUrl ?? '', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${DEV_TOKENS.expired}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} },
+    }),
+  });
+  expect(refused.status).toBe(401);
+  expect(refused.headers.get('www-authenticate')).toMatch(/error="invalid_token".*expired/);
+  expect(await refused.json()).toEqual({ error: 'invalid_token' });
+
+  await send(page, { isError: true, content: [{ type: 'text', text: SIGN_IN_REQUIRED_TEXT }] });
   await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'sign-in-required');
-  await expect(view.getByTestId('subscriptions-status')).toHaveText('Sign in to see your subscriptions.');
+  await expect(view.getByTestId('subscriptions-status')).toHaveText(SIGN_IN_REQUIRED_TEXT);
   await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(0);
   await expect(view.getByText('Alice')).toHaveCount(0);
+
+  // A delayed copy of the earlier authorized result arrives while the view is invalid. No new call
+  // started it, so it must not become the new trusted label; the private view stays cleared.
+  await send(page, authorized);
+  await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'sign-in-required');
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(0);
+  await expect(view.getByText('Alice')).toHaveCount(0);
+
+  // A fresh authenticated round trip reestablishes the private view.
+  await page.evaluate(() => window.deliverToolInput?.({ arguments: {} }));
+  await send(page, await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} }));
+  await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(1);
   await alice.close();
 });
 

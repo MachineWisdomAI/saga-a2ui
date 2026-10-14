@@ -102,6 +102,53 @@ describe('subscriptions view', () => {
     await expect.poll(() => (h.last() as { subscriptions?: SubscriptionsResult })?.subscriptions?.subscriptions.length).toBe(2);
   });
 
+  it('keeps the view cleared after a failure until a new call starts a round trip', async () => {
+    const h = await harness();
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: SIGN_IN_REQUIRED_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('sign-in-required');
+
+    // A delayed copy of the earlier authorized result arrives while the view is invalid: it must
+    // not become the new trusted first label, because no new call started it.
+    const shown = h.states.length;
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown); // nothing was shown
+    expect(h.last()?.kind).toBe('sign-in-required');
+
+    // A fresh authenticated round trip reestablishes the private view.
+    await h.bridge.sendToolInput({ arguments: {} });
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.last()).toMatchObject({ kind: 'subscriptions', subscriptions: { displayName: 'Alice' } });
+  });
+
+  it('an unrelated error does not unlock the view after a session mismatch', async () => {
+    const h = await harness();
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    await h.bridge.sendToolResult(delivery(result('Bob', 'vs_bbbbbbbbbbbbbbbbbbbbbb', ['Creator Three'])));
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Subscriptions are unavailable.' }] });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+
+    // The prior session's result still cannot revive the view without a fresh round trip.
+    const shown = h.states.length;
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown); // nothing was shown
+    expect(h.last()?.kind).toBe('problem');
+
+    // A fresh round trip with the current session's label recovers safely.
+    await h.bridge.sendToolInput({ arguments: {} });
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+  });
+
   it('ignores results after disposal', async () => {
     const h = await harness();
     h.view.dispose();
