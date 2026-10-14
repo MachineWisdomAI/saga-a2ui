@@ -6,6 +6,9 @@ const FORBIDDEN = [
   'StreamableHTTPServerTransport', // MCP server transport
   'node:http',
   'createEpisodeServer',
+  'createSubscriptionsServer',
+  'createDevelopmentVerifier',
+  'dev-only-token',
   'process.env',
   'Authorization',
   'Bearer ',

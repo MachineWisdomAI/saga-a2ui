@@ -5,81 +5,47 @@ import type { IngestResult } from '../protocols/a2ui/v0_9/session.js';
 import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
 import { PublicEpisodeSchema } from './episode.js';
 
-export interface EpisodeViewDependencies {
+export type ToolResult = McpUiToolResultNotification['params'];
+
+export interface ToolResultViewDependencies {
   /** The MCP Apps view bridge. Its transport is chosen by the composition root. */
   readonly app: App;
   readonly transport: Transport;
-  /** Hands A2UI input to the renderer's session (decoding and validation live there). */
-  readonly deliver: (input: unknown) => IngestResult;
-  /** Shows a plain-text problem, or clears it when called with `undefined`. */
-  readonly showProblem: (message: string | undefined) => void;
+  /** Handles each delivered result. Never called after the connection is disposed. */
+  readonly onToolResult: (result: ToolResult) => void;
 }
 
-/** A connected episode view. Ends the bridge connection and stops all delivery. */
-export interface EpisodeViewConnection {
+/** A connected view. Ends the bridge connection and stops all delivery. */
+export interface ToolResultViewConnection {
   /** Idempotent. Results that arrive afterwards are ignored. */
   dispose(): void;
 }
 
-type ToolResult = McpUiToolResultNotification['params'];
-
-const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: { surfaceId: SURFACE_ID } }];
-
 /**
- * Connects the view bridge, then renders each delivered tool result through the A2UI session.
- *
- * Delivery only: the result is checked against the public episode contract and turned into
- * A2UI messages; A2UI decoding stays in the protocol module and presentation in the Lit view.
- * This module owns the bridge connection's lifetime; the session's lifetime stays with the
- * caller.
+ * Connects the view bridge and owns its lifetime; what to do with a result belongs to the caller.
  *
  * Lifecycle, using only the upstream `App` API:
  * - The `toolresult` listener and the teardown handler are installed before `connect`, so a
  *   result the host sends right after initialization is handled, once.
- * - Each valid result replaces the one shown. The panel surface exists when this is called
- *   (the Lit app creates it); after a failure removed it, the next valid result recreates it
- *   before supplying data.
- * - An error or non-episode result removes the panel and shows a plain-text fallback, so
- *   stale content is never left beside a problem.
- * - A result the session rejects is treated like any other failure: panel removed, reason shown.
  * - `dispose()` removes the listener and closes the connection once, even after a host teardown
  *   request has already stopped delivery; it also runs when `connect` fails. Teardown only stops
  *   delivery, because the host ends the connection after its request is answered. Connecting
  *   the same `App` again starts with exactly one listener.
  */
-export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
+export async function connectToolResultView(deps: ToolResultViewDependencies): Promise<ToolResultViewConnection> {
   const { app } = deps;
   let disposed = false; // delivery has stopped
   let closed = false; // the App's transport close has been requested
-  let panelShown = true;
-
-  const showFailure = (problem: string) => {
-    if (panelShown) {
-      deps.deliver(removePanel);
-      panelShown = false;
-    }
-    deps.showProblem(problem);
-  };
 
   const onToolResult = (result: ToolResult) => {
-    if (disposed) return;
-    if (result.isError) return showFailure('The tool reported an error.');
-    const episode = PublicEpisodeSchema.safeParse(result.structuredContent);
-    if (!episode.success) return showFailure('The tool result was not a public episode.');
-
-    const data = panelData(episode.data);
-    const outcome = deps.deliver(panelShown ? data : [...panelSurface, ...data]);
-    if (!outcome.ok) return showFailure(outcome.failure.message);
-    panelShown = true;
-    deps.showProblem(undefined);
+    if (!disposed) deps.onToolResult(result);
   };
-
   const release = () => {
     disposed = true;
     app.removeEventListener('toolresult', onToolResult);
     app.onteardown = undefined;
   };
-  const connection: EpisodeViewConnection = {
+  const connection: ToolResultViewConnection = {
     dispose() {
       if (closed) return; // completed disposal must not touch a later connection's handlers
       closed = true;
@@ -101,4 +67,60 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
     throw error;
   }
   return connection;
+}
+
+export interface EpisodeViewDependencies {
+  readonly app: App;
+  readonly transport: Transport;
+  /** Hands A2UI input to the renderer's session (decoding and validation live there). */
+  readonly deliver: (input: unknown) => IngestResult;
+  /** Shows a plain-text problem, or clears it when called with `undefined`. */
+  readonly showProblem: (message: string | undefined) => void;
+}
+
+/** A connected episode view. */
+export type EpisodeViewConnection = ToolResultViewConnection;
+
+const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: { surfaceId: SURFACE_ID } }];
+
+/**
+ * Renders each delivered tool result through the A2UI session.
+ *
+ * Delivery only: the result is checked against the public episode contract and turned into
+ * A2UI messages; A2UI decoding stays in the protocol module and presentation in the Lit view.
+ * Bridge lifetime is `connectToolResultView`; the session's lifetime stays with the caller.
+ *
+ * - Each valid result replaces the one shown. The panel surface exists when this is called
+ *   (the Lit app creates it); after a failure removed it, the next valid result recreates it
+ *   before supplying data.
+ * - An error or non-episode result removes the panel and shows a plain-text fallback, so
+ *   stale content is never left beside a problem.
+ * - A result the session rejects is treated like any other failure: panel removed, reason shown.
+ */
+export function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
+  let panelShown = true;
+
+  const showFailure = (problem: string) => {
+    if (panelShown) {
+      deps.deliver(removePanel);
+      panelShown = false;
+    }
+    deps.showProblem(problem);
+  };
+
+  return connectToolResultView({
+    app: deps.app,
+    transport: deps.transport,
+    onToolResult(result) {
+      if (result.isError) return showFailure('The tool reported an error.');
+      const episode = PublicEpisodeSchema.safeParse(result.structuredContent);
+      if (!episode.success) return showFailure('The tool result was not a public episode.');
+
+      const data = panelData(episode.data);
+      const outcome = deps.deliver(panelShown ? data : [...panelSurface, ...data]);
+      if (!outcome.ok) return showFailure(outcome.failure.message);
+      panelShown = true;
+      deps.showProblem(undefined);
+    },
+  });
 }
