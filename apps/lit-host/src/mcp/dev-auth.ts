@@ -1,7 +1,7 @@
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { SUBSCRIPTIONS_SCOPE } from './request-auth.js';
+import { PLAYBACK_SCOPE, SUBSCRIPTIONS_SCOPE } from './request-auth.js';
 
 // DEVELOPMENT ONLY. Fixed, public, synthetic credentials for the local recipe and its tests.
 // This verifier proves nothing about a real user. It is not exported from any package, refuses
@@ -28,7 +28,7 @@ export function createDevelopmentVerifier(): OAuthTokenVerifier {
   const user = (accountId: string, signInId: string, token: string, expiresAt: number): AuthInfo => ({
     token,
     clientId: 'development-client',
-    scopes: [SUBSCRIPTIONS_SCOPE],
+    scopes: [SUBSCRIPTIONS_SCOPE, PLAYBACK_SCOPE],
     expiresAt,
     extra: { accountId, signInId },
   });

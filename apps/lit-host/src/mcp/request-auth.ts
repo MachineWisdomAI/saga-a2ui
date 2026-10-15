@@ -10,7 +10,16 @@ import { z } from 'zod';
 // from tool arguments or from shared "current user" state.
 
 export const SUBSCRIPTIONS_SCOPE = 'subscriptions:read';
-const REALM = 'saga-a2ui-subscriptions';
+export const PLAYBACK_SCOPE = 'playback:play';
+
+/** What one protected endpoint requires of a credential: the challenge realm and the scope. */
+export interface AuthRequirement {
+  readonly realm: string;
+  readonly scope: string;
+}
+
+export const SUBSCRIPTIONS_REQUIREMENT: AuthRequirement = { realm: 'saga-a2ui-subscriptions', scope: SUBSCRIPTIONS_SCOPE };
+export const PLAYBACK_REQUIREMENT: AuthRequirement = { realm: 'saga-a2ui-playback', scope: PLAYBACK_SCOPE };
 
 /** Who is calling, as established by the verifier for exactly one request. */
 export interface VerifiedIdentity {
@@ -50,42 +59,43 @@ function snapshotAuthInfo(authInfo: AuthInfo, identity: VerifiedIdentity): AuthI
   });
 }
 
-function reject(status: 401 | 403, error: string, description: string, scope?: string): AuthDecision {
-  const parts = [`realm="${REALM}"`, `error="${error}"`, `error_description="${description}"`];
+function reject(requirement: AuthRequirement, status: 401 | 403, error: string, description: string, scope?: string): AuthDecision {
+  const parts = [`realm="${requirement.realm}"`, `error="${error}"`, `error_description="${description}"`];
   if (scope) parts.push(`scope="${scope}"`);
   return { ok: false, status, challenge: `Bearer ${parts.join(', ')}`, error };
 }
 
 /**
  * Checks the `Authorization` header: a bearer credential the verifier accepts, not expired,
- * carrying the subscriptions scope, and naming an account. Anything else is refused with the
- * HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
+ * carrying the endpoint's required scope, and naming an account. Anything else is refused with
+ * the HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
  */
 export async function authenticate(
   request: Pick<IncomingMessage, 'headers'>,
   verifier: OAuthTokenVerifier,
+  requirement: AuthRequirement,
   nowSeconds: () => number = () => Date.now() / 1000,
 ): Promise<AuthDecision> {
   const header = request.headers.authorization;
-  if (header === undefined) return { ok: false, status: 401, challenge: `Bearer realm="${REALM}"`, error: 'missing_token' };
+  if (header === undefined) return { ok: false, status: 401, challenge: `Bearer realm="${requirement.realm}"`, error: 'missing_token' };
 
   const match = /^Bearer ([^\s]+)$/i.exec(header);
-  if (!match?.[1]) return reject(401, 'invalid_token', 'Malformed credential');
+  if (!match?.[1]) return reject(requirement, 401, 'invalid_token', 'Malformed credential');
 
   let authInfo: AuthInfo;
   try {
     authInfo = await verifier.verifyAccessToken(match[1]);
   } catch (error) {
-    if (error instanceof InvalidTokenError) return reject(401, 'invalid_token', 'Invalid credential');
+    if (error instanceof InvalidTokenError) return reject(requirement, 401, 'invalid_token', 'Invalid credential');
     return { ok: false, status: 500, error: 'server_error' };
   }
   if (typeof authInfo.expiresAt !== 'number' || authInfo.expiresAt <= nowSeconds()) {
-    return reject(401, 'invalid_token', 'Token has expired');
+    return reject(requirement, 401, 'invalid_token', 'Token has expired');
   }
-  if (!authInfo.scopes.includes(SUBSCRIPTIONS_SCOPE)) {
-    return reject(403, 'insufficient_scope', 'User sign-in required', SUBSCRIPTIONS_SCOPE);
+  if (!authInfo.scopes.includes(requirement.scope)) {
+    return reject(requirement, 403, 'insufficient_scope', 'User sign-in required', requirement.scope);
   }
   const identity = identityFromAuthInfo(authInfo);
-  if (!identity) return reject(403, 'insufficient_scope', 'User sign-in required', SUBSCRIPTIONS_SCOPE);
+  if (!identity) return reject(requirement, 403, 'insufficient_scope', 'User sign-in required', requirement.scope);
   return { ok: true, authInfo: snapshotAuthInfo(authInfo, identity) };
 }

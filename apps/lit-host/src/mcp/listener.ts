@@ -3,16 +3,20 @@ import type { AddressInfo } from 'node:net';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { authenticate } from './request-auth.js';
+import type { MediaStore } from '../playback/media-service.js';
+import { PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
+import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
+import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
-import { SUBSCRIPTION_LIMITS } from './subscriptions.js';
+import { SUBSCRIPTION_LIMITS, SUBSCRIPTIONS_TOOL_NAME } from './subscriptions.js';
 import {
-  classifySubscriptionsBody,
+  classifyProtectedBody,
   declaredBodyTooLarge,
   transportHeaderFailure,
   writeProtocol,
   writeTransport,
-} from './subscriptions-request.js';
+  type ProtectedRequestPolicy,
+} from './protected-request.js';
 import {
   createSubscriptionsServer,
   createViewSessionLabeler,
@@ -32,6 +36,16 @@ export interface SubscriptionsEndpointOptions {
   readonly readBoundMs?: number;
 }
 
+/** Optional protected endpoint: the app-only Play operation for the signed-in listener. */
+export interface PlaybackEndpointOptions {
+  readonly viewHtml: string;
+  readonly backend: PlaybackBackend;
+  /** Protected episode bytes. Reached only after authentication, entitlement and the capability check. */
+  readonly mediaStore: MediaStore;
+  /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
+  readonly verifier: OAuthTokenVerifier;
+}
+
 export interface EpisodeListenerOptions {
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
@@ -39,6 +53,8 @@ export interface EpisodeListenerOptions {
   readonly port: number;
   /** When absent, the protected path does not exist. */
   readonly subscriptions?: SubscriptionsEndpointOptions;
+  /** When absent, the protected path does not exist. */
+  readonly playback?: PlaybackEndpointOptions;
 }
 
 export interface EpisodeListener {
@@ -46,12 +62,35 @@ export interface EpisodeListener {
   readonly url: string;
   /** Protected endpoint (bearer credential required); undefined unless configured. */
   readonly subscriptionsUrl?: string;
+  /** Protected endpoint (bearer credential required); undefined unless configured. */
+  readonly playbackUrl?: string;
   close(): Promise<void>;
 }
 
 const HOST = '127.0.0.1';
 const MCP_PATH = '/mcp';
 const SUBSCRIPTIONS_PATH = '/subscriptions/mcp';
+const PLAYBACK_PATH = '/playback/mcp';
+
+/** What the protected subscriptions endpoint accepts: its one tool, within the browse bounds. */
+const SUBSCRIPTIONS_POLICY: ProtectedRequestPolicy = {
+  toolNames: [SUBSCRIPTIONS_TOOL_NAME],
+  limits: SUBSCRIPTION_LIMITS,
+};
+
+/** What the protected playback endpoint accepts: the one Play tool, within the Play bounds. */
+const PLAYBACK_POLICY: ProtectedRequestPolicy = {
+  toolNames: [PLAY_TOOL_NAME],
+  limits: PLAYBACK_LIMITS,
+};
+
+/** Everything that differs between protected endpoints; the request order does not. */
+interface ProtectedEndpoint {
+  readonly policy: ProtectedRequestPolicy;
+  readonly requirement: AuthRequirement;
+  readonly verifier: OAuthTokenVerifier;
+  createServer(): McpServer;
+}
 
 /**
  * Application-owned HTTP hosting for the MCP servers: loopback only, stateless Streamable HTTP
@@ -99,7 +138,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     await transport.handleRequest(req, res, parsedBody);
   }
 
-  async function readLimitedBody(req: IncomingMessage): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
+  async function readLimitedBody(req: IncomingMessage, maxBytes: number): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
     // Do not iterate with for-await: leaving that loop destroys the socket before a 413 can be written.
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
@@ -120,7 +159,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       const onData = (chunk: Buffer | string) => {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         received += buf.length;
-        if (received > SUBSCRIPTION_LIMITS.maxRequestBytes) {
+        if (received > maxBytes) {
           finish({ tooLarge: true });
           return;
         }
@@ -146,13 +185,18 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     else res.once('finish', cleanup);
   }
 
-  async function serveSubscriptions(
-    endpoint: SubscriptionsEndpointOptions,
+  /**
+   * The one order every protected endpoint follows: authenticate before reading the body, then
+   * classify the request, then build a server and hand it the verified identity. Only the policy,
+   * the credential requirement and the server differ between endpoints.
+   */
+  async function serveProtected(
+    endpoint: ProtectedEndpoint,
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
-    if (declaredBodyTooLarge(req)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
-    const decision = await authenticate(req, endpoint.verifier);
+    if (declaredBodyTooLarge(req, endpoint.policy)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    const decision = await authenticate(req, endpoint.verifier, endpoint.requirement);
     if (!decision.ok) {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (decision.challenge) headers['www-authenticate'] = decision.challenge;
@@ -160,35 +204,58 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     }
     const headerFailure = transportHeaderFailure(req);
     if (headerFailure) return writeTransport(res, headerFailure);
-    const body = await readLimitedBody(req);
+    const body = await readLimitedBody(req, endpoint.policy.limits.maxRequestBytes);
     if (body.tooLarge) return rejectOversized(req, res);
-    const gate = classifySubscriptionsBody(body.text);
+    const gate = classifyProtectedBody(body.text, endpoint.policy);
     if (gate.kind === 'transport') return writeTransport(res, gate);
     if (gate.kind === 'protocol') return writeProtocol(res, gate);
     // The SDK transport passes `req.auth` to each tool call as `extra.authInfo`.
     Object.assign(req, { auth: decision.authInfo });
-    const server = createSubscriptionsServer({
-      viewHtml: endpoint.viewHtml,
-      backend: endpoint.backend,
-      labelViewSession,
-      ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
-    });
-    await serve(server, req, res, gate.body, SUBSCRIPTION_LIMITS.maxRequestBytes);
+    await serve(endpoint.createServer(), req, res, gate.body, endpoint.policy.limits.maxRequestBytes);
+  }
+
+  function protectedEndpointAt(path: string): ProtectedEndpoint | undefined {
+    if (path === SUBSCRIPTIONS_PATH && options.subscriptions) {
+      const endpoint = options.subscriptions;
+      return {
+        policy: SUBSCRIPTIONS_POLICY,
+        requirement: SUBSCRIPTIONS_REQUIREMENT,
+        verifier: endpoint.verifier,
+        createServer: () =>
+          createSubscriptionsServer({
+            viewHtml: endpoint.viewHtml,
+            backend: endpoint.backend,
+            labelViewSession,
+            ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
+          }),
+      };
+    }
+    if (path === PLAYBACK_PATH && options.playback) {
+      const endpoint = options.playback;
+      return {
+        policy: PLAYBACK_POLICY,
+        requirement: PLAYBACK_REQUIREMENT,
+        verifier: endpoint.verifier,
+        createServer: () => createPlaybackServer({ viewHtml: endpoint.viewHtml }),
+      };
+    }
+    return undefined;
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
-    const protectedEndpoint = path === SUBSCRIPTIONS_PATH ? options.subscriptions : undefined;
+    const protectedEndpoint = protectedEndpointAt(path);
     if (path !== MCP_PATH && !protectedEndpoint) return void res.writeHead(404).end();
     if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();
 
-    if (protectedEndpoint) return serveSubscriptions(protectedEndpoint, req, res);
+    if (protectedEndpoint) return serveProtected(protectedEndpoint, req, res);
     await serve(createEpisodeServer({ viewHtml: options.viewHtml, catalog: options.catalog }), req, res);
   }
 
   return {
     url: `http://${HOST}:${port}${MCP_PATH}`,
     ...(options.subscriptions ? { subscriptionsUrl: `http://${HOST}:${port}${SUBSCRIPTIONS_PATH}` } : {}),
+    ...(options.playback ? { playbackUrl: `http://${HOST}:${port}${PLAYBACK_PATH}` } : {}),
     close: () =>
       new Promise<void>((resolve, reject) => {
         http.close((error) => (error ? reject(error) : resolve()));
