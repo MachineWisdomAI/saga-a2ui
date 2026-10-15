@@ -1,14 +1,16 @@
 {
   "name": "saga-a2ui-workspace",
   "private": true,
+  "type": "module",
   "description": "SAGA A2UI SDK workspace",
   "scripts": {
     "start": "npm run start -w @saga-a2ui/lit-host-app",
     "build": "npm run build -w @saga-a2ui/lit-host-app",
     "serve:mcp": "npm run serve:mcp -w @saga-a2ui/lit-host-app",
-    "typecheck": "npm run typecheck -w @saga-a2ui/lit-host-app",
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/lit-host-app",
     "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app",
-    "test:headless": "npm run test:headless -w @saga-a2ui/lit-host-app"
+    "test:headless": "vitest run",
+    "verify": "tsx scripts/verify.ts"
   },
   "license": "Apache-2.0",
   "engines": {
