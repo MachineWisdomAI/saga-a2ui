@@ -41,3 +41,15 @@ test('the Lit application and host-fixture bundles contain no server code or cre
     for (const marker of FORBIDDEN) expect(text, `${path} contains ${marker}`).not.toContain(marker);
   }
 });
+
+test('the player view is one self-contained document with no server code, credential or per-user value', async () => {
+  const html = await readFile(new URL('../dist/playback-view/playback.html', import.meta.url), 'utf8');
+  expect(html).not.toMatch(/<script[^>]+\bsrc=/); // no external script
+  expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/);
+  expect(html).not.toMatch(/<audio|<video|<source/i); // bytes are decoded in script, never given to a media element
+  for (const marker of [...FORBIDDEN, 'createPlaybackServer', 'createMediaService', 'node:crypto', 'playback:play']) {
+    expect(html, marker).not.toContain(marker);
+  }
+  // The only thing signed in the view is a proof, and its key is generated at run time.
+  expect(html).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
+});
