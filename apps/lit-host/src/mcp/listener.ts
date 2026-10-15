@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { MediaStore } from '../playback/media-service.js';
+import { createMediaService, type MediaStore } from '../playback/media-service.js';
 import { PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
 import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
 import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
@@ -108,6 +108,9 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const { port } = http.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
   const allowedHosts = [`${HOST}:${port}`, `localhost:${port}`];
   const labelViewSession = createViewSessionLabeler();
+  // One service for the listener's lifetime: it holds the issued capabilities, while each
+  // request still builds its own MCP server.
+  const mediaService = createMediaService();
 
   http.on('request', (req, res) => {
     void handle(req, res).catch(() => {
@@ -236,7 +239,8 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
         policy: PLAYBACK_POLICY,
         requirement: PLAYBACK_REQUIREMENT,
         verifier: endpoint.verifier,
-        createServer: () => createPlaybackServer({ viewHtml: endpoint.viewHtml }),
+        createServer: () =>
+          createPlaybackServer({ viewHtml: endpoint.viewHtml, backend: endpoint.backend, mediaService }),
       };
     }
     return undefined;

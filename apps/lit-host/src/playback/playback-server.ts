@@ -1,6 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
-import { PLAY_TOOL_NAME, PLAYBACK_VIEW_URI, PlayRequestSchema } from './playback.js';
+import { calculateJwkThumbprint } from 'jose';
+import { identityFromAuthInfo } from '../mcp/request-auth.js';
+import type { MediaService } from './media-service.js';
+import {
+  PLAY_TOOL_NAME,
+  PLAYBACK_AUTHORIZED_TEXT,
+  PLAYBACK_DENIED_TEXT,
+  PLAYBACK_RESULT_META,
+  PLAYBACK_UNSUPPORTED_TEXT,
+  PLAYBACK_VIEW_URI,
+  PlayRequestSchema,
+  RECIPIENT_KEY_META,
+  RecipientKeySchema,
+} from './playback.js';
 
 /**
  * What the application's backend knows about an episode. Only `id`, `title` and `description`
@@ -23,9 +36,14 @@ export interface PlaybackBackend {
 export interface PlaybackServerOptions {
   /** The built, immutable view document. Served verbatim; never combined with request data. */
   readonly viewHtml: string;
+  readonly backend: PlaybackBackend;
+  /** Issues the capability the media service checks later. Shared across requests by the listener. */
+  readonly mediaService: MediaService;
 }
 
 const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
+
+const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
 
 /**
  * One app-only Play operation. `visibility: ['app']` makes the host offer it to the embedded
@@ -47,7 +65,37 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI, visibility: ['app'] }, 'ui/resourceUri': PLAYBACK_VIEW_URI },
     },
-    async () => ({ isError: true, content: [{ type: 'text', text: 'Playback is not available.' }] }),
+    async ({ episodeId }, extra) => {
+      // The principal comes only from the verified request context, never from the arguments.
+      const identity = identityFromAuthInfo(extra.authInfo);
+      if (!identity) return failure(PLAYBACK_UNSUPPORTED_TEXT); // the listener already refused this; fail closed anyway
+
+      // Routing is checked before any protected work: without a usable recipient key the view
+      // cannot receive a bound capability, so nothing is looked up or fetched.
+      const recipient = RecipientKeySchema.safeParse(extra._meta?.[RECIPIENT_KEY_META]);
+      if (!recipient.success) return failure(PLAYBACK_UNSUPPORTED_TEXT);
+
+      const decision = await options.backend.checkEntitlement(identity.accountId, episodeId);
+      const episode = options.backend.findEpisode(episodeId);
+      if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
+
+      const { kty, crv, x, y } = recipient.data;
+      const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
+      const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
+
+      // Two projections, each built field by field. Only `_meta` carries the capability.
+      return {
+        content: [{ type: 'text', text: PLAYBACK_AUTHORIZED_TEXT }],
+        _meta: {
+          [PLAYBACK_RESULT_META]: {
+            episodeId: episode.id,
+            title: episode.title,
+            capability: issued.capability,
+            expiresAt: issued.expiresAt,
+          },
+        },
+      };
+    },
   );
 
   registerAppResource(server, 'Playback view', PLAYBACK_VIEW_URI, {}, async () => ({
