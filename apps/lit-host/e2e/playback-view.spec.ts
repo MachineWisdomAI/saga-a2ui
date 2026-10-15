@@ -8,10 +8,10 @@ import {
   rpcOverHttp,
   signMediaProof,
   startPlaybackHarness,
-  toneWav,
   type PlaybackHarness,
   type PlaybackHarnessOptions,
 } from '../src/playback/playback-fixture.js';
+import { toneWav } from '../src/playback/synthetic-media.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: the real listener with real bearer credentials, the controlled media service, and
