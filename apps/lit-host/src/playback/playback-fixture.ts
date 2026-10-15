@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
@@ -269,4 +271,40 @@ export async function rpcOverHttp(url: string | undefined, token: string | undef
   });
   const text = await response.text();
   return { status: response.status, challenge: response.headers.get('www-authenticate'), body: text.length === 0 ? undefined : JSON.parse(text) };
+}
+
+/** What a stand-in destination saw: the proof that nothing (or exactly what) reached it. */
+export interface Recorder {
+  /** `http://127.0.0.1:<port>`; a different origin from the listener under test. */
+  readonly origin: string;
+  readonly requests: { readonly url: string; readonly headers: IncomingHttpHeaders }[];
+  close(): Promise<void>;
+}
+
+/**
+ * A second HTTP origin that records every request it receives. It stands in for a destination the
+ * view was never told about, or for a media origin that redirects, so a test can show that no
+ * capability or proof ever arrives there. It answers with `respond`, or with 200 and the canary bytes.
+ */
+export async function startRecorder(respond?: (req: IncomingMessage, res: ServerResponse) => void): Promise<Recorder> {
+  const requests: Recorder['requests'][number][] = [];
+  const server = createServer((req, res) => {
+    requests.push({ url: req.url ?? '', headers: req.headers });
+    if (respond) return respond(req, res);
+    res.writeHead(200, { 'content-type': 'audio/wav', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }).end(Buffer.from(MEDIA_BYTES));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = server.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      }),
+  };
 }

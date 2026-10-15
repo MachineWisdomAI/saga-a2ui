@@ -5,7 +5,7 @@ import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PublicEpisode } from '../mcp/episode.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
-import { MEDIA_BYTES, startPlaybackHarness, type PlaybackHarness } from './playback-fixture.js';
+import { MEDIA_BYTES, startPlaybackHarness, startRecorder, type PlaybackHarness } from './playback-fixture.js';
 import { connectPlaybackView, type AudioPlayer, type PlaybackViewConnection, type PlaybackViewState } from './playback-view.js';
 
 // The view's controller, joined to a real App/AppBridge pair. The bridge's tool handler plays the
@@ -128,6 +128,10 @@ async function rig(options: {
   serverTools?: boolean;
   dropMeta?: boolean;
   entitlements?: Record<string, readonly string[]>;
+  /** Runs at the host after the listener granted a Play and before the view sees the grant. */
+  afterGrant?: (harness: PlaybackHarness) => void;
+  /** Lets a test change the view projection the host hands over, as a buggy or hostile path would. */
+  tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
 } = {}): Promise<Rig> {
   const harness = await startPlaybackHarness(
     options.entitlements ?? { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: [] },
@@ -157,7 +161,12 @@ async function rig(options: {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: sent }),
     });
     if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
-    return ((await response.json()) as { result: CallToolResult }).result;
+    const result = ((await response.json()) as { result: CallToolResult }).result;
+    const grant = result._meta?.['saga-a2ui/playback'];
+    if (params.name !== 'play_episode' || result.isError || !grant) return result;
+    options.afterGrant?.(harness);
+    const shown = options.tamperGrant?.(grant as Record<string, unknown>) ?? grant;
+    return { ...result, _meta: { ...result._meta, 'saga-a2ui/playback': shown } };
   };
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
@@ -686,5 +695,31 @@ describe('Play when the browser cannot play audio', () => {
     expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
     expect(r.harness.playback.entitlementChecks).toEqual([]);
     expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+});
+
+describe('Play when the media origin redirects', () => {
+  // Decision: the media service never redirects, so the player treats any redirect as a failed
+  // acquisition. Following one would carry the capability and the proof headers to a destination
+  // the application never declared.
+  it('does not follow a redirect to another destination: the capability and proof reach nobody else', async () => {
+    const elsewhere = await startRecorder();
+    const redirecting = await startRecorder((req, res) => {
+      res.writeHead(302, { location: `${elsewhere.origin}${req.url}`, 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }).end();
+    });
+    try {
+      const r = await rig({ tamperGrant: (grant) => ({ ...grant, mediaUrl: `${redirecting.origin}/playback/media/ep-1` }) });
+      await r.select(EP1);
+
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('media-failed');
+
+      expect(redirecting.requests).toHaveLength(1); // the declared destination was asked once
+      expect(elsewhere.requests).toEqual([]); // the redirect target never heard of it
+      expect(r.player.started).toHaveLength(0);
+      expect(kinds(r)).not.toContain('playing');
+    } finally {
+      await Promise.all([redirecting.close(), elsewhere.close()]);
+    }
   });
 });

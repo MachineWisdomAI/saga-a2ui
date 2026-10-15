@@ -185,6 +185,9 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         headers: { [CAPABILITY_HEADER]: view.capability, [PROOF_HEADER]: proof },
         cache: 'no-store',
         credentials: 'omit',
+        // The media service never redirects. Following one would carry the capability and the
+        // proof headers to a destination the application did not declare, so a redirect fails.
+        redirect: 'error',
         signal,
       });
       if (response.status === 403) return { kind: 'refused' };
