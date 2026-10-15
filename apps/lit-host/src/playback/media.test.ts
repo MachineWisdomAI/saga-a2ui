@@ -413,6 +413,53 @@ describe('an invalid or unsatisfiable byte range', () => {
   });
 });
 
+describe('cache controls keep one user’s media from another through a shared cache', () => {
+  // Decision: every answer that can carry a status or bytes (200, 206, 403, 416, 503) is
+  // `private, no-store`, so neither a shared cache nor the browser keeps it, and names the request
+  // headers that select the representation in `Vary` as a second line of defence for a cache that
+  // ignores no-store. A cache keyed on the URL alone could otherwise answer B with A's bytes.
+  const SELECTORS = ['origin', 'range', 'x-saga-capability', 'x-saga-proof'];
+
+  const varies = (headers: Headers) => (headers.get('vary') ?? '').toLowerCase().split(/,\s*/);
+
+  it('marks delivered bytes, a range, and every refusal private, uncacheable and varying on what selects them', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    const bobKey = await createRecipientKey();
+
+    const whole = await acquireWithFreshProof(key, grant);
+    const partial = await acquireWithFreshProof(key, grant, 'bytes=0-3');
+    const unsatisfiable = await acquireWithFreshProof(key, grant, 'bytes=50-');
+    const refused = await acquireWithFreshProof(bobKey, grant);
+    h.playback.failReadsWith('down');
+    const unavailable = await acquireWithFreshProof(key, grant);
+
+    expect([whole.status, partial.status, unsatisfiable.status, refused.status, unavailable.status]).toEqual([200, 206, 416, 403, 503]);
+    for (const answer of [whole, partial, unsatisfiable, refused, unavailable]) {
+      expect(answer.headers.get('cache-control')).toMatch(/private/);
+      expect(answer.headers.get('cache-control')).toMatch(/no-store/);
+      expect(varies(answer.headers)).toEqual(expect.arrayContaining(SELECTORS));
+    }
+  });
+
+  it('lets the sandboxed view send a Range after a preflight that reads no media', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const preflight = await fetch(grant.mediaUrl, {
+      method: 'OPTIONS',
+      headers: { origin: 'null', 'access-control-request-method': 'GET', 'access-control-request-headers': 'x-saga-capability, x-saga-proof, range' },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('content-length') ?? '0').toBe('0');
+    expect((preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase()).toContain('range');
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+});
+
 describe('media acquisition when a dependency of the service fails', () => {
   // Decision: a failed entitlement lookup or storage read is not a refusal (the caller may be
   // entitled) and is never a grant. It is a bodiless 503, distinct from the 403 that means

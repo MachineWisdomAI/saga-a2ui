@@ -280,10 +280,18 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const CORS_HEADERS = {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET',
-    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}, range`,
     'access-control-max-age': '600',
   } as const;
-  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS } as const;
+  // Every answer that can carry bytes or a status for one caller. `private, no-store` keeps it out of
+  // shared and browser caches; `Vary` names what selects the representation, for a cache that ignores
+  // no-store and would otherwise key on the URL alone and answer B with A's bytes.
+  const MEDIA_ANSWER_HEADERS = {
+    'cache-control': 'private, no-store',
+    vary: `Origin, Range, ${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    ...CORS_HEADERS,
+  } as const;
+  const REFUSED_HEADERS = { 'content-type': 'application/json', ...MEDIA_ANSWER_HEADERS } as const;
 
   /**
    * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
@@ -310,15 +318,14 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
     if (outcome.kind === 'unsatisfiable') {
       // Sent only to a caller who passed every check, so the length is not a probe for anyone else.
-      res.writeHead(416, { 'cache-control': 'private, no-store', 'content-range': `bytes */${outcome.total}`, ...CORS_HEADERS }).end();
+      res.writeHead(416, { 'content-range': `bytes */${outcome.total}`, ...MEDIA_ANSWER_HEADERS }).end();
       return;
     }
     const delivered = {
       'content-type': outcome.media.contentType,
-      'cache-control': 'private, no-store',
       'content-length': outcome.media.bytes.length,
       'accept-ranges': 'bytes',
-      ...CORS_HEADERS,
+      ...MEDIA_ANSWER_HEADERS,
     };
     if (outcome.kind === 'partial') {
       res
