@@ -23,14 +23,23 @@ interface FakePlayer extends AudioPlayer {
   holdNextStart(): { release(outcome?: 'started' | 'blocked'): void };
   failNextStart(): void;
   outcome: 'started' | 'blocked';
+  /** What the next `resume` reports once the audio clock has (or has not) advanced. */
+  resumeOutcome: 'resumed' | 'blocked';
+  /** Holds the next `resume` until the test releases it, to model a slow audio device. */
+  holdNextResume(): { release(outcome?: 'resumed' | 'blocked'): void };
+  /** Makes the next `pause` fail, as when the browser cannot suspend the audio. */
+  failNextPause(): void;
   endPlayback(): void;
 }
 
 function fakePlayer(): FakePlayer {
   let ended: (() => void) | undefined;
   let held: { resolve(outcome: 'started' | 'blocked'): void; reject(error: Error): void } | undefined;
+  let heldResume: { resolve(outcome: 'resumed' | 'blocked'): void; reject(error: Error): void } | undefined;
   let hold = false;
   let fail = false;
+  let holdResume = false;
+  let failPause = false;
   // The real player's contract: `start` needs the context `prepare` made, and `stop` destroys it.
   // A controller that stops the player after preparing it leaves nothing to start.
   let live = false;
@@ -58,13 +67,28 @@ function fakePlayer(): FakePlayer {
       player.started.push(bytes);
       return Promise.resolve(player.outcome);
     },
-    pause: () => void player.calls.push('pause'),
-    resume: () => void player.calls.push('resume'),
+    resumeOutcome: 'resumed',
+    pause() {
+      player.calls.push('pause');
+      if (!failPause) return Promise.resolve();
+      failPause = false;
+      return Promise.reject(new Error('cannot suspend'));
+    },
+    resume() {
+      player.calls.push('resume');
+      if (!holdResume) return Promise.resolve(player.resumeOutcome);
+      holdResume = false;
+      return new Promise((resolve, reject) => {
+        heldResume = { resolve, reject };
+      });
+    },
     stop() {
       player.calls.push('stop');
       live = false;
       held?.reject(new Error('stopped'));
       held = undefined;
+      heldResume?.reject(new Error('stopped'));
+      heldResume = undefined;
     },
     onEnded: (listener) => void (ended = listener),
     holdNextStart() {
@@ -72,6 +96,11 @@ function fakePlayer(): FakePlayer {
       return { release: (outcome = 'started') => (player.started.push(new ArrayBuffer(0)), held?.resolve(outcome)) };
     },
     failNextStart: () => void (fail = true),
+    holdNextResume() {
+      holdResume = true;
+      return { release: (outcome = 'resumed') => heldResume?.resolve(outcome) };
+    },
+    failNextPause: () => void (failPause = true),
     endPlayback: () => ended?.(),
   };
   return player;
@@ -457,11 +486,187 @@ describe('Play outcomes after the server said yes', () => {
     await expect.poll(() => r.last()?.kind).toBe('playing');
 
     r.view.pause();
-    expect(r.last()?.kind).toBe('paused');
+    await expect.poll(() => r.last()?.kind).toBe('paused');
     r.view.resume();
-    expect(r.last()?.kind).toBe('playing');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
     r.player.endPlayback();
     expect(r.last()?.kind).toBe('ended');
+  });
+});
+
+describe('Pause and Resume report what the audio actually did', () => {
+  async function paused(): Promise<Rig> {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.view.pause();
+    await expect.poll(() => r.last()?.kind).toBe('paused');
+    return r;
+  }
+
+  it('does not announce playing until the resume has completed, and ignores a second press meanwhile', async () => {
+    const r = await paused();
+    const settling = r.player.holdNextResume();
+
+    r.view.resume();
+    r.view.resume();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(r.last()?.kind).toBe('paused'); // the device has not confirmed anything yet
+    expect(r.player.calls.filter((call) => call === 'resume')).toHaveLength(1);
+
+    settling.release('resumed');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+  });
+
+  it('says another press is needed when the browser withheld the resume, then plays on that press', async () => {
+    const r = await paused();
+    r.player.resumeOutcome = 'blocked';
+
+    r.view.resume();
+    await expect.poll(() => r.last()?.kind).toBe('resume-blocked');
+    expect(kinds(r)).toEqual(['ready', 'pending', 'playing', 'paused', 'resume-blocked']);
+    expect(r.harness.playback.entitlementChecks).toHaveLength(1); // recovery is not a new authorization
+
+    r.player.resumeOutcome = 'resumed';
+    r.view.resume();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(r.harness.playback.entitlementChecks).toHaveLength(1);
+  });
+
+  it('reports a player that cannot resume at all as media-failed, with a fresh Play on offer', async () => {
+    const r = await paused();
+    r.player.resume = () => Promise.reject(new Error('context closed'));
+
+    r.view.resume();
+    await expect.poll(() => r.last()?.kind).toBe('media-failed');
+    expect(kinds(r)).not.toContain('resume-blocked');
+    expect(r.player.calls.at(-1)).toBe('stop');
+  });
+
+  it('keeps a resume that was retired in flight from restoring playing', async () => {
+    const r = await paused();
+    const settling = r.player.holdNextResume();
+    r.view.resume();
+    await expect.poll(() => r.player.calls.includes('resume')).toBe(true);
+
+    await r.select(EP2); // a new selection retires the resume
+    const afterSelection = r.states.length;
+    settling.release('resumed');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.states.slice(afterSelection)).toEqual([]); // the retired resume presented nothing at all
+  });
+
+  it('keeps an end reached while the resume was still being confirmed', async () => {
+    const r = await paused();
+    const settling = r.player.holdNextResume();
+    r.view.resume();
+    await expect.poll(() => r.player.calls.includes('resume')).toBe(true);
+
+    r.player.endPlayback(); // the media finished before the clock poll confirmed the resume
+    settling.release('resumed');
+
+    await expect.poll(() => r.last()?.kind).toBe('ended');
+    expect(kinds(r).slice(-2)).toEqual(['paused', 'ended']);
+  });
+
+  it('does not announce paused when the player could not suspend, and reports media-failed like a failed resume', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.player.failNextPause();
+
+    r.view.pause();
+
+    await expect.poll(() => r.last()?.kind).toBe('media-failed');
+    expect(kinds(r)).not.toContain('paused');
+    expect(r.player.calls.at(-1)).toBe('stop');
+  });
+
+  it('ignores a second Pause press while the first is still waiting on the player', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    let settle!: () => void;
+    r.player.pause = () => (r.player.calls.push('pause'), new Promise<void>((resolve) => void (settle = resolve)));
+
+    r.view.pause();
+    r.view.pause();
+    expect(r.last()?.kind).toBe('playing'); // the suspend has not completed: "Paused." would be premature
+    settle();
+
+    await expect.poll(() => r.last()?.kind).toBe('paused');
+    expect(r.player.calls.filter((call) => call === 'pause')).toHaveLength(1);
+  });
+
+  it('does not let a pause that settles after the end overwrite ended', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    let settle!: () => void;
+    r.player.pause = () => new Promise<void>((resolve) => void (settle = resolve));
+
+    r.view.pause();
+    r.player.endPlayback();
+    expect(r.last()?.kind).toBe('ended');
+    settle();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(r.last()?.kind).toBe('ended');
+  });
+});
+
+describe('Play when the media ends before the start is confirmed', () => {
+  it('shows ended, not playing, when the end arrives before the player reports started', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const decoding = r.player.holdNextStart();
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+
+    r.player.endPlayback(); // a very short episode finished before the clock poll resolved
+    decoding.release('started');
+
+    await expect.poll(() => r.last()?.kind).toBe('ended');
+    expect(kinds(r)).toEqual(['ready', 'pending', 'ended']);
+  });
+
+  it('does not carry an early end of a retired request over to the next Play', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.player.holdNextStart();
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    r.player.endPlayback(); // seen by the request that is about to be retired
+    await r.select(EP2);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+  });
+
+  it('keeps a retired request from restoring playing after the end, once a new selection cleared it', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const decoding = r.player.holdNextStart();
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    r.player.endPlayback();
+
+    await r.select(EP2);
+    decoding.release('started');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(kinds(r)).not.toContain('playing');
+    expect(kinds(r)).not.toContain('ended');
   });
 });
 

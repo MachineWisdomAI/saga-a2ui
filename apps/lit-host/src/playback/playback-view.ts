@@ -26,11 +26,21 @@ export interface AudioPlayer {
    * bytes cannot be decoded or played. A `stop()` during the call makes it reject.
    */
   start(bytes: ArrayBuffer): Promise<'started' | 'blocked'>;
-  pause(): void;
-  resume(): void;
+  /**
+   * Suspends the audio. Called synchronously inside the user's activation. Resolves once the audio
+   * is actually suspended; rejects when it cannot be. A `stop()` during the call makes it reject.
+   */
+  pause(): Promise<void>;
+  /**
+   * Continues the audio. Called synchronously inside the user's activation. Resolves `resumed`
+   * only once audio is actually advancing again, and `blocked` when the browser withheld audio and
+   * needs a new user gesture. Rejects when the audio cannot continue. A `stop()` during the call
+   * makes it reject.
+   */
+  resume(): Promise<'resumed' | 'blocked'>;
   /** Stops and releases everything the player holds. Idempotent. */
   stop(): void;
-  /** Registers the one listener told when audio plays to its end. */
+  /** Registers the one listener told when audio plays to its end, possibly before `start` settles. */
   onEnded(listener: () => void): void;
 }
 
@@ -40,6 +50,7 @@ export type PlaybackViewState =
   | { readonly kind: 'ready' | 'pending' | 'playing' | 'paused' | 'ended'; readonly episode: OpenedEpisode }
   | {
       readonly kind:
+        | 'resume-blocked'
         | 'denied'
         | 'sign-in-required'
         | 'expired'
@@ -93,6 +104,12 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   let generation = 0;
   let abort: AbortController | undefined;
   let disposed = false;
+  // The Pause or Resume the player has not yet confirmed. The shown state stays the one the user
+  // last saw until the player reports what the audio actually did.
+  let settlingCounter = 0;
+  let settling: number | undefined;
+  // The start the player has not yet confirmed, and whether the audio ended while it was waiting.
+  let starting: { readonly generation: number; ended: boolean } | undefined;
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
@@ -102,6 +119,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   /** Retires any pending request and stops the player; nothing audible or fetchable survives. */
   const retire = () => {
     generation += 1;
+    settling = undefined;
     abort?.abort();
     abort = undefined;
     player.stop();
@@ -113,8 +131,38 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   };
 
   player.onEnded(() => {
-    if (kind === 'playing' && selected) present({ kind: 'ended', episode: selected });
+    if (!selected) return;
+    if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') {
+      settling = undefined; // a Pause or Resume still in flight must not replace the end
+      present({ kind: 'ended', episode: selected });
+    } else if (kind === 'pending' && starting?.generation === generation) {
+      starting.ended = true; // the start has not been confirmed yet: remember it for that moment
+    }
   });
+
+  /**
+   * Runs one Pause or Resume and presents what the player reports. The player is called inside the
+   * user's activation; the shown state changes only when it answers, and not at all if the audio
+   * was retired or ended meanwhile. A player that cannot do it is a media failure.
+   */
+  function settle<T>(attempt: () => Promise<T>, outcome: (result: T, episode: OpenedEpisode) => PlaybackViewState): void {
+    if (settling !== undefined || !selected) return;
+    const episode = selected;
+    settlingCounter += 1;
+    const mine = settlingCounter;
+    settling = mine;
+    const current = () => settling === mine && !disposed;
+    (async () => attempt())().then(
+      (result) => {
+        if (!current()) return;
+        settling = undefined;
+        present(outcome(result, episode));
+      },
+      () => {
+        if (current()) clearWith({ kind: 'media-failed', episode });
+      },
+    );
+  }
 
   const onOpened = (result: ToolResult) => {
     if (disposed) return;
@@ -203,14 +251,21 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     if (media.kind === 'refused') return clearWith({ kind: 'expired', episode });
     if (media.kind === 'failed') return clearWith({ kind: 'media-failed', episode });
 
+    // Audio that is short enough can end before the player confirms it started. That end belongs to
+    // this request, so it is remembered here and wins over the late `started` result.
+    const awaited = { generation: mine, ended: false };
+    starting = awaited;
     try {
       const started = await player.start(media.bytes);
       if (!current()) return player.stop();
+      if (awaited.ended) return present({ kind: 'ended', episode });
       if (started === 'blocked') return clearWith({ kind: 'gesture-needed', episode });
       present({ kind: 'playing', episode });
     } catch {
       // The bytes arrived; the browser could not play them. That is not a server denial.
       if (current()) clearWith({ kind: 'media-failed', episode });
+    } finally {
+      if (starting === awaited) starting = undefined;
     }
   }
 
@@ -225,7 +280,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   return {
     play() {
       if (disposed || !selected) return;
-      if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'session-changed') return;
+      if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'resume-blocked' || kind === 'session-changed') return;
       const episode = selected;
       // Retire first: stopping releases the player's context, so preparing before it would
       // destroy the context this press just unlocked.
@@ -242,14 +297,18 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       void run(episode, generation);
     },
     pause() {
-      if (kind !== 'playing' || !selected) return;
-      player.pause();
-      present({ kind: 'paused', episode: selected });
+      if (kind !== 'playing') return;
+      settle(
+        () => player.pause(),
+        (_, episode) => ({ kind: 'paused', episode }),
+      );
     },
     resume() {
-      if (kind !== 'paused' || !selected) return;
-      player.resume();
-      present({ kind: 'playing', episode: selected });
+      if (kind !== 'paused' && kind !== 'resume-blocked') return;
+      settle(
+        () => player.resume(),
+        (resumed, episode) => ({ kind: resumed === 'resumed' ? 'playing' : 'resume-blocked', episode }),
+      );
     },
     dispose() {
       if (disposed) return;

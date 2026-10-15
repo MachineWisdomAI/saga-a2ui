@@ -11,6 +11,18 @@ import type { AudioPlayer } from './playback-view.js';
  */
 const CLOCK_START_TIMEOUT_MS = 1_500;
 const CLOCK_POLL_MS = 25;
+const LATE = Symbol('the audio device did not answer in time');
+
+/** A context call that never settles must not leave the view waiting for ever. */
+function within<T>(call: Promise<T>): Promise<T | typeof LATE> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(LATE), CLOCK_START_TIMEOUT_MS);
+    call.then(
+      (value) => (clearTimeout(timer), resolve(value)),
+      (error: unknown) => (clearTimeout(timer), reject(error)),
+    );
+  });
+}
 
 export function createWebAudioPlayer(): AudioPlayer {
   let context: AudioContext | undefined;
@@ -81,8 +93,30 @@ export function createWebAudioPlayer(): AudioPlayer {
       return (await clockAdvanced(ctx, from)) ? 'started' : 'blocked';
     },
 
-    pause: () => void context?.suspend().catch(() => undefined),
-    resume: () => void context?.resume().catch(() => undefined),
+    // Both are called synchronously inside the user's activation (the context call is made before
+    // the first `await`), and both report what the audio did instead of assuming it.
+    async pause() {
+      const ctx = context;
+      if (!ctx) throw new Error('stopped');
+      if ((await within(ctx.suspend())) === LATE) throw new Error('the audio did not suspend');
+      if (context !== ctx) throw new Error('stopped');
+    },
+
+    async resume() {
+      const ctx = context;
+      if (!ctx) throw new Error('stopped');
+      const from = ctx.currentTime;
+      try {
+        // A device the browser withholds is a request for another gesture, not a broken player.
+        if ((await within(ctx.resume())) === LATE) return 'blocked';
+      } catch (error) {
+        if (context !== ctx) throw new Error('stopped');
+        if (error instanceof DOMException && error.name === 'NotAllowedError') return 'blocked';
+        throw error;
+      }
+      if (context !== ctx) throw new Error('stopped');
+      return (await clockAdvanced(ctx, from)) ? 'resumed' : 'blocked';
+    },
     stop: release,
     onEnded: (listener) => void (endedListener = listener),
   };

@@ -316,6 +316,72 @@ test.describe('recipient binding through the built player', () => {
   });
 });
 
+/** Makes every `AudioContext.resume()` in every frame reject, as a device the browser withholds does. */
+async function rejectResume(page: Page, errorName: string): Promise<void> {
+  for (const frame of page.frames()) {
+    await frame.evaluate((name) => {
+      AudioContext.prototype.resume = () => Promise.reject(new DOMException('Audio device unavailable', name));
+    }, errorName);
+  }
+}
+
+test.describe('the built player Pause and Resume tell the truth about the audio', () => {
+  test('a Resume the browser withholds is not announced as playing, and the next press resumes', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: { mediaBytes: toneWav(10) } });
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText('Paused.');
+    const [paused] = await audioClocks(page);
+    expect(paused?.state).toBe('suspended');
+    await rejectResume(page, 'NotAllowedError');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'resume-blocked');
+    await expect(status(host.view)).not.toContainText('Playing');
+    await expect(button(host.view)).toHaveText('Resume'); // the offered recovery keeps the position
+    expect((await audioClocks(page))[0]?.state).toBe('suspended');
+
+    // The browser relents: the next explicit press resumes from where the audio stopped.
+    for (const frame of page.frames()) await frame.evaluate(() => void delete (AudioContext.prototype as Partial<AudioContext>).resume);
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    await expect.poll(async () => ((await audioClocks(page))[0]?.time ?? 0) > (paused?.time ?? 0)).toBe(true);
+    expect(host.harness.playback.entitlementChecks).toHaveLength(1); // recovery is not a new authorization
+  });
+
+  test('a Resume the player can no longer perform is a media failure with a fresh Play on offer', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: { mediaBytes: toneWav(10) } });
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText('Paused.');
+    await rejectResume(page, 'InvalidStateError');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'media-failed');
+    await expect(status(host.view)).toHaveText('The audio could not be played.');
+    expect(await silent(page)).toBe(true);
+  });
+
+  test('media that ends before startup is confirmed reaches ended, not playing', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: { mediaBytes: toneWav(0.005) } });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'ended');
+    await expect(status(host.view)).toHaveText('Finished playing.');
+    // The late startup confirmation has had its chance to overwrite it; it must not have.
+    await page.waitForTimeout(1_700);
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'ended');
+  });
+});
+
 test.describe('the built player states are announced and reflow', () => {
   test('pending keeps the control focusable but inert, and a second press makes no second request', async ({ page }) => {
     const host = await mountPlayer(page);

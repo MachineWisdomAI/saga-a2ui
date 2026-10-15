@@ -25,6 +25,12 @@ function presentationFor(state: PlaybackViewState): Presentation {
       return { status: `Playing ${title}.`, button: { label: 'Pause', action: 'saga-pause' } };
     case 'paused':
       return { status: 'Paused.', button: { label: 'Resume', action: 'saga-resume' } };
+    case 'resume-blocked':
+      // The audio is still paused where it stopped; another press, not a new authorization, retries.
+      return {
+        status: 'Your browser needs another press to continue the audio.',
+        button: { label: 'Resume', action: 'saga-resume' },
+      };
     case 'ended':
       return { status: 'Finished playing.', button: { label: 'Play again', action: 'saga-play' } };
     case 'denied':
