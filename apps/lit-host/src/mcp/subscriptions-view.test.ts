@@ -2,7 +2,15 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SIGN_IN_REQUIRED_TEXT, type SubscriptionsResult } from './subscriptions.js';
+import {
+  EMPTY_SUBSCRIPTIONS_TEXT,
+  INVALID_OUTPUT_TEXT,
+  INVALID_SUBSCRIPTION_INPUT_TEXT,
+  SIGN_IN_REQUIRED_TEXT,
+  SUBSCRIPTION_LIMITS,
+  SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+  type SubscriptionsResult,
+} from './subscriptions.js';
 import { connectSubscriptionsView, type SubscriptionsViewState } from './subscriptions-view.js';
 
 // The view's private-data handling, exercised with a real App/AppBridge pair. The observable
@@ -64,7 +72,7 @@ describe('subscriptions view', () => {
     const h = await harness();
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa')));
     await expect.poll(() => h.last()?.kind).toBe('subscriptions');
-    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Subscriptions are unavailable.' }] });
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'The subscriptions read failed.' }] });
     await expect.poll(() => h.last()?.kind).toBe('problem');
     expect(JSON.stringify(h.last())).not.toContain('Alice');
   });
@@ -132,7 +140,7 @@ describe('subscriptions view', () => {
     await h.bridge.sendToolResult(delivery(result('Bob', 'vs_bbbbbbbbbbbbbbbbbbbbbb', ['Creator Three'])));
     await expect.poll(() => h.last()?.kind).toBe('problem');
 
-    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Subscriptions are unavailable.' }] });
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'The subscriptions read failed.' }] });
     await expect.poll(() => h.last()?.kind).toBe('problem');
 
     // The prior session's result still cannot revive the view without a correlated response.
@@ -293,5 +301,120 @@ describe('subscriptions view', () => {
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa'))).catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.states).toEqual([]);
+  });
+
+  it('shows an empty successful read instead of stale rows', async () => {
+    const h = await harness();
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    await h.bridge.sendToolResult(delivery({ ...result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa'), subscriptions: [] }));
+    await expect.poll(() => h.last()?.kind).toBe('empty');
+    expect(h.last()).toMatchObject({ kind: 'empty', displayName: 'Alice' });
+    expect(JSON.stringify(h.last())).toContain(EMPTY_SUBSCRIPTIONS_TEXT);
+    expect(JSON.stringify(h.last())).not.toContain('Creator');
+  });
+
+  it('shows retry for a backend failure and clears private values', async () => {
+    const h = await harness();
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: SUBSCRIPTIONS_UNAVAILABLE_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('retry');
+    expect(JSON.stringify(h.last())).not.toMatch(/Alice|Creator/);
+    expect(JSON.stringify(h.last())).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+  });
+
+  it('clears the view for invalid projected output and invalid business input', async () => {
+    const h = await harness();
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: INVALID_OUTPUT_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.last())).toContain(INVALID_OUTPUT_TEXT);
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: INVALID_SUBSCRIPTION_INPUT_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.last())).toContain(INVALID_SUBSCRIPTION_INPUT_TEXT);
+    expect(JSON.stringify(h.last())).not.toContain('not-a-status');
+  });
+
+  it('rejects an oversized incoming result before showing any of it', async () => {
+    const h = await harness();
+    const huge = 'x'.repeat(SUBSCRIPTION_LIMITS.maxIncomingStateBytes);
+    await h.bridge.sendToolResult({
+      content: [{ type: 'text', text: huge }],
+      structuredContent: { ...result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa'), note: huge },
+    });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.states)).not.toContain(huge);
+    expect(JSON.stringify(h.states)).not.toContain('Alice');
+  });
+
+  it('retains a selection that is still present and clears it when the read is uncertain', async () => {
+    const h = await harness({ serverTools: {} });
+    const listed = (ids: string[]): SubscriptionsResult => ({
+      displayName: 'Alice',
+      viewSession: 'vs_aaaaaaaaaaaaaaaaaaaaaa',
+      subscriptions: ids.map((subscriptionId) => ({
+        subscriptionId,
+        creator: subscriptionId === 'sub-keep' ? 'Creator One' : 'Creator Two',
+        tier: 'Gold',
+        status: 'active' as const,
+      })),
+    });
+    await h.bridge.sendToolResult(delivery(listed(['sub-keep', 'sub-drop'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    h.view.select('sub-keep');
+    expect(h.last()).toMatchObject({ kind: 'subscriptions', selectedId: 'sub-keep' });
+
+    await h.bridge.sendToolResult(delivery(listed(['sub-keep', 'sub-drop'])));
+    await expect.poll(() => (h.last() as { selectedId?: string }).selectedId).toBe('sub-keep');
+
+    await h.bridge.sendToolResult(delivery(listed(['sub-drop'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(JSON.stringify(h.last())).not.toContain('sub-keep');
+
+    h.view.select('sub-drop');
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: SUBSCRIPTIONS_UNAVAILABLE_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('retry');
+    expect(JSON.stringify(h.last())).not.toContain('sub-drop');
+  });
+
+  it('retries only the safe read and ignores a late result after the bound', async () => {
+    const states: SubscriptionsViewState[] = [];
+    const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
+    const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, { serverTools: {} });
+    toClean.push({ app, bridge });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge.connect(hostSide);
+    let release: (value: ReturnType<typeof delivery>) => void = () => undefined;
+    const seen: { name?: string; arguments?: Record<string, unknown> }[] = [];
+    bridge.oncalltool = (params) => {
+      seen.push(params);
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const view = await connectSubscriptionsView({
+      app,
+      transport: viewSide,
+      show: (state) => states.push(state),
+      readBoundMs: 30,
+    });
+    await bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => states.at(-1)?.kind).toBe('subscriptions');
+    view.select('sub-0');
+    view.retry();
+    await expect.poll(() => seen.length).toBe(1);
+    expect(seen[0]).toMatchObject({ name: 'list_subscriptions', arguments: {} });
+    expect(seen[0]?.arguments).not.toHaveProperty('status');
+    await expect.poll(() => states.at(-1)?.kind).toBe('retry');
+    expect(JSON.stringify(states.at(-1))).not.toMatch(/Alice|Creator|sub-0/);
+    const shown = states.length;
+    release(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(states.length).toBe(shown);
+    expect(states.at(-1)?.kind).toBe('retry');
   });
 });

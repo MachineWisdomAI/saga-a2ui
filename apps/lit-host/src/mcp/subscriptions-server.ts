@@ -1,10 +1,15 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { ZodError } from 'zod';
 import { identityFromAuthInfo } from './request-auth.js';
 import {
+  INVALID_OUTPUT_TEXT,
+  INVALID_SUBSCRIPTION_INPUT_TEXT,
   SIGN_IN_REQUIRED_TEXT,
+  SUBSCRIPTION_STATUSES,
   SUBSCRIPTIONS_TOOL_NAME,
+  SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SUBSCRIPTIONS_VIEW_URI,
   SubscriptionsRequestShape,
   SubscriptionsResultSchema,
@@ -46,6 +51,10 @@ export interface SubscriptionsServerOptions {
 
 const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
 
+function isSubscriptionStatus(value: string): boolean {
+  return SUBSCRIPTION_STATUSES.some((status) => status === value);
+}
+
 /**
  * Builds each field from the record explicitly (no spreading), then validates the result.
  * A record with an unsupported value fails here, before anything is serialized.
@@ -84,20 +93,30 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       _meta: { ui: { resourceUri: SUBSCRIPTIONS_VIEW_URI } },
     },
-    async (_args, extra) => {
+    async (args, extra) => {
+      if (args.status !== undefined && !isSubscriptionStatus(args.status)) {
+        return failure(INVALID_SUBSCRIPTION_INPUT_TEXT);
+      }
       const identity = identityFromAuthInfo(extra.authInfo);
       if (!identity) return failure(SIGN_IN_REQUIRED_TEXT);
       try {
         const account = await options.backend.listSubscriptions(identity.accountId);
-        if (!account) return failure('No subscriptions are available for this account.');
-        const result = toSubscriptionsResult(account, options.labelViewSession(identity.signInId));
+        if (!account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+        const published = args.status === undefined
+          ? account
+          : {
+              displayName: account.displayName,
+              subscriptions: account.subscriptions.filter((record) => record.status === args.status),
+            };
+        const result = toSubscriptionsResult(published, options.labelViewSession(identity.signInId));
         return {
           content: [{ type: 'text', text: `${result.displayName}: ${result.subscriptions.length} subscription(s)` }],
           structuredContent: result,
         };
-      } catch {
+      } catch (error) {
         // The failure text deliberately omits backend detail and validation messages.
-        return failure('Subscriptions are unavailable.');
+        if (error instanceof ZodError) return failure(INVALID_OUTPUT_TEXT);
+        return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
       }
     },
   );
