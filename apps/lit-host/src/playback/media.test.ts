@@ -169,6 +169,40 @@ describe('media acquisition after access is revoked', () => {
   });
 });
 
+describe('a revocation, once observed, is final for that capability', () => {
+  // Decision: the entitlement lookup is the current revocation lookup. When it says "denied" the
+  // service forgets the capability, so access granted again later is reached only through a new
+  // Play (fresh authentication and entitlement), never by reviving a copy issued before the lapse.
+  it('does not revive an old capability when the entitlement returns, but a new Play works', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    h.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+    expect((await acquireWithFreshProof(key, grant)).status).toBe(403);
+    h.playback.setEntitled(DEV_ACCOUNTS.alice, ['ep-1', 'ep-2']);
+
+    const revived = await acquireWithFreshProof(key, grant);
+    expect(revived.status).toBe(403);
+    expect(h.playback.mediaReads).toEqual([]);
+
+    const fresh = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    expect((await acquireWithFreshProof(key, fresh)).status).toBe(200);
+  });
+
+  it('keeps the capability when the lookup merely fails: a fault is not a revocation', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    h.playback.failEntitlementWith('lookup unavailable');
+    expect((await acquireWithFreshProof(key, grant)).status).toBe(503);
+    h.playback.failEntitlementWith(undefined);
+
+    expect((await acquireWithFreshProof(key, grant)).status).toBe(200);
+  });
+});
+
 describe('a later byte-range request repeats every check', () => {
   const RANGE = 'bytes=0-3';
   const noBytes = (attempt: { bytes: Uint8Array }) => Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)));

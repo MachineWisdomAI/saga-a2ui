@@ -137,7 +137,12 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
         return REFUSED;
       }
 
-      if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') return REFUSED;
+      if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') {
+        // A denial is final for this capability: access granted again later needs a new Play. A
+        // lookup that throws never reaches here, so a fault does not revoke anything.
+        grants.delete(capabilityHash);
+        return REFUSED;
+      }
 
       const media = await options.store.read(grant.episodeId);
       const range = resolveRange(request.range, media.bytes.length);
