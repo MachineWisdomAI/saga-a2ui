@@ -10,6 +10,8 @@ Keep private customer material, credentials, business records and internal plann
 
 Name documents expected to be superseded `YYYY-MM-DD_title_vN.ext`, for example `2026-10-13_binding-design_v1.md`. Start at `v1`; when a new edition supersedes it, use the new edition date and increment the document version, retain the previous edition, and update links to the current one. Ordinary corrections stay in the same edition. Keep evergreen files such as README.md, CONTRIBUTING.md, CODING_STANDARDS.md, SECURITY.md and AGENTS.md at stable names. Document versions are separate from package versions.
 
+Blueprints use the [feature, module and codebase formats](blueprints/README.md). Their filenames are stable contract names without a date or edition suffix; Git revisions preserve their history.
+
 New clones can install the local default-branch and force-push guards with the installed MachineWisdom helper:
 
 ```sh
