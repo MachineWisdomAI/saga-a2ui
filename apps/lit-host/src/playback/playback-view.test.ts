@@ -714,12 +714,112 @@ describe('Play when the media origin redirects', () => {
       r.view.play();
       await expect.poll(() => r.last()?.kind).toBe('media-failed');
 
-      expect(redirecting.requests).toHaveLength(1); // the declared destination was asked once
+      expect(redirecting.requests).toHaveLength(1); // the media origin the grant named was asked once
       expect(elsewhere.requests).toEqual([]); // the redirect target never heard of it
       expect(r.player.started).toHaveLength(0);
       expect(kinds(r)).not.toContain('playing');
     } finally {
       await Promise.all([redirecting.close(), elsewhere.close()]);
     }
+  });
+});
+
+/** Records every URL the view fetches while `run` executes, so a test can show where requests went. */
+async function fetchedUrls<T>(run: () => Promise<T>): Promise<{ readonly result: T; readonly urls: string[] }> {
+  const real = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = ((input, init) => (urls.push(String(input instanceof Request ? input.url : input)), real(input, init))) as typeof fetch;
+  try {
+    return { result: await run(), urls };
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+const mediaFetches = (urls: readonly string[]) => urls.filter((url) => url.includes('/playback/media/'));
+
+describe('Recovery after access ends between the grant and the media fetch', () => {
+  it('stops, clears the source and offers a deliberate retry; the retry re-checks entitlement and shows denial when revoked', async () => {
+    // The subscription lapses after Play was granted but before the bytes were requested.
+    const r = await rig({ afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []) });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('expired');
+    expect(r.player.started).toHaveLength(0);
+    expect(r.player.calls.at(-1)).toBe('stop'); // nothing is left playing or held
+    expect(r.harness.playback.mediaReads).toEqual([]); // the service gave no protected bytes
+
+    // Retry is a new Play with fresh checks: this time the entitlement check itself says no.
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('denied');
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
+    expect(r.player.started).toHaveLength(0);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('obtains fresh access on retry once the server permits it, never reusing the earlier capability', async () => {
+    let lapseAfterFirstGrant = true; // only the first Play loses access between grant and fetch
+    const r = await rig({
+      afterGrant: (h) => {
+        if (!lapseAfterFirstGrant) return;
+        lapseAfterFirstGrant = false;
+        h.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+      },
+    });
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('expired');
+
+    r.harness.playback.setEntitled(DEV_ACCOUNTS.alice, ['ep-1', 'ep-2']);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+
+    const grants = r.forwarded.filter((call) => call.name === 'play_episode');
+    expect(grants).toHaveLength(2); // two separate Play calls, each with the same business input
+    expect(grants.every((call) => JSON.stringify(call.arguments) === JSON.stringify({ episodeId: 'ep-1' }))).toBe(true);
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+
+  it('does not retry on its own: after expiry no further Play or media request is made until the user presses', async () => {
+    const r = await rig({ afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []) });
+    await r.select(EP1);
+    const { urls } = await fetchedUrls(async () => {
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('expired');
+      await new Promise((resolve) => setTimeout(resolve, 300)); // long enough for any hidden retry loop to show itself
+    });
+
+    expect(mediaFetches(urls)).toHaveLength(1);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(1);
+    expect(r.harness.playback.entitlementChecks).toHaveLength(2); // one for Play, one for the single acquisition
+  });
+});
+
+describe('Recovery when the media service is unavailable', () => {
+  it('shows a media failure, not expiry, and a retry fetches only from the freshly granted URL', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.harness.playback.failReadsWith('storage down');
+
+    const first = await fetchedUrls(async () => {
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('media-failed');
+    });
+    expect(kinds(r)).not.toContain('expired');
+    expect(r.player.started).toHaveLength(0);
+    expect(r.player.calls.at(-1)).toBe('stop');
+
+    r.harness.playback.failReadsWith(undefined);
+    const second = await fetchedUrls(async () => {
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('playing');
+    });
+
+    const allowed = new URL(r.harness.listener.playbackUrl ?? '').origin;
+    for (const url of [...first.urls, ...second.urls]) expect(new URL(url).origin).toBe(allowed); // no public mp3 or chat URL
+    expect(mediaFetches(first.urls)).toHaveLength(1);
+    expect(mediaFetches(second.urls)).toHaveLength(1);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
   });
 });
