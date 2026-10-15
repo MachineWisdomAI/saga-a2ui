@@ -45,6 +45,8 @@ interface MountedHost {
   /** The proxied calls the host forwarded, with the exact result the listener returned. */
   readonly calls: { params: { name: string; arguments?: unknown; _meta?: Record<string, unknown> }; result: { _meta?: Record<string, unknown> } }[];
   useToken(token: string | undefined): void;
+  /** Holds the next proxied tools/call at the host until released, to observe the pending state. */
+  holdNextToolCall(): { release(): void };
   open(episodeId: string): Promise<void>;
 }
 
@@ -57,6 +59,7 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
   const running = harness;
   let token: string | undefined = options.token ?? DEV_TOKENS.alice;
   const calls: MountedHost['calls'] = [];
+  let gate: Promise<void> | undefined;
 
   // Records the audio contexts the view creates, in every frame, so the audio clock is observable.
   await page.addInitScript(() => {
@@ -75,6 +78,11 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
     rpcOverHttp(running.listener.playbackUrl, token, body);
 
   await page.exposeFunction('handleToolCall', async (params: MountedHost['calls'][number]['params']) => {
+    if (gate) {
+      const waiting = gate;
+      gate = undefined;
+      await waiting;
+    }
     const sent = options.dropMeta ? { name: params.name, arguments: params.arguments } : params;
     const response = await post({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: sent });
     if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
@@ -94,6 +102,11 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
     harness: running,
     calls,
     useToken: (next) => void (token = next),
+    holdNextToolCall() {
+      let release!: () => void;
+      gate = new Promise<void>((resolve) => void (release = resolve));
+      return { release };
+    },
     // The host mounts the view by running the model-visible opener and delivering its real result.
     async open(episodeId) {
       const opened = await post({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: OPENER, arguments: { episodeId } } });
@@ -153,5 +166,188 @@ test.describe('the built player for the entitled listener', () => {
     await page.keyboard.press('Space');
     await expect(status(host.view)).toHaveText('Paused.');
     await expect(button(host.view)).toBeFocused();
+  });
+});
+
+const DENIED = 'Playback denied: this account does not have access to this episode.';
+
+/** What the built view was granted by the real listener: the capability only the view receives. */
+function lastGrant(host: MountedHost): { capability: string; mediaUrl: string; episodeId: string } {
+  const grant = [...host.calls].reverse().find((call) => call.params.name === PLAY)?.result._meta?.['saga-a2ui/playback'];
+  if (!grant) throw new Error('the host saw no Play grant');
+  return grant as { capability: string; mediaUrl: string; episodeId: string };
+}
+
+/** True when no audio context the view created is still producing sound. */
+const silent = async (page: Page) => (await audioClocks(page)).every((context) => context.state !== 'running');
+
+test.describe('the built player when access is refused', () => {
+  test('denied B: says so, plays nothing, and the server read no media', async ({ page }) => {
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+
+    await expect(status(host.view)).toHaveText(DENIED);
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'denied');
+    expect(await silent(page)).toBe(true);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    expect(host.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' }]);
+  });
+
+  test('a refused credential is sign-in recovery, not an entitlement denial', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    host.useToken(DEV_TOKENS.expired);
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'sign-in-required');
+    await expect(status(host.view)).toHaveText('Sign in to play this episode.');
+    await expect(status(host.view)).not.toContainText('denied');
+    expect(host.harness.playback.entitlementChecks).toEqual([]);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+  });
+
+  test('a host that drops the call metadata gets an unsupported view, no checks and no bytes', async ({ page }) => {
+    const host = await mountPlayer(page, { dropMeta: true });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+
+    await expect(status(host.view)).toHaveText('Playback is not supported here.');
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'unsupported');
+    expect(host.harness.playback.entitlementChecks).toEqual([]);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    // Nothing the user can press remains, so keyboard focus moves to the announced status.
+    await expect(button(host.view)).toHaveCount(0);
+    await expect(status(host.view)).toBeFocused();
+  });
+
+  test('valid replay rechecks current permission: access revoked after the first play is denied', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText('Finished playing.', { timeout: 10_000 });
+
+    host.harness.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+    await button(host.view).click();
+
+    await expect(status(host.view)).toHaveText(DENIED);
+    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']); // only the first, entitled play read media
+  });
+
+  test('retry after a denial is a fresh authorization that succeeds once access is granted', async ({ page }) => {
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(DENIED);
+
+    host.harness.playback.setEntitled(DEV_ACCOUNTS.bob, ['ep-1']);
+    await button(host.view).click();
+
+    await expect(status(host.view)).toContainText('Playing');
+    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+  });
+});
+
+test.describe('recipient binding through the built player', () => {
+  test('the capability the built player received gives another user or another episode no bytes', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    const grant = lastGrant(host);
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']); // the built player's own acquisition
+
+    const bobKey = await createRecipientKey();
+    const asBob = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof: await signMediaProof({ key: bobKey, capability: grant.capability, url: grant.mediaUrl }),
+    });
+    const otherUrl = grant.mediaUrl.replace('/ep-1', '/ep-2');
+    const otherEpisode = await acquireMedia({
+      url: otherUrl,
+      capability: grant.capability,
+      proof: await signMediaProof({ key: bobKey, capability: grant.capability, url: otherUrl }),
+    });
+    const bareCopy = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability });
+
+    for (const attempt of [asBob, otherEpisode, bareCopy]) {
+      expect(attempt.status).toBe(403);
+      expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+    }
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']); // still only the built player's read
+  });
+});
+
+test.describe('the built player states are announced and reflow', () => {
+  test('pending keeps the control focusable but inert, and a second press makes no second request', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    const inFlight = host.holdNextToolCall();
+
+    await button(host.view).click();
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'pending');
+    await expect(status(host.view)).toHaveText('Checking access…');
+    await expect(button(host.view)).toHaveAttribute('aria-disabled', 'true');
+    await expect(button(host.view)).toHaveAttribute('aria-busy', 'true');
+    // Playwright treats aria-disabled as "not actionable" and would wait forever; a real user can
+    // still press the button, so force the press to exercise the duplicate-activation path.
+    await button(host.view).click({ force: true });
+    await button(host.view).click({ force: true });
+    inFlight.release();
+
+    await expect(status(host.view)).toContainText('Playing');
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
+  });
+
+  test('the status is a polite live region and the page is the only thing that speaks it', async ({ page }) => {
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await host.open('ep-1');
+    await expect(status(host.view)).toHaveAttribute('role', 'status');
+    await expect(status(host.view)).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('stays usable at a 320px width: no horizontal scrolling and the control is on screen', async ({ page }) => {
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await page.evaluate(() => {
+      const frame = document.querySelector('iframe');
+      if (frame) frame.style.cssText = 'width:320px;height:240px;border:0';
+    });
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(DENIED);
+
+    const overflow = await page.frames().find((frame) => frame !== page.mainFrame())?.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(overflow?.scroll).toBeLessThanOrEqual(overflow?.client ?? 0);
+    await expect(button(host.view)).toBeInViewport();
+    await expect(status(host.view)).toBeInViewport();
+  });
+
+  test('reflows at 320px with the text enlarged to 200%: the long denial wraps instead of overflowing', async ({ page }) => {
+    // WCAG reflow is "no horizontal scrolling at 320 CSS px", the width of a 1280px window at 400%
+    // zoom, so the narrow frame above is the zoom check. This adds the other axis: larger text.
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await page.evaluate(() => {
+      const frame = document.querySelector('iframe');
+      if (frame) frame.style.cssText = 'width:320px;height:480px;border:0';
+    });
+    await host.open('ep-1');
+    await host.view.locator('html').evaluate((root) => void (root.style.fontSize = '200%'));
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(DENIED);
+
+    const overflow = await page.frames().find((frame) => frame !== page.mainFrame())?.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(overflow?.scroll).toBeLessThanOrEqual(overflow?.client ?? 0);
+    await expect(button(host.view)).toBeInViewport();
   });
 });
