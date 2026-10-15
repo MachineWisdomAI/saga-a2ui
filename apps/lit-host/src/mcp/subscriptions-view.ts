@@ -9,6 +9,8 @@ import {
   SUBSCRIPTIONS_TOOL_NAME,
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SubscriptionsResultSchema,
+  declaredSubscriptionRead,
+  type DeclaredSubscriptionRead,
   type SubscriptionsResult,
 } from './subscriptions.js';
 import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from './view.js';
@@ -72,12 +74,15 @@ function incomingBytes(value: unknown): number {
  * The host's opening `toolresult` can pin the label: that notification is the result of the call
  * that created the view. After that, a `toolinput` notification is not authentication. It carries
  * no request id, so the next `toolresult` may be a delayed copy of an earlier result. When the
- * host can proxy a server tool call, a new input starts `callServerTool` — a request whose
- * response is correlated with that call — and only that response may establish or recover the
- * pin. Each read keeps an identity that is not recycled when the view returns to idle, so an
- * older in-flight response cannot match a later read or reopen private rendering after a later
- * refusal. An unsolicited notification cannot open private rendering. It can still end it: an
- * error, a changed label, or an unknown shape clears the view immediately, including while a
+ * host can proxy a server tool call, a new input starts `App.callServerTool`, carrying the
+ * declared status filter from that input's business arguments — a request whose response is
+ * correlated with that call — and only that response may establish or recover the pin. An
+ * undeclared field (for example `accountId`), or a status the tool does not support, is not
+ * forwarded: the server refuses that same business input, and the view clears instead of reading
+ * without the filter. Each read keeps an identity that is not recycled when the view returns to
+ * idle, so an older in-flight response cannot match a later read or reopen private rendering after
+ * a later refusal. An unsolicited notification cannot open private rendering. It can still end it:
+ * an error, a changed label, or an unknown shape clears the view immediately, including while a
  * read is in flight, and retires every read that started before that loss. Only a correlated
  * read started after the loss may recover.
  *
@@ -188,8 +193,9 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
   // A host that advertises `serverTools` can proxy this read. The returned promise is the
   // authenticated response; a refusal (the listener's HTTP 401/403, before any tool handler)
   // rejects it, and the private view stays cleared. The bound retires a read that does not
-  // finish, so a late resolution cannot emit.
-  const readThroughHost = () => {
+  // finish, so a late resolution cannot emit. The read carries the declared arguments of the
+  // input that started it: the optional status filter, and nothing else.
+  const readThroughHost = (declared: DeclaredSubscriptionRead) => {
     if (!deps.app.getHostCapabilities()?.serverTools || disposed) return;
     stopTimer();
     const generation = ++nextRead;
@@ -200,7 +206,10 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
         clear({ kind: 'retry', message: SUBSCRIPTIONS_UNAVAILABLE_TEXT });
       });
     }, readBoundMs);
-    void deps.app.callServerTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} }).then(
+    void deps.app.callServerTool({
+      name: SUBSCRIPTIONS_TOOL_NAME,
+      arguments: declared.kind === 'filtered' ? { status: declared.status } : {},
+    }).then(
       (result) => settleRead(generation, () => apply(result)),
       () => settleRead(generation, () => {
         invalidated = true;
@@ -212,8 +221,18 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
   return connectToolResultView({
     app: deps.app,
     transport: deps.transport,
-    onToolInput() {
-      readThroughHost();
+    onToolInput(input) {
+      const declared = declaredSubscriptionRead(input.arguments);
+      if (declared.kind === 'rejected') {
+        // The server refuses this business input for the same reason, so the view refuses it here
+        // instead of reading without the filter. No read starts, and a read already in flight is
+        // retired so its late result cannot put private rows back after the refusal.
+        invalidated = true;
+        retireReads();
+        clear({ kind: 'problem', message: INVALID_SUBSCRIPTION_INPUT_TEXT });
+        return;
+      }
+      readThroughHost(declared);
     },
     onToolResult(result) {
       // Session loss is not freshness. Classify it before suppressing uncorrelated positive
@@ -230,7 +249,7 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     },
   }).then((connection) => ({
     retry() {
-      readThroughHost();
+      readThroughHost({ kind: 'unfiltered' });
     },
     select(subscriptionId) {
       if (disposed || shown === undefined) return;

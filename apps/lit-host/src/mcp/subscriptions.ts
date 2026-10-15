@@ -39,6 +39,38 @@ export const SUBSCRIPTION_LIMITS = {
 
 export const SUBSCRIPTION_STATUSES = ['active', 'paused', 'canceled'] as const;
 
+/** One status the tool supports. */
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+
+/** The one authoritative check for a supported status. The server and the view share it. */
+export function isSubscriptionStatus(value: unknown): value is SubscriptionStatus {
+  return typeof value === 'string' && SUBSCRIPTION_STATUSES.some((supported) => supported === value);
+}
+
+/**
+ * The declared arguments of a host-initiated read. The view may forward only the optional
+ * `status` filter, and only when it names a supported status; an undeclared field (for example
+ * `accountId`) is dropped and never travels as authority. A status the tool does not support is
+ * refused here for the same reason the server refuses it, instead of being dropped: a dropped
+ * filter would widen the read to every subscription the host did not ask for. The server still
+ * authorizes each call from the verified request.
+ */
+export type DeclaredSubscriptionRead =
+  | { readonly kind: 'unfiltered' }
+  | { readonly kind: 'filtered'; readonly status: SubscriptionStatus }
+  | { readonly kind: 'rejected' };
+
+// Not strict on purpose: zod strips every undeclared field, so only `status` can come out.
+const DeclaredReadArgumentsSchema = z.object({ status: z.enum(SUBSCRIPTION_STATUSES).optional() });
+
+export function declaredSubscriptionRead(argumentsFromHost: unknown): DeclaredSubscriptionRead {
+  if (argumentsFromHost === undefined) return { kind: 'unfiltered' };
+  const parsed = DeclaredReadArgumentsSchema.safeParse(argumentsFromHost);
+  if (!parsed.success) return { kind: 'rejected' };
+  const { status } = parsed.data;
+  return status === undefined ? { kind: 'unfiltered' } : { kind: 'filtered', status };
+}
+
 /**
  * The account always comes from the verified request identity. `status`, when present, is an
  * optional filter the tool itself checks; any other argument (for example `accountId`) is
