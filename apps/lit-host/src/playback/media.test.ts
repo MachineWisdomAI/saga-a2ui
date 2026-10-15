@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
+import { captureOrdinaryLogs } from './ordinary-logs.js';
 import {
   acquireMedia,
   createRecipientKey,
@@ -345,6 +346,41 @@ describe('an invalid or unsatisfiable byte range', () => {
     expect(attempt.status).toBe(200);
     expect([...attempt.bytes]).toEqual([...MEDIA_BYTES]);
   });
+});
+
+describe('media acquisition when a dependency of the service fails', () => {
+  // Decision: a failed entitlement lookup or storage read is not a refusal (the caller may be
+  // entitled) and is never a grant. It is a bodiless 503, distinct from the 403 that means
+  // expired/revoked/misused, so the view can tell "try again" from "ask for access again". The body
+  // and the logs carry no dependency text.
+  const FAULT = 'canary-media-dependency-detail';
+
+  for (const [dependency, fail] of [
+    ['entitlement lookup', (h: PlaybackHarness) => h.playback.failEntitlementWith(FAULT)],
+    ['protected storage read', (h: PlaybackHarness) => h.playback.failReadsWith(FAULT)],
+  ] as const) {
+    it(`answers a failed ${dependency} with a readable, uncacheable 503 and no bytes, text or log line`, async () => {
+      const h = await harness();
+      const key = await createRecipientKey();
+      const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+      fail(h);
+      const logs = captureOrdinaryLogs();
+      let attempt;
+      try {
+        attempt = await acquireWithFreshProof(key, grant);
+      } finally {
+        logs.restore();
+      }
+
+      expect(attempt.status).toBe(503);
+      expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
+      expect(attempt.headers.get('access-control-allow-origin')).toBe('*'); // the sandboxed view can read it
+      expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+      expect(Buffer.from(attempt.bytes).toString('utf8')).not.toContain(FAULT);
+      expect(logs.text()).not.toContain(FAULT);
+      expect(h.playback.mediaReads).toEqual([]);
+    });
+  }
 });
 
 describe('media responses for a sandboxed view in another origin', () => {

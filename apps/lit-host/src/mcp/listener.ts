@@ -292,14 +292,21 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
    */
   async function serveMedia(req: IncomingMessage, res: ServerResponse, episodeId: string): Promise<void> {
     if (!mediaService) return void res.writeHead(404).end();
-    const outcome = await mediaService.acquire({
-      episodeId,
-      url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
-      method: req.method ?? '',
-      capability: singleHeader(req.headers[CAPABILITY_HEADER]),
-      proof: singleHeader(req.headers[PROOF_HEADER]),
-      range: singleHeader(req.headers.range),
-    });
+    let outcome;
+    try {
+      outcome = await mediaService.acquire({
+        episodeId,
+        url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
+        method: req.method ?? '',
+        capability: singleHeader(req.headers[CAPABILITY_HEADER]),
+        proof: singleHeader(req.headers[PROOF_HEADER]),
+        range: singleHeader(req.headers.range),
+      });
+    } catch {
+      // The entitlement lookup or the storage read failed. That is neither a grant nor a refusal of
+      // this caller, so say "try again" (503) without any dependency text, readable by the view.
+      return void res.writeHead(503, REFUSED_HEADERS).end(JSON.stringify({ error: 'unavailable' }));
+    }
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
     if (outcome.kind === 'unsatisfiable') {
       // Sent only to a caller who passed every check, so the length is not a probe for anyone else.
