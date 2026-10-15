@@ -56,7 +56,12 @@ export interface PlaybackServerOptions {
   readonly mediaOrigin: string;
 }
 
-const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
+/**
+ * The player fetches bytes with `fetch` and decodes them with Web Audio, so it needs `connect-src`
+ * for the media origin and nothing else: no script, style, image, media element or frame origin.
+ */
+const viewCsp = (mediaOrigin: string) =>
+  ({ connectDomains: [mediaOrigin], resourceDomains: [], frameDomains: [], baseUriDomains: [] }) as const;
 
 const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
 
@@ -155,7 +160,7 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
   );
 
   registerAppResource(server, 'Playback view', PLAYBACK_VIEW_URI, {}, async () => ({
-    contents: [{ uri: PLAYBACK_VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: options.viewHtml, _meta: { ui: { csp: VIEW_CSP } } }],
+    contents: [{ uri: PLAYBACK_VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: options.viewHtml, _meta: { ui: { csp: viewCsp(options.mediaOrigin) } } }],
   }));
 
   return server;

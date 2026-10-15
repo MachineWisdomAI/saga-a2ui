@@ -62,7 +62,8 @@ export function countingPlayback(
   };
 }
 
-const VIEW_HTML = '<!doctype html><title>player</title>';
+/** The static view document the harness serves. Tests compare resource bodies against it verbatim. */
+export const PLAYER_VIEW_HTML = '<!doctype html><title>player</title>';
 
 export interface PlaybackHarness {
   readonly listener: EpisodeListener;
@@ -84,11 +85,11 @@ export async function startPlaybackHarness(
 ): Promise<PlaybackHarness> {
   const playback = countingPlayback(entitlements, options);
   const listener = await startEpisodeListener({
-    viewHtml: VIEW_HTML,
+    viewHtml: PLAYER_VIEW_HTML,
     catalog: { find: () => undefined },
     port: 0,
     playback: {
-      viewHtml: VIEW_HTML,
+      viewHtml: PLAYER_VIEW_HTML,
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: createDevelopmentVerifier(),
@@ -206,4 +207,20 @@ export async function acquireMedia(options: {
     },
   });
   return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };
+}
+
+/** One raw JSON-RPC request over HTTP to the playback endpoint (for methods other than tools/call). */
+export async function rpcOverHttp(url: string | undefined, token: string | undefined, body: unknown): Promise<WireResponse> {
+  if (url === undefined) throw new Error('the listener has no playback endpoint');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  return { status: response.status, challenge: response.headers.get('www-authenticate'), body: text.length === 0 ? undefined : JSON.parse(text) };
 }

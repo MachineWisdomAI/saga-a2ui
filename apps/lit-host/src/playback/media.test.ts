@@ -144,3 +144,43 @@ describe('media acquisition refused', () => {
     expect(h.playback.mediaReads).toEqual([]);
   });
 });
+
+describe('media responses for a sandboxed view in another origin', () => {
+  it('answers a CORS preflight for the two proof headers without reading any protected media', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const preflight = await fetch(grant.mediaUrl, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'null', // what an opaque-origin sandboxed iframe sends
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'x-saga-capability, x-saga-proof',
+      },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preflight.headers.get('access-control-allow-methods')).toBe('GET');
+    const allowed = (preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase().split(/,\s*/);
+    expect(allowed).toEqual(expect.arrayContaining(['x-saga-capability', 'x-saga-proof']));
+    expect(preflight.headers.get('access-control-allow-credentials')).toBeNull(); // no cookie ever authorizes media
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+
+  it('lets the view read a refusal, so an expired capability is distinguishable from a network failure', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const refused = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability }); // no proof
+    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+    const delivered = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+
+    expect(refused.status).toBe(403);
+    expect(refused.headers.get('access-control-allow-origin')).toBe('*');
+    expect(delivered.status).toBe(200);
+    expect(delivered.headers.get('access-control-allow-origin')).toBe('*');
+  });
+});

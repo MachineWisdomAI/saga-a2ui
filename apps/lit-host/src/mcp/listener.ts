@@ -270,7 +270,17 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   }
 
   const MEDIA_PATH = new RegExp(`^${MEDIA_PATH_PREFIX}([a-z0-9][a-z0-9-]{0,63})$`);
-  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' } as const;
+  // The player runs in a sandboxed iframe with an opaque origin, so its fetch is cross-origin and
+  // sends `Origin: null`. Any origin may therefore read the response, which is safe only because
+  // nothing ambient authorizes it: credentials are never allowed (no cookie or auth header is
+  // honored) and the capability plus a fresh proof from the bound key decide every request.
+  const CORS_HEADERS = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET',
+    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    'access-control-max-age': '600',
+  } as const;
+  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS } as const;
 
   /**
    * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
@@ -288,7 +298,12 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     });
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
     res
-      .writeHead(200, { 'content-type': outcome.media.contentType, 'cache-control': 'private, no-store', 'content-length': outcome.media.bytes.length })
+      .writeHead(200, {
+        'content-type': outcome.media.contentType,
+        'cache-control': 'private, no-store',
+        'content-length': outcome.media.bytes.length,
+        ...CORS_HEADERS,
+      })
       .end(Buffer.from(outcome.media.bytes));
   }
 
@@ -296,7 +311,10 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     const path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
     const mediaMatch = MEDIA_PATH.exec(path);
     if (mediaMatch?.[1] && options.playback) {
-      if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET' }).end();
+      // A preflight carries no credential and reaches no media: it only answers which headers the
+      // real request may send.
+      if (req.method === 'OPTIONS') return void res.writeHead(204, CORS_HEADERS).end();
+      if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET, OPTIONS' }).end();
       return serveMedia(req, res, mediaMatch[1]);
     }
     const protectedEndpoint = protectedEndpointAt(path);

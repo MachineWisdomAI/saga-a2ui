@@ -4,7 +4,9 @@ import { PLAYBACK_RESULT_META, RECIPIENT_KEY_META } from './playback.js';
 import {
   callToolOverHttp,
   createRecipientKey,
+  PLAYER_VIEW_HTML,
   PRIVATE_CANARY,
+  rpcOverHttp,
   startPlaybackHarness,
   type PlaybackHarness,
 } from './playback-fixture.js';
@@ -412,5 +414,38 @@ describe('the model-visible opener that mounts the player view', () => {
     expect(resultOf((await open(h, DEV_TOKENS.alice, { episodeId: 'ep-nope' })).body)).toMatchObject({ isError: true });
     const anonymous = await open(h, undefined, { episodeId: 'ep-1' });
     expect(anonymous.status).toBe(401);
+  });
+});
+
+describe('the player view resource', () => {
+  const VIEW_URI = 'ui://saga-a2ui/playback-view.html';
+  const readView = async (h: Harness, token: string) => {
+    const response = await rpcOverHttp(h.listener.playbackUrl, token, { jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: VIEW_URI } });
+    return (response.body as { result: { contents: { text: string; _meta: { ui: { csp: Record<string, string[]> } } }[] } }).result.contents[0];
+  };
+
+  it('is one static document for every caller, with no per-user secret, even after a capability was issued', async () => {
+    const h = await harness();
+    const { publicJwk } = await createRecipientKey();
+    const granted = await play(h, DEV_TOKENS.alice, { episodeId: 'ep-1' }, { [RECIPIENT_KEY_META]: publicJwk });
+    const capability = (resultOf(granted.body)._meta?.[PLAYBACK_RESULT_META] as { capability: string }).capability;
+
+    const forAlice = await readView(h, DEV_TOKENS.alice);
+    const forBob = await readView(h, DEV_TOKENS.bob);
+
+    expect(forAlice?.text).toBe(PLAYER_VIEW_HTML);
+    expect(forBob?.text).toBe(PLAYER_VIEW_HTML);
+    for (const secret of [capability, DEV_TOKENS.alice, DEV_TOKENS.bob, DEV_ACCOUNTS.alice, PRIVATE_CANARY]) {
+      expect(JSON.stringify([forAlice, forBob])).not.toContain(secret);
+    }
+  });
+
+  it('lets the view connect to the media origin and nothing else', async () => {
+    const h = await harness();
+    const mediaOrigin = new URL(h.listener.url).origin;
+
+    const view = await readView(h, DEV_TOKENS.alice);
+
+    expect(view?._meta.ui.csp).toEqual({ connectDomains: [mediaOrigin], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
   });
 });
