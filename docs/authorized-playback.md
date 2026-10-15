@@ -1,10 +1,10 @@
 # How authorized playback works
 
-PLAY1 ([#56](https://github.com/MachineWisdomAI/saga-a2ui/pull/56)) lets a signed-in synthetic subscriber press Play in the embedded Lit player and hear a protected episode. The server checks the account's entitlement on every Play, and only the player view that asked can fetch the audio. The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). Run commands, the wire mapping and the full list of limits are in the README section [Play an episode only after a fresh entitlement check (PLAY1)](../README.md#play-an-episode-only-after-a-fresh-entitlement-check-play1).
+PLAY1 ([#56](https://github.com/MachineWisdomAI/saga-a2ui/pull/56)) lets a signed-in synthetic subscriber press Play in the embedded Lit player and hear a protected episode. PLAY2 ([#58](https://github.com/MachineWisdomAI/saga-a2ui/pull/58)) adds expiry, revocation and delivery rules for the media itself. The server checks the account's entitlement on every Play and again on every media request, and only the player view that asked can fetch the audio. The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). Run commands, the wire mapping, the delivery rules and the full list of limits are in the README sections [Play an episode only after a fresh entitlement check (PLAY1)](../README.md#play-an-episode-only-after-a-fresh-entitlement-check-play1) and [Protected media expiry and delivery constraints (PLAY2)](../README.md#protected-media-expiry-and-delivery-constraints-play2).
 
 ## One Play press
 
-![Sequence of one Play press: the view prepares audio and creates a key pair, the host forwards play_episode to the protected endpoint, the handler checks entitlement and gets a capability bound to the view's key, the view fetches the bytes with the capability and a signed proof, and shows Playing once the audio clock advances.](../diagrams/authorized-playback-play-sequence.png)
+![Sequence of one Play press: the view prepares audio and creates a key pair, the host forwards play_episode to the protected endpoint, the handler checks entitlement and gets a capability bound to the view's key, the view fetches the bytes with the capability and a signed proof, the media service checks the capability, the proof and current entitlement again, and the view shows Playing once the audio clock advances.](../diagrams/authorized-playback-play-sequence.png)
 
 [Editable Mermaid](../diagrams/authorized-playback-play-sequence.mmd) · [SVG](../diagrams/authorized-playback-play-sequence.svg)
 
@@ -16,17 +16,23 @@ The host forwards the call to `POST /playback/mcp` with the signed-in user's bea
 
 The model cannot call `play_episode`: it declares `visibility: ['app']`, so the host offers it only to the view. The model-visible tool is `get_playable_episode`. It mounts the player and requires sign-in, but it checks no entitlement and issues no capability.
 
-The view accepts a Play result only if it names the selected episode, the sign-in the view pinned when it opened, and the media path for that episode. It then fetches the bytes with the capability and a newly signed proof, decodes them with Web Audio, and shows Playing only after the audio clock advances.
+The view accepts a Play result only if it names the selected episode, the sign-in the view pinned when it opened, and the media path for that episode. It then fetches the bytes with the capability and a newly signed proof, without following redirects. The media service checks that request on its own, including whether the account is still entitled. The view decodes the bytes with Web Audio and shows Playing only after the audio clock advances.
 
 ## What the media service checks
 
-![Media request checks in order: both headers present, capability issued and unexpired for this episode, proof is a valid ES256 JWT under 60 seconds old, proof names GET, this URL and this capability, proof key matches the key the capability was issued to, proof ID never used. Any failure returns the same 403; passing every check reads the protected bytes.](../diagrams/authorized-playback-media-checks.png)
+![Media request checks in order: both headers present; capability issued, unexpired and for this episode; proof is a fresh ES256 JWT naming GET, this URL and this capability; proof key matches the key the capability was issued to; proof ID never used; account still entitled. Any failed check returns the same 403, and a revoked entitlement also drops the capability. A failed entitlement lookup or storage read returns 503 and keeps the capability. After every check passes, the Range header decides between 200 for the whole body, 206 for one byte range, and 416 for any other bytes range.](../diagrams/authorized-playback-media-checks.png)
 
 [Editable Mermaid](../diagrams/authorized-playback-media-checks.mmd) · [Editable Excalidraw](../diagrams/authorized-playback-media-checks.excalidraw) · [SVG](../diagrams/authorized-playback-media-checks.svg)
 
-`GET /playback/media/{episodeId}` does not identify the person. Cookies and bearer tokens play no part; the capability and the proof decide every request. The proof is a JWT signed with the view's private key. It names the method, the exact URL and the SHA-256 hash of the capability, and carries its own `iat` and single-use `jti`. A capability lasts 60 seconds by default, and the service stores only its hash.
+`GET /playback/media/{episodeId}` does not identify the person. Cookies and bearer tokens play no part. The capability, the proof and the account's current entitlement decide every request. The proof is a JWT signed with the view's private key. It names the method, the exact URL and the SHA-256 hash of the capability, and carries its own `iat` and single-use `jti`, so every request, including each byte range, needs a new proof. A capability lasts 60 seconds from issue on the service's clock, and the service stores only its hash.
 
-Every refusal is the same `403` with the body `{"error":"forbidden"}`, so a caller cannot tell which check failed. The media path answers any origin (`Access-Control-Allow-Origin: *`) because the sandboxed iframe sends `Origin: null`. That is safe only because nothing ambient authorizes a media request.
+After the proof checks, the service asks the application's `checkEntitlement` again, for the account and episode the capability was issued for. If the answer is no, the service refuses the request and drops the capability, so access granted again later needs a new Play. If the lookup itself fails, or the storage read fails, the answer is `503` with the body `{"error":"unavailable"}`. That is neither a grant nor a refusal, and the capability stays usable.
+
+Every refusal is the same `403` with the body `{"error":"forbidden"}`, so a caller cannot tell which check failed, and storage is not read. Only a caller who passed every check gets the `Range` header interpreted: one `bytes=` range is `206`, any other `bytes=` range is `416` with the total length and no body, and no range or another unit gets the whole body with `200`. Every answer that can carry bytes or a status is `Cache-Control: private, no-store` with `Vary: Origin, Range, x-saga-capability, x-saga-proof`, so a cache cannot answer one user with another's bytes.
+
+Revocation and expiry decide the next request only. A response that already passed every check finishes, and bytes the browser already received cannot be retracted.
+
+The media path answers any origin (`Access-Control-Allow-Origin: *`) because the sandboxed iframe sends `Origin: null`. That is safe only because nothing ambient authorizes a media request. The service never redirects, and the player fetches with `redirect: 'error'`, so the capability and proof headers never follow a redirect to another destination.
 
 ## Player view states
 
@@ -34,7 +40,7 @@ Every refusal is the same `403` with the body `{"error":"forbidden"}`, so a call
 
 [Editable Mermaid](../diagrams/authorized-playback-view-states.mmd) · [SVG](../diagrams/authorized-playback-view-states.svg)
 
-The view shows what the audio actually did. Pause shows `paused` only once the audio context has suspended, and Resume shows `playing` only once the audio clock advances again. A Resume that the browser withholds shows `resume-blocked` and keeps the position; the next press retries it without a new authorization. A Pause or Resume that the player cannot perform shows `media-failed`. If a short episode ends before the player confirms that it started, the view keeps that end and shows `ended` instead of the late "started" result.
+The view shows what the audio actually did. Pause shows `paused` only once the audio context has suspended, and Resume shows `playing` only once the audio clock advances again. A Resume that the browser withholds shows `resume-blocked` and keeps the position; the next press retries it without a new authorization. A Pause or Resume that the player cannot perform shows `media-failed`. A `403` from the media service, meaning expiry or revocation between the grant and the fetch, shows `expired`. Any other media failure (network, `5xx`, a redirect, undecodable bytes, a blocked origin) shows `media-failed`. If a short episode ends before the player confirms that it started, the view keeps that end and shows `ended` instead of the late "started" result.
 
 Each Play gets a generation number. A new press after a failure, a changed selection or sign-in, a denial, or disposal advances the generation, aborts the byte fetch and stops the player, so a late response to an earlier request cannot restore audio. Presses are ignored while a request is pending or audio is loaded. Every retry is a new Play with a fresh entitlement check; the view never reuses a capability. A new opener result resets the view to `ready`, or to `session-changed` if it belongs to a different sign-in.
 
@@ -63,7 +69,8 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 | --- | --- |
 | [`playback/playback.ts`](../apps/lit-host/src/playback/playback.ts) | Contract shared by server and view: tool names, `_meta` keys, strict schemas, fixed sentences |
 | [`playback/playback-server.ts`](../apps/lit-host/src/playback/playback-server.ts) | `play_episode` and `get_playable_episode` |
-| [`playback/media-service.ts`](../apps/lit-host/src/playback/media-service.ts) | Issues capabilities and decides every media request |
+| [`playback/media-service.ts`](../apps/lit-host/src/playback/media-service.ts) | Issues capabilities and decides every media request, including the entitlement check |
+| [`playback/media-range.ts`](../apps/lit-host/src/playback/media-range.ts) | Reads a `Range` header after authorization; grants nothing |
 | [`playback/recipient-proof.ts`](../apps/lit-host/src/playback/recipient-proof.ts) | The view's key pair and per-request proof |
 | [`playback/playback-view.ts`](../apps/lit-host/src/playback/playback-view.ts) | View controller: request generations and states |
 | [`playback/web-audio-player.ts`](../apps/lit-host/src/playback/web-audio-player.ts) | Web Audio player: prepare, start, pause, resume |
@@ -73,5 +80,8 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 ## Limits
 
 - Not yet tried on ChatGPT or Claude. Recipient binding needs the host to forward `_meta` on the view's proxied `tools/call` and to let the sandboxed iframe `fetch` the media origin with custom headers. The local host fixture shows that Play fails closed (`unsupported`, no protected fetch) when it does not.
+- The view controller does not check a media URL's origin itself. The resource's declared `connect-src` is what blocks an undeclared destination, so a host that ignores the resource's CSP would not block one.
+- The built player fetches the whole body and never sends `Range`. Range handling is tested at the service's HTTP edge through the real listener, not through the player.
+- No shared cache is simulated. Cache safety rests on the `private, no-store` and `Vary` headers.
+- The synthetic entitlement lookup and storage are in memory. A real application owns how quickly a revocation takes effect; this service guarantees only that it asks on every request.
 - Headless Chromium shows that the audio clock advances, not that the sound is audible.
-- Revoking a capability that was already issued, range requests, redirects, shared caches and cancelling an in-flight response belong to PLAY2.

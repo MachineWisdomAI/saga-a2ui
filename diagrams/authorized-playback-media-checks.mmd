@@ -1,14 +1,20 @@
 graph TD
-  R["GET /playback/media/episodeId"] --> C1{"Capability and proof headers present?"}
-  C1 -->|"No"| X["403, same body for every refusal"]
+  R["GET /playback/media/episodeId, whole body or one byte range"] --> C1{"Capability and proof headers present?"}
+  C1 -->|"No"| X["403 forbidden: same body for every refusal, storage not read"]
   C1 -->|"Yes"| C2{"Capability issued, unexpired, for this episode?"}
-  C2 -->|"No: guessed, expired or other episode"| X
-  C2 -->|"Yes"| C3{"Proof is an ES256 JWT under 60 s old?"}
-  C3 -->|"No: forged or stale"| X
-  C3 -->|"Yes"| C4{"Proof names GET, this URL and this capability?"}
-  C4 -->|"No: signed for another request"| X
-  C4 -->|"Yes"| C5{"Proof key is the key the capability was issued to?"}
-  C5 -->|"No: capability copied to another view"| X
-  C5 -->|"Yes"| C6{"Proof ID never used before?"}
-  C6 -->|"No: replay"| X
-  C6 -->|"Yes"| OK["Read protected bytes: 200, private, no-store"]
+  C2 -->|"No: guessed, expired, already revoked or other episode"| X
+  C2 -->|"Yes"| C3{"Proof is a fresh ES256 JWT naming GET, this URL and this capability?"}
+  C3 -->|"No: forged, stale or signed for another request"| X
+  C3 -->|"Yes"| C4{"Proof key is the key the capability was issued to?"}
+  C4 -->|"No: capability copied to another view"| X
+  C4 -->|"Yes"| C5{"Proof ID never used before?"}
+  C5 -->|"No: replay"| X
+  C5 -->|"Yes"| C6{"Account still entitled? Asked again on every request"}
+  C6 -->|"No: revoked, capability dropped"| X
+  C6 -->|"Lookup fails"| F["503 unavailable: try again, capability kept"]
+  C6 -->|"Yes"| S["Read protected storage"]
+  S -->|"Read fails"| F
+  S --> G{"Range header?"}
+  G -->|"None, or not bytes="| W["200 whole body"]
+  G -->|"One bytes= range that fits"| P["206 that slice"]
+  G -->|"Any other bytes= range"| U["416 with the total length, no body"]

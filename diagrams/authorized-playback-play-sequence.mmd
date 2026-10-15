@@ -17,5 +17,6 @@ sequenceDiagram
     P-->>V: Result via host<br/>content: "Playback authorized."<br/>_meta: mediaUrl, capability, expiresAt
     Note over V: Accept only the selected episode,<br/>the pinned sign-in and its media path
     V->>M: GET /playback/media/episodeId<br/>capability + newly signed proof
-    M-->>V: 200 audio bytes, or 403
+    Note over M: Capability, proof and current<br/>entitlement checked again
+    M-->>V: 200 audio bytes, 403 refused, or 503 try again
     Note over V: Decode and start.<br/>Show Playing once the audio clock advances.
