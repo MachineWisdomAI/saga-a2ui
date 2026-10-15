@@ -39,6 +39,8 @@ interface HostOptions {
   readonly harness?: Omit<PlaybackHarnessOptions, 'viewHtml'>;
   /** Runs at the host after the listener granted a Play and before the view sees the grant. */
   readonly afterGrant?: () => void;
+  /** Changes the view projection the host hands over, as a buggy or hostile host path would. */
+  readonly tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
 }
 
 interface MountedHost {
@@ -91,7 +93,9 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
     const result = (response.body as { result: MountedHost['calls'][number]['result'] }).result;
     calls.push({ params, result });
     if (params.name === PLAY && !(result as { isError?: boolean }).isError) options.afterGrant?.();
-    return result;
+    const grant = result._meta?.['saga-a2ui/playback'];
+    if (params.name !== PLAY || !grant || !options.tamperGrant) return result;
+    return { ...result, _meta: { ...result._meta, 'saga-a2ui/playback': options.tamperGrant(grant as Record<string, unknown>) } };
   });
 
   const resource = await post({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: 'ui://saga-a2ui/playback-view.html' } });
@@ -448,5 +452,152 @@ test.describe('the built player states are announced and reflow', () => {
     }));
     expect(overflow?.scroll).toBeLessThanOrEqual(overflow?.client ?? 0);
     await expect(button(host.view)).toBeInViewport();
+  });
+});
+
+/** Every request the page and its frames make to a media path or to the stand-in destination. */
+function watchNetwork(page: Page): { readonly urls: () => string[] } {
+  const urls: string[] = [];
+  page.on('request', (request) => void urls.push(request.url()));
+  return { urls: () => [...urls] };
+}
+
+const mediaRequests = (urls: readonly string[]) => urls.filter((url) => url.includes('/playback/media/'));
+
+test.describe('revocation and expiry through the built player', () => {
+  test('access revoked after the grant: the player stops, says access expired, keeps focus on the control and recovers on a deliberate press', async ({ page }) => {
+    let revoke = true;
+    const host = await mountPlayer(page, {
+      afterGrant: () => {
+        if (!revoke) return;
+        revoke = false;
+        host.harness.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+      },
+    });
+    await host.open('ep-1');
+
+    await page.keyboard.press('Tab');
+    await expect(button(host.view)).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'expired');
+    await expect(status(host.view)).toHaveText('Playback access expired. Press Play to ask for access again.');
+    await expect(status(host.view)).toHaveAttribute('aria-live', 'polite'); // announced through the live region
+    await expect(button(host.view)).toBeFocused(); // a keyboard user is not stranded
+    expect(await silent(page)).toBe(true);
+    expect(host.harness.playback.mediaReads).toEqual([]); // the service delivered no protected bytes
+
+    // Retry is deliberate and fresh: the server now says no, and the view shows safe denial.
+    await page.keyboard.press('Enter');
+    await expect(status(host.view)).toHaveText(DENIED);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(2);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+
+    host.harness.playback.setEntitled(DEV_ACCOUNTS.alice, ['ep-1']);
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+
+  test('a media service that is down is announced as a failed audio, not as expiry, and offers a fresh Play', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    host.harness.playback.failReadsWith('storage down');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'media-failed');
+    await expect(status(host.view)).toHaveText('The audio could not be played.');
+    await expect(status(host.view)).not.toContainText('expired');
+    expect(await silent(page)).toBe(true);
+
+    host.harness.playback.failReadsWith(undefined);
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(2);
+  });
+
+  test('does not retry by itself after expiry: one Play, one media request, however long it waits', async ({ page }) => {
+    const network = watchNetwork(page);
+    const host = await mountPlayer(page, { afterGrant: () => host.harness.playback.setEntitled(DEV_ACCOUNTS.alice, []) });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'expired');
+    await page.waitForTimeout(1_500);
+
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
+    expect(mediaRequests(network.urls()).filter((url) => !url.endsWith('/playback/mcp'))).toHaveLength(1);
+    expect(host.harness.playback.entitlementChecks).toHaveLength(2); // Play, then the single acquisition
+  });
+});
+
+test.describe('where the built player may send the capability', () => {
+  test('a media URL on an undeclared origin is blocked by the resource policy: nothing arrives there, nothing plays', async ({ page }) => {
+    const { startRecorder } = await import('../src/playback/playback-fixture.js');
+    const elsewhere = await startRecorder();
+    try {
+      const host = await mountPlayer(page, {
+        tamperGrant: (grant) => ({ ...grant, mediaUrl: `${elsewhere.origin}/playback/media/ep-1` }),
+      });
+      await host.open('ep-1');
+
+      await button(host.view).click();
+
+      await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'media-failed');
+      expect(elsewhere.requests).toEqual([]); // not even a preflight reached the undeclared destination
+      expect(host.harness.playback.mediaReads).toEqual([]);
+      expect(await silent(page)).toBe(true);
+    } finally {
+      await elsewhere.close();
+    }
+  });
+
+  test('the capability and the proof travel only to the declared media origin', async ({ page }) => {
+    const sent: { url: string; headers: Record<string, string> }[] = [];
+    page.on('request', (request) => {
+      const headers = request.headers();
+      if ('x-saga-capability' in headers || 'x-saga-proof' in headers) sent.push({ url: request.url(), headers });
+    });
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+
+    const declared = new URL(host.harness.listener.url).origin;
+    expect(sent.length).toBeGreaterThan(0);
+    for (const request of sent) expect(new URL(request.url).origin).toBe(declared);
+    expect(sent.every((request) => request.headers['x-saga-capability'] === lastGrant(host).capability)).toBe(true);
+  });
+});
+
+test.describe('nothing is fetched or disclosed after a refusal', () => {
+  test('a denied Play makes no media request at all, and the capability is nowhere the model can see', async ({ page }) => {
+    const network = watchNetwork(page);
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(DENIED);
+    await page.waitForTimeout(500);
+
+    expect(mediaRequests(network.urls())).toEqual([]);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    const modelVisible = JSON.stringify(host.calls.map((call) => ({ content: (call.result as { content?: unknown }).content, structuredContent: (call.result as { structuredContent?: unknown }).structuredContent })));
+    expect(modelVisible).not.toMatch(/capability/i);
+  });
+
+  test('after an entitled Play the capability is only in the view-only result, never in model-visible fields or the static resource', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    const { capability } = lastGrant(host);
+
+    const modelVisible = JSON.stringify(host.calls.map((call) => ({ content: (call.result as { content?: unknown }).content, structuredContent: (call.result as { structuredContent?: unknown }).structuredContent })));
+    expect(modelVisible).not.toContain(capability);
+    const resource = await rpcOverHttp(host.harness.listener.playbackUrl, DEV_TOKENS.alice, { jsonrpc: '2.0', id: 9, method: 'resources/read', params: { uri: 'ui://saga-a2ui/playback-view.html' } });
+    expect(JSON.stringify(resource.body)).not.toContain(capability);
   });
 });
