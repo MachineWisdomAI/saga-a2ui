@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify } from 'jose';
+import { MEDIA_PROOF_TYP } from './media-proof.js';
 
 /** The bytes of one protected episode, as the application's storage returns them. */
 export interface ProtectedMedia {
@@ -62,7 +63,6 @@ export interface MediaServiceOptions {
   readonly nowSeconds?: () => number;
 }
 
-export const MEDIA_PROOF_TYP = 'saga-media-proof+jwt';
 
 const DEFAULT_TTL_SECONDS = 60;
 /** A proof older than this, or dated further ahead than the tolerance, is refused. */

@@ -2,12 +2,16 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { calculateJwkThumbprint } from 'jose';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
+import type { ViewSessionLabeler } from '../mcp/subscriptions-server.js';
 import type { MediaService } from './media-service.js';
 import { ZodError } from 'zod';
 import {
   MEDIA_PATH_PREFIX,
   ModelPlaybackSchema,
+  OPEN_TOOL_NAME,
+  OpenedEpisodeSchema,
   PLAY_TOOL_NAME,
+  PLAYBACK_NO_EPISODE_TEXT,
   PLAYBACK_AUTHORIZED_TEXT,
   PLAYBACK_DENIED_TEXT,
   PLAYBACK_INVALID_RESULT_TEXT,
@@ -46,6 +50,8 @@ export interface PlaybackServerOptions {
   readonly backend: PlaybackBackend;
   /** Issues the capability the media service checks later. Shared across requests by the listener. */
   readonly mediaService: MediaService;
+  /** Mints the opaque sign-in label the view uses to notice a changed sign-in. */
+  readonly labelViewSession: ViewSessionLabeler;
   /** Origin of the media service, e.g. `http://127.0.0.1:3001`. Built by the listener, never from a request. */
   readonly mediaOrigin: string;
 }
@@ -104,11 +110,44 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
         const forView = ViewPlaybackSchema.parse({
           episodeId: shown.episodeId,
           title: shown.title,
+          viewSession: options.labelViewSession(identity.signInId),
           mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
           capability: issued.capability,
           expiresAt: issued.expiresAt,
         });
         return { content: [{ type: 'text', text: forModel.text }], _meta: { [PLAYBACK_RESULT_META]: forView } };
+      } catch (error) {
+        return failure(error instanceof ZodError ? PLAYBACK_INVALID_RESULT_TEXT : PLAYBACK_UNAVAILABLE_TEXT);
+      }
+    },
+  );
+
+  // The only model-visible tool. A host renders a view when a tool that links it is called, and
+  // the model cannot call Play, so this is what mounts the player. It checks no entitlement and
+  // issues nothing: it publishes the same public fields `get_episode` does, plus the sign-in label.
+  server.registerTool(
+    OPEN_TOOL_NAME,
+    {
+      title: 'Open playable episode',
+      description: 'Shows one episode with a Play control. Playing it needs a signed-in listener with access.',
+      inputSchema: PlayRequestSchema,
+      outputSchema: OpenedEpisodeSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI }, 'ui/resourceUri': PLAYBACK_VIEW_URI },
+    },
+    async ({ episodeId }, extra) => {
+      const identity = identityFromAuthInfo(extra.authInfo);
+      if (!identity) return failure(PLAYBACK_UNSUPPORTED_TEXT);
+      try {
+        const episode = options.backend.findEpisode(episodeId);
+        if (!episode) return failure(PLAYBACK_NO_EPISODE_TEXT);
+        const opened = OpenedEpisodeSchema.parse({
+          episodeId: episode.id,
+          title: episode.title,
+          description: episode.description,
+          viewSession: options.labelViewSession(identity.signInId),
+        });
+        return { content: [{ type: 'text', text: `${opened.title} (${opened.episodeId})` }], structuredContent: opened };
       } catch (error) {
         return failure(error instanceof ZodError ? PLAYBACK_INVALID_RESULT_TEXT : PLAYBACK_UNAVAILABLE_TEXT);
       }

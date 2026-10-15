@@ -353,3 +353,64 @@ describe('Play view projection validation', () => {
     expect(JSON.stringify(response.body)).not.toContain('ep-2');
   });
 });
+
+describe('Play view session label', () => {
+  it('tells the view which sign-in granted playback with an opaque, stable, per-sign-in label', async () => {
+    const h = await harness({ [DEV_ACCOUNTS.alice]: ['ep-1'], [DEV_ACCOUNTS.bob]: ['ep-1'] });
+    const { publicJwk } = await createRecipientKey();
+    const labelFor = async (token: string) => {
+      const response = await play(h, token, { episodeId: 'ep-1' }, { [RECIPIENT_KEY_META]: publicJwk });
+      return (resultOf(response.body)._meta?.[PLAYBACK_RESULT_META] as { viewSession: string }).viewSession;
+    };
+
+    const alice = await labelFor(DEV_TOKENS.alice);
+    expect(alice).toMatch(/^vs_[A-Za-z0-9_-]{22}$/);
+    expect(alice).not.toContain(DEV_TOKENS.alice);
+    expect(alice).not.toContain(DEV_ACCOUNTS.alice);
+    expect(await labelFor(DEV_TOKENS.alice)).toBe(alice);
+    expect(await labelFor(DEV_TOKENS.bob)).not.toBe(alice);
+  });
+});
+
+describe('the model-visible opener that mounts the player view', () => {
+  const open = (h: Harness, token: string | undefined, args: unknown) =>
+    callToolOverHttp(h.listener.playbackUrl, token, { name: 'get_playable_episode', arguments: args });
+
+  it('is offered to the model, links the player view, and is the only tool that is', async () => {
+    const h = await harness();
+    const tools = await listTools(h.listener.playbackUrl, DEV_TOKENS.alice);
+    const modelVisible = tools.filter((tool) => (tool._meta?.ui?.visibility ?? ['model', 'app']).includes('model'));
+    expect(modelVisible.map((tool) => tool.name)).toEqual(['get_playable_episode']);
+    expect((modelVisible[0]?._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri).toBe('ui://saga-a2ui/playback-view.html');
+  });
+
+  it('shows the public episode and the sign-in label without checking access, issuing a capability or reading media', async () => {
+    const h = await harness();
+    const response = await open(h, DEV_TOKENS.bob, { episodeId: 'ep-1' }); // bob is not entitled: browsing is not playing
+
+    const result = resultOf(response.body);
+    expect(result.isError).toBeFalsy();
+    expect(Object.keys(result.structuredContent as object).sort()).toEqual(['description', 'episodeId', 'title', 'viewSession']);
+    expect(result.structuredContent).toMatchObject({ episodeId: 'ep-1', title: 'The protected episode', description: 'A public description.' });
+    expect((result.structuredContent as { viewSession: string }).viewSession).toMatch(/^vs_[A-Za-z0-9_-]{22}$/);
+    expect(JSON.stringify(response.body)).not.toMatch(/capability|expiresAt/);
+    expect(JSON.stringify(response.body)).not.toContain(PRIVATE_CANARY);
+    expect(h.playback.entitlementChecks).toEqual([]);
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+
+  it('gives the opener and Play the same label for one sign-in, so the view can tell they belong together', async () => {
+    const h = await harness();
+    const { publicJwk } = await createRecipientKey();
+    const opened = resultOf((await open(h, DEV_TOKENS.alice, { episodeId: 'ep-1' })).body).structuredContent as { viewSession: string };
+    const played = resultOf((await play(h, DEV_TOKENS.alice, { episodeId: 'ep-1' }, { [RECIPIENT_KEY_META]: publicJwk })).body)._meta?.[PLAYBACK_RESULT_META] as { viewSession: string };
+    expect(played.viewSession).toBe(opened.viewSession);
+  });
+
+  it('answers an unknown episode as a safe failure and an unauthenticated caller with 401', async () => {
+    const h = await harness();
+    expect(resultOf((await open(h, DEV_TOKENS.alice, { episodeId: 'ep-nope' })).body)).toMatchObject({ isError: true });
+    const anonymous = await open(h, undefined, { episodeId: 'ep-1' });
+    expect(anonymous.status).toBe(401);
+  });
+});

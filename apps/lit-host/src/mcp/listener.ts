@@ -4,7 +4,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMediaService, type MediaStore } from '../playback/media-service.js';
-import { MEDIA_PATH_PREFIX, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
+import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
+import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
 import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
 import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
@@ -89,7 +90,7 @@ const SUBSCRIPTIONS_POLICY: ProtectedRequestPolicy = {
 
 /** What the protected playback endpoint accepts: the one Play tool, within the Play bounds. */
 const PLAYBACK_POLICY: ProtectedRequestPolicy = {
-  toolNames: [PLAY_TOOL_NAME],
+  toolNames: [PLAY_TOOL_NAME, OPEN_TOOL_NAME],
   limits: PLAYBACK_LIMITS,
 };
 
@@ -260,6 +261,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
             viewHtml: endpoint.viewHtml,
             backend: endpoint.backend,
             mediaService,
+            labelViewSession,
             mediaOrigin: origin,
           }),
       };
@@ -281,8 +283,8 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       episodeId,
       url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
       method: req.method ?? '',
-      capability: singleHeader(req.headers['x-saga-capability']),
-      proof: singleHeader(req.headers['x-saga-proof']),
+      capability: singleHeader(req.headers[CAPABILITY_HEADER]),
+      proof: singleHeader(req.headers[PROOF_HEADER]),
     });
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
     res

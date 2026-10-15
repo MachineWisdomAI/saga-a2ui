@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';
@@ -200,8 +201,8 @@ export async function acquireMedia(options: {
 }): Promise<MediaAttempt> {
   const response = await fetch(options.url, {
     headers: {
-      ...(options.capability === undefined ? {} : { 'x-saga-capability': options.capability }),
-      ...(options.proof === undefined ? {} : { 'x-saga-proof': options.proof }),
+      ...(options.capability === undefined ? {} : { [CAPABILITY_HEADER]: options.capability }),
+      ...(options.proof === undefined ? {} : { [PROOF_HEADER]: options.proof }),
     },
   });
   return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };

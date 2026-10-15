@@ -1,9 +1,14 @@
 import { z } from 'zod';
+import { PublicEpisodeSchema } from '../mcp/episode.js';
+import { ViewSessionLabelSchema } from '../mcp/subscriptions.js';
 
-// Contract shared by the playback MCP server and the view. It imports only `zod`, so the
-// browser bundle can use it without pulling in any server code.
+// Contract shared by the playback MCP server and the view. It imports only `zod` (and the
+// sibling contract module that does the same), so the browser bundle can use it without
+// pulling in any server code.
 
 export const PLAY_TOOL_NAME = 'play_episode';
+/** The model-visible tool whose result mounts the player view. It never grants playback. */
+export const OPEN_TOOL_NAME = 'get_playable_episode';
 export const PLAYBACK_VIEW_URI = 'ui://saga-a2ui/playback-view.html';
 
 /** Path prefix of the synthetic media service: `<prefix><episodeId>`. The listener serves it; the view fetches it. */
@@ -97,9 +102,22 @@ export const ViewEpisodeSchema = z
  * before any media is mounted.
  */
 export const ViewPlaybackSchema = ViewEpisodeSchema.extend({
+  /** Which sign-in was granted playback. Freshness only; it never authorizes anything. */
+  viewSession: ViewSessionLabelSchema,
   mediaUrl: z.string().max(300),
   capability: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   expiresAt: z.number().int().positive(),
 }).strict();
 
 export type ViewPlayback = z.infer<typeof ViewPlaybackSchema>;
+
+/** Tool failure: the opener found no episode with that id. */
+export const PLAYBACK_NO_EPISODE_TEXT = 'No playable episode has that id.';
+
+/**
+ * What mounting the player view may carry: the public episode and the sign-in label, nothing
+ * else. It is deliberately not entitlement-aware: browsing an episode is not permission to play it.
+ */
+export const OpenedEpisodeSchema = PublicEpisodeSchema.extend({ viewSession: ViewSessionLabelSchema }).strict();
+
+export type OpenedEpisode = z.infer<typeof OpenedEpisodeSchema>;
