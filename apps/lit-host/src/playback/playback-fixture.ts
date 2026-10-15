@@ -209,11 +209,14 @@ export async function acquireMedia(options: {
   readonly url: string;
   readonly capability?: string;
   readonly proof?: string;
+  /** The raw `Range` request header, exactly as a client would send it. */
+  readonly range?: string;
 }): Promise<MediaAttempt> {
   const response = await fetch(options.url, {
     headers: {
       ...(options.capability === undefined ? {} : { [CAPABILITY_HEADER]: options.capability }),
       ...(options.proof === undefined ? {} : { [PROOF_HEADER]: options.proof }),
+      ...(options.range === undefined ? {} : { range: options.range }),
     },
   });
   return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };

@@ -298,16 +298,23 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       method: req.method ?? '',
       capability: singleHeader(req.headers[CAPABILITY_HEADER]),
       proof: singleHeader(req.headers[PROOF_HEADER]),
+      range: singleHeader(req.headers.range),
     });
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
-    res
-      .writeHead(200, {
-        'content-type': outcome.media.contentType,
-        'cache-control': 'private, no-store',
-        'content-length': outcome.media.bytes.length,
-        ...CORS_HEADERS,
-      })
-      .end(Buffer.from(outcome.media.bytes));
+    const delivered = {
+      'content-type': outcome.media.contentType,
+      'cache-control': 'private, no-store',
+      'content-length': outcome.media.bytes.length,
+      'accept-ranges': 'bytes',
+      ...CORS_HEADERS,
+    };
+    if (outcome.kind === 'partial') {
+      res
+        .writeHead(206, { ...delivered, 'content-range': `bytes ${outcome.first}-${outcome.last}/${outcome.total}` })
+        .end(Buffer.from(outcome.media.bytes));
+      return;
+    }
+    res.writeHead(200, delivered).end(Buffer.from(outcome.media.bytes));
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

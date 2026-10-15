@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify } from 'jose';
 import { MEDIA_PROOF_TYP } from './media-proof.js';
+import { resolveRange } from './media-range.js';
 
 /** The bytes of one protected episode, as the application's storage returns them. */
 export interface ProtectedMedia {
@@ -39,11 +40,15 @@ export interface MediaRequest {
   readonly method: string;
   readonly capability: string | undefined;
   readonly proof: string | undefined;
+  /** The raw `Range` header, if the client sent one. Interpreted only after every check passed. */
+  readonly range: string | undefined;
 }
 
 /** A refusal carries no reason: telling a caller which check failed would help it probe. */
 export type MediaOutcome =
   | { readonly kind: 'delivered'; readonly media: ProtectedMedia }
+  /** A supported byte range: `media.bytes` is exactly bytes `first`..`last` of a body of `total`. */
+  | { readonly kind: 'partial'; readonly media: ProtectedMedia; readonly first: number; readonly last: number; readonly total: number }
   | { readonly kind: 'refused' };
 
 /**
@@ -132,7 +137,11 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
 
       if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') return REFUSED;
 
-      return { kind: 'delivered', media: await options.store.read(grant.episodeId) };
+      const media = await options.store.read(grant.episodeId);
+      const range = resolveRange(request.range, media.bytes.length);
+      if (range.kind === 'whole') return { kind: 'delivered', media };
+      const slice = { contentType: media.contentType, bytes: media.bytes.subarray(range.first, range.last + 1) };
+      return { kind: 'partial', media: slice, first: range.first, last: range.last, total: media.bytes.length };
     },
   };
 }

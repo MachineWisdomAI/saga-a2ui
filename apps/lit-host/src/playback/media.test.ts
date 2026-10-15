@@ -168,6 +168,130 @@ describe('media acquisition after access is revoked', () => {
   });
 });
 
+describe('a later byte-range request repeats every check', () => {
+  const RANGE = 'bytes=0-3';
+  const noBytes = (attempt: { bytes: Uint8Array }) => Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)));
+
+  it('refuses a range for an account whose entitlement was revoked after the capability was issued', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    h.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+
+    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: RANGE });
+
+    expect(attempt.status).toBe(403);
+    expect(noBytes(attempt)).toBe(false);
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+
+  it('refuses a range once the capability expired, even with a fresh proof', async () => {
+    let now = 1_800_000_000;
+    const h = await harness({ capabilityTtlSeconds: 30, nowSeconds: () => now });
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    now += 31;
+
+    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, issuedAt: now });
+    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: RANGE });
+
+    expect(attempt.status).toBe(403);
+    expect(noBytes(attempt)).toBe(false);
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+
+  it('refuses a range from another user holding A’s capability and from a capability used on another episode', async () => {
+    const h = await harness();
+    const aliceKey = await createRecipientKey();
+    const bobKey = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, aliceKey);
+    const otherEpisodeUrl = grant.mediaUrl.replace('/ep-1', '/ep-2');
+
+    const asBob = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof: await signMediaProof({ key: bobKey, capability: grant.capability, url: grant.mediaUrl }),
+      range: RANGE,
+    });
+    const otherEpisode = await acquireMedia({
+      url: otherEpisodeUrl,
+      capability: grant.capability,
+      proof: await signMediaProof({ key: aliceKey, capability: grant.capability, url: otherEpisodeUrl }),
+      range: RANGE,
+    });
+
+    for (const attempt of [asBob, otherEpisode]) {
+      expect(attempt.status).toBe(403);
+      expect(noBytes(attempt)).toBe(false);
+    }
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+});
+
+/** One acquisition exactly as the player makes it: the capability plus a fresh proof, optionally with a Range. */
+async function acquireWithFreshProof(
+  key: Awaited<ReturnType<typeof createRecipientKey>>,
+  grant: { readonly capability: string; readonly mediaUrl: string },
+  range?: string,
+) {
+  const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+  return acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, ...(range === undefined ? {} : { range }) });
+}
+
+describe('a supported byte range', () => {
+  // MEDIA_BYTES is the ten bytes of "RIFFcanary", so every expected slice below is read off the
+  // requirement (RFC 9110 range semantics), not recomputed by the service.
+  const cases = [
+    { range: 'bytes=2-5', first: 2, last: 5 },
+    { range: 'bytes=6-', first: 6, last: 9 },
+    { range: 'bytes=-3', first: 7, last: 9 },
+    { range: 'bytes=0-99', first: 0, last: 9 }, // an end past the data is clamped, not an error
+  ];
+
+  for (const { range, first, last } of cases) {
+    it(`answers ${range} with 206 and exactly those bytes, after the same authorization`, async () => {
+      const h = await harness();
+      const key = await createRecipientKey();
+      const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+      const attempt = await acquireWithFreshProof(key, grant, range);
+
+      expect(attempt.status).toBe(206);
+      expect([...attempt.bytes]).toEqual([...MEDIA_BYTES.subarray(first, last + 1)]);
+      expect(attempt.headers.get('content-range')).toBe(`bytes ${first}-${last}/${MEDIA_BYTES.length}`);
+      expect(attempt.headers.get('content-length')).toBe(String(last - first + 1));
+      expect(attempt.headers.get('cache-control')).toMatch(/private/);
+      expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
+      expect(h.playback.entitlementChecks.at(-1)).toEqual({ accountId: DEV_ACCOUNTS.alice, episodeId: 'ep-1' });
+    });
+  }
+
+  it('is announced on the whole-body answer, so a client knows ranges are supported', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const attempt = await acquireWithFreshProof(key, grant);
+
+    expect(attempt.status).toBe(200);
+    expect(attempt.headers.get('accept-ranges')).toBe('bytes');
+  });
+
+  it('needs its own fresh proof: reusing the proof of an earlier whole-body fetch is refused', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+    expect((await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof })).status).toBe(200);
+
+    const replay = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: 'bytes=0-3' });
+
+    expect(replay.status).toBe(403);
+    expect(Buffer.from(replay.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)))).toBe(false);
+  });
+});
+
 describe('media responses for a sandboxed view in another origin', () => {
   it('answers a CORS preflight for the two proof headers without reading any protected media', async () => {
     const h = await harness();
