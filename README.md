@@ -159,3 +159,39 @@ A selection stays only when the next successful read still contains that subscri
 Tests: `src/mcp/subscriptions.test.ts` (wire classes, limits, batch classification, chunked 413, a bounded backend read that does not emit late, and the failure fixture), `src/mcp/subscriptions-view.test.ts` (empty, retry, cleared, selection, the declared status filter through a real `App`/`AppBridge`, and a bounded read that does not emit late), `e2e/subscriptions-view.spec.ts` (the same wire results in the sandboxed view).
 
 Tests: `src/mcp/subscriptions.test.ts` (real listener and bearer credentials over HTTP: concurrent users, forged account argument, canaries, bad backend data, every credential failure and its status/challenge, and a paused request whose verifier reuses one mutable `AuthInfo`), `src/mcp/subscriptions-view.test.ts` (session pinning, clearing, recovery only through the correlated `callServerTool` response, an older in-flight read that cannot reuse a later read's identity after a refusal, and session loss that clears while a read is pending), `e2e/subscriptions-view.spec.ts` (built view in the sandboxed host fixture: authorized, changed sign-in, a proxied tools/call whose listener 401 clears the view, a delayed prior result, and recovery from that call's response).
+
+### Play an episode only after a fresh entitlement check (PLAY1)
+
+A third protected MCP endpoint, `POST /playback/mcp`, lets the signed-in synthetic subscriber press Play in an embedded Lit view and hear a protected episode. Synthetic accounts and a generated tone only; no real Patreon access, no SDK packages, no actual-host (ChatGPT/Claude) acceptance. One new runtime dependency: `jose` 6.2.12 (MIT) for JWT proofs and RFC 7638 key thumbprints; no MCP-UI, CopilotKit, AG-UI or Ora package is used.
+
+    npm run build && npm run serve:mcp   # also prints the playback URL; dev tokens only (see mcp/dev-auth.ts)
+
+Mechanisms chosen for the Blueprint's open decisions (the evidence is the tests named below, run through the real listener and the built view):
+
+- **Recipient binding (decision 1): proof of possession.** The view creates a non-extractable ECDSA P-256 key and sends only its public half in the Play call's `_meta` (`saga-a2ui/recipient-key`); the arguments stay `{ episodeId }`. The media service binds the issued capability to the verified account, the episode and that key's thumbprint. A media request must carry the capability **and** a fresh ES256 proof signed by that key naming the exact URL, method and capability; each proof is single-use. A copied capability, another user, another episode, a missing, stale, replayed or mis-targeted proof and an expired capability each get a bodiless `403` and no protected read (`playback/media.test.ts`, `e2e/playback-view.spec.ts`). A bearer URL alone is never enough.
+- **App-only declaration and private result channel (decision 3).** `play_episode` declares `_meta.ui.visibility: ['app']`; the only model-visible tool is `get_playable_episode`, which mounts the view and checks no access. A successful Play puts the capability **only** in `result._meta['saga-a2ui/playback']` (MCP Apps documents `_meta` as not intended for model context); `content` is a fixed sentence and there is no `structuredContent`. Both projections are strict, bounded zod schemas parsed before serialization. The static view resource is identical for every caller.
+- **User gesture (decision 4).** The press calls `player.prepare()` synchronously (creating and resuming the `AudioContext` inside the activation), then authorizes asynchronously. If the browser still holds audio back, the view shows `gesture-needed` and a second explicit press plays; it never autoplays. Audio is fetched with `fetch` and decoded with Web Audio, so the view needs only `connect-src` for the media origin and no media element, URL or `media-src`.
+- **Playing means audible.** The view reports `playing` only after the audio clock advances; `denied`, `sign-in-required`, `expired`, `unsupported`, `unavailable`, `media-failed` and `gesture-needed` are distinct states, and pending work is retired by a generation number so a late success cannot restore cleared media.
+
+Wire mapping, verified against the pinned `@modelcontextprotocol/sdk` 1.32.1 and `ext-apps` 1.7.5:
+
+| Condition | Result |
+| --- | --- |
+| Missing, invalid, expired credential | HTTP `401` + `WWW-Authenticate`, before any tool |
+| Service-only credential | HTTP `403 insufficient_scope` |
+| Malformed call, unknown tool, oversized argument | JSON-RPC error from the request gate (`protected-request.ts`), tool not run |
+| Known tool, invalid input (incl. a forged `accountId`) | `isError` result with a fixed sentence; the rejected key and value are not echoed |
+| Denial, unknown episode | `isError`, "Playback denied: this account does not have access to this episode." (identical for both) |
+| No usable recipient key (host dropped `_meta`) | `isError`, "Playback is not supported here."; zero entitlement checks, zero media reads |
+| Backend failure, projection that breaks its contract | `isError` with a different fixed sentence; no capability, no backend text, nothing in logs |
+
+Limits worth knowing:
+
+- The pinned MCP SDK maps **any** handler failure to an `isError` result; it has no JSON-RPC internal-error path for a registered tool. The ticket's "sanitized internal error" is therefore an `isError` result with a fixed sentence and no success data. A distinct JSON-RPC `-32603` would need a change upstream or a custom dispatcher, which this slice does not add.
+- `registerAppTool` types its input as a raw shape, which silently drops unknown keys. Play needs a strict object so a forged `accountId` is rejected, so it registers through `McpServer.registerTool` with the same `_meta` keys the helper writes.
+- **Feasibility gap kept open:** recipient binding needs the host to forward `_meta` on the view's proxied `tools/call` and to let a sandboxed iframe `fetch` the media origin with custom headers. The local host fixture shows the mechanism works when it does and that Play fails closed when it does not (`unsupported`, no protected fetch). Neither ChatGPT web nor Claude web has been tried; their result decides whether each can carry the binding. Nothing here weakens the binding for a host that cannot.
+- The media origin answers any origin (`Access-Control-Allow-Origin: *`, no credentials) because a sandboxed iframe sends `Origin: null`. That is safe only because no cookie or ambient header authorizes media; the capability and proof decide every request.
+- Expiry and revocation here are the minimum PLAY1 needs (a short capability lifetime checked on every acquisition, and a fresh entitlement check on every Play). Range requests, redirects, shared caches, in-flight cancellation and revocation of an already-issued capability are PLAY2. Account/selection races, retention and focus-resume revalidation are STATE1/STATE2.
+- Audio device output is not asserted by headless Chromium beyond the audio clock advancing; "audible playback" in a real host is a Captain acceptance run.
+
+Tests: `src/playback/playback.test.ts` (wire contract through the real listener: declaration, entitled/denied/unsupported/forged/replay, every credential failure, projections, fault mapping with log capture, CORS/CSP), `src/playback/media.test.ts` (recipient binding, replay, expiry, preflight), `src/playback/playback-view.test.ts` (the controller through a real `App`/`AppBridge` whose host forwards to the real listener), `e2e/playback-view.spec.ts` (built view in the sandboxed fixture with real Web Audio: playing, keyboard, denial, sign-in recovery, unsupported, replay after revocation, expiry, recipient binding, pending, live region, 320px reflow with 200% text), and `e2e/view-bundle.spec.ts` (no server code, credential or media element in the built view).
