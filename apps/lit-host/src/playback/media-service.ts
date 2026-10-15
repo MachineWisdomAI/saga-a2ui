@@ -53,33 +53,45 @@ export type MediaOutcome =
   | { readonly kind: 'unsatisfiable'; readonly total: number }
   | { readonly kind: 'refused' };
 
-/**
- * The synthetic media service. It issues capabilities and decides every later acquisition.
- * A capability is only a handle: acquiring bytes also needs a fresh proof signed by the key the
- * capability was bound to (RFC 9449 style proof of possession), so another user or another
- * episode cannot use a copy of it.
- */
-export interface MediaService {
-  issue(grant: CapabilityGrant): IssuedCapability;
-  acquire(request: MediaRequest): Promise<MediaOutcome>;
-}
-
 export type EntitlementDecision = 'entitled' | 'denied';
 
 /**
- * The application's current answer to "may this account hear this episode?". The service asks it
- * on every fresh acquisition, with the account and episode the capability was issued for, so a
- * revoked entitlement refuses new bytes even though the capability itself has not expired.
+ * The application's current answer to "may this account hear this episode?". It is also the
+ * current revocation lookup: the service asks it on every fresh acquisition, with the account and
+ * episode the capability was issued for, so a revoked entitlement refuses new bytes even though the
+ * capability has not expired. A lookup that throws is a fault, not a revocation.
  */
 export type EntitlementLookup = (accountId: string, episodeId: string) => Promise<EntitlementDecision>;
+
+/**
+ * The synthetic media service. It issues capabilities and decides every later acquisition.
+ *
+ * A capability is only a handle: acquiring bytes also needs a fresh proof signed by the key the
+ * capability was bound to (RFC 9449 style proof of possession), so another user or another
+ * episode cannot use a copy of it.
+ *
+ * Every acquisition, whole or byte range, repeats the same checks in this order and stops at the
+ * first failure with `refused` and no read of protected storage: capability known and unexpired on
+ * the service's clock, episode scope, proof of the bound recipient key, then current entitlement.
+ * Only after all pass is storage read and the `Range` header interpreted.
+ *
+ * What it cannot do: a response that already passed these checks is not tracked or cancelled, and
+ * bytes the client already received or buffered cannot be retracted. Revocation and expiry decide
+ * the next acquisition only.
+ */
+export interface MediaService {
+  issue(grant: CapabilityGrant): IssuedCapability;
+  /** Rejects only when the entitlement lookup or the storage read fails; the caller maps that to "try again". */
+  acquire(request: MediaRequest): Promise<MediaOutcome>;
+}
 
 export interface MediaServiceOptions {
   readonly store: MediaStore;
   readonly entitlement: EntitlementLookup;
+  /** Capability lifetime from issue. Expiry is measured on this service's clock, never the client's. */
   readonly ttlSeconds?: number;
   readonly nowSeconds?: () => number;
 }
-
 
 const DEFAULT_TTL_SECONDS = 60;
 /** A proof older than this, or dated further ahead than the tolerance, is refused. */
