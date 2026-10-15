@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
+import { captureOrdinaryLogs } from './ordinary-logs.js';
 import { PLAYBACK_RESULT_META, RECIPIENT_KEY_META } from './playback.js';
 import {
   callToolOverHttp,
@@ -221,16 +222,6 @@ const UNAVAILABLE_TEXT = 'Playback is unavailable.';
 const INVALID_RESULT_TEXT = 'The playback result could not be shown.';
 const UNREADABLE_REQUEST_TEXT = 'That play request could not be read.';
 const FAULT_CANARY = 'canary-backend-fault-detail';
-
-/** Everything an operator might read: console methods and raw stdout/stderr writes. */
-function captureOrdinaryLogs(): { readonly text: () => string; readonly restore: () => void } {
-  const lines: string[] = [];
-  const record = (...parts: unknown[]) => void lines.push(parts.map(String).join(' '));
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) => vi.spyOn(console, method).mockImplementation(record));
-  const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (record(chunk), true));
-  const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (record(chunk), true));
-  return { text: () => lines.join('\n'), restore: () => [...spies, out, err].forEach((spy) => spy.mockRestore()) };
-}
 
 describe('Play result projections and faults', () => {
   it('answers a record that breaks the view contract with a sanitized contract-fault failure and no success data', async () => {

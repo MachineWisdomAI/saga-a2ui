@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify } from 'jose';
 import { MEDIA_PROOF_TYP } from './media-proof.js';
+import { resolveRange } from './media-range.js';
 
 /** The bytes of one protected episode, as the application's storage returns them. */
 export interface ProtectedMedia {
@@ -39,30 +40,58 @@ export interface MediaRequest {
   readonly method: string;
   readonly capability: string | undefined;
   readonly proof: string | undefined;
+  /** The raw `Range` header, if the client sent one. Interpreted only after every check passed. */
+  readonly range: string | undefined;
 }
 
 /** A refusal carries no reason: telling a caller which check failed would help it probe. */
 export type MediaOutcome =
   | { readonly kind: 'delivered'; readonly media: ProtectedMedia }
+  /** A supported byte range: `media.bytes` is exactly bytes `first`..`last` of a body of `total`. */
+  | { readonly kind: 'partial'; readonly media: ProtectedMedia; readonly first: number; readonly last: number; readonly total: number }
+  /** An authorized caller asked for a range that cannot be served. It carries the length and no bytes. */
+  | { readonly kind: 'unsatisfiable'; readonly total: number }
   | { readonly kind: 'refused' };
+
+export type EntitlementDecision = 'entitled' | 'denied';
+
+/**
+ * The application's current answer to "may this account hear this episode?". It is also the
+ * current revocation lookup: the service asks it on every fresh acquisition, with the account and
+ * episode the capability was issued for, so a revoked entitlement refuses new bytes even though the
+ * capability has not expired. A lookup that throws is a fault, not a revocation.
+ */
+export type EntitlementLookup = (accountId: string, episodeId: string) => Promise<EntitlementDecision>;
 
 /**
  * The synthetic media service. It issues capabilities and decides every later acquisition.
+ *
  * A capability is only a handle: acquiring bytes also needs a fresh proof signed by the key the
  * capability was bound to (RFC 9449 style proof of possession), so another user or another
  * episode cannot use a copy of it.
+ *
+ * Every acquisition, whole or byte range, repeats the same checks in this order and stops at the
+ * first failure with `refused` and no read of protected storage: capability known and unexpired on
+ * the service's clock, episode scope, proof of the bound recipient key, then current entitlement.
+ * Only after all pass is storage read and the `Range` header interpreted.
+ *
+ * What it cannot do: a response that already passed these checks is not tracked or cancelled, and
+ * bytes the client already received or buffered cannot be retracted. Revocation and expiry decide
+ * the next acquisition only.
  */
 export interface MediaService {
   issue(grant: CapabilityGrant): IssuedCapability;
+  /** Rejects only when the entitlement lookup or the storage read fails; the caller maps that to "try again". */
   acquire(request: MediaRequest): Promise<MediaOutcome>;
 }
 
 export interface MediaServiceOptions {
   readonly store: MediaStore;
+  readonly entitlement: EntitlementLookup;
+  /** Capability lifetime from issue. Expiry is measured on this service's clock, never the client's. */
   readonly ttlSeconds?: number;
   readonly nowSeconds?: () => number;
 }
-
 
 const DEFAULT_TTL_SECONDS = 60;
 /** A proof older than this, or dated further ahead than the tolerance, is refused. */
@@ -120,7 +149,19 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
         return REFUSED;
       }
 
-      return { kind: 'delivered', media: await options.store.read(grant.episodeId) };
+      if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') {
+        // A denial is final for this capability: access granted again later needs a new Play. A
+        // lookup that throws never reaches here, so a fault does not revoke anything.
+        grants.delete(capabilityHash);
+        return REFUSED;
+      }
+
+      const media = await options.store.read(grant.episodeId);
+      const range = resolveRange(request.range, media.bytes.length);
+      if (range.kind === 'whole') return { kind: 'delivered', media };
+      if (range.kind === 'unsatisfiable') return { kind: 'unsatisfiable', total: media.bytes.length };
+      const slice = { contentType: media.contentType, bytes: media.bytes.subarray(range.first, range.last + 1) };
+      return { kind: 'partial', media: slice, first: range.first, last: range.last, total: media.bytes.length };
     },
   };
 }
