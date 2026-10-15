@@ -49,6 +49,8 @@ export type MediaOutcome =
   | { readonly kind: 'delivered'; readonly media: ProtectedMedia }
   /** A supported byte range: `media.bytes` is exactly bytes `first`..`last` of a body of `total`. */
   | { readonly kind: 'partial'; readonly media: ProtectedMedia; readonly first: number; readonly last: number; readonly total: number }
+  /** An authorized caller asked for a range that cannot be served. It carries the length and no bytes. */
+  | { readonly kind: 'unsatisfiable'; readonly total: number }
   | { readonly kind: 'refused' };
 
 /**
@@ -140,6 +142,7 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       const media = await options.store.read(grant.episodeId);
       const range = resolveRange(request.range, media.bytes.length);
       if (range.kind === 'whole') return { kind: 'delivered', media };
+      if (range.kind === 'unsatisfiable') return { kind: 'unsatisfiable', total: media.bytes.length };
       const slice = { contentType: media.contentType, bytes: media.bytes.subarray(range.first, range.last + 1) };
       return { kind: 'partial', media: slice, first: range.first, last: range.last, total: media.bytes.length };
     },

@@ -292,6 +292,61 @@ describe('a supported byte range', () => {
   });
 });
 
+describe('an invalid or unsatisfiable byte range', () => {
+  // Decision: a `bytes=` range the service cannot honour as one slice is answered 416 with the body
+  // length (RFC 9110 §14.4) and no bytes. It is answered only to a caller who passed every check, so
+  // the length is never a probe for an unauthorized caller. A range in another unit is not ours to
+  // interpret and gets the whole body, which RFC 9110 permits.
+  const unsatisfiable = [
+    { why: 'starts at the end of the body', range: 'bytes=10-' },
+    { why: 'starts beyond the body', range: 'bytes=50-60' },
+    { why: 'is reversed', range: 'bytes=5-2' },
+    { why: 'asks for a zero-length suffix', range: 'bytes=-0' },
+    { why: 'names neither end', range: 'bytes=-' },
+    { why: 'asks for several ranges at once', range: 'bytes=0-1,4-5' },
+    { why: 'is not numeric', range: 'bytes=a-b' },
+  ];
+
+  for (const { why, range } of unsatisfiable) {
+    it(`answers 416 with the length and no bytes when the range ${why} (${range})`, async () => {
+      const h = await harness();
+      const key = await createRecipientKey();
+      const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+      const attempt = await acquireWithFreshProof(key, grant, range);
+
+      expect(attempt.status).toBe(416);
+      expect(attempt.headers.get('content-range')).toBe(`bytes */${MEDIA_BYTES.length}`);
+      expect(attempt.bytes.length).toBe(0);
+      expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
+    });
+  }
+
+  it('does not tell an unauthorized caller the length: a bad range from another user is the same bodiless 403', async () => {
+    const h = await harness();
+    const aliceKey = await createRecipientKey();
+    const bobKey = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, aliceKey);
+
+    const attempt = await acquireWithFreshProof(bobKey, grant, 'bytes=50-60');
+
+    expect(attempt.status).toBe(403);
+    expect(attempt.headers.get('content-range')).toBeNull();
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+
+  it('gives the whole body for a range in a unit the service does not interpret', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const attempt = await acquireWithFreshProof(key, grant, 'items=0-1');
+
+    expect(attempt.status).toBe(200);
+    expect([...attempt.bytes]).toEqual([...MEDIA_BYTES]);
+  });
+});
+
 describe('media responses for a sandboxed view in another origin', () => {
   it('answers a CORS preflight for the two proof headers without reading any protected media', async () => {
     const h = await harness();

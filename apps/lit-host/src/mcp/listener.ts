@@ -301,6 +301,11 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       range: singleHeader(req.headers.range),
     });
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
+    if (outcome.kind === 'unsatisfiable') {
+      // Sent only to a caller who passed every check, so the length is not a probe for anyone else.
+      res.writeHead(416, { 'cache-control': 'private, no-store', 'content-range': `bytes */${outcome.total}`, ...CORS_HEADERS }).end();
+      return;
+    }
     const delivered = {
       'content-type': outcome.media.contentType,
       'cache-control': 'private, no-store',
