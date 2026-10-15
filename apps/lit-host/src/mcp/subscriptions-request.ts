@@ -8,6 +8,8 @@ import {
  * Classifies one protected browse request before the tool handler runs.
  * HTTP transport failures, JSON-RPC protocol failures and tool results are different
  * outcomes: this module only decides the first two. It never calls the backend.
+ * A JSON-RPC batch is not a way around that gate: every element is classified, and
+ * any rejection stops the whole batch before the handler.
  */
 
 export type RequestId = string | number | null;
@@ -60,9 +62,10 @@ function argumentWithinLimits(args: unknown): boolean {
 }
 
 /**
- * Reads a body that has already been bounded. Malformed calls and unknown tools stop here,
- * with the request id echoed when one can be read safely. A forwardable call is the only
- * path that may reach the tool handler.
+ * Reads one JSON value that has already been bounded. Malformed calls and unknown tools stop
+ * here, with the request id echoed when one can be read safely. A forwardable call is the only
+ * path that may reach the tool handler. An array is classified element by element; a rejected
+ * element is not dispatched, and a one-element batch keeps that element's protocol result.
  */
 export function classifySubscriptionsBody(raw: string): SubscriptionsGate {
   let parsed: unknown;
@@ -71,8 +74,22 @@ export function classifySubscriptionsBody(raw: string): SubscriptionsGate {
   } catch {
     return { kind: 'protocol', status: 400, id: null, code: PARSE_ERROR, message: 'Parse error' };
   }
-  if (Array.isArray(parsed)) return { kind: 'forward', body: parsed };
-  if (parsed === null || typeof parsed !== 'object') {
+  if (Array.isArray(parsed)) return classifyBatch(parsed);
+  return classifyMessage(parsed);
+}
+
+function classifyBatch(messages: readonly unknown[]): SubscriptionsGate {
+  if (messages.length === 0) {
+    return { kind: 'protocol', status: 400, id: null, code: INVALID_REQUEST, message: 'Invalid request' };
+  }
+  const gates = messages.map((message) => classifyMessage(message));
+  const rejected = gates.find((gate) => gate.kind !== 'forward');
+  if (rejected) return messages.length === 1 ? rejected : { kind: 'protocol', status: 400, id: null, code: INVALID_REQUEST, message: 'Invalid request' };
+  return { kind: 'forward', body: messages };
+}
+
+function classifyMessage(parsed: unknown): SubscriptionsGate {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { kind: 'protocol', status: 400, id: null, code: INVALID_REQUEST, message: 'Invalid request' };
   }
   const message = parsed as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };

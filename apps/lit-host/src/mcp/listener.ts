@@ -25,6 +25,11 @@ export interface SubscriptionsEndpointOptions {
   readonly backend: SubscriptionBackend;
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * How long the backend read may run before the server retires it.
+   * Defaults to the documented browse bound. A later resolution is not returned.
+   */
+  readonly readBoundMs?: number;
 }
 
 export interface EpisodeListenerOptions {
@@ -95,18 +100,50 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   }
 
   async function readLimitedBody(req: IncomingMessage): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
-    const chunks: Buffer[] = [];
-    let received = 0;
-    for await (const chunk of req) {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      received += buf.length;
-      if (received > SUBSCRIPTION_LIMITS.maxRequestBytes) {
-        req.destroy();
-        return { tooLarge: true };
-      }
-      chunks.push(buf);
-    }
-    return { tooLarge: false, text: Buffer.concat(chunks).toString('utf8') };
+    // Do not iterate with for-await: leaving that loop destroys the socket before a 413 can be written.
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      let settled = false;
+      const detach = () => {
+        req.off('data', onData);
+        req.off('end', onEnd);
+        req.off('error', onError);
+      };
+      const finish = (result: { tooLarge: true } | { tooLarge: false; text: string }) => {
+        if (settled) return;
+        settled = true;
+        req.pause();
+        detach();
+        resolve(result);
+      };
+      const onData = (chunk: Buffer | string) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        received += buf.length;
+        if (received > SUBSCRIPTION_LIMITS.maxRequestBytes) {
+          finish({ tooLarge: true });
+          return;
+        }
+        chunks.push(buf);
+      };
+      const onEnd = () => finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
+      const onError = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        detach();
+        reject(error);
+      };
+      req.on('data', onData);
+      req.on('end', onEnd);
+      req.on('error', onError);
+    });
+  }
+
+  function rejectOversized(req: IncomingMessage, res: ServerResponse): void {
+    writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    const cleanup = () => req.destroy();
+    if (res.writableFinished) cleanup();
+    else res.once('finish', cleanup);
   }
 
   async function serveSubscriptions(
@@ -124,7 +161,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     const headerFailure = transportHeaderFailure(req);
     if (headerFailure) return writeTransport(res, headerFailure);
     const body = await readLimitedBody(req);
-    if (body.tooLarge) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    if (body.tooLarge) return rejectOversized(req, res);
     const gate = classifySubscriptionsBody(body.text);
     if (gate.kind === 'transport') return writeTransport(res, gate);
     if (gate.kind === 'protocol') return writeProtocol(res, gate);
@@ -134,6 +171,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       viewHtml: endpoint.viewHtml,
       backend: endpoint.backend,
       labelViewSession,
+      ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
     });
     await serve(server, req, res, gate.body, SUBSCRIPTION_LIMITS.maxRequestBytes);
   }

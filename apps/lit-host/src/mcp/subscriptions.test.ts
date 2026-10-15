@@ -519,6 +519,189 @@ describe('subscription request failures', () => {
     expect(JSON.stringify(result)).not.toContain('Creator One');
   });
 
+  it('rejects too many arguments on a single call and on the same call wrapped in a batch', async () => {
+    const h = await harness();
+    const args: Record<string, boolean> = {};
+    for (let index = 0; index < SUBSCRIPTION_LIMITS.maxArgumentElements + 1; index += 1) args[`k${index}`] = true;
+    const single = toolCall(21, SUBSCRIPTIONS_TOOL_NAME, args);
+    const responses = await Promise.all([
+      post(h.listener.subscriptionsUrl ?? '', single),
+      post(h.listener.subscriptionsUrl ?? '', JSON.stringify([JSON.parse(single)])),
+    ]);
+    for (const response of responses) {
+      const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+      expect(response.status).toBe(200);
+      expect(body.id).toBe(21);
+      expect(body.result).toBeUndefined();
+      expect(body.error?.code).toBe(-32602);
+      expect(body.error?.message).toBe('Invalid params');
+      expect(JSON.stringify(body)).not.toContain('Creator');
+    }
+    expect(h.lookups).toEqual([]);
+  });
+
+  it('answers an unknown tool inside a batch with a correlated JSON-RPC error, not a tool result', async () => {
+    const h = await harness();
+    const name = 'unknown-tool-canary';
+    const call = {
+      jsonrpc: '2.0',
+      id: 'batch-unknown',
+      method: 'tools/call',
+      params: { name, arguments: { note: FAILURE_CANARY } },
+    };
+    const response = await post(h.listener.subscriptionsUrl ?? '', JSON.stringify([call]));
+    const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+    expect(response.status).toBe(200);
+    expect(body.id).toBe('batch-unknown');
+    expect(body.result).toBeUndefined();
+    expect(body.error?.code).toBe(-32602);
+    expect(body.error?.message).toBe('Unknown tool');
+    expect(JSON.stringify(body)).not.toContain(name);
+    expect(JSON.stringify(body)).not.toContain(FAILURE_CANARY);
+    expect(h.lookups).toEqual([]);
+  });
+
+  it('does not run any element when one element of a batch is rejected', async () => {
+    const h = await harness();
+    const body = JSON.stringify([
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} } },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'unknown-tool-canary', arguments: {} } },
+    ]);
+    const response = await post(h.listener.subscriptionsUrl ?? '', body);
+    const parsed = await response.json() as { result?: unknown; error?: { message?: string } };
+    expect(parsed.result).toBeUndefined();
+    expect(JSON.stringify(parsed)).not.toContain('unknown-tool-canary');
+    expect(JSON.stringify(parsed)).not.toContain('Creator');
+    expect(h.lookups).toEqual([]);
+  });
+
+  it('still reads a one-element batch whose call passes the gate', async () => {
+    const h = await harness();
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      JSON.stringify([JSON.parse(toolCall(22, SUBSCRIPTIONS_TOOL_NAME))]),
+    );
+    const body = await response.json() as { result?: { structuredContent?: { displayName?: string } } };
+    expect(response.status).toBe(200);
+    expect(body.result?.structuredContent?.displayName).toBe('Alice');
+    expect(h.lookups).toEqual([DEV_ACCOUNTS.alice]);
+  });
+
+  it('answers a chunked body over the limit with 413 rather than dropping the connection', async () => {
+    const h = await harness();
+    const url = new URL(h.listener.subscriptionsUrl ?? '');
+    const payload = Buffer.alloc(SUBSCRIPTION_LIMITS.maxRequestBytes + 1, 0x61);
+    const outcome = await new Promise<{ status: number; text: string; error?: string }>((resolve) => {
+      const req = request(
+        {
+          host: url.hostname,
+          port: Number(url.port),
+          path: url.pathname,
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${DEV_TOKENS.alice}`,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)));
+          res.on('end', () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }));
+        },
+      );
+      req.on('error', (error) => resolve({ status: 0, text: '', error: error.message }));
+      req.write(payload.subarray(0, 1024));
+      req.write(payload.subarray(1024));
+      req.end();
+    });
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.status).toBe(413);
+    const body = JSON.parse(outcome.text) as { error?: string; jsonrpc?: string; result?: unknown };
+    expect(body.error).toBe('payload_too_large');
+    expect(body.jsonrpc).toBeUndefined();
+    expect(body.result).toBeUndefined();
+    expect(h.lookups).toEqual([]);
+  });
+
+  it('returns a safe failure when the backend read exceeds its bound, and a late result does not replace it', async () => {
+    let release: (value: AccountSubscriptions) => void = () => undefined;
+    const lookups: string[] = [];
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        verifier: createDevelopmentVerifier(),
+        readBoundMs: 40,
+        backend: {
+          listSubscriptions(accountId) {
+            lookups.push(accountId);
+            return new Promise((resolve) => {
+              release = resolve;
+            });
+          },
+        },
+      },
+    });
+    cleanup.listener = listener;
+    const pending = post(listener.subscriptionsUrl ?? '', toolCall(31, SUBSCRIPTIONS_TOOL_NAME));
+    await expect.poll(() => lookups.length).toBe(1);
+    const winner = await Promise.race([
+      pending.then((response) => ({ kind: 'response' as const, response })),
+      new Promise<{ kind: 'pending' }>((resolve) => setTimeout(() => resolve({ kind: 'pending' }), 250)),
+    ]);
+    expect(winner.kind).toBe('response');
+    if (winner.kind !== 'response') return;
+    const body = await winner.response.json() as { result?: { isError?: boolean; structuredContent?: unknown; content?: unknown } };
+    expect(winner.response.status).toBe(200);
+    expect(body.result?.isError).toBe(true);
+    expect(JSON.stringify(body)).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+    expect(body.result?.structuredContent).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain(FAILURE_CANARY);
+    release({
+      displayName: 'Alice',
+      subscriptions: [{ subscriptionId: 'sub-late', creator: FAILURE_CANARY, tier: 'Gold', status: 'active' }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(JSON.stringify(body)).not.toContain(FAILURE_CANARY);
+    expect(JSON.stringify(body)).not.toContain('sub-late');
+  });
+
+  it('does not leave the request outstanding when the backend read never finishes', async () => {
+    const lookups: string[] = [];
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        verifier: createDevelopmentVerifier(),
+        readBoundMs: 40,
+        backend: {
+          listSubscriptions(accountId) {
+            lookups.push(accountId);
+            return new Promise(() => undefined);
+          },
+        },
+      },
+    });
+    cleanup.listener = listener;
+    const pending = post(listener.subscriptionsUrl ?? '', toolCall(32, SUBSCRIPTIONS_TOOL_NAME));
+    const winner = await Promise.race([
+      pending.then((response) => ({ kind: 'response' as const, response })),
+      new Promise<{ kind: 'pending' }>((resolve) => setTimeout(() => resolve({ kind: 'pending' }), 250)),
+    ]);
+    expect(winner.kind).toBe('response');
+    if (winner.kind !== 'response') return;
+    const body = await winner.response.json() as { result?: { isError?: boolean; structuredContent?: unknown } };
+    expect(body.result?.isError).toBe(true);
+    expect(JSON.stringify(body)).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+    expect(body.result?.structuredContent).toBeUndefined();
+    expect(lookups).toEqual([DEV_ACCOUNTS.alice]);
+  });
+
   it('rejects an argument string over the input limit before any backend work', async () => {
     const h = await harness();
     const response = await post(

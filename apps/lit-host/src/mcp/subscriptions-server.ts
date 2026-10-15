@@ -11,6 +11,7 @@ import {
   SUBSCRIPTIONS_TOOL_NAME,
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SUBSCRIPTIONS_VIEW_URI,
+  SUBSCRIPTION_LIMITS,
   SubscriptionsRequestShape,
   SubscriptionsResultSchema,
   type SubscriptionsResult,
@@ -47,6 +48,12 @@ export interface SubscriptionsServerOptions {
   readonly viewHtml: string;
   readonly backend: SubscriptionBackend;
   readonly labelViewSession: ViewSessionLabeler;
+  /**
+   * Finite wait for this browse read. Defaults to `SUBSCRIPTION_LIMITS.readBoundMs`.
+   * Expiry or request cancellation retires the read: the safe failure is the only result,
+   * and a later backend resolution is not returned.
+   */
+  readonly readBoundMs?: number;
 }
 
 const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
@@ -74,6 +81,33 @@ function toSubscriptionsResult(account: AccountSubscriptions, viewSession: strin
 
 const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
 
+const RETIRED = Symbol('retired-browse-read');
+
+/**
+ * Waits for one backend read only until the bound or the request abort signal.
+ * A resolution that loses that race is ignored, so it cannot become the tool result.
+ */
+function readWithinBound<T>(operation: Promise<T>, boundMs: number, signal: AbortSignal): Promise<T | typeof RETIRED> {
+  if (signal.aborted) return Promise.resolve(RETIRED);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T | typeof RETIRED) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      resolve(signal.aborted ? RETIRED : value);
+    };
+    const onAbort = () => finish(RETIRED);
+    const timer = setTimeout(onAbort, boundMs);
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => finish(value),
+      () => finish(RETIRED),
+    );
+  });
+}
+
 /**
  * One read-only tool whose identity is the SDK's per-request verified auth context
  * (`extra.authInfo`), read inside each invocation. The server holds no current-user state, and
@@ -99,9 +133,14 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
       }
       const identity = identityFromAuthInfo(extra.authInfo);
       if (!identity) return failure(SIGN_IN_REQUIRED_TEXT);
+      const boundMs = options.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs;
       try {
-        const account = await options.backend.listSubscriptions(identity.accountId);
-        if (!account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+        const account = await readWithinBound(
+          options.backend.listSubscriptions(identity.accountId),
+          boundMs,
+          extra.signal,
+        );
+        if (account === RETIRED || extra.signal.aborted || !account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
         const published = args.status === undefined
           ? account
           : {
@@ -109,6 +148,7 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
               subscriptions: account.subscriptions.filter((record) => record.status === args.status),
             };
         const result = toSubscriptionsResult(published, options.labelViewSession(identity.signInId));
+        if (extra.signal.aborted) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
         return {
           content: [{ type: 'text', text: `${result.displayName}: ${result.subscriptions.length} subscription(s)` }],
           structuredContent: result,
