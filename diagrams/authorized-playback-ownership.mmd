@@ -1,0 +1,19 @@
+graph TD
+  V["Lit: view and player"]
+  H["Host: MCP Apps bridge"]
+  I["App: verified identity"]
+  E["App: current entitlement"]
+  S["App: media service"]
+  D["SAGA: input and host checks"]
+  P["SAGA: recipient projections"]
+  M["Host: model context"]
+  V -->|"Play: episode ID"| H
+  H -->|"Authenticated request"| I
+  I -->|"Principal"| D
+  D -->|"Valid; supported"| E
+  E -->|"Authorized issue"| S
+  S -->|"Capability"| P
+  P -->|"Via host: view-only"| V
+  P -->|"Via host: safe outcome"| M
+  V -->|"Acquire: recipient proof TBD"| S
+  S -->|"Checked acquisition: bytes"| V
