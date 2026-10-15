@@ -1,4 +1,5 @@
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
+import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { contentSecurityPolicy, type ResourceCsp } from './csp.js';
 
 // Test-only local host. It stands in for a chat host just enough to exercise the MCP Apps
@@ -26,6 +27,14 @@ declare global {
     teardownView?: () => Promise<void>;
     /** Delivers a tool result to the mounted view. */
     deliverToolResult?: (result: Parameters<AppBridge['sendToolResult']>[0]) => Promise<void>;
+    /** Reports that a tool call is starting, as a host does before the result arrives. */
+    deliverToolInput?: (params: Parameters<AppBridge['sendToolInput']>[0]) => Promise<void>;
+    /**
+     * Forwards a view's `tools/call` (from `App.callServerTool`) to the test. The subscriptions
+     * view uses that correlated response, not the next tool-result notification, to establish or
+     * recover a session. Absent, a proxied call fails closed.
+     */
+    handleToolCall?: (params: CallToolRequest['params']) => Promise<CallToolResult>;
   }
 }
 
@@ -41,7 +50,11 @@ window.mountView = async (resource, options) => {
     `<head><meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(resource.csp)}">`,
   );
 
-  bridge = new AppBridge(null, { name: 'local-host-fixture', version: '0.0.0' }, {});
+  bridge = new AppBridge(null, { name: 'local-host-fixture', version: '0.0.0' }, { serverTools: {} });
+  bridge.oncalltool = (params) => {
+    if (!window.handleToolCall) throw new Error('The host fixture has no tool caller.');
+    return window.handleToolCall(params);
+  };
   const initialized = new Promise<void>((resolve) => {
     if (!bridge) throw new Error('bridge missing');
     bridge.oninitialized = () => {
@@ -59,6 +72,11 @@ window.mountView = async (resource, options) => {
 window.deliverToolResult = async (result) => {
   if (!bridge) throw new Error('mountView has not run');
   await bridge.sendToolResult(result);
+};
+
+window.deliverToolInput = async (params) => {
+  if (!bridge) throw new Error('mountView has not run');
+  await bridge.sendToolInput(params);
 };
 
 window.teardownView = async () => {
