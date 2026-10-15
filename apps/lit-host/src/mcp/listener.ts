@@ -3,16 +3,21 @@ import type { AddressInfo } from 'node:net';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { authenticate } from './request-auth.js';
+import { createMediaService, type MediaStore } from '../playback/media-service.js';
+import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
+import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
+import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
+import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
-import { SUBSCRIPTION_LIMITS } from './subscriptions.js';
+import { SUBSCRIPTION_LIMITS, SUBSCRIPTIONS_TOOL_NAME } from './subscriptions.js';
 import {
-  classifySubscriptionsBody,
+  classifyProtectedBody,
   declaredBodyTooLarge,
   transportHeaderFailure,
   writeProtocol,
   writeTransport,
-} from './subscriptions-request.js';
+  type ProtectedRequestPolicy,
+} from './protected-request.js';
 import {
   createSubscriptionsServer,
   createViewSessionLabeler,
@@ -32,6 +37,25 @@ export interface SubscriptionsEndpointOptions {
   readonly readBoundMs?: number;
 }
 
+/** Optional protected endpoint: the app-only Play operation for the signed-in listener. */
+export interface PlaybackEndpointOptions {
+  readonly viewHtml: string;
+  readonly backend: PlaybackBackend;
+  /** Protected episode bytes. Reached only after authentication, entitlement and the capability check. */
+  readonly mediaStore: MediaStore;
+  /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
+  readonly verifier: OAuthTokenVerifier;
+  /** Lifetime of an issued media capability. Defaults to the service's short default. */
+  readonly capabilityTtlSeconds?: number;
+  /** Test seam for the media service's clock. */
+  readonly nowSeconds?: () => number;
+}
+
+/** Header values arrive as `string | string[]`; a repeated header is not a valid credential. */
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
 export interface EpisodeListenerOptions {
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
@@ -39,6 +63,8 @@ export interface EpisodeListenerOptions {
   readonly port: number;
   /** When absent, the protected path does not exist. */
   readonly subscriptions?: SubscriptionsEndpointOptions;
+  /** When absent, the protected path does not exist. */
+  readonly playback?: PlaybackEndpointOptions;
 }
 
 export interface EpisodeListener {
@@ -46,12 +72,35 @@ export interface EpisodeListener {
   readonly url: string;
   /** Protected endpoint (bearer credential required); undefined unless configured. */
   readonly subscriptionsUrl?: string;
+  /** Protected endpoint (bearer credential required); undefined unless configured. */
+  readonly playbackUrl?: string;
   close(): Promise<void>;
 }
 
 const HOST = '127.0.0.1';
 const MCP_PATH = '/mcp';
 const SUBSCRIPTIONS_PATH = '/subscriptions/mcp';
+const PLAYBACK_PATH = '/playback/mcp';
+
+/** What the protected subscriptions endpoint accepts: its one tool, within the browse bounds. */
+const SUBSCRIPTIONS_POLICY: ProtectedRequestPolicy = {
+  toolNames: [SUBSCRIPTIONS_TOOL_NAME],
+  limits: SUBSCRIPTION_LIMITS,
+};
+
+/** What the protected playback endpoint accepts: the one Play tool, within the Play bounds. */
+const PLAYBACK_POLICY: ProtectedRequestPolicy = {
+  toolNames: [PLAY_TOOL_NAME, OPEN_TOOL_NAME],
+  limits: PLAYBACK_LIMITS,
+};
+
+/** Everything that differs between protected endpoints; the request order does not. */
+interface ProtectedEndpoint {
+  readonly policy: ProtectedRequestPolicy;
+  readonly requirement: AuthRequirement;
+  readonly verifier: OAuthTokenVerifier;
+  createServer(): McpServer;
+}
 
 /**
  * Application-owned HTTP hosting for the MCP servers: loopback only, stateless Streamable HTTP
@@ -69,6 +118,16 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const { port } = http.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
   const allowedHosts = [`${HOST}:${port}`, `localhost:${port}`];
   const labelViewSession = createViewSessionLabeler();
+  const origin = `http://${HOST}:${port}`;
+  // One service for the listener's lifetime: it holds the issued capabilities, while each
+  // request still builds its own MCP server.
+  const mediaService = options.playback
+    ? createMediaService({
+        store: options.playback.mediaStore,
+        ...(options.playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: options.playback.capabilityTtlSeconds }),
+        ...(options.playback.nowSeconds === undefined ? {} : { nowSeconds: options.playback.nowSeconds }),
+      })
+    : undefined;
 
   http.on('request', (req, res) => {
     void handle(req, res).catch(() => {
@@ -99,7 +158,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     await transport.handleRequest(req, res, parsedBody);
   }
 
-  async function readLimitedBody(req: IncomingMessage): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
+  async function readLimitedBody(req: IncomingMessage, maxBytes: number): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
     // Do not iterate with for-await: leaving that loop destroys the socket before a 413 can be written.
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
@@ -120,7 +179,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       const onData = (chunk: Buffer | string) => {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         received += buf.length;
-        if (received > SUBSCRIPTION_LIMITS.maxRequestBytes) {
+        if (received > maxBytes) {
           finish({ tooLarge: true });
           return;
         }
@@ -146,13 +205,18 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     else res.once('finish', cleanup);
   }
 
-  async function serveSubscriptions(
-    endpoint: SubscriptionsEndpointOptions,
+  /**
+   * The one order every protected endpoint follows: authenticate before reading the body, then
+   * classify the request, then build a server and hand it the verified identity. Only the policy,
+   * the credential requirement and the server differ between endpoints.
+   */
+  async function serveProtected(
+    endpoint: ProtectedEndpoint,
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
-    if (declaredBodyTooLarge(req)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
-    const decision = await authenticate(req, endpoint.verifier);
+    if (declaredBodyTooLarge(req, endpoint.policy)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    const decision = await authenticate(req, endpoint.verifier, endpoint.requirement);
     if (!decision.ok) {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (decision.challenge) headers['www-authenticate'] = decision.challenge;
@@ -160,35 +224,111 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     }
     const headerFailure = transportHeaderFailure(req);
     if (headerFailure) return writeTransport(res, headerFailure);
-    const body = await readLimitedBody(req);
+    const body = await readLimitedBody(req, endpoint.policy.limits.maxRequestBytes);
     if (body.tooLarge) return rejectOversized(req, res);
-    const gate = classifySubscriptionsBody(body.text);
+    const gate = classifyProtectedBody(body.text, endpoint.policy);
     if (gate.kind === 'transport') return writeTransport(res, gate);
     if (gate.kind === 'protocol') return writeProtocol(res, gate);
     // The SDK transport passes `req.auth` to each tool call as `extra.authInfo`.
     Object.assign(req, { auth: decision.authInfo });
-    const server = createSubscriptionsServer({
-      viewHtml: endpoint.viewHtml,
-      backend: endpoint.backend,
-      labelViewSession,
-      ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
+    await serve(endpoint.createServer(), req, res, gate.body, endpoint.policy.limits.maxRequestBytes);
+  }
+
+  function protectedEndpointAt(path: string): ProtectedEndpoint | undefined {
+    if (path === SUBSCRIPTIONS_PATH && options.subscriptions) {
+      const endpoint = options.subscriptions;
+      return {
+        policy: SUBSCRIPTIONS_POLICY,
+        requirement: SUBSCRIPTIONS_REQUIREMENT,
+        verifier: endpoint.verifier,
+        createServer: () =>
+          createSubscriptionsServer({
+            viewHtml: endpoint.viewHtml,
+            backend: endpoint.backend,
+            labelViewSession,
+            ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
+          }),
+      };
+    }
+    if (path === PLAYBACK_PATH && options.playback && mediaService) {
+      const endpoint = options.playback;
+      return {
+        policy: PLAYBACK_POLICY,
+        requirement: PLAYBACK_REQUIREMENT,
+        verifier: endpoint.verifier,
+        createServer: () =>
+          createPlaybackServer({
+            viewHtml: endpoint.viewHtml,
+            backend: endpoint.backend,
+            mediaService,
+            labelViewSession,
+            mediaOrigin: origin,
+          }),
+      };
+    }
+    return undefined;
+  }
+
+  const MEDIA_PATH = new RegExp(`^${MEDIA_PATH_PREFIX}([a-z0-9][a-z0-9-]{0,63})$`);
+  // The player runs in a sandboxed iframe with an opaque origin, so its fetch is cross-origin and
+  // sends `Origin: null`. Any origin may therefore read the response, which is safe only because
+  // nothing ambient authorizes it: credentials are never allowed (no cookie or auth header is
+  // honored) and the capability plus a fresh proof from the bound key decide every request.
+  const CORS_HEADERS = {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET',
+    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    'access-control-max-age': '600',
+  } as const;
+  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS } as const;
+
+  /**
+   * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
+   * the recipient's proof decide, and a refusal says nothing about which check failed. The URL the
+   * proof must name is built from this listener's own origin, never from the Host header.
+   */
+  async function serveMedia(req: IncomingMessage, res: ServerResponse, episodeId: string): Promise<void> {
+    if (!mediaService) return void res.writeHead(404).end();
+    const outcome = await mediaService.acquire({
+      episodeId,
+      url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
+      method: req.method ?? '',
+      capability: singleHeader(req.headers[CAPABILITY_HEADER]),
+      proof: singleHeader(req.headers[PROOF_HEADER]),
     });
-    await serve(server, req, res, gate.body, SUBSCRIPTION_LIMITS.maxRequestBytes);
+    if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
+    res
+      .writeHead(200, {
+        'content-type': outcome.media.contentType,
+        'cache-control': 'private, no-store',
+        'content-length': outcome.media.bytes.length,
+        ...CORS_HEADERS,
+      })
+      .end(Buffer.from(outcome.media.bytes));
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
-    const protectedEndpoint = path === SUBSCRIPTIONS_PATH ? options.subscriptions : undefined;
+    const mediaMatch = MEDIA_PATH.exec(path);
+    if (mediaMatch?.[1] && options.playback) {
+      // A preflight carries no credential and reaches no media: it only answers which headers the
+      // real request may send.
+      if (req.method === 'OPTIONS') return void res.writeHead(204, CORS_HEADERS).end();
+      if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET, OPTIONS' }).end();
+      return serveMedia(req, res, mediaMatch[1]);
+    }
+    const protectedEndpoint = protectedEndpointAt(path);
     if (path !== MCP_PATH && !protectedEndpoint) return void res.writeHead(404).end();
     if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();
 
-    if (protectedEndpoint) return serveSubscriptions(protectedEndpoint, req, res);
+    if (protectedEndpoint) return serveProtected(protectedEndpoint, req, res);
     await serve(createEpisodeServer({ viewHtml: options.viewHtml, catalog: options.catalog }), req, res);
   }
 
   return {
     url: `http://${HOST}:${port}${MCP_PATH}`,
     ...(options.subscriptions ? { subscriptionsUrl: `http://${HOST}:${port}${SUBSCRIPTIONS_PATH}` } : {}),
+    ...(options.playback ? { playbackUrl: `http://${HOST}:${port}${PLAYBACK_PATH}` } : {}),
     close: () =>
       new Promise<void>((resolve, reject) => {
         http.close((error) => (error ? reject(error) : resolve()));

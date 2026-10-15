@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "vite",
-    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.host-fixture.config.ts",
+    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.playback-view.config.ts && vite build --config vite.host-fixture.config.ts",
     "serve:mcp": "tsx src/mcp/serve.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
@@ -18,6 +18,7 @@
     "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.32.1",
+    "jose": "6.2.12",
     "lit": "^3.3.3",
     "zod": "3.25.76"
   },

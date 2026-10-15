@@ -286,7 +286,7 @@ test('a subscriber recovers from empty, failed and cleared wire results', async 
   await view.getByText('Creator One — Gold (active)').click();
   await page.evaluate(() => window.deliverToolInput?.({ arguments: {} }));
   await expect(view.locator('[data-selected="true"]')).toHaveText('Creator One — Gold (active)');
-  expect(proxied).toBe(2);
+  await expect.poll(() => proxied).toBe(2); // the view's re-fetch completes after the DOM already shows the selection
 
   mode = 'bad';
   const invalid = await read();
