@@ -37,6 +37,8 @@ interface HostOptions {
   readonly dropMeta?: boolean;
   readonly entitlements?: Record<string, readonly string[]>;
   readonly harness?: Omit<PlaybackHarnessOptions, 'viewHtml'>;
+  /** Runs at the host after the listener granted a Play and before the view sees the grant. */
+  readonly afterGrant?: () => void;
 }
 
 interface MountedHost {
@@ -88,6 +90,7 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
     if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
     const result = (response.body as { result: MountedHost['calls'][number]['result'] }).result;
     calls.push({ params, result });
+    if (params.name === PLAY && !(result as { isError?: boolean }).isError) options.afterGrant?.();
     return result;
   });
 
@@ -119,21 +122,21 @@ const status = (view: FrameLocator) => view.getByTestId('play-status');
 const button = (view: FrameLocator) => view.getByTestId('play-button');
 
 /** The audio clock of every context the view created: proof that sound is (or is not) being produced. */
-const audioClocks = (page: Page) =>
-  page.frames().flatMap((frame) => [frame]).length >= 0
-    ? Promise.all(
-        page.frames().map((frame) =>
-          frame
-            .evaluate(() =>
-              ((window as unknown as { __audioContexts?: AudioContext[] }).__audioContexts ?? []).map((context) => ({
-                state: context.state,
-                time: context.currentTime,
-              })),
-            )
-            .catch(() => []),
-        ),
-      ).then((perFrame) => perFrame.flat())
-    : Promise.resolve([]);
+async function audioClocks(page: Page): Promise<{ state: string; time: number }[]> {
+  const perFrame = await Promise.all(
+    page.frames().map((frame) =>
+      frame
+        .evaluate(() =>
+          ((window as unknown as { __audioContexts?: AudioContext[] }).__audioContexts ?? []).map((context) => ({
+            state: context.state,
+            time: context.currentTime,
+          })),
+        )
+        .catch(() => []), // a frame that is mid-navigation has no contexts to report
+    ),
+  );
+  return perFrame.flat();
+}
 
 test.describe('the built player for the entitled listener', () => {
   test('shows playing only once audio is audibly advancing, and fetched the protected bytes exactly once', async ({ page }) => {
@@ -249,6 +252,36 @@ test.describe('the built player when access is refused', () => {
 
     await expect(status(host.view)).toContainText('Playing');
     expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+  });
+});
+
+test.describe('capability expiry through the built player', () => {
+  test('a capability that expires before the bytes are requested is announced as expired, not as a denial or a failure, and Play recovers', async ({ page }) => {
+    // The service's clock is ours. The capability lives 5 seconds and the clock jumps 6 between the
+    // grant and the media request, so the proof (made now) is still fresh: only the capability is stale.
+    const clock = { now: Math.floor(Date.now() / 1000) };
+    let advance = true;
+    const host = await mountPlayer(page, {
+      harness: { capabilityTtlSeconds: 5, nowSeconds: () => clock.now },
+      afterGrant: () => {
+        if (advance) clock.now += 6;
+      },
+    });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'expired');
+    await expect(status(host.view)).toHaveText('Playback access expired. Press Play to ask for access again.');
+    expect(await silent(page)).toBe(true);
+    expect(host.harness.playback.mediaReads).toEqual([]); // the service refused: no protected read
+
+    // Recovery is a new Play with fresh checks, never a refreshed capability.
+    advance = false;
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
   });
 });
 
