@@ -300,8 +300,10 @@ async function acquireWithFreshProof(
   key: Awaited<ReturnType<typeof createRecipientKey>>,
   grant: { readonly capability: string; readonly mediaUrl: string },
   range?: string,
+  /** The service's clock when a test controls it: the proof must be fresh on that clock, not the real one. */
+  issuedAt?: number,
 ) {
-  const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+  const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, ...(issuedAt === undefined ? {} : { issuedAt }) });
   return acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, ...(range === undefined ? {} : { range }) });
 }
 
@@ -532,5 +534,67 @@ describe('media responses for a sandboxed view in another origin', () => {
     expect(refused.headers.get('access-control-allow-origin')).toBe('*');
     expect(delivered.status).toBe(200);
     expect(delivered.headers.get('access-control-allow-origin')).toBe('*');
+  });
+});
+
+describe('capability lifetime', () => {
+  // Decision: a capability lives `ttlSeconds` (60 by default) from the moment Play issued it. It is
+  // usable up to but not including `expiresAt`, and the view is told that same instant. Expiry is
+  // measured on the service's clock, never the client's, and applies to every acquisition including
+  // a range. A new Play issues a new capability with a new lifetime; nothing extends an old one.
+  it('is valid until its expiry second, refused from it, and reports that instant to the view', async () => {
+    let now = 1_800_000_000;
+    const h = await harness({ capabilityTtlSeconds: 30, nowSeconds: () => now });
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    expect(grant.expiresAt).toBe(1_800_000_030);
+    now = 1_800_000_029;
+    expect((await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status).toBe(206);
+    now = 1_800_000_030;
+    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(403);
+    expect((await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status).toBe(403);
+  });
+
+  it('defaults to a short lifetime, and using a capability does not extend it', async () => {
+    let now = 1_800_000_000;
+    const h = await harness({ nowSeconds: () => now });
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    expect(grant.expiresAt - now).toBe(60);
+
+    now += 59;
+    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(200); // used late, still inside the lifetime
+    now += 2;
+    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(403); // that use bought no extra time
+  });
+});
+
+describe('what the media path writes to ordinary logs', () => {
+  it('never contains the capability, the proof, the bearer credential or the media bytes, whatever the outcome', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const bobKey = await createRecipientKey();
+    const logs = captureOrdinaryLogs();
+    let grant;
+    let proof: string;
+    try {
+      grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+      proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+      await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof }); // delivered
+      await acquireWithFreshProof(key, grant, 'bytes=0-3'); // a range
+      await acquireWithFreshProof(bobKey, grant); // another user
+      h.playback.setEntitled(DEV_ACCOUNTS.alice, []);
+      await acquireWithFreshProof(key, grant); // revoked
+      h.playback.failReadsWith('down');
+      await playAndGetGrant(h, DEV_TOKENS.alice, key).catch(() => undefined);
+    } finally {
+      logs.restore();
+    }
+    const written = logs.text();
+    expect(written).not.toContain(grant.capability);
+    expect(written).not.toContain(proof);
+    expect(written).not.toContain(DEV_TOKENS.alice);
+    expect(written).not.toContain('canary');
   });
 });
