@@ -121,11 +121,14 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const origin = `http://${HOST}:${port}`;
   // One service for the listener's lifetime: it holds the issued capabilities, while each
   // request still builds its own MCP server.
-  const mediaService = options.playback
+  const { playback } = options;
+  const mediaService = playback
     ? createMediaService({
-        store: options.playback.mediaStore,
-        ...(options.playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: options.playback.capabilityTtlSeconds }),
-        ...(options.playback.nowSeconds === undefined ? {} : { nowSeconds: options.playback.nowSeconds }),
+        store: playback.mediaStore,
+        // The same lookup Play uses, asked again on every fresh acquisition.
+        entitlement: (accountId, episodeId) => playback.backend.checkEntitlement(accountId, episodeId),
+        ...(playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: playback.capabilityTtlSeconds }),
+        ...(playback.nowSeconds === undefined ? {} : { nowSeconds: playback.nowSeconds }),
       })
     : undefined;
 
@@ -277,10 +280,18 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const CORS_HEADERS = {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET',
-    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    'access-control-allow-headers': `${CAPABILITY_HEADER}, ${PROOF_HEADER}, range`,
     'access-control-max-age': '600',
   } as const;
-  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS } as const;
+  // Every answer that can carry bytes or a status for one caller. `private, no-store` keeps it out of
+  // shared and browser caches; `Vary` names what selects the representation, for a cache that ignores
+  // no-store and would otherwise key on the URL alone and answer B with A's bytes.
+  const MEDIA_ANSWER_HEADERS = {
+    'cache-control': 'private, no-store',
+    vary: `Origin, Range, ${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
+    ...CORS_HEADERS,
+  } as const;
+  const REFUSED_HEADERS = { 'content-type': 'application/json', ...MEDIA_ANSWER_HEADERS } as const;
 
   /**
    * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
@@ -289,22 +300,40 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
    */
   async function serveMedia(req: IncomingMessage, res: ServerResponse, episodeId: string): Promise<void> {
     if (!mediaService) return void res.writeHead(404).end();
-    const outcome = await mediaService.acquire({
-      episodeId,
-      url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
-      method: req.method ?? '',
-      capability: singleHeader(req.headers[CAPABILITY_HEADER]),
-      proof: singleHeader(req.headers[PROOF_HEADER]),
-    });
+    let outcome;
+    try {
+      outcome = await mediaService.acquire({
+        episodeId,
+        url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
+        method: req.method ?? '',
+        capability: singleHeader(req.headers[CAPABILITY_HEADER]),
+        proof: singleHeader(req.headers[PROOF_HEADER]),
+        range: singleHeader(req.headers.range),
+      });
+    } catch {
+      // The entitlement lookup or the storage read failed. That is neither a grant nor a refusal of
+      // this caller, so say "try again" (503) without any dependency text, readable by the view.
+      return void res.writeHead(503, REFUSED_HEADERS).end(JSON.stringify({ error: 'unavailable' }));
+    }
     if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
-    res
-      .writeHead(200, {
-        'content-type': outcome.media.contentType,
-        'cache-control': 'private, no-store',
-        'content-length': outcome.media.bytes.length,
-        ...CORS_HEADERS,
-      })
-      .end(Buffer.from(outcome.media.bytes));
+    if (outcome.kind === 'unsatisfiable') {
+      // Sent only to a caller who passed every check, so the length is not a probe for anyone else.
+      res.writeHead(416, { 'content-range': `bytes */${outcome.total}`, ...MEDIA_ANSWER_HEADERS }).end();
+      return;
+    }
+    const delivered = {
+      'content-type': outcome.media.contentType,
+      'content-length': outcome.media.bytes.length,
+      'accept-ranges': 'bytes',
+      ...MEDIA_ANSWER_HEADERS,
+    };
+    if (outcome.kind === 'partial') {
+      res
+        .writeHead(206, { ...delivered, 'content-range': `bytes ${outcome.first}-${outcome.last}/${outcome.total}` })
+        .end(Buffer.from(outcome.media.bytes));
+      return;
+    }
+    res.writeHead(200, delivered).end(Buffer.from(outcome.media.bytes));
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

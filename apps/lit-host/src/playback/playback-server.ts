@@ -3,7 +3,7 @@ import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/e
 import { calculateJwkThumbprint } from 'jose';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
 import type { ViewSessionLabeler } from '../mcp/subscriptions-server.js';
-import type { MediaService } from './media-service.js';
+import type { EntitlementDecision, MediaService } from './media-service.js';
 import { ZodError } from 'zod';
 import {
   MEDIA_PATH_PREFIX,
@@ -35,8 +35,6 @@ export interface EpisodeRecord {
   readonly title: string;
   readonly description: string;
 }
-
-export type EntitlementDecision = 'entitled' | 'denied';
 
 /** The application's data seam. Entitlement is decided from the verified account, never from arguments. */
 export interface PlaybackBackend {

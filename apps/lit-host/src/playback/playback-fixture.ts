@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
@@ -24,6 +26,15 @@ export interface CountingPlayback {
   readonly mediaReads: string[];
   /** Grants or revokes access between requests, as the application's subscription rules would. */
   setEntitled(accountId: string, episodeIds: readonly string[]): void;
+  /** From now on the entitlement lookup throws `message` (or works again when omitted). */
+  failEntitlementWith(message?: string): void;
+  /** From now on the protected storage read throws `message` (or works again when omitted). */
+  failReadsWith(message?: string): void;
+  /**
+   * Holds the next protected read open, as a slow storage backend would. `reached` settles once the
+   * read has started; the read finishes only after `release()`.
+   */
+  holdNextRead(): { readonly reached: Promise<void>; release(): void };
 }
 
 export function countingPlayback(
@@ -44,24 +55,48 @@ export function countingPlayback(
   ];
   const entitlementChecks: { accountId: string; episodeId: string }[] = [];
   const mediaReads: string[] = [];
+  let entitlementFault = options?.failEntitlementWith;
+  let readFault: string | undefined;
+  let heldRead: { readonly started: () => void; readonly gate: Promise<void> } | undefined;
   return {
     entitlementChecks,
     mediaReads,
     setEntitled(accountId, episodeIds) {
       entitlements.set(accountId, new Set(episodeIds));
     },
+    failEntitlementWith(message) {
+      entitlementFault = message;
+    },
+    failReadsWith(message) {
+      readFault = message;
+    },
+    holdNextRead() {
+      let release!: () => void;
+      let started!: () => void;
+      const gate = new Promise<void>((resolve) => void (release = resolve));
+      const reached = new Promise<void>((resolve) => void (started = resolve));
+      heldRead = { started, gate };
+      return { reached, release };
+    },
     backend: {
       // `recordFor` lets a test make the backend answer a lookup with a record whose own id differs.
       findEpisode: (episodeId) => options?.recordFor?.[episodeId] ?? episodes.find((episode) => episode.id === episodeId),
       async checkEntitlement(accountId, episodeId) {
         entitlementChecks.push({ accountId, episodeId });
-        if (options?.failEntitlementWith) throw new Error(options.failEntitlementWith);
+        if (entitlementFault) throw new Error(entitlementFault);
         return entitlements.get(accountId)?.has(episodeId) ? 'entitled' : 'denied';
       },
     },
     store: {
       async read(episodeId) {
+        if (readFault) throw new Error(readFault);
         mediaReads.push(episodeId);
+        const held = heldRead;
+        heldRead = undefined;
+        if (held) {
+          held.started();
+          await held.gate;
+        }
         return { contentType: 'audio/wav', bytes: options?.mediaBytes ?? MEDIA_BYTES };
       },
     },
@@ -209,11 +244,14 @@ export async function acquireMedia(options: {
   readonly url: string;
   readonly capability?: string;
   readonly proof?: string;
+  /** The raw `Range` request header, exactly as a client would send it. */
+  readonly range?: string;
 }): Promise<MediaAttempt> {
   const response = await fetch(options.url, {
     headers: {
       ...(options.capability === undefined ? {} : { [CAPABILITY_HEADER]: options.capability }),
       ...(options.proof === undefined ? {} : { [PROOF_HEADER]: options.proof }),
+      ...(options.range === undefined ? {} : { range: options.range }),
     },
   });
   return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };
@@ -233,4 +271,40 @@ export async function rpcOverHttp(url: string | undefined, token: string | undef
   });
   const text = await response.text();
   return { status: response.status, challenge: response.headers.get('www-authenticate'), body: text.length === 0 ? undefined : JSON.parse(text) };
+}
+
+/** What a stand-in destination saw: the proof that nothing (or exactly what) reached it. */
+export interface Recorder {
+  /** `http://127.0.0.1:<port>`; a different origin from the listener under test. */
+  readonly origin: string;
+  readonly requests: { readonly url: string; readonly headers: IncomingHttpHeaders }[];
+  close(): Promise<void>;
+}
+
+/**
+ * A second HTTP origin that records every request it receives. It stands in for a destination the
+ * view was never told about, or for a media origin that redirects, so a test can show that no
+ * capability or proof ever arrives there. It answers with `respond`, or with 200 and the canary bytes.
+ */
+export async function startRecorder(respond?: (req: IncomingMessage, res: ServerResponse) => void): Promise<Recorder> {
+  const requests: Recorder['requests'][number][] = [];
+  const server = createServer((req, res) => {
+    requests.push({ url: req.url ?? '', headers: req.headers });
+    if (respond) return respond(req, res);
+    res.writeHead(200, { 'content-type': 'audio/wav', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }).end(Buffer.from(MEDIA_BYTES));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const { port } = server.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      }),
+  };
 }
