@@ -6,6 +6,9 @@ import { z } from 'zod';
 export const PLAY_TOOL_NAME = 'play_episode';
 export const PLAYBACK_VIEW_URI = 'ui://saga-a2ui/playback-view.html';
 
+/** Path prefix of the synthetic media service: `<prefix><episodeId>`. The listener serves it; the view fetches it. */
+export const MEDIA_PATH_PREFIX = '/playback/media/';
+
 /**
  * `_meta` key on the view's `tools/call` that carries the view's public recipient key (a JWK).
  * The arguments stay `{ episodeId }`; the key is request metadata, not business input.

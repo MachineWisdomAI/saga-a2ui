@@ -4,7 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMediaService, type MediaStore } from '../playback/media-service.js';
-import { PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
+import { MEDIA_PATH_PREFIX, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
 import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
 import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
@@ -44,6 +44,15 @@ export interface PlaybackEndpointOptions {
   readonly mediaStore: MediaStore;
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
+  /** Lifetime of an issued media capability. Defaults to the service's short default. */
+  readonly capabilityTtlSeconds?: number;
+  /** Test seam for the media service's clock. */
+  readonly nowSeconds?: () => number;
+}
+
+/** Header values arrive as `string | string[]`; a repeated header is not a valid credential. */
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 export interface EpisodeListenerOptions {
@@ -108,9 +117,16 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const { port } = http.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
   const allowedHosts = [`${HOST}:${port}`, `localhost:${port}`];
   const labelViewSession = createViewSessionLabeler();
+  const origin = `http://${HOST}:${port}`;
   // One service for the listener's lifetime: it holds the issued capabilities, while each
   // request still builds its own MCP server.
-  const mediaService = createMediaService();
+  const mediaService = options.playback
+    ? createMediaService({
+        store: options.playback.mediaStore,
+        ...(options.playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: options.playback.capabilityTtlSeconds }),
+        ...(options.playback.nowSeconds === undefined ? {} : { nowSeconds: options.playback.nowSeconds }),
+      })
+    : undefined;
 
   http.on('request', (req, res) => {
     void handle(req, res).catch(() => {
@@ -233,21 +249,54 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
           }),
       };
     }
-    if (path === PLAYBACK_PATH && options.playback) {
+    if (path === PLAYBACK_PATH && options.playback && mediaService) {
       const endpoint = options.playback;
       return {
         policy: PLAYBACK_POLICY,
         requirement: PLAYBACK_REQUIREMENT,
         verifier: endpoint.verifier,
         createServer: () =>
-          createPlaybackServer({ viewHtml: endpoint.viewHtml, backend: endpoint.backend, mediaService }),
+          createPlaybackServer({
+            viewHtml: endpoint.viewHtml,
+            backend: endpoint.backend,
+            mediaService,
+            mediaOrigin: origin,
+          }),
       };
     }
     return undefined;
   }
 
+  const MEDIA_PATH = new RegExp(`^${MEDIA_PATH_PREFIX}([a-z0-9][a-z0-9-]{0,63})$`);
+  const REFUSED_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' } as const;
+
+  /**
+   * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
+   * the recipient's proof decide, and a refusal says nothing about which check failed. The URL the
+   * proof must name is built from this listener's own origin, never from the Host header.
+   */
+  async function serveMedia(req: IncomingMessage, res: ServerResponse, episodeId: string): Promise<void> {
+    if (!mediaService) return void res.writeHead(404).end();
+    const outcome = await mediaService.acquire({
+      episodeId,
+      url: `${origin}${MEDIA_PATH_PREFIX}${episodeId}`,
+      method: req.method ?? '',
+      capability: singleHeader(req.headers['x-saga-capability']),
+      proof: singleHeader(req.headers['x-saga-proof']),
+    });
+    if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
+    res
+      .writeHead(200, { 'content-type': outcome.media.contentType, 'cache-control': 'private, no-store', 'content-length': outcome.media.bytes.length })
+      .end(Buffer.from(outcome.media.bytes));
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
+    const mediaMatch = MEDIA_PATH.exec(path);
+    if (mediaMatch?.[1] && options.playback) {
+      if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET' }).end();
+      return serveMedia(req, res, mediaMatch[1]);
+    }
     const protectedEndpoint = protectedEndpointAt(path);
     if (path !== MCP_PATH && !protectedEndpoint) return void res.writeHead(404).end();
     if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();

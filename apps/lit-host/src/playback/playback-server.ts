@@ -4,6 +4,7 @@ import { calculateJwkThumbprint } from 'jose';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
 import type { MediaService } from './media-service.js';
 import {
+  MEDIA_PATH_PREFIX,
   PLAY_TOOL_NAME,
   PLAYBACK_AUTHORIZED_TEXT,
   PLAYBACK_DENIED_TEXT,
@@ -39,6 +40,8 @@ export interface PlaybackServerOptions {
   readonly backend: PlaybackBackend;
   /** Issues the capability the media service checks later. Shared across requests by the listener. */
   readonly mediaService: MediaService;
+  /** Origin of the media service, e.g. `http://127.0.0.1:3001`. Built by the listener, never from a request. */
+  readonly mediaOrigin: string;
 }
 
 const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
@@ -90,6 +93,7 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
           [PLAYBACK_RESULT_META]: {
             episodeId: episode.id,
             title: episode.title,
+            mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${episode.id}`,
             capability: issued.capability,
             expiresAt: issued.expiresAt,
           },

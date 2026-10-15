@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';
@@ -67,9 +68,16 @@ export interface PlaybackHarness {
 }
 
 /** The real listener with the playback endpoint, a development verifier and counting seams. */
+export interface PlaybackHarnessOptions {
+  readonly episodes?: readonly EpisodeRecord[];
+  readonly failEntitlementWith?: string;
+  readonly capabilityTtlSeconds?: number;
+  readonly nowSeconds?: () => number;
+}
+
 export async function startPlaybackHarness(
   entitlements: Readonly<Record<string, readonly string[]>>,
-  options?: Parameters<typeof countingPlayback>[1],
+  options: PlaybackHarnessOptions = {},
 ): Promise<PlaybackHarness> {
   const playback = countingPlayback(entitlements, options);
   const listener = await startEpisodeListener({
@@ -81,6 +89,8 @@ export async function startPlaybackHarness(
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: createDevelopmentVerifier(),
+      ...(options.capabilityTtlSeconds === undefined ? {} : { capabilityTtlSeconds: options.capabilityTtlSeconds }),
+      ...(options.nowSeconds === undefined ? {} : { nowSeconds: options.nowSeconds }),
     },
   });
   return { listener, playback };
@@ -117,7 +127,80 @@ export async function callToolOverHttp(
 }
 
 /** What the view does in a browser: a non-extractable-in-practice key pair whose public half is shared. */
-export async function createRecipientKey(): Promise<{ readonly publicJwk: JsonWebKey; readonly privateKey: CryptoKey }> {
+export async function createRecipientKey(): Promise<RecipientKey> {
   const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   return { publicJwk: await crypto.subtle.exportKey('jwk', pair.publicKey), privateKey: pair.privateKey };
+}
+
+export interface RecipientKey {
+  readonly publicJwk: JsonWebKey;
+  readonly privateKey: CryptoKey;
+}
+
+export interface GrantedView {
+  readonly episodeId: string;
+  readonly capability: string;
+  readonly mediaUrl: string;
+  readonly expiresAt: number;
+}
+
+/** Presses Play as `token` with `key` as the recipient, and returns the view-only projection. */
+export async function playAndGetGrant(
+  harness: PlaybackHarness,
+  token: string,
+  key: RecipientKey,
+  episodeId = 'ep-1',
+): Promise<GrantedView> {
+  const response = await callToolOverHttp(harness.listener.playbackUrl, token, {
+    name: 'play_episode',
+    arguments: { episodeId },
+    _meta: { 'saga-a2ui/recipient-key': key.publicJwk },
+  });
+  const result = (response.body as { result?: { isError?: boolean; _meta?: Record<string, unknown> } }).result;
+  const view = result?._meta?.['saga-a2ui/playback'];
+  if (result?.isError || !view) throw new Error(`Play was not authorized: ${JSON.stringify(response.body)}`);
+  return view as GrantedView;
+}
+
+/**
+ * A media proof built independently of production code, straight from the documented format:
+ * an ES256 JWT whose header embeds the public key, binding method, URL and the capability's hash.
+ */
+export async function signMediaProof(options: {
+  readonly key: RecipientKey;
+  readonly capability: string;
+  readonly url: string;
+  readonly method?: string;
+  readonly jti?: string;
+  readonly issuedAt?: number;
+}): Promise<string> {
+  const { SignJWT } = await import('jose');
+  const capabilityHash = createHash('sha256').update(options.capability).digest('base64url');
+  const { kty, crv, x, y } = options.key.publicJwk;
+  return new SignJWT({ htm: options.method ?? 'GET', htu: options.url, cap: capabilityHash })
+    .setProtectedHeader({ alg: 'ES256', typ: 'saga-media-proof+jwt', jwk: { kty, crv, x, y } as never })
+    .setJti(options.jti ?? randomUUID())
+    .setIssuedAt(options.issuedAt)
+    .sign(options.key.privateKey);
+}
+
+export interface MediaAttempt {
+  readonly status: number;
+  readonly bytes: Uint8Array;
+  readonly headers: Headers;
+}
+
+/** One media acquisition exactly as the built player makes it: a GET with the capability and a proof. */
+export async function acquireMedia(options: {
+  readonly url: string;
+  readonly capability?: string;
+  readonly proof?: string;
+}): Promise<MediaAttempt> {
+  const response = await fetch(options.url, {
+    headers: {
+      ...(options.capability === undefined ? {} : { 'x-saga-capability': options.capability }),
+      ...(options.proof === undefined ? {} : { 'x-saga-proof': options.proof }),
+    },
+  });
+  return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };
 }
