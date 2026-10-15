@@ -14,10 +14,11 @@ export interface ToolResultViewDependencies {
   /** Handles each delivered result. Never called after the connection is disposed. */
   readonly onToolResult: (result: ToolResult) => void;
   /**
-   * Optional. Called when the host reports that a tool call is starting (`toolinput`). A result
-   * is the answer to a call; this is the only signal that a round trip began, so a view that must
-   * tell a fresh call apart from a delayed or uncorrelated delivery needs it. Registering it
-   * before `connect` keeps it in the same lifetime as `onToolResult`.
+   * Optional. Called when the host reports that a tool call is starting (`toolinput`). The
+   * notification carries arguments only — it is not that call's response, and it does not
+   * authenticate a later `toolresult`. A view that must recover from a correlated response uses
+   * this as the moment to start that request. Registering it before `connect` keeps it in the
+   * same lifetime as `onToolResult`.
    */
   readonly onToolInput?: () => void;
 }

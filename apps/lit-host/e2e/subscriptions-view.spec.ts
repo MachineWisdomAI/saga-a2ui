@@ -106,7 +106,7 @@ test('a changed sign-in clears the private view and it stays cleared', async ({ 
   await bob.close();
 });
 
-test('a refused credential clears the private view, a delayed prior result cannot revive it, and a fresh round trip recovers', async ({ page }) => {
+test('a refused credential clears the private view through the proxied call, a delayed prior result cannot revive it, and the correlated response recovers', async ({ page }) => {
   const alice = await connect(DEV_TOKENS.alice);
   const view = await mountedView(page, alice);
   const authorized = await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
@@ -114,43 +114,66 @@ test('a refused credential clears the private view, a delayed prior result canno
   await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
   await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(1);
 
-  // The host's next call carries a credential the listener refuses. This is the real 401 path: the
-  // listener answers with an HTTP error and a challenge before any tool handler runs, so no tool
-  // result is ever produced for it. A host surfaces that refusal to the view as the sign-in message.
-  const refused = await fetch(listener.subscriptionsUrl ?? '', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-      authorization: `Bearer ${DEV_TOKENS.expired}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} },
-    }),
-  });
-  expect(refused.status).toBe(401);
-  expect(refused.headers.get('www-authenticate')).toMatch(/error="invalid_token".*expired/);
-  expect(await refused.json()).toEqual({ error: 'invalid_token' });
-
-  await send(page, { isError: true, content: [{ type: 'text', text: SIGN_IN_REQUIRED_TEXT }] });
+  // The view's next read is `callServerTool`, which the host proxies as tools/call. The listener
+  // refuses the expired credential with HTTP 401 before any tool handler, and that refusal — not
+  // a separately injected error notification — is what clears the view.
+  type ToolParams = { name: string; arguments?: Record<string, unknown> };
+  let refusal: { status: number; challenge: string | null; body: unknown } | undefined;
+  let forward = async (params: ToolParams): Promise<Awaited<ReturnType<Client['callTool']>>> => {
+    const response = await fetch(listener.subscriptionsUrl ?? '', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${DEV_TOKENS.expired}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params }),
+    });
+    refusal = {
+      status: response.status,
+      challenge: response.headers.get('www-authenticate'),
+      body: await response.json(),
+    };
+    throw new Error(`listener refused the proxied tools/call (${response.status})`);
+  };
+  await page.exposeFunction('handleToolCall', (params: ToolParams) => forward(params));
+  await page.evaluate(() => window.deliverToolInput?.({ arguments: {} }));
   await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'sign-in-required');
   await expect(view.getByTestId('subscriptions-status')).toHaveText(SIGN_IN_REQUIRED_TEXT);
   await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(0);
   await expect(view.getByText('Alice')).toHaveCount(0);
+  expect(refusal).toMatchObject({
+    status: 401,
+    body: { error: 'invalid_token' },
+  });
+  expect(refusal?.challenge).toMatch(/error="invalid_token".*expired/);
 
-  // A delayed copy of the earlier authorized result arrives while the view is invalid. No new call
-  // started it, so it must not become the new trusted label; the private view stays cleared.
+  // A delayed copy of the earlier authorized result arrives while the view is invalid. It must
+  // not become the new trusted label.
   await send(page, authorized);
   await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'sign-in-required');
   await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(0);
   await expect(view.getByText('Alice')).toHaveCount(0);
 
-  // A fresh authenticated round trip reestablishes the private view.
+  // Hold the next correlated response, deliver the old result before it returns, then release.
+  let release: (value: Awaited<ReturnType<Client['callTool']>>) => void = () => undefined;
+  let markStarted: () => void = () => undefined;
+  const callStarted = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  forward = () => {
+    markStarted();
+    return new Promise((resolve) => {
+      release = resolve;
+    });
+  };
   await page.evaluate(() => window.deliverToolInput?.({ arguments: {} }));
-  await send(page, await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} }));
+  await callStarted;
+  await send(page, authorized);
+  await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'sign-in-required');
+  await expect(view.getByText('Alice')).toHaveCount(0);
+
+  release(await alice.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} }));
   await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
   await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(1);
   await alice.close();

@@ -25,10 +25,10 @@ const delivery = (value: SubscriptionsResult) => ({
 
 const toClean: { app: App; bridge: AppBridge }[] = [];
 
-async function harness() {
+async function harness(capabilities: { serverTools?: Record<string, never> } = {}) {
   const states: SubscriptionsViewState[] = [];
   const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, capabilities);
   toClean.push({ app, bridge });
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
@@ -102,31 +102,30 @@ describe('subscriptions view', () => {
     await expect.poll(() => (h.last() as { subscriptions?: SubscriptionsResult })?.subscriptions?.subscriptions.length).toBe(2);
   });
 
-  it('keeps the view cleared after a failure until a new call starts a round trip', async () => {
-    const h = await harness();
+  it('stays cleared after a failure until a correlated authenticated response arrives', async () => {
+    const h = await harness({ serverTools: {} });
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await expect.poll(() => h.last()?.kind).toBe('subscriptions');
 
     await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: SIGN_IN_REQUIRED_TEXT }] });
     await expect.poll(() => h.last()?.kind).toBe('sign-in-required');
 
-    // A delayed copy of the earlier authorized result arrives while the view is invalid: it must
-    // not become the new trusted first label, because no new call started it.
+    // A delayed copy of the earlier authorized result arrives while the view is invalid. No
+    // correlated response has arrived, so it must not become the new trusted label.
     const shown = h.states.length;
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(h.states.length).toBe(shown); // nothing was shown
+    expect(h.states.length).toBe(shown);
     expect(h.last()?.kind).toBe('sign-in-required');
 
-    // A fresh authenticated round trip reestablishes the private view.
+    h.bridge.oncalltool = async () => delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One']));
     await h.bridge.sendToolInput({ arguments: {} });
-    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await expect.poll(() => h.last()?.kind).toBe('subscriptions');
     expect(h.last()).toMatchObject({ kind: 'subscriptions', subscriptions: { displayName: 'Alice' } });
   });
 
   it('an unrelated error does not unlock the view after a session mismatch', async () => {
-    const h = await harness();
+    const h = await harness({ serverTools: {} });
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await expect.poll(() => h.last()?.kind).toBe('subscriptions');
 
@@ -136,17 +135,67 @@ describe('subscriptions view', () => {
     await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Subscriptions are unavailable.' }] });
     await expect.poll(() => h.last()?.kind).toBe('problem');
 
-    // The prior session's result still cannot revive the view without a fresh round trip.
+    // The prior session's result still cannot revive the view without a correlated response.
     const shown = h.states.length;
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(h.states.length).toBe(shown); // nothing was shown
+    expect(h.states.length).toBe(shown);
     expect(h.last()?.kind).toBe('problem');
 
-    // A fresh round trip with the current session's label recovers safely.
+    h.bridge.oncalltool = async () => delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One']));
     await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+  });
+
+  it('a tool input does not authenticate the next notification; only the correlated response recovers', async () => {
+    const h = await harness({ serverTools: {} });
+    let release: (value: ReturnType<typeof delivery>) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const callStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    h.bridge.oncalltool = () => {
+      markStarted();
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
     await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    await h.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: SIGN_IN_REQUIRED_TEXT }] });
+    await expect.poll(() => h.last()?.kind).toBe('sign-in-required');
+
+    // The host reports a new call, then a delayed copy of the earlier result arrives before that
+    // call's authenticated response. The copy must not become the new trusted label.
+    await h.bridge.sendToolInput({ arguments: {} });
+    const shown = h.states.length;
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown);
+    expect(h.last()?.kind).toBe('sign-in-required');
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+
+    await callStarted;
+    release(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator Two'])));
+    await expect.poll(() => (h.last() as { subscriptions?: SubscriptionsResult })?.subscriptions?.subscriptions[0]?.creator).toBe('Creator Two');
+  });
+
+  it('a refused correlated read clears the private view, and a later notification cannot revive it', async () => {
+    const h = await harness({ serverTools: {} });
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    h.bridge.oncalltool = () => Promise.reject(new Error('listener refused the proxied tools/call'));
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => h.last()?.kind).toBe('sign-in-required');
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+
+    const shown = h.states.length;
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown);
+    expect(h.last()?.kind).toBe('sign-in-required');
   });
 
   it('ignores results after disposal', async () => {
