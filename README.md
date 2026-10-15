@@ -220,6 +220,8 @@ Recovery in the view: expiry or revocation between grant and fetch shows `expire
 Limits worth knowing:
 
 - The built player fetches the whole body with one request and never sends `Range`. Range behavior is exercised at the service's HTTP edge (real listener, real proofs), not through the player.
+- The view controller does not compare a media URL's origin itself; the resource's declared `connect-src` is what rejects an undeclared destination. A host that ignores the resource's CSP would not reject one, which is part of the host feasibility check, not something this service can enforce.
+- The redirect rule is exercised in the headless controller test against a real redirecting origin, not in the browser spec.
 - The synthetic entitlement lookup and storage are in-memory seams. A real application owns revocation latency; this service guarantees only that it asks on every acquisition.
 - `Access-Control-Allow-Origin: *` remains (see PLAY1): a sandboxed iframe sends `Origin: null`. Nothing ambient authorizes media, so this discloses nothing to a page without the capability and a proof from the bound key.
 - Neither real host has been tried. Whether ChatGPT web or Claude web forward `_meta`, allow the `connect-src` origin and keep the player's focus and announcements is Captain acceptance work, as is the dependency on STATE1/STATE2 and both content-policy levels.
