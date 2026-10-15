@@ -5,6 +5,14 @@ import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/p
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { authenticate } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
+import { SUBSCRIPTION_LIMITS } from './subscriptions.js';
+import {
+  classifySubscriptionsBody,
+  declaredBodyTooLarge,
+  transportHeaderFailure,
+  writeProtocol,
+  writeTransport,
+} from './subscriptions-request.js';
 import {
   createSubscriptionsServer,
   createViewSessionLabeler,
@@ -17,6 +25,11 @@ export interface SubscriptionsEndpointOptions {
   readonly backend: SubscriptionBackend;
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * How long the backend read may run before the server retires it.
+   * Defaults to the documented browse bound. A later resolution is not returned.
+   */
+  readonly readBoundMs?: number;
 }
 
 export interface EpisodeListenerOptions {
@@ -64,19 +77,73 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     });
   });
 
-  async function serve(server: McpServer, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function serve(
+    server: McpServer,
+    req: IncomingMessage,
+    res: ServerResponse,
+    parsedBody?: unknown,
+    maxRequestBodySize?: number,
+  ): Promise<void> {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
       enableDnsRebindingProtection: true,
       allowedHosts,
+      ...(maxRequestBodySize === undefined ? {} : { maxRequestBodySize }),
     });
     res.on('close', () => {
       void transport.close();
       void server.close();
     });
     await server.connect(transport);
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(req, res, parsedBody);
+  }
+
+  async function readLimitedBody(req: IncomingMessage): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
+    // Do not iterate with for-await: leaving that loop destroys the socket before a 413 can be written.
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      let settled = false;
+      const detach = () => {
+        req.off('data', onData);
+        req.off('end', onEnd);
+        req.off('error', onError);
+      };
+      const finish = (result: { tooLarge: true } | { tooLarge: false; text: string }) => {
+        if (settled) return;
+        settled = true;
+        req.pause();
+        detach();
+        resolve(result);
+      };
+      const onData = (chunk: Buffer | string) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        received += buf.length;
+        if (received > SUBSCRIPTION_LIMITS.maxRequestBytes) {
+          finish({ tooLarge: true });
+          return;
+        }
+        chunks.push(buf);
+      };
+      const onEnd = () => finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
+      const onError = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        detach();
+        reject(error);
+      };
+      req.on('data', onData);
+      req.on('end', onEnd);
+      req.on('error', onError);
+    });
+  }
+
+  function rejectOversized(req: IncomingMessage, res: ServerResponse): void {
+    writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    const cleanup = () => req.destroy();
+    if (res.writableFinished) cleanup();
+    else res.once('finish', cleanup);
   }
 
   async function serveSubscriptions(
@@ -84,20 +151,29 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
+    if (declaredBodyTooLarge(req)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
     const decision = await authenticate(req, endpoint.verifier);
     if (!decision.ok) {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (decision.challenge) headers['www-authenticate'] = decision.challenge;
       return void res.writeHead(decision.status, headers).end(JSON.stringify({ error: decision.error }));
     }
+    const headerFailure = transportHeaderFailure(req);
+    if (headerFailure) return writeTransport(res, headerFailure);
+    const body = await readLimitedBody(req);
+    if (body.tooLarge) return rejectOversized(req, res);
+    const gate = classifySubscriptionsBody(body.text);
+    if (gate.kind === 'transport') return writeTransport(res, gate);
+    if (gate.kind === 'protocol') return writeProtocol(res, gate);
     // The SDK transport passes `req.auth` to each tool call as `extra.authInfo`.
     Object.assign(req, { auth: decision.authInfo });
     const server = createSubscriptionsServer({
       viewHtml: endpoint.viewHtml,
       backend: endpoint.backend,
       labelViewSession,
+      ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
     });
-    await serve(server, req, res);
+    await serve(server, req, res, gate.body, SUBSCRIPTION_LIMITS.maxRequestBytes);
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

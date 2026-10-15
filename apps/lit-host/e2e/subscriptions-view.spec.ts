@@ -5,6 +5,7 @@ import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
 import { SUBSCRIPTIONS_TOOL_NAME, SUBSCRIPTIONS_VIEW_URI, SIGN_IN_REQUIRED_TEXT } from '../src/mcp/subscriptions.js';
+import { BACKEND_FAILURE_MESSAGE, FAILURE_CANARY } from '../src/mcp/subscriptions-failure-fixture.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: real listener with real bearer credentials -> real tools/call and resources/read ->
@@ -197,4 +198,109 @@ test('credentials that cannot sign a user in are refused over HTTP with challeng
   const service = await attempt(`Bearer ${DEV_TOKENS.service}`);
   expect(service.status).toBe(403);
   expect(service.headers.get('www-authenticate')).toMatch(/insufficient_scope/);
+});
+
+test('a subscriber recovers from empty, failed and cleared wire results', async ({ page }) => {
+  let mode: 'list' | 'empty' | 'throw' | 'bad' = 'list';
+  const local = await startEpisodeListener({
+    viewHtml: await readFile(new URL('../dist/subscriptions-view/subscriptions.html', import.meta.url), 'utf8'),
+    catalog: { find: () => undefined },
+    port: 0,
+    subscriptions: {
+      viewHtml: await readFile(new URL('../dist/subscriptions-view/subscriptions.html', import.meta.url), 'utf8'),
+      verifier: createDevelopmentVerifier(),
+      backend: {
+        listSubscriptions: async (accountId) => {
+          if (accountId !== DEV_ACCOUNTS.alice) return undefined;
+          if (mode === 'throw') throw new Error(BACKEND_FAILURE_MESSAGE);
+          if (mode === 'bad') {
+            return { displayName: 'Alice', subscriptions: [{ subscriptionId: 's', creator: 'C', tier: 'T', status: FAILURE_CANARY }] };
+          }
+          if (mode === 'empty') return { displayName: 'Alice', subscriptions: [] };
+          return {
+            displayName: 'Alice',
+            subscriptions: [
+              { subscriptionId: 'sub-keep', creator: 'Creator One', tier: 'Gold', status: 'active' },
+              { subscriptionId: 'sub-other', creator: 'Creator Two', tier: 'Basic', status: 'paused' },
+            ],
+          };
+        },
+      },
+    },
+  });
+  const client = new Client({ name: 'e2e-recovery', version: '0.0.0' });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(local.subscriptionsUrl ?? ''), {
+      requestInit: { headers: { authorization: `Bearer ${DEV_TOKENS.alice}` } },
+    }),
+  );
+  const read = () => client.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
+  const view = await mountedView(page, client);
+  const listed = await read();
+  expect(listed.isError).toBeFalsy();
+  await send(page, listed);
+  await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
+  await view.getByText('Creator One — Gold (active)').click();
+  await expect(view.locator('[data-selected="true"]')).toHaveText('Creator One — Gold (active)');
+
+  mode = 'empty';
+  const empty = await read();
+  expect(empty.isError).toBeFalsy();
+  expect(JSON.stringify(empty.structuredContent)).toContain('Alice');
+  expect(JSON.stringify(empty.structuredContent)).not.toContain('Creator');
+  await send(page, empty);
+  await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'empty');
+  await expect(view.getByTestId('subscriptions-status')).toContainText('No subscriptions.');
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(0);
+  await expect(view.locator('[data-selected="true"]')).toHaveCount(0);
+  await expect(view.getByTestId('subscriptions-retry')).toBeVisible();
+
+  mode = 'list';
+  const restored = await read();
+  await send(page, restored);
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(2);
+  await view.getByText('Creator One — Gold (active)').click();
+
+  mode = 'throw';
+  const failed = await read();
+  expect(failed.isError).toBe(true);
+  expect(JSON.stringify(failed)).not.toContain(FAILURE_CANARY);
+  expect(JSON.stringify(failed)).not.toContain('503');
+  await send(page, failed);
+  await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'retry');
+  await expect(view.getByText(/Alice|Creator/)).toHaveCount(0);
+  await expect(view.locator('[data-selected="true"]')).toHaveCount(0);
+
+  mode = 'list';
+  let proxied = 0;
+  await page.exposeFunction('handleToolCall', async () => {
+    proxied += 1;
+    return read();
+  });
+  await view.getByTestId('subscriptions-retry').click();
+  await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
+  await expect(view.getByTestId('subscriptions-list').locator('li')).toHaveCount(2);
+  await expect(view.locator('[data-selected="true"]')).toHaveCount(0);
+  expect(proxied).toBe(1);
+
+  await view.getByText('Creator One — Gold (active)').click();
+  await page.evaluate(() => window.deliverToolInput?.({ arguments: {} }));
+  await expect(view.locator('[data-selected="true"]')).toHaveText('Creator One — Gold (active)');
+  expect(proxied).toBe(2);
+
+  mode = 'bad';
+  const invalid = await read();
+  expect(invalid.isError).toBe(true);
+  expect(JSON.stringify(invalid)).not.toContain(FAILURE_CANARY);
+  await send(page, invalid);
+  await expect(view.getByTestId('subscriptions-root')).toHaveAttribute('data-state', 'problem');
+  await expect(view.getByText(/Alice|Creator|canary/)).toHaveCount(0);
+  await expect(view.getByTestId('subscriptions-retry')).toBeVisible();
+
+  mode = 'list';
+  await view.getByTestId('subscriptions-retry').click();
+  await expect(view.getByTestId('subscriptions-status')).toHaveText('Signed in as Alice');
+  await expect(view.getByText('Creator One — Gold (active)')).toBeVisible();
+  await client.close();
+  await local.close();
 });
