@@ -22,6 +22,8 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 
 Write a self-contained design for human readers: the problem, current behavior, responsibilities, interfaces, representative flow, rationale, failures, verification outcomes and open decisions. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`. Keep detailed worker instructions in implementation issues. Distinguish existing behavior from a proposal and preserve uncertainties that affect the design.
 
+Make verification outcomes concrete: state the input or condition, expected observable result and boundary being exercised. For example, an image-policy contract could require empty input to produce `img-src 'none'`, populated input to preserve permitted origins, and a mounted frame to load a permitted image while blocking an unlisted origin. The directive and browser behavior are separate claims requiring different evidence.
+
 Use `diagram` when an illustration clarifies the architecture or flow. Store editable sources and rendered SVG/PNG outputs in the repository's `diagrams/` directory, embed the relevant output and inspect it before review. Follow [change hygiene](../docs/change-hygiene.md) for retained artifacts and Git LFS.
 
 Blueprints and linked implementation issues must be usable without private planning context. Keep internal discussion, audit chronology and approval provenance in the private planning records. User documentation draws on these designs together with verified implementation and release behavior.

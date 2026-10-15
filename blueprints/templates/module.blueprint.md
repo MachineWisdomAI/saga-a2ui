@@ -29,7 +29,7 @@ Draft awaiting human design review.
 
 ## Verification outcomes
 
-<!-- State observable outcomes that implementations must demonstrate. Do not present planned verification as passing evidence. -->
+<!-- For each consequential success, failure or edge case, state the input or condition and expected result through the module's caller-facing interface. Identify effects that need browser, transport or host verification beyond that interface. Keep planned verification distinct from observed evidence. -->
 
 ## Open decisions
 

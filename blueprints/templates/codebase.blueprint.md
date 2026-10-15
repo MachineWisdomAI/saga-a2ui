@@ -22,7 +22,7 @@ implemented_features: []
 
 ## Verification
 
-<!-- Link the relevant checks, commands and actual evidence. State what was exercised and what remains unverified; a module revision alone does not prove conformance. -->
+<!-- Connect the consequential module/feature outcomes to relevant tests or other observed evidence, naming the implementation revision and runtime exercised. State remaining gaps; a module revision or test total alone does not prove conformance. -->
 
 ## Related features
 

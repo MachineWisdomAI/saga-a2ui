@@ -30,7 +30,7 @@ Draft awaiting human design review.
 
 ## Verification outcomes
 
-<!-- Describe observable outcomes through relevant behavioral boundaries. Separate planned checks, observed evidence and required actual-host acceptance. -->
+<!-- For each consequential success, failure or edge case, state the input or condition, expected observable result and boundary to exercise. Separate planned checks, observed evidence and required actual-host acceptance. -->
 
 ## Implementation sequence
 
