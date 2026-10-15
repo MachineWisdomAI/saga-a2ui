@@ -26,8 +26,10 @@ export interface SubscriptionsViewDependencies {
  * response is correlated with that call — and only that response may establish or recover the
  * pin. Each read keeps an identity that is not recycled when the view returns to idle, so an
  * older in-flight response cannot match a later read or reopen private rendering after a later
- * refusal. While the view is invalid, or while such a read is in flight, an unsolicited
- * notification cannot open private rendering.
+ * refusal. An unsolicited notification cannot open private rendering. It can still end it: an
+ * error, a changed label, or an unknown shape clears the view immediately, including while a
+ * read is in flight, and retires every read that started before that loss. Only a correlated
+ * read started after the loss may recover.
  *
  * The label says only whether the data on screen is still from the sign-in it started with. It
  * never grants access; the server authorizes every call from the verified request.
@@ -44,25 +46,47 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     if (!disposed) deps.show(state);
   };
 
-  const apply = (result: ToolResult) => {
-    if (disposed) return;
+  // One classification for both the notification gate and presentation. An error, an unreadable
+  // shape, or a different label ends the pinned sign-in. A well-shaped result does not, even
+  // when it repeats the pinned label.
+  type IncomingResult =
+    | { readonly kind: 'error'; readonly signInRequired: boolean }
+    | { readonly kind: 'unreadable' }
+    | { readonly kind: 'changed-session' }
+    | { readonly kind: 'current'; readonly data: SubscriptionsResult };
+
+  const readIncoming = (result: ToolResult): IncomingResult => {
     if (result.isError) {
-      invalidated = true;
-      const signInRequired = result.content?.some((part) => part.type === 'text' && part.text === SIGN_IN_REQUIRED_TEXT);
-      return clear(signInRequired ? { kind: 'sign-in-required' } : { kind: 'problem', message: 'The tool reported an error.' });
+      return {
+        kind: 'error',
+        signInRequired: result.content?.some((part) => part.type === 'text' && part.text === SIGN_IN_REQUIRED_TEXT) ?? false,
+      };
     }
     const parsed = SubscriptionsResultSchema.safeParse(result.structuredContent);
-    if (!parsed.success) {
-      invalidated = true;
-      return clear({ kind: 'problem', message: 'The tool result was not a subscriptions result.' });
+    if (!parsed.success) return { kind: 'unreadable' };
+    if (pinnedSession !== undefined && parsed.data.viewSession !== pinnedSession) return { kind: 'changed-session' };
+    return { kind: 'current', data: parsed.data };
+  };
+
+  const apply = (result: ToolResult) => {
+    if (disposed) return;
+    const incoming = readIncoming(result);
+    switch (incoming.kind) {
+      case 'error':
+        invalidated = true;
+        return clear(incoming.signInRequired ? { kind: 'sign-in-required' } : { kind: 'problem', message: 'The tool reported an error.' });
+      case 'unreadable':
+        invalidated = true;
+        return clear({ kind: 'problem', message: 'The tool result was not a subscriptions result.' });
+      case 'changed-session':
+        invalidated = true;
+        return clear({ kind: 'problem', message: 'Your session changed. Reload to see your subscriptions.' });
+      case 'current':
+        pinnedSession = incoming.data.viewSession;
+        invalidated = false;
+        deps.show({ kind: 'subscriptions', subscriptions: incoming.data });
+        return;
     }
-    if (pinnedSession !== undefined && parsed.data.viewSession !== pinnedSession) {
-      invalidated = true;
-      return clear({ kind: 'problem', message: 'Your session changed. Reload to see your subscriptions.' });
-    }
-    pinnedSession = parsed.data.viewSession;
-    invalidated = false;
-    deps.show({ kind: 'subscriptions', subscriptions: parsed.data });
   };
 
   // A host that advertises `serverTools` can proxy this read. The returned promise is the
@@ -94,8 +118,15 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
       readThroughHost();
     },
     onToolResult(result) {
-      // Not the response to a call this view made. Ignore it while invalid, and while a
-      // correlated read is the evidence for the round trip the host just started.
+      // Session loss is not freshness. Classify it before suppressing uncorrelated positive
+      // data, clear immediately, and retire reads that started before the loss so a later
+      // resolution cannot restore private rendering. A well-shaped result still cannot open
+      // private rendering while the view is invalid or a correlated read is in flight.
+      if (readIncoming(result).kind !== 'current') {
+        activeRead = 0;
+        apply(result);
+        return;
+      }
       if (invalidated || activeRead !== 0) return;
       apply(result);
     },

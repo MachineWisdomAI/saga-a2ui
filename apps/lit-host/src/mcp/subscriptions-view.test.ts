@@ -220,6 +220,56 @@ describe('subscriptions view', () => {
     expect(JSON.stringify(h.last())).not.toContain('Alice');
   });
 
+  it.each([
+    [
+      'a sign-in-required error',
+      { isError: true, content: [{ type: 'text' as const, text: SIGN_IN_REQUIRED_TEXT }] },
+      'sign-in-required' as const,
+    ],
+    [
+      'a changed view-session label',
+      delivery(result('Bob', 'vs_bbbbbbbbbbbbbbbbbbbbbb', ['Creator Three'])),
+      'problem' as const,
+    ],
+    [
+      'an unknown session shape',
+      { content: [], structuredContent: { displayName: 'Alice', subscriptions: [] } },
+      'problem' as const,
+    ],
+  ])('session loss via %s clears immediately while a read is pending, and only a later correlated read recovers', async (_name, loss, clearedKind) => {
+    const h = await harness({ serverTools: {} });
+    const pending: { resolve: (value: ReturnType<typeof delivery>) => void }[] = [];
+    h.bridge.oncalltool = () => new Promise((resolve) => {
+      pending.push({ resolve });
+    });
+
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    // A is in flight. The host then reports session loss on the notification path. That evidence
+    // must clear the private view now; it is not stale positive data to suppress.
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(1);
+    await h.bridge.sendToolResult(loss);
+    await expect.poll(() => h.last()?.kind).toBe(clearedKind);
+    expect(JSON.stringify(h.last())).not.toMatch(/Alice|Bob|Creator/);
+
+    // The read that started before the loss cannot put Alice back.
+    pending[0]?.resolve(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.last()?.kind).toBe(clearedKind);
+    expect(JSON.stringify(h.last())).not.toMatch(/Alice|Bob|Creator/);
+
+    // A correlated read started after the loss is the only recovery. It must show Bob, not a
+    // session-mismatch leftover from the pin the loss should have cleared.
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(2);
+    pending[1]?.resolve(delivery(result('Bob', 'vs_bbbbbbbbbbbbbbbbbbbbbb', ['Creator Three'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.last()).toMatchObject({ kind: 'subscriptions', subscriptions: { displayName: 'Bob' } });
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+  });
+
   it('a refused correlated read clears the private view, and a later notification cannot revive it', async () => {
     const h = await harness({ serverTools: {} });
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
