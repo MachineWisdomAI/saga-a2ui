@@ -449,3 +449,40 @@ describe('the player view resource', () => {
     expect(view?._meta.ui.csp).toEqual({ connectDomains: [mediaOrigin], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
   });
 });
+
+describe('the declared output contract on the wire', () => {
+  interface ListedWithOutput extends ListedTool {
+    readonly outputSchema?: { readonly properties?: Record<string, unknown>; readonly additionalProperties?: unknown };
+  }
+  const listWithOutput = async (h: Harness) =>
+    (await rpcOverHttp(h.listener.playbackUrl, DEV_TOKENS.alice, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).body as {
+      result: { tools: ListedWithOutput[] };
+    };
+
+  it('declares a strict output schema only for the opener: Play declares none because its success data is view-only', async () => {
+    const h = await harness();
+    const { tools } = (await listWithOutput(h)).result;
+    const opener = tools.find((tool) => tool.name === 'get_playable_episode');
+    const playTool = tools.find((tool) => tool.name === 'play_episode');
+
+    expect(Object.keys(opener?.outputSchema?.properties ?? {}).sort()).toEqual(['description', 'episodeId', 'title', 'viewSession']);
+    expect(opener?.outputSchema?.additionalProperties).toBe(false);
+    // A declared output schema would make the SDK demand model-visible structuredContent from every
+    // success. Play's success carries only a fixed sentence and a `_meta` projection.
+    expect(playTool?.outputSchema).toBeUndefined();
+  });
+
+  it('refuses an opener result that breaks its declared schema instead of sending it', async () => {
+    const h = await startPlaybackHarness(
+      { [DEV_ACCOUNTS.alice]: ['ep-1'] },
+      { recordFor: { 'ep-1': { id: 'ep-1', title: 'x', description: 'D'.repeat(2000) } } },
+    );
+    cleanup.listener = h.listener;
+
+    const response = await callToolOverHttp(h.listener.playbackUrl, DEV_TOKENS.alice, { name: 'get_playable_episode', arguments: { episodeId: 'ep-1' } });
+
+    expect(resultOf(response.body)).toMatchObject({ isError: true });
+    expect(resultOf(response.body).structuredContent).toBeUndefined();
+    expect(JSON.stringify(response.body)).not.toContain('DDDDDDDD');
+  });
+});
