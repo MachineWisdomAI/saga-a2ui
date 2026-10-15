@@ -318,6 +318,18 @@ describe('Play request discipline', () => {
     expect(r.player.calls.slice(before)).toEqual(['stop']);
   });
 
+  it('stops the audio when the host tears the view down, before it answers the teardown request', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    const before = r.player.calls.length;
+
+    await r.bridge.teardownResource({});
+
+    expect(r.player.calls.slice(before)).toEqual(['stop']);
+  });
+
   it('rejects a grant minted for a different sign-in than the one that opened the view, fetching nothing', async () => {
     const r = await rig({ entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1'], [DEV_ACCOUNTS.bob]: ['ep-1'] } });
     await r.select(EP1); // opened by Alice

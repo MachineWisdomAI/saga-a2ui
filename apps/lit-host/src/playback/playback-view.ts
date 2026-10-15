@@ -214,7 +214,13 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     }
   }
 
-  const connection = await connectToolResultView({ app, transport: deps.transport, onToolResult: onOpened });
+  const connection = await connectToolResultView({
+    app,
+    transport: deps.transport,
+    onToolResult: onOpened,
+    // The host ends the connection right after it answers teardown, so audio must stop now.
+    onTeardown: retire,
+  });
 
   return {
     play() {

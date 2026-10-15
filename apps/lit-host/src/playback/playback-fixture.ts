@@ -28,7 +28,13 @@ export interface CountingPlayback {
 
 export function countingPlayback(
   initialEntitlements: Readonly<Record<string, readonly string[]>>,
-  options?: { episodes?: readonly EpisodeRecord[]; recordFor?: Readonly<Record<string, EpisodeRecord>>; failEntitlementWith?: string },
+  options?: {
+    episodes?: readonly EpisodeRecord[];
+    recordFor?: Readonly<Record<string, EpisodeRecord>>;
+    failEntitlementWith?: string;
+    /** What the media store returns. Defaults to a small non-audio blob; browser tests pass a real WAV. */
+    mediaBytes?: Uint8Array;
+  },
 ): CountingPlayback {
   const entitlements = new Map(Object.entries(initialEntitlements).map(([account, ids]) => [account, new Set(ids)]));
   const episodes = options?.episodes ?? [
@@ -56,7 +62,7 @@ export function countingPlayback(
     store: {
       async read(episodeId) {
         mediaReads.push(episodeId);
-        return { contentType: 'audio/wav', bytes: MEDIA_BYTES };
+        return { contentType: 'audio/wav', bytes: options?.mediaBytes ?? MEDIA_BYTES };
       },
     },
   };
@@ -74,6 +80,9 @@ export interface PlaybackHarness {
 export interface PlaybackHarnessOptions {
   readonly episodes?: readonly EpisodeRecord[];
   readonly recordFor?: Readonly<Record<string, EpisodeRecord>>;
+  readonly mediaBytes?: Uint8Array;
+  /** The view document the listener serves. Defaults to a placeholder; browser tests pass the built view. */
+  readonly viewHtml?: string;
   readonly failEntitlementWith?: string;
   readonly capabilityTtlSeconds?: number;
   readonly nowSeconds?: () => number;
@@ -84,12 +93,13 @@ export async function startPlaybackHarness(
   options: PlaybackHarnessOptions = {},
 ): Promise<PlaybackHarness> {
   const playback = countingPlayback(entitlements, options);
+  const viewHtml = options.viewHtml ?? PLAYER_VIEW_HTML;
   const listener = await startEpisodeListener({
-    viewHtml: PLAYER_VIEW_HTML,
+    viewHtml,
     catalog: { find: () => undefined },
     port: 0,
     playback: {
-      viewHtml: PLAYER_VIEW_HTML,
+      viewHtml,
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: createDevelopmentVerifier(),
@@ -223,4 +233,24 @@ export async function rpcOverHttp(url: string | undefined, token: string | undef
   });
   const text = await response.text();
   return { status: response.status, challenge: response.headers.get('www-authenticate'), body: text.length === 0 ? undefined : JSON.parse(text) };
+}
+
+/** A real, decodable mono 16-bit PCM WAV of a quiet tone, for tests that decode audio in a browser. */
+export function toneWav(seconds = 3, rate = 8_000): Uint8Array {
+  const samples = seconds * rate;
+  const out = Buffer.alloc(44 + samples * 2);
+  out.write('RIFF', 0);
+  out.writeUInt32LE(36 + samples * 2, 4);
+  out.write('WAVEfmt ', 8);
+  out.writeUInt32LE(16, 16);
+  out.writeUInt16LE(1, 20);
+  out.writeUInt16LE(1, 22);
+  out.writeUInt32LE(rate, 24);
+  out.writeUInt32LE(rate * 2, 28);
+  out.writeUInt16LE(2, 32);
+  out.writeUInt16LE(16, 34);
+  out.write('data', 36);
+  out.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i += 1) out.writeInt16LE(Math.round(Math.sin(i / 6) * 1_500), 44 + i * 2);
+  return new Uint8Array(out);
 }

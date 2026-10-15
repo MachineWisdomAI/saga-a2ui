@@ -23,6 +23,13 @@ export interface ToolResultViewDependencies {
    * Registering it before `connect` keeps it in the same lifetime as `onToolResult`.
    */
   readonly onToolInput?: (input: ToolInput) => void;
+  /**
+   * Optional. Called once when the host asks the view to tear down, before the request is answered
+   * and before delivery stops. A view that holds something outside the page's own rendering (a
+   * running player, a pending request) releases it here, because the host ends the connection
+   * right after it answers and nothing else tells the view it is going away.
+   */
+  readonly onTeardown?: () => void;
 }
 
 /** A connected view. Ends the bridge connection and stops all delivery. */
@@ -72,6 +79,7 @@ export async function connectToolResultView(deps: ToolResultViewDependencies): P
   app.addEventListener('toolresult', onToolResult);
   // The host closes the connection after its teardown request is answered, so only release here.
   app.onteardown = async () => {
+    if (!disposed) deps.onTeardown?.();
     release();
     return {};
   };
