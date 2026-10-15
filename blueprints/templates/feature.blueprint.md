@@ -2,6 +2,7 @@
 feature_name: capability_name
 status: draft
 module_blueprints: []
+dependencies: []
 date_added: YYYY-MM-DD
 ---
 
@@ -9,7 +10,7 @@ date_added: YYYY-MM-DD
 
 Draft awaiting human design review.
 
-<!-- Authoring prompts: replace them with subject-matter prose before review. -->
+<!-- Copy to features/<capability>.blueprint.md. Replace prompts with subject-matter prose before review; use only real module/feature references. -->
 
 ## Problem and current behavior
 
