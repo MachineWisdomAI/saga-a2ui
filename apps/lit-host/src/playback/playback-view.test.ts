@@ -31,15 +31,20 @@ function fakePlayer(): FakePlayer {
   let held: { resolve(outcome: 'started' | 'blocked'): void; reject(error: Error): void } | undefined;
   let hold = false;
   let fail = false;
+  // The real player's contract: `start` needs the context `prepare` made, and `stop` destroys it.
+  // A controller that stops the player after preparing it leaves nothing to start.
+  let live = false;
   const player: FakePlayer = {
     started: [],
     calls: [],
     outcome: 'started',
     prepare() {
       player.calls.push('prepare');
+      live = true;
     },
     start(bytes) {
       player.calls.push('start');
+      if (!live) return Promise.reject(new Error('no prepared context: stop() ran after prepare()'));
       if (fail) {
         fail = false;
         return Promise.reject(new Error('undecodable'));
@@ -57,6 +62,7 @@ function fakePlayer(): FakePlayer {
     resume: () => void player.calls.push('resume'),
     stop() {
       player.calls.push('stop');
+      live = false;
       held?.reject(new Error('stopped'));
       held = undefined;
     },

@@ -226,10 +226,12 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     play() {
       if (disposed || !selected) return;
       if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'session-changed') return;
-      // Inside the user's activation: unlock audio now, before any asynchronous authorization.
-      player.prepare();
       const episode = selected;
+      // Retire first: stopping releases the player's context, so preparing before it would
+      // destroy the context this press just unlocked.
       retire();
+      // Still inside the user's activation: unlock audio now, before any asynchronous authorization.
+      player.prepare();
       present({ kind: 'pending', episode });
       void run(episode, generation);
     },
