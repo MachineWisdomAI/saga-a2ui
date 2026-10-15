@@ -145,6 +145,29 @@ describe('media acquisition refused', () => {
   });
 });
 
+describe('media acquisition after access is revoked', () => {
+  it('refuses an already-issued capability once the account is no longer entitled, with no protected read', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    const first = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof: await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl }),
+    });
+    expect(first.status).toBe(200);
+    h.playback.mediaReads.length = 0;
+
+    h.playback.setEntitled(DEV_ACCOUNTS.alice, []); // the subscription lapses after the capability was issued
+    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+
+    expect(attempt.status).toBe(403);
+    expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+    expect(h.playback.mediaReads).toEqual([]);
+  });
+});
+
 describe('media responses for a sandboxed view in another origin', () => {
   it('answers a CORS preflight for the two proof headers without reading any protected media', async () => {
     const h = await harness();

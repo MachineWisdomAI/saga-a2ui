@@ -441,10 +441,11 @@ describe('Play outcomes after the server said yes', () => {
     expect(kinds(r)).not.toContain('playing');
     expect(r.player.calls.at(-1)).toBe('stop');
 
-    // Retry is a new Play: a second authorization, a second entitlement check.
+    // Retry is a new Play: a second authorization. Each Play that reached the media service also
+    // costs one acquisition check, so two presses that both fetched bytes are four lookups.
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
-    expect(r.harness.playback.entitlementChecks).toHaveLength(2);
+    expect(r.harness.playback.entitlementChecks).toHaveLength(4);
   });
 
   it('asks for a second explicit Play when the browser withheld audio, and plays on that press', async () => {
@@ -526,12 +527,13 @@ describe('Pause and Resume report what the audio actually did', () => {
     r.view.resume();
     await expect.poll(() => r.last()?.kind).toBe('resume-blocked');
     expect(kinds(r)).toEqual(['ready', 'pending', 'playing', 'paused', 'resume-blocked']);
-    expect(r.harness.playback.entitlementChecks).toHaveLength(1); // recovery is not a new authorization
+    // One Play check and one acquisition check for the single Play; recovery adds none.
+    expect(r.harness.playback.entitlementChecks).toHaveLength(2);
 
     r.player.resumeOutcome = 'resumed';
     r.view.resume();
     await expect.poll(() => r.last()?.kind).toBe('playing');
-    expect(r.harness.playback.entitlementChecks).toHaveLength(1);
+    expect(r.harness.playback.entitlementChecks).toHaveLength(2);
   });
 
   it('reports a player that cannot resume at all as media-failed, with a fresh Play on offer', async () => {

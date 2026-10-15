@@ -121,11 +121,14 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   const origin = `http://${HOST}:${port}`;
   // One service for the listener's lifetime: it holds the issued capabilities, while each
   // request still builds its own MCP server.
-  const mediaService = options.playback
+  const { playback } = options;
+  const mediaService = playback
     ? createMediaService({
-        store: options.playback.mediaStore,
-        ...(options.playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: options.playback.capabilityTtlSeconds }),
-        ...(options.playback.nowSeconds === undefined ? {} : { nowSeconds: options.playback.nowSeconds }),
+        store: playback.mediaStore,
+        // The same lookup Play uses, asked again on every fresh acquisition.
+        entitlement: (accountId, episodeId) => playback.backend.checkEntitlement(accountId, episodeId),
+        ...(playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: playback.capabilityTtlSeconds }),
+        ...(playback.nowSeconds === undefined ? {} : { nowSeconds: playback.nowSeconds }),
       })
     : undefined;
 

@@ -57,8 +57,18 @@ export interface MediaService {
   acquire(request: MediaRequest): Promise<MediaOutcome>;
 }
 
+export type EntitlementDecision = 'entitled' | 'denied';
+
+/**
+ * The application's current answer to "may this account hear this episode?". The service asks it
+ * on every fresh acquisition, with the account and episode the capability was issued for, so a
+ * revoked entitlement refuses new bytes even though the capability itself has not expired.
+ */
+export type EntitlementLookup = (accountId: string, episodeId: string) => Promise<EntitlementDecision>;
+
 export interface MediaServiceOptions {
   readonly store: MediaStore;
+  readonly entitlement: EntitlementLookup;
   readonly ttlSeconds?: number;
   readonly nowSeconds?: () => number;
 }
@@ -119,6 +129,8 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       } catch {
         return REFUSED;
       }
+
+      if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') return REFUSED;
 
       return { kind: 'delivered', media: await options.store.read(grant.episodeId) };
     },
