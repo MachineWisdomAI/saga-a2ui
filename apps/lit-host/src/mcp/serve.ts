@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { createDevelopmentVerifier, DEV_ACCOUNTS } from './dev-auth.js';
+import type { MediaStore } from '../playback/media-service.js';
+import type { PlaybackBackend } from '../playback/playback-server.js';
+import { toneWav } from '../playback/synthetic-media.js';
 import { startEpisodeListener } from './listener.js';
 import type { EpisodeCatalog, EpisodeRecord } from './server.js';
 import type { AccountSubscriptions } from './subscriptions-server.js';
@@ -28,11 +31,24 @@ const accounts: Readonly<Record<string, AccountSubscriptions>> = {
   },
 };
 
+// Synthetic playback policy: only Alice may hear ep-001. The "protected media" is a generated tone.
+const playableEntitlements: Readonly<Record<string, ReadonlySet<string>>> = {
+  [DEV_ACCOUNTS.alice]: new Set(['ep-001']),
+  [DEV_ACCOUNTS.bob]: new Set(),
+};
+const playbackBackend: PlaybackBackend = {
+  findEpisode: (episodeId) => episodes.find((episode) => episode.id === episodeId),
+  checkEntitlement: async (accountId, episodeId) =>
+    playableEntitlements[accountId]?.has(episodeId) ? 'entitled' : 'denied',
+};
+const mediaStore: MediaStore = { read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }) };
+
 const viewHtml = await readFile(new URL('../../dist/view/view.html', import.meta.url), 'utf8');
 const subscriptionsViewHtml = await readFile(
   new URL('../../dist/subscriptions-view/subscriptions.html', import.meta.url),
   'utf8',
 );
+const playbackViewHtml = await readFile(new URL('../../dist/playback-view/playback.html', import.meta.url), 'utf8');
 const listener = await startEpisodeListener({
   viewHtml,
   catalog,
@@ -42,6 +58,13 @@ const listener = await startEpisodeListener({
     backend: { listSubscriptions: async (accountId) => accounts[accountId] },
     verifier: createDevelopmentVerifier(),
   },
+  playback: {
+    viewHtml: playbackViewHtml,
+    backend: playbackBackend,
+    mediaStore,
+    verifier: createDevelopmentVerifier(),
+  },
 });
 console.log(`MCP server listening at ${listener.url}`);
 console.log(`Protected subscriptions endpoint (development tokens only): ${listener.subscriptionsUrl}`);
+console.log(`Protected playback endpoint (development tokens only): ${listener.playbackUrl}`);
