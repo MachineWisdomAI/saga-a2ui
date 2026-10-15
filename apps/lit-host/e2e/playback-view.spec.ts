@@ -155,7 +155,9 @@ test.describe('the built player for the entitled listener', () => {
     expect(first?.state).toBe('running');
     await expect.poll(async () => ((await audioClocks(page))[0]?.time ?? 0) > (first?.time ?? 0)).toBe(true);
     expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
-    expect(host.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.alice, episodeId: 'ep-1' }]);
+    // One check authorizing the Play and one more when the service was asked for the bytes.
+    const alice = { accountId: DEV_ACCOUNTS.alice, episodeId: 'ep-1' };
+    expect(host.harness.playback.entitlementChecks).toEqual([alice, alice]);
   });
 
   test('is operable from the keyboard alone and keeps focus on the control', async ({ page }) => {
@@ -241,7 +243,8 @@ test.describe('the built player when access is refused', () => {
     await button(host.view).click();
 
     await expect(status(host.view)).toHaveText(DENIED);
-    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+    // First Play and its acquisition, then the replayed Play, which is refused before any media.
+    expect(host.harness.playback.entitlementChecks).toHaveLength(3);
     expect(host.harness.playback.mediaReads).toEqual(['ep-1']); // only the first, entitled play read media
   });
 
@@ -255,7 +258,8 @@ test.describe('the built player when access is refused', () => {
     await button(host.view).click();
 
     await expect(status(host.view)).toContainText('Playing');
-    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+    // The denied Play, then the granted Play and its acquisition.
+    expect(host.harness.playback.entitlementChecks).toHaveLength(3);
   });
 });
 
@@ -284,7 +288,9 @@ test.describe('capability expiry through the built player', () => {
     advance = false;
     await button(host.view).click();
     await expect(status(host.view)).toContainText('Playing');
-    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
+    // The expired capability is refused before any entitlement lookup, so the checks are the first
+    // Play, the second Play and the second Play's acquisition.
+    expect(host.harness.playback.entitlementChecks).toHaveLength(3);
     expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
   });
 });
@@ -353,7 +359,8 @@ test.describe('the built player Pause and Resume tell the truth about the audio'
     await button(host.view).click();
     await expect(status(host.view)).toContainText('Playing');
     await expect.poll(async () => ((await audioClocks(page))[0]?.time ?? 0) > (paused?.time ?? 0)).toBe(true);
-    expect(host.harness.playback.entitlementChecks).toHaveLength(1); // recovery is not a new authorization
+    // The one Play and its acquisition; resuming is not a new authorization.
+    expect(host.harness.playback.entitlementChecks).toHaveLength(2);
   });
 
   test('a Resume the player can no longer perform is a media failure with a fresh Play on offer', async ({ page }) => {
