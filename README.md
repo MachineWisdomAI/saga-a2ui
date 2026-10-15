@@ -46,10 +46,29 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
     npm run build                       # build the Lit app into apps/lit-host/dist
     npm run typecheck                   # tsc --noEmit
     npm run test:headless               # protocol decoding/processing in plain Node (no DOM, no browser)
-    npx playwright install chromium    # one-time browser download for the check below
+    npx playwright install chromium    # explicit browser install; verify does not download one
     npm run test:browser                # serves the built page and checks the visible title
+    npm run verify                      # guards, typecheck, build, tests, LFS, and version enrollment
 
-`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) runs typecheck, build, the headless tests and the browser check on every pull request.
+`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+
+### Repository verification
+
+`npm run verify` is the one local and CI route. It runs the static guard, headless and browser discovery checks, typecheck, build, headless tests, browser tests, Git LFS pointer check, and version-enrollment check, in that order. It stops at the first failing command and uses that command's exit code. Git LFS must already be installed; the pointer check calls `git lfs`.
+
+Browser installation is an explicit prerequisite. Install the Playwright browser this repository already depends on before verify. Verify does not download a browser and does not substitute a different one:
+
+    npx playwright install chromium
+
+CI runs `npx playwright install --with-deps chromium` before `npm run verify`.
+
+Each invocation writes a disposable receipt to `.wise-agents/verify-receipts/` (ignored) and copies it to `latest.json` in that directory. The receipt records the working directory, the verify process arguments, the Node and npm versions that actually ran, the git commit and tracked dirty state at each command boundary, and each command's name, arguments, timestamps, and exit code. It does not record environment variables or command output, so do not put secrets in command arguments. A run is labeled `pristine-head` only when the commit and tracked dirty state are clean at the start and unchanged through every command that ran. A dirty tracked file or a commit created during verification is recorded as `not-pristine-head`. That label is not itself a failure. Detection is at command boundaries, not a continuous watch. `--exec` replaces the repository suite and marks the receipt `exec`; `npm run verify` does not pass it.
+
+The static guard is not a general truthiness analysis and does not prove a policy is correct. It reports `||` whose left operand, after removing parentheses and zero-argument `.trim()` calls, is a string or untagged template that contains fixed non-whitespace text. It reports the file and line and exits nonzero. It does not flag identifiers, interpolation-only templates, whitespace-only fixed text, `||` nested inside an interpolation, concatenation, `&&`, `??`, non-zero-argument `.trim()`, or other methods. It parses authored `.ts`, `.tsx`, `.mts`, and `.cts` files with the TypeScript compiler and skips `.d.ts`, dependencies, and generated output (`node_modules`, `dist`, `coverage`, `test-results`, `playwright-report`). It does not typecheck.
+
+Test discovery asks Vitest for its file list (`vitest list --filesOnly` against `vitest.config.ts`) and compares that with authored `*.test.ts` files. Playwright `*.spec.ts` files are compared separately with `playwright test --list`. An authored file omitted by its runner fails the check. The file walk does not exclude fixture or `e2e` tests. Discovery does not run the tests, measure coverage, or prove an architectural boundary.
+
+Passing verify does not guarantee coverage, host compatibility, or architecture.
 
 The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private and no SDK packages exist yet.
 
