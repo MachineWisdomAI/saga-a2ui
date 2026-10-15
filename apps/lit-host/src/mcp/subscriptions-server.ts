@@ -7,13 +7,13 @@ import {
   INVALID_OUTPUT_TEXT,
   INVALID_SUBSCRIPTION_INPUT_TEXT,
   SIGN_IN_REQUIRED_TEXT,
-  SUBSCRIPTION_STATUSES,
   SUBSCRIPTIONS_TOOL_NAME,
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SUBSCRIPTIONS_VIEW_URI,
   SUBSCRIPTION_LIMITS,
   SubscriptionsRequestShape,
   SubscriptionsResultSchema,
+  isSubscriptionStatus,
   type SubscriptionsResult,
 } from './subscriptions.js';
 
@@ -57,10 +57,6 @@ export interface SubscriptionsServerOptions {
 }
 
 const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
-
-function isSubscriptionStatus(value: string): boolean {
-  return SUBSCRIPTION_STATUSES.some((status) => status === value);
-}
 
 /**
  * Builds each field from the record explicitly (no spreading), then validates the result.

@@ -8,7 +8,9 @@ import {
   INVALID_SUBSCRIPTION_INPUT_TEXT,
   SIGN_IN_REQUIRED_TEXT,
   SUBSCRIPTION_LIMITS,
+  SUBSCRIPTIONS_TOOL_NAME,
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+  type Subscription,
   type SubscriptionsResult,
 } from './subscriptions.js';
 import { connectSubscriptionsView, type SubscriptionsViewState } from './subscriptions-view.js';
@@ -416,5 +418,196 @@ describe('subscriptions view', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(states.length).toBe(shown);
     expect(states.at(-1)?.kind).toBe('retry');
+  });
+});
+
+// The declared status filter: a host tool input carries the business arguments of the call the
+// host is starting. The view forwards only the declared optional `status` filter, so the read it
+// starts keeps the filter the host named. A filtered read that returns no rows stays empty.
+describe('declared status filter in host-initiated reads', () => {
+  const active: Subscription = { subscriptionId: 'b1', creator: 'Creator One', tier: 'Gold', status: 'active' };
+  const paused: Subscription = { subscriptionId: 'b2', creator: 'Creator Two', tier: 'Silver', status: 'paused' };
+  const account: SubscriptionsResult = {
+    displayName: 'Bob',
+    viewSession: 'vs_bbbbbbbbbbbbbbbbbbbbbb',
+    subscriptions: [active, paused],
+  };
+
+  type Call = { name?: string; arguments?: Record<string, unknown> };
+
+  /** A host that proxies each read to the real tool: the arguments decide which rows come back. */
+  async function filteredHost(rows: readonly Subscription[] = account.subscriptions) {
+    const h = await harness({ serverTools: {} });
+    const calls: Call[] = [];
+    h.bridge.oncalltool = (params) => {
+      calls.push(params);
+      const status = params.arguments?.status;
+      return Promise.resolve(delivery({
+        ...account,
+        subscriptions: rows.filter((item) => status === undefined || item.status === status),
+      }));
+    };
+    return { ...h, calls };
+  }
+
+  it('keeps the declared filter, so a filtered read that returns no rows stays empty', async () => {
+    const h = await filteredHost([active]);
+
+    await h.bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => h.calls.length).toBe(1);
+    expect(h.calls[0]).toMatchObject({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: { status: 'paused' } });
+    await expect.poll(() => h.last()?.kind).toBe('empty');
+    expect(h.last()).toMatchObject({ kind: 'empty', displayName: 'Bob' });
+    expect(JSON.stringify(h.last())).not.toContain('Creator One');
+  });
+
+  it('shows only the rows the declared populated filter returns', async () => {
+    const h = await filteredHost();
+    await h.bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.calls[0]?.arguments).toEqual({ status: 'paused' });
+    expect(h.last()).toMatchObject({
+      kind: 'subscriptions',
+      subscriptions: { displayName: 'Bob', subscriptions: [paused] },
+    });
+  });
+
+  it('reads with no arguments when the host tool input declares no filter', async () => {
+    const h = await filteredHost();
+    await h.bridge.sendToolInput({});
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.calls[0]).toMatchObject({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
+    expect(h.calls[0]?.arguments).not.toHaveProperty('status');
+    expect(h.last()).toMatchObject({
+      kind: 'subscriptions',
+      subscriptions: { displayName: 'Bob', subscriptions: [active, paused] },
+    });
+  });
+
+  it('never forwards an undeclared field from the tool input as authority', async () => {
+    const h = await filteredHost();
+    await h.bridge.sendToolInput({ arguments: { accountId: 'alice', status: 'paused' } });
+    await expect.poll(() => h.calls.length).toBe(1);
+    expect(h.calls[0]?.arguments).toEqual({ status: 'paused' });
+
+    await h.bridge.sendToolInput({ arguments: { accountId: 'alice' } });
+    await expect.poll(() => h.calls.length).toBe(2);
+    expect(h.calls[1]?.arguments).toEqual({});
+    expect(JSON.stringify(h.calls)).not.toContain('alice');
+  });
+
+  it.each([
+    ['an unsupported status', { status: 'not-a-status' }],
+    ['a status with the wrong case', { status: 'PAUSED' }],
+    ['an empty status', { status: '' }],
+    ['a status that is not a string', { status: 1 }],
+    ['a list of statuses', { status: ['paused'] }],
+    ['a null status', { status: null }],
+    ['an object status', { status: { $ne: 'paused' } }],
+  ])('refuses %s without starting a read or showing rows', async (_name, forged) => {
+    const h = await filteredHost();
+    await h.bridge.sendToolResult(delivery(account));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    await h.bridge.sendToolInput({ arguments: { accountId: 'alice', ...forged } });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.last())).toContain(INVALID_SUBSCRIPTION_INPUT_TEXT);
+    expect(JSON.stringify(h.last())).not.toMatch(/Bob|Creator|alice/);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.calls).toEqual([]);
+  });
+
+  it('retries with the declared safe read, not the filtered input that was shown', async () => {
+    const h = await filteredHost([active]);
+    await h.bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => h.last()?.kind).toBe('empty');
+
+    h.view.retry();
+    await expect.poll(() => h.calls.length).toBe(2);
+    expect(h.calls[1]).toMatchObject({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
+    expect(h.calls[1]?.arguments).not.toHaveProperty('status');
+  });
+
+  it('retires an older filtered read when a newer read starts, so its late result is not shown', async () => {
+    const h = await harness({ serverTools: {} });
+    const pending: { resolve: (value: ReturnType<typeof delivery>) => void }[] = [];
+    h.bridge.oncalltool = () => new Promise((resolve) => {
+      pending.push({ resolve });
+    });
+
+    await h.bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => pending.length).toBe(1);
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(2);
+
+    // The older filtered read finishes after the newer read started. It no longer owns the view.
+    const shown = h.states.length;
+    pending[0]?.resolve(delivery({ ...account, subscriptions: [paused] }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown);
+
+    pending[1]?.resolve(delivery(account));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.last()).toMatchObject({ subscriptions: { subscriptions: [active, paused] } });
+  });
+
+  it('does not show a late filtered result after the read bound, and clears rows on disposal', async () => {
+    const states: SubscriptionsViewState[] = [];
+    const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
+    const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, { serverTools: {} });
+    toClean.push({ app, bridge });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge.connect(hostSide);
+    let release: (value: ReturnType<typeof delivery>) => void = () => undefined;
+    bridge.oncalltool = () => new Promise((resolve) => {
+      release = resolve;
+    });
+    const view = await connectSubscriptionsView({
+      app,
+      transport: viewSide,
+      show: (state) => states.push(state),
+      readBoundMs: 30,
+    });
+
+    await bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => states.at(-1)?.kind).toBe('retry');
+    const shown = states.length;
+    release(delivery({ ...account, subscriptions: [paused] }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(states.length).toBe(shown);
+
+    await bridge.sendToolInput({ arguments: { status: 'paused' } });
+    view.dispose();
+    release(delivery({ ...account, subscriptions: [paused] }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(states.length).toBe(shown);
+  });
+
+  it('refuses a status the tool does not support without starting a read and retires the read in flight', async () => {
+    const h = await harness({ serverTools: {} });
+    const calls: Call[] = [];
+    const pending: { resolve: (value: ReturnType<typeof delivery>) => void }[] = [];
+    h.bridge.oncalltool = (params) => {
+      calls.push(params);
+      return new Promise((resolve) => {
+        pending.push({ resolve });
+      });
+    };
+
+    await h.bridge.sendToolInput({ arguments: { status: 'paused' } });
+    await expect.poll(() => calls.length).toBe(1);
+    expect(calls[0]?.arguments).toEqual({ status: 'paused' });
+
+    // The declared read is refused here for the same reason the server refuses it, so nothing is
+    // forwarded and the read that started before the refusal cannot put rows back afterwards.
+    await h.bridge.sendToolInput({ arguments: { status: 'not-a-status' } });
+    await expect.poll(() => h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.last())).toContain(INVALID_SUBSCRIPTION_INPUT_TEXT);
+    expect(calls.length).toBe(1);
+
+    pending[0]?.resolve(delivery({ ...account, subscriptions: [active] }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.last()?.kind).toBe('problem');
+    expect(JSON.stringify(h.last())).not.toMatch(/Bob|Creator/);
   });
 });

@@ -1,4 +1,4 @@
-import type { App, McpUiToolResultNotification } from '@modelcontextprotocol/ext-apps';
+import type { App, McpUiToolInputNotification, McpUiToolResultNotification } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '../protocols/a2ui/v0_9/session.js';
@@ -6,6 +6,7 @@ import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
 import { PublicEpisodeSchema } from './episode.js';
 
 export type ToolResult = McpUiToolResultNotification['params'];
+export type ToolInput = McpUiToolInputNotification['params'];
 
 export interface ToolResultViewDependencies {
   /** The MCP Apps view bridge. Its transport is chosen by the composition root. */
@@ -14,13 +15,14 @@ export interface ToolResultViewDependencies {
   /** Handles each delivered result. Never called after the connection is disposed. */
   readonly onToolResult: (result: ToolResult) => void;
   /**
-   * Optional. Called when the host reports that a tool call is starting (`toolinput`). The
-   * notification carries arguments only — it is not that call's response, and it does not
-   * authenticate a later `toolresult`. A view that must recover from a correlated response uses
-   * this as the moment to start that request. Registering it before `connect` keeps it in the
-   * same lifetime as `onToolResult`.
+   * Optional. Called when the host reports that a tool call is starting (`toolinput`), with that
+   * notification's own params. The notification carries the business arguments of the call the
+   * host is starting — the only place they appear — so a view that must keep them reads them here.
+   * It is not that call's response, and it does not authenticate a later `toolresult`. A view that
+   * must recover from a correlated response uses this as the moment to start that request.
+   * Registering it before `connect` keeps it in the same lifetime as `onToolResult`.
    */
-  readonly onToolInput?: () => void;
+  readonly onToolInput?: (input: ToolInput) => void;
 }
 
 /** A connected view. Ends the bridge connection and stops all delivery. */
@@ -48,8 +50,8 @@ export async function connectToolResultView(deps: ToolResultViewDependencies): P
   const onToolResult = (result: ToolResult) => {
     if (!disposed) deps.onToolResult(result);
   };
-  const onToolInput = () => {
-    if (!disposed) deps.onToolInput?.();
+  const onToolInput = (input: ToolInput) => {
+    if (!disposed) deps.onToolInput?.(input);
   };
   const release = () => {
     disposed = true;
