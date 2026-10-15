@@ -27,7 +27,7 @@ export interface CountingPlayback {
 
 export function countingPlayback(
   initialEntitlements: Readonly<Record<string, readonly string[]>>,
-  options?: { episodes?: readonly EpisodeRecord[]; failEntitlementWith?: string },
+  options?: { episodes?: readonly EpisodeRecord[]; recordFor?: Readonly<Record<string, EpisodeRecord>>; failEntitlementWith?: string },
 ): CountingPlayback {
   const entitlements = new Map(Object.entries(initialEntitlements).map(([account, ids]) => [account, new Set(ids)]));
   const episodes = options?.episodes ?? [
@@ -44,7 +44,8 @@ export function countingPlayback(
       entitlements.set(accountId, new Set(episodeIds));
     },
     backend: {
-      findEpisode: (episodeId) => episodes.find((episode) => episode.id === episodeId),
+      // `recordFor` lets a test make the backend answer a lookup with a record whose own id differs.
+      findEpisode: (episodeId) => options?.recordFor?.[episodeId] ?? episodes.find((episode) => episode.id === episodeId),
       async checkEntitlement(accountId, episodeId) {
         entitlementChecks.push({ accountId, episodeId });
         if (options?.failEntitlementWith) throw new Error(options.failEntitlementWith);
@@ -70,6 +71,7 @@ export interface PlaybackHarness {
 /** The real listener with the playback endpoint, a development verifier and counting seams. */
 export interface PlaybackHarnessOptions {
   readonly episodes?: readonly EpisodeRecord[];
+  readonly recordFor?: Readonly<Record<string, EpisodeRecord>>;
   readonly failEntitlementWith?: string;
   readonly capabilityTtlSeconds?: number;
   readonly nowSeconds?: () => number;

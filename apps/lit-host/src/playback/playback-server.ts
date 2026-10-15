@@ -3,17 +3,23 @@ import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/e
 import { calculateJwkThumbprint } from 'jose';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
 import type { MediaService } from './media-service.js';
+import { ZodError } from 'zod';
 import {
   MEDIA_PATH_PREFIX,
+  ModelPlaybackSchema,
   PLAY_TOOL_NAME,
   PLAYBACK_AUTHORIZED_TEXT,
   PLAYBACK_DENIED_TEXT,
+  PLAYBACK_INVALID_RESULT_TEXT,
   PLAYBACK_RESULT_META,
+  PLAYBACK_UNAVAILABLE_TEXT,
   PLAYBACK_UNSUPPORTED_TEXT,
   PLAYBACK_VIEW_URI,
   PlayRequestSchema,
   RECIPIENT_KEY_META,
   RecipientKeySchema,
+  ViewEpisodeSchema,
+  ViewPlaybackSchema,
 } from './playback.js';
 
 /**
@@ -78,27 +84,34 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
       const recipient = RecipientKeySchema.safeParse(extra._meta?.[RECIPIENT_KEY_META]);
       if (!recipient.success) return failure(PLAYBACK_UNSUPPORTED_TEXT);
 
-      const decision = await options.backend.checkEntitlement(identity.accountId, episodeId);
-      const episode = options.backend.findEpisode(episodeId);
-      if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
+      // The pinned SDK copies a thrown message into the tool failure, so nothing escapes this
+      // handler as an exception: a backend failure is a fixed sentence, and so is a contract fault.
+      try {
+        const decision = await options.backend.checkEntitlement(identity.accountId, episodeId);
+        const episode = options.backend.findEpisode(episodeId);
+        if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
 
-      const { kty, crv, x, y } = recipient.data;
-      const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
-      const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
+        // The public fields are validated before a capability exists, so a record that breaks the
+        // contract leaves no issued-but-undelivered grant behind.
+        const shown = ViewEpisodeSchema.parse({ episodeId: episode.id, title: episode.title });
+        const { kty, crv, x, y } = recipient.data;
+        const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
+        const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
 
-      // Two projections, each built field by field. Only `_meta` carries the capability.
-      return {
-        content: [{ type: 'text', text: PLAYBACK_AUTHORIZED_TEXT }],
-        _meta: {
-          [PLAYBACK_RESULT_META]: {
-            episodeId: episode.id,
-            title: episode.title,
-            mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${episode.id}`,
-            capability: issued.capability,
-            expiresAt: issued.expiresAt,
-          },
-        },
-      };
+        // Two projections, each built field by field and validated before serialization. Only
+        // the view's, in `_meta`, carries the capability.
+        const forModel = ModelPlaybackSchema.parse({ text: PLAYBACK_AUTHORIZED_TEXT });
+        const forView = ViewPlaybackSchema.parse({
+          episodeId: shown.episodeId,
+          title: shown.title,
+          mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
+          capability: issued.capability,
+          expiresAt: issued.expiresAt,
+        });
+        return { content: [{ type: 'text', text: forModel.text }], _meta: { [PLAYBACK_RESULT_META]: forView } };
+      } catch (error) {
+        return failure(error instanceof ZodError ? PLAYBACK_INVALID_RESULT_TEXT : PLAYBACK_UNAVAILABLE_TEXT);
+      }
     },
   );
 

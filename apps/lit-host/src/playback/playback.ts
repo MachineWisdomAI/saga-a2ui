@@ -51,13 +51,55 @@ export const PLAYBACK_LIMITS = {
   maxArgumentElements: 4,
 } as const;
 
+/** Tool failure: the known tool was called with input it does not accept. Never echoes the input. */
+export const PLAYBACK_UNREADABLE_REQUEST_TEXT = 'That play request could not be read.';
+
+/** Tool failure: a backend or dependency failed. Safe to retry. Carries no backend detail. */
+export const PLAYBACK_UNAVAILABLE_TEXT = 'Playback is unavailable.';
+
+/** Tool failure: the result broke its own contract, so nothing was sent. Carries no field values. */
+export const PLAYBACK_INVALID_RESULT_TEXT = 'The playback result could not be shown.';
+
 /**
  * The only business input Play accepts. Strict, so a forged `accountId` (or any other field)
  * is rejected as invalid input instead of being silently dropped: the caller is the verified
- * principal, never a value in the arguments.
+ * principal, never a value in the arguments. Every issue carries the same fixed sentence, because
+ * the pinned MCP SDK copies zod's issue text into the tool failure it returns.
  */
+/** The one rule for an episode id: a short lowercase slug. Requests and projections both use it. */
+const EPISODE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
 export const PlayRequestSchema = z
   .object({
-    episodeId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'episodeId must be 1-64 lowercase letters, digits or hyphens'),
+    episodeId: z
+      .string({ required_error: PLAYBACK_UNREADABLE_REQUEST_TEXT, invalid_type_error: PLAYBACK_UNREADABLE_REQUEST_TEXT })
+      .regex(EPISODE_SLUG, PLAYBACK_UNREADABLE_REQUEST_TEXT),
+  })
+  .strict(PLAYBACK_UNREADABLE_REQUEST_TEXT);
+
+/**
+ * Model projection: the only thing the model is ever told about a Play. Fixed text, no fields
+ * from the request, the account, the episode record or the capability.
+ */
+export const ModelPlaybackSchema = z.object({ text: z.literal(PLAYBACK_AUTHORIZED_TEXT) }).strict();
+
+/** The public part of the view projection: what the listener may see about the episode. */
+export const ViewEpisodeSchema = z
+  .object({
+    episodeId: z.string().regex(EPISODE_SLUG),
+    title: z.string().min(1).max(120),
   })
   .strict();
+
+/**
+ * View projection: the only place a capability may appear. Strict and bounded, so an unknown or
+ * oversized field fails before the result is serialized. It is validated again by the view
+ * before any media is mounted.
+ */
+export const ViewPlaybackSchema = ViewEpisodeSchema.extend({
+  mediaUrl: z.string().max(300),
+  capability: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  expiresAt: z.number().int().positive(),
+}).strict();
+
+export type ViewPlayback = z.infer<typeof ViewPlaybackSchema>;
