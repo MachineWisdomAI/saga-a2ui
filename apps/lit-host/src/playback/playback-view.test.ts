@@ -464,3 +464,20 @@ describe('Play outcomes after the server said yes', () => {
     expect(r.last()?.kind).toBe('ended');
   });
 });
+
+describe('Play when the browser cannot play audio', () => {
+  it('shows unsupported before any protected call when the player cannot be prepared', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.player.prepare = () => {
+      throw new Error('AudioContext is not defined');
+    };
+
+    expect(() => r.view.play()).not.toThrow(); // the press happens inside a browser event handler
+    await expect.poll(() => r.last()?.kind).toBe('unsupported');
+
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(r.harness.playback.entitlementChecks).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+});

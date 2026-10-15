@@ -231,7 +231,13 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       // destroy the context this press just unlocked.
       retire();
       // Still inside the user's activation: unlock audio now, before any asynchronous authorization.
-      player.prepare();
+      // A browser with no Web Audio cannot play at all, so nothing protected is requested for it.
+      try {
+        player.prepare();
+      } catch {
+        present({ kind: 'unsupported', episode });
+        return;
+      }
       present({ kind: 'pending', episode });
       void run(episode, generation);
     },
