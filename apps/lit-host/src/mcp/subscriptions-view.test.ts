@@ -181,6 +181,45 @@ describe('subscriptions view', () => {
     await expect.poll(() => (h.last() as { subscriptions?: SubscriptionsResult })?.subscriptions?.subscriptions[0]?.creator).toBe('Creator Two');
   });
 
+  it('an older in-flight read cannot take a later read’s identity after a refusal', async () => {
+    const h = await harness({ serverTools: {} });
+    const pending: {
+      resolve: (value: ReturnType<typeof delivery>) => void;
+      reject: (error: Error) => void;
+    }[] = [];
+    h.bridge.oncalltool = () =>
+      new Promise((resolve, reject) => {
+        pending.push({ resolve, reject });
+      });
+
+    await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+
+    // A stays in flight. B is a newer read that refuses and clears the view. C is the current
+    // read. A's generation must not be reusable just because B's refusal returned the view to idle.
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(1);
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(2);
+    pending[1]?.reject(new Error('listener refused the proxied tools/call'));
+    await expect.poll(() => h.last()?.kind).toBe('sign-in-required');
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+
+    await h.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => pending.length).toBe(3);
+    const shown = h.states.length;
+    pending[0]?.resolve(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.states.length).toBe(shown);
+    expect(h.last()?.kind).toBe('sign-in-required');
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+
+    pending[2]?.resolve(delivery(result('Bob', 'vs_bbbbbbbbbbbbbbbbbbbbbb', ['Creator Three'])));
+    await expect.poll(() => h.last()?.kind).toBe('subscriptions');
+    expect(h.last()).toMatchObject({ kind: 'subscriptions', subscriptions: { displayName: 'Bob' } });
+    expect(JSON.stringify(h.last())).not.toContain('Alice');
+  });
+
   it('a refused correlated read clears the private view, and a later notification cannot revive it', async () => {
     const h = await harness({ serverTools: {} });
     await h.bridge.sendToolResult(delivery(result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One'])));
