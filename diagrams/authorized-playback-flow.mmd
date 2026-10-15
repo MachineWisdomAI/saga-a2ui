@@ -1,0 +1,35 @@
+flowchart TD
+  request["User presses Play<br/>Episode ID; pending state"]
+  checks{"Verified identity, valid input,<br/>fresh entitlement and<br/>recipient route supported?"}
+  denied["Denied / unsupported<br/>No grant or protected fetch<br/>Stop and clear media"]
+  grant["Issue scoped, short-lived grant<br/>Validated view result"]
+  current{"Session, selection and<br/>request still current?"}
+  discard["Discard late result<br/>Stop and clear player"]
+  acquire{"Media request permitted?<br/>Scope, expiry, revocation,<br/>origin / redirect / range / cache"}
+  failure["Expired / denied / failed<br/>Stop and clear media"]
+  playing["One foreground player<br/>Playing after audio starts"]
+  change["Session / selection change,<br/>denial or disposal"]
+  retry["Explicit fresh Play request<br/>Repeat server checks"]
+
+  request --> checks
+  checks -->|no| denied
+  checks -->|yes| grant
+  grant --> current
+  current -->|no| discard
+  current -->|yes| acquire
+  acquire -->|no| failure
+  acquire -->|yes| playing
+  playing -->|expiry or media failure| failure
+  playing --> change
+  change --> discard
+  failure -->|user retries| retry
+  retry --> checks
+
+  classDef normal fill:#e0ecff,stroke:#345a94,color:#152b49;
+  classDef decision fill:#fff1d5,stroke:#97712c,color:#483311;
+  classDef stop fill:#fbe4e3,stroke:#a54e4b,color:#542321;
+  classDef success fill:#e0f3ed,stroke:#397d6c,color:#153d31;
+  class request,grant,retry normal;
+  class checks,current,acquire decision;
+  class denied,discard,failure,change stop;
+  class playing success;

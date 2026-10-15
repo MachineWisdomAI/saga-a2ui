@@ -1,0 +1,29 @@
+flowchart TD
+  view["Lit view<br/>User presses Play"]
+  host["MCP Apps host<br/>App-only operation route"]
+  auth["Application HTTP / auth<br/>Immutable verified identity"]
+  play["Application Play operation<br/>Validate episode and recipients"]
+  entitlement["Application backend<br/>Current entitlement"]
+  media["Synthetic media service<br/>Scoped grant and byte policy"]
+  projection["Explicit validated projection<br/>Separate model / view fields"]
+  model["Model<br/>Safe outcome only"]
+  player["View: one foreground player<br/>Current session and selection"]
+
+  view -->|episode ID only| host
+  host -->|authenticated request| auth
+  auth -->|verified user| play
+  play -->|user + episode| entitlement
+  entitlement -->|access decision| play
+  play -->|only after allow| media
+  media -->|short-lived scoped grant| projection
+  projection -->|safe model fields via host| model
+  projection -->|capability via supported view channel| player
+  player -->|media request with scoped grant| media
+  media -->|permitted bytes| player
+
+  classDef app fill:#e0ecff,stroke:#345a94,color:#152b49;
+  classDef transport fill:#eee8fa,stroke:#76539d,color:#352246;
+  classDef ui fill:#e0f3ed,stroke:#397d6c,color:#153d31;
+  class auth,play,entitlement,media app;
+  class host,projection,model transport;
+  class view,player ui;

@@ -29,7 +29,8 @@ Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before designing, implementing, 
 - Keep internal plans, customer records and sensitive research out of this repository and its history.
 - Apache-2.0 applies to SDK code; preserve third-party notices.
 - The plan is approved. Refine one task at a time and keep implementation within the selected ticket. Do not repeat the entire planning process.
+- For future epics, follow [the Blueprint workflow](blueprints/README.md) before ticket breakdown and when a material design change arises during delivery. Human approval of the reviewed design revision precedes ticketing; dispatch and existing holds remain separate.
 - The private Lit application renders a fixed A2UI fixture. No SDK packages exist yet. Use README.md for current build and browser-test commands.
-- Follow CONTRIBUTING.md for document names: supersedable documents use `YYYY-MM-DD_title_vN.ext`; evergreen guides keep stable names.
+- Follow CONTRIBUTING.md for document names: supersedable documents use dated editions; evergreen guides and Blueprint contracts keep stable names.
 
 - Before preparing or reviewing a PR, follow [PR descriptions and retained artifacts](docs/change-hygiene.md). Keep disposable evidence ignored; stage retained artifacts through Git LFS and verify their pointers before pushing.
