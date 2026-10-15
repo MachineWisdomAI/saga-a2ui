@@ -203,6 +203,37 @@ describe('a revocation, once observed, is final for that capability', () => {
   });
 });
 
+describe('a response already in flight when access is revoked', () => {
+  // Decision (characterization, not a new behavior): authorization is decided once per acquisition,
+  // before the protected read. A response that already passed every check is allowed to finish,
+  // because the service does not track or cancel bytes it has started to send. Bytes already
+  // delivered or buffered by the client cannot be retracted. What revocation guarantees is that the
+  // very next acquisition, including a range request issued while the first is still running, gets
+  // no bytes.
+  it('lets the already-authorized response finish and refuses every acquisition that starts after the revocation', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+    const slowRead = h.playback.holdNextRead();
+
+    const inFlight = acquireWithFreshProof(key, grant); // passes every check, then waits on storage
+    await slowRead.reached;
+    h.playback.setEntitled(DEV_ACCOUNTS.alice, []); // revoked while those bytes are being read
+    const during = await acquireWithFreshProof(key, grant, 'bytes=0-3');
+    slowRead.release();
+    const finished = await inFlight;
+
+    expect(during.status).toBe(403);
+    expect(Buffer.from(during.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)))).toBe(false);
+    expect(finished.status).toBe(200); // not retracted: it was authorized before the revocation
+    expect([...finished.bytes]).toEqual([...MEDIA_BYTES]);
+
+    const after = await acquireWithFreshProof(key, grant);
+    expect(after.status).toBe(403);
+    expect(h.playback.mediaReads).toEqual(['ep-1']); // only the in-flight read ever touched storage
+  });
+});
+
 describe('a later byte-range request repeats every check', () => {
   const RANGE = 'bytes=0-3';
   const noBytes = (attempt: { bytes: Uint8Array }) => Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)));

@@ -28,6 +28,11 @@ export interface CountingPlayback {
   failEntitlementWith(message?: string): void;
   /** From now on the protected storage read throws `message` (or works again when omitted). */
   failReadsWith(message?: string): void;
+  /**
+   * Holds the next protected read open, as a slow storage backend would. `reached` settles once the
+   * read has started; the read finishes only after `release()`.
+   */
+  holdNextRead(): { readonly reached: Promise<void>; release(): void };
 }
 
 export function countingPlayback(
@@ -50,6 +55,7 @@ export function countingPlayback(
   const mediaReads: string[] = [];
   let entitlementFault = options?.failEntitlementWith;
   let readFault: string | undefined;
+  let heldRead: { readonly started: () => void; readonly gate: Promise<void> } | undefined;
   return {
     entitlementChecks,
     mediaReads,
@@ -61,6 +67,14 @@ export function countingPlayback(
     },
     failReadsWith(message) {
       readFault = message;
+    },
+    holdNextRead() {
+      let release!: () => void;
+      let started!: () => void;
+      const gate = new Promise<void>((resolve) => void (release = resolve));
+      const reached = new Promise<void>((resolve) => void (started = resolve));
+      heldRead = { started, gate };
+      return { reached, release };
     },
     backend: {
       // `recordFor` lets a test make the backend answer a lookup with a record whose own id differs.
@@ -75,6 +89,12 @@ export function countingPlayback(
       async read(episodeId) {
         if (readFault) throw new Error(readFault);
         mediaReads.push(episodeId);
+        const held = heldRead;
+        heldRead = undefined;
+        if (held) {
+          held.started();
+          await held.gate;
+        }
         return { contentType: 'audio/wav', bytes: options?.mediaBytes ?? MEDIA_BYTES };
       },
     },
