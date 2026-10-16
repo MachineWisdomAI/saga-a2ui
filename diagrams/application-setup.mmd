@@ -1,0 +1,14 @@
+graph TD
+  T["Maintained template files<br/>(auth and server glue)"]
+  CI["CI qualifies templates<br/>stack x server pairs"]
+  N["saga init --stack renderer-mcp --server target<br/>creates a new directory"]
+  E["Existing-backend guide recipe<br/>attach SAGA to your server"]
+  H["Verified-identity hook<br/>application-owned authentication"]
+  D["One qualified demo pair<br/>own fixtures, separate from the starter"]
+  T --> CI
+  CI -->|qualified pairs| N
+  CI -->|qualified pairs| E
+  N --> H
+  E --> H
+  CI -->|one pair| D
+  T -.->|shared glue| D

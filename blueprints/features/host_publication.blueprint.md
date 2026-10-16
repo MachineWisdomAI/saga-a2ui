@@ -14,7 +14,7 @@ Draft awaiting human design review.
 
 A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service, and nothing in this proposal deploys it. A directory listing is the host's own review and publication of the application, which only the host can grant.
 
-The current [workspace scripts](../../package.json) build and test the Lit prototype. Two planned tickets, [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29), own the planned SAGA CLI's init/demo commands and renderer matrix. Publication preparation would extend that single CLI. No CLI, `@saga-a2ui/publish` package or publication configuration schema is implemented today.
+The current [workspace scripts](../../package.json) build and test the Lit prototype. Two planned tickets, [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29), own the planned SAGA CLI's init/demo commands and renderer matrix, described in [application setup](application_setup.blueprint.md). Publication preparation would extend that single CLI. No CLI, `@saga-a2ui/publish` package or publication configuration schema is implemented today.
 
 ## Proposed behavior
 
@@ -77,4 +77,4 @@ Design review must settle the smallest configuration and durable record format, 
 
 ## References
 
-The [reusable MCP connector](reusable_mcp_connector.blueprint.md), [package ownership](../../packages/README.md) and [coding standards](../../CODING_STANDARDS.md) define the runtime responsibilities this proposal preserves. Platform sources above were checked on 2026-10-16; implementation must recheck their contracts before fixing a supported recipe.
+The [reusable MCP connector](reusable_mcp_connector.blueprint.md), [application setup](application_setup.blueprint.md), [package ownership](../../packages/README.md) and [coding standards](../../CODING_STANDARDS.md) define the runtime responsibilities this proposal preserves. Platform sources above were checked on 2026-10-16; implementation must recheck their contracts before fixing a supported recipe.

@@ -32,7 +32,7 @@ A public operation declares that access mode explicitly, supplies its input and 
 
 ## Responsibilities and interfaces
 
-The proposed package has distinct server, view and policy exports. Server exports attach to an application-owned MCP server and accept declared operations, runtime schemas and application callbacks. View exports own supported bridge initialization, result delivery and teardown. Policy exports express MCP delivery decisions and required capabilities without importing a renderer or the application's subscription policy. Exact exported names remain a design choice.
+The proposed package, `@saga-a2ui/mcp`, has distinct `/server`, `/view` and `/policy` subpath exports, each grouping one concern. A2UI wire-version protocols stay in `@saga-a2ui/core`; this package does not own them. Server exports attach to an application-owned MCP server and accept declared operations, runtime schemas and application callbacks. View exports own supported bridge initialization, result delivery and teardown. Policy exports express MCP delivery decisions and required capabilities without importing a renderer or the application's subscription policy. Subpath names are settled; exact exported identifiers remain a design choice. The [package layout](../../packages/README.md) records the flat package naming.
 
 | Owner | Inputs and outputs | Required boundary |
 | --- | --- | --- |
@@ -105,6 +105,7 @@ Blueprint approval and implementation-breakdown approval remain required before 
 
 ## References
 
+- [Application setup](application_setup.blueprint.md), which describes how new and existing applications wire their authentication and server integration to this connector's verified-identity hook.
 - [Package ownership](../../packages/README.md), [coding standards](../../CODING_STANDARDS.md), and [version policy](../../docs/version-policy.md).
 - [Application listener](../../apps/lit-host/src/mcp/listener.ts), [subscriptions server](../../apps/lit-host/src/mcp/subscriptions-server.ts), [request classification](../../apps/lit-host/src/mcp/protected-request.ts), [bridge lifecycle](../../apps/lit-host/src/mcp/view.ts), and [playback server](../../apps/lit-host/src/playback/playback-server.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b`.
 - [Authorized playback](authorized_playback.blueprint.md), [account/session isolation](account_session_isolation.blueprint.md), [content safety](content_safety_levels.blueprint.md), [reusable Lit adapter](reusable_lit_adapter.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
