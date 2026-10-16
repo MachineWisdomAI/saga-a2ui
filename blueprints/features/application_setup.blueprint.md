@@ -30,7 +30,7 @@ The Hapi bridge is existing owned source that lives outside SAGA. It has explici
 
 ## Proposed behavior
 
-**New project.** A developer runs `saga init --stack <renderer>-mcp --server <target>`, for example `lynx-mcp` with `hono`. The stack value names a renderer plus MCP delivery, never a combined word such as `lymcp`. A stack is a template choice, not an npm package; the packages remain the flat `@saga-a2ui/*` names. Required server targets are the five in the table above. Hapi is required scope, not postponed because it lacks an official adapter. It reuses the existing bridge with no transport redesign and without inventing a Hapi npm package; this does not decide any later packaging of the bridge.
+**New project.** A developer runs `saga init --a2ui-stack <renderer>-mcp --server <target>`, for example `lynx-mcp` with `hono`. The stack value names a renderer plus MCP delivery, never a combined word such as `lymcp`. A stack is a template choice, not an npm package; the packages remain the flat `@saga-a2ui/*` names. Required server targets are the five in the table above. Hapi is required scope, not postponed because it lacks an official adapter. It reuses the existing bridge with no transport redesign and without inventing a Hapi npm package; this does not decide any later packaging of the bridge.
 
 Init creates a new directory only. It refuses to overwrite existing files, follow unsafe symlinks, install dependencies implicitly or run remote hooks, and it never modifies an existing application. It offers only pairs that CI has qualified. For any other pair it refuses and prints the list of supported pairs. The generated starter is clean: it contains no demo content, synthetic identity or media, and no test verifier.
 
