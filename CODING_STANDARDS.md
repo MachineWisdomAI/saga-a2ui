@@ -1,6 +1,14 @@
 # Coding standards
 
-SAGA code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning.
+SAGA code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning. Keep each interface small and coherent enough for a human to understand its concepts and obligations together.
+
+## Keep interfaces manageable and remove obsolete contracts and code
+
+Do not accumulate backward compatibility debt for internally written code that has never had a stable release. CORE1 and CORE3 are implementation slices, not releases. Change interfaces and migrate all owned callers and tests together. Do not add shims, legacy overloads, aliases, or a second implementation merely to preserve signatures from an earlier slice.
+
+Delete obsolete code as part of replacing it. Remove superseded implementations, unused exports and configuration, and obsolete documentation and tests. The replacement must retain required functionality, security guarantees, and protocol support, with behavioral tests covering those requirements. Do not leave old and new paths in parallel indefinitely.
+
+For published stable public contracts, use semantic versioning and proportionate migration guidance and release notes for intentional breaking changes, following the [version policy](docs/version-policy.md). Use that release path to retire obsolete contracts rather than keeping them permanently.
 
 ## Responsibility determines placement
 
@@ -42,9 +50,9 @@ Keep a small interface and its only implementation together when that is easier 
 
 ## Deep modules with explicit interfaces
 
-A **module** has an **interface** and an **implementation**. The interface includes the accepted values, invariants, ordering, failures, ownership, and lifecycle the caller must understand. A **seam** is where behavior can vary through that interface; an **adapter** supplies a concrete implementation there.
+A **module** has an **interface** and an **implementation**. The interface includes the concepts, accepted values, invariants, ordering, failures, required configuration, ownership, and lifecycle the caller must understand. A **seam** is where behavior can vary through that interface; an **adapter** supplies a concrete implementation there.
 
-Seek **depth**: substantial useful behavior behind a small interface. A decoder can own validation, supported envelope normalization, and construction of message values. Its caller should not also inspect nested JSON or remember the decoder's internal sequence. The module earns its place when removing it would spread that knowledge across callers.
+Seek **depth**: substantial useful behavior behind a small, coherent interface a human can manage. Judge its size by everything the caller must learn; method, line, and token counts do not measure that burden. Keep related obligations together so callers do not have to reconstruct one operation across scattered modules. A decoder can own validation, supported envelope normalization, and construction of message values. Its caller should not also inspect nested JSON or remember the decoder's internal sequence. The module earns its place when removing it would spread that knowledge across callers.
 
 Prefer interfaces describing operations over bags of getters, flags, or callbacks whose ordering callers must reconstruct. Pass dependencies explicitly at construction or through a typed function parameter. Keep pure decisions separate from I/O and renderer effects. A module can be a function or class; inheritance hierarchies, dependency-injection containers, and pass-through wrappers are not required for depth.
 
@@ -104,4 +112,4 @@ Choose expected results from the requirement, a worked example, or an independen
 
 Exercise renderer-independent processing without a DOM or renderer imports. Keep browser tests for rendering, bindings, events, accessibility, and lifecycle. Verify server/view separation through the actual package exports and built artifacts when those packages exist. Keep actual-host acceptance separate from protocol and browser checks.
 
-Review each change for correct ownership, a traceable call path, useful invariants, and preserved failure behavior. Keep the change bounded to one observable outcome. Existing prototype code is not an architectural precedent: move misplaced logic as a focused, behavior-preserving change when working on that responsibility, without absorbing unrelated epics.
+Review each change for correct ownership, a traceable call path, useful invariants, and preserved failure behavior. Keep the change bounded to one observable outcome. Existing prototype code is not an architectural precedent: move misplaced logic and remove superseded code when working on that responsibility, preserving required behavior and migrating owned callers together without absorbing unrelated epics.
