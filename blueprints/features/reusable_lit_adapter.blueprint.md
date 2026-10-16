@@ -96,4 +96,4 @@ The complete [PACK1](https://github.com/MachineWisdomAI/saga-a2ui/issues/21) and
 
 - [Coding standards](../../CODING_STANDARDS.md), [package direction](../../packages/README.md), and [reusable MCP connector](reusable_mcp_connector.blueprint.md).
 - [A2UI decoder](../../apps/lit-host/src/protocols/a2ui/v0_9/decoder.ts), [validated messages](../../apps/lit-host/src/protocols/a2ui/v0_9/message.ts), [processor session](../../apps/lit-host/src/protocols/a2ui/v0_9/session.ts), [Lit lifecycle](../../apps/lit-host/src/lit/saga-app.ts), and [catalog integration](../../apps/lit-host/src/lit/integration.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b`.
-- [Authorized playback](authorized_playback.blueprint.md), [account/session isolation](account_session_isolation.blueprint.md), [content safety](content_safety_levels.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
+- [Authorized playback](authorized_playback.blueprint.md), [rejected account/session proposal](account_session_isolation.blueprint.md), [content safety](content_safety_levels.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).

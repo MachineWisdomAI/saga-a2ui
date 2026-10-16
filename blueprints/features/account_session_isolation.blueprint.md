@@ -1,6 +1,6 @@
 ---
 feature_name: account_session_isolation
-status: draft
+status: rejected
 module_blueprints: []
 dependencies:
   - authorized_playback
@@ -9,7 +9,13 @@ date_added: 2026-10-15
 
 # Account and session isolation
 
-Draft awaiting human design review.
+Rejected on 2026-10-16. This proposal is not approved for implementation. No demonstrated real-host workflow or current consumer requires its proposed generic machinery for switching accounts within a live view. Whether a host retains the iframe across an account change remains unverified; the review did not establish content injection or an authorization bypass.
+
+Existing authentication, authorization and request isolation remain required, as do ordinary selection, cancellation and cleanup obligations. No replacement design is approved.
+
+## Rejected proposal retained for reference
+
+The remaining text and diagram preserve the rejected design; their proposed requirements are not a current implementation contract.
 
 ## Problem and current behavior
 

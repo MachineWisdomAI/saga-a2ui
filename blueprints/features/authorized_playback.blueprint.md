@@ -84,6 +84,8 @@ Wire-level tests check these mappings against the selected upstream output-schem
 
 Account/session-isolation work defines how request generations retire older results, how long private state may be retained, and when focus or resume triggers revalidation. If a host exposes no observable account-change signal, the view cannot clear immediately after an invisible switch. It revalidates before restoring private content on focus or resume and limits retained state. Verification records this limit for each actual host. The server still checks every request.
 
+Status on 2026-10-16: the generic retention and focus/resume behavior above belongs to the [rejected account/session proposal](account_session_isolation.blueprint.md). STATE1/STATE2 await design reconciliation. Existing authentication, session invalidation, cancellation and cleanup obligations, and prerequisite edges, remain unchanged.
+
 Stopping and clearing the player reduces continued use of held media, but cannot revoke bytes already buffered or downloaded. Expiry and revocation prevent fresh acquisition at the service; they cannot retract delivered bytes or erase a host provider's copy.
 
 ## Verification outcomes

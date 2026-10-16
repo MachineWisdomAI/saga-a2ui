@@ -97,9 +97,9 @@ The integrated authenticated ChatGPT web and Claude web runs still exercise both
 
 1. [POL1](https://github.com/MachineWisdomAI/saga-a2ui/issues/5) introduces the trusted policy value, maintained Markdown interpretation and Standard rendering in the existing Lit application. It preserves original input and makes configuration/content failures explicit. Browser tests cover restricted-token rendering, destination disclosure, real callbacks and demonstrated image-only enforcement.
 2. [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7) adds Strict’s blocked-fragment presentation and revocable Show images interaction, proves interleaved-instance isolation and cleanup, and preserves authored Play’s separate policy. Resource and renderer policy stay aligned.
-3. Exercise both modes with completed account/session isolation and playback in each required host. Implementation review, observed host evidence and final signoff stay separate outcomes.
+3. Exercise both modes with the required lifetime behavior and playback in each required host. Implementation review, observed host evidence and final signoff stay separate outcomes.
 
-This work can proceed alongside [account and session isolation](account_session_isolation.blueprint.md). Content interpretation and policy decisions belong to this lane; session validity and result retirement belong to the lifetime lane. Integration preserves both contracts without sharing mutable configuration between instances.
+Content interpretation and policy decisions can proceed independently. The [account and session isolation proposal](account_session_isolation.blueprint.md) is rejected, so the required lifetime behavior needs design reconciliation before integration. Existing authentication, isolation, cancellation and cleanup requirements remain; no replacement lifetime design is approved.
 
 ## Open decisions
 
@@ -112,5 +112,5 @@ POL1 must select and pin a maintained Markdown library, document the supported d
 - [Public resource policy](../../apps/lit-host/src/mcp/server.ts)
 - [Authorized playback design](authorized_playback.blueprint.md)
 - [Reusable MCP connector](reusable_mcp_connector.blueprint.md)
-- [Account and session isolation](account_session_isolation.blueprint.md)
+- [Rejected account/session proposal](account_session_isolation.blueprint.md)
 - [Coding standards](../../CODING_STANDARDS.md)
