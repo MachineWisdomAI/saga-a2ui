@@ -40,4 +40,4 @@ Renderers keep independent maturity and independent dependency and peer declarat
 
 The workspace root is not published. Packages are not yet implemented or installable. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
 
-The new-project CLI templates and the existing-backend recipes are not packages. They are described in [application setup](../blueprints/features/application_setup.blueprint.md).
+The new-project CLI templates and the existing-backend recipes are not packages. They are described in [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md).
