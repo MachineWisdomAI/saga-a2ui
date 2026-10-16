@@ -1,13 +1,15 @@
 graph TD
-  A[Trusted app configuration] --> B[Validated instance policy]
-  B --> C[Resource CSP]
-  B --> D{Content level}
-  M[Original Markdown] --> N[Bounded inert interpretation]
+  P[Trusted immutable policy] --> C["Predeclared host CSP<br/>and image-only restrictions"]
+  P --> D{Content level}
+  M[Original description Markdown] --> N["Bounded restricted tokens<br/>Fixed templates and text bindings"]
   N --> D
-  D -->|Standard| E[Validate HTTPS destinations]
+  D -->|Standard links| E["Validate HTTPS links<br/>Disclose parsed hostname"]
   E --> F[Supported host link callback]
-  E --> G[Exact-host images within CSP]
-  D -->|Strict| H[Readable inert links and images]
-  E -->|Blocked or unavailable| H
-  I[Authored Play control] --> J[Separate authorization and media policy]
+  D -->|Standard images| G["Load only permitted images<br/>HTTPS, exact hosts and redirects"]
   C --> G
+  D -->|Strict| H["No initial image fetch; links stay inert<br/>Hidden or inert blocked fragments"]
+  H --> L["Reveal or hide source as text<br/>No execution, navigation or fetch"]
+  H --> K["Show images when permitted<br/>Revocable view and description consent"]
+  K --> G
+  G -->|blocked or unqualified| B["Image placeholder or inert source<br/>No image request"]
+  I[Authored Play control] --> J[Separate authorization and media policy]
