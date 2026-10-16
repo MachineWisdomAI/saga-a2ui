@@ -12,9 +12,9 @@ Draft awaiting human design review.
 
 ## Problem and current behavior
 
-A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory.
+A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service, and nothing in this proposal deploys it. A directory listing is the host's own review and publication of the application, which only the host can grant.
 
-The current [workspace scripts](../../package.json) build and test the Lit prototype. [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29) own the planned SAGA CLI's init/demo commands and renderer matrix. Publication preparation would extend that single CLI. No CLI, `@saga-a2ui/publish` package or publication configuration schema is implemented today.
+The current [workspace scripts](../../package.json) build and test the Lit prototype. Two planned tickets, [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29), own the planned SAGA CLI's init/demo commands and renderer matrix. Publication preparation would extend that single CLI. No CLI, `@saga-a2ui/publish` package or publication configuration schema is implemented today.
 
 ## Proposed behavior
 
@@ -67,9 +67,9 @@ An accepted implementation would demonstrate these outcomes:
 
 ## Implementation sequence
 
-After design approval, reconcile additive coverage with CLI1/CLI2 and consider a CLI3 implementation slice; no new issue is assigned here. Establish the release-input and evidence interface, then exercise both host adapters with one application before adding portal handoff. Preserve init/demo and the full renderer matrix, including init's fail-closed behavior against overwrites, unsafe symlinks, implicit installs and remote hooks.
+After design approval, reconcile additive coverage with CLI1 and CLI2 and consider a further CLI implementation slice, here called CLI3; no new issue is assigned to it. Establish the release-input and evidence interface, then exercise both host adapters with one application before adding portal handoff. Preserve init/demo and the full renderer matrix, including init's fail-closed behavior against overwrites, unsafe symlinks, implicit installs and remote hooks.
 
-Publication tooling and external directory approval are not new prerequisites for the [Ansari migration](ansari_adoption.blueprint.md). Its existing public SAGA repository and exact-version public npm installation gate remains unchanged. This draft creates no implementation tickets or approval claims.
+Publication tooling is optional developer tooling, and neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md). If the tooling is not ready, a first listing can be prepared through each platform's native flow. The migration's existing gate remains unchanged: the SAGA source must be public and the exact required package versions must install anonymously from public npm. This draft creates no implementation tickets or approval claims.
 
 ## Open decisions
 

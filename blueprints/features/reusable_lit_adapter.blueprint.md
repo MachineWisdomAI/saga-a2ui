@@ -45,7 +45,7 @@ The own-catalog import must not require `@saga-a2ui/components`, FaithfulCard or
 
 The session must distinguish schema validity, component support, reference integrity and state-dependent update validity. A successful decode does not authorize an action. Preserve valid partial updates, supported action data, state and attribution; unsupported essential behavior requires an explicit failure. The current session can apply earlier messages before a later processor rejection. The public adapter must define and test how that rejection clears or replaces the affected display rather than claiming an atomic state rollback it does not implement.
 
-The early Lynx Web dependency/sandbox investigation is a prerequisite to VIEW1 interface finalization. It identifies whether requirements such as workers, WASM or resource origins would expose a Lit-only assumption in the neutral contracts. A concrete supported path or documented infeasibility/access gap completes that bounded investigation. It does not require implementing Lynx, and it does not establish Lynx host support.
+The early Lynx Web dependency/sandbox investigation is a prerequisite to VIEW1 interface finalization, not to the MCP connector's extraction. It identifies whether requirements such as workers, WASM or resource origins would expose a Lit-only assumption in the neutral contracts. A concrete supported path or documented infeasibility/access gap completes that bounded investigation. It does not require implementing Lynx, and it does not establish Lynx host support.
 
 ## Failure and recovery
 
@@ -56,7 +56,7 @@ The early Lynx Web dependency/sandbox investigation is a prerequisite to VIEW1 i
 | A result arrives during connection | It is handled once after the owning view is ready; initialization does not repeat the business request. |
 | Results arrive out of order after selection/account changes | The current request/session generation wins; retired data and audio cannot be restored. |
 | Authentication is lost or a new sign-in is observed | Private content clears immediately when observable; player/request cleanup follows the session contract. An invisible host account change is not claimed to be immediately detectable. |
-| A callback fails, processing exceeds a configured bound, or the view disconnects | Safe failure or teardown retires work and releases owned listeners/sessions. Application-owned cleanup remains explicit. |
+| A callback fails, processing exceeds a configured bound, or the view disconnects | Safe failure or teardown retires work and releases owned listeners/sessions. Application-owned cleanup remains explicit. The [connector's failure contract](reusable_mcp_connector.blueprint.md#failure-and-recovery) covers the bounded request. |
 | Standard and Strict instances share one page | Trusted policy and callbacks remain instance-owned; changing one instance cannot permit another instance's links or images. |
 
 Host navigation uses only a supported advertised capability. When unavailable, supplied links remain readable and inert. Image requests obey trusted exact-host configuration and the host's Content Security Policy (CSP). Content cannot change the policy; authorized authored Play retains separate server authorization and media rules under both content levels.
@@ -78,13 +78,13 @@ Run the full VIEW2 lifecycle matrix and the complete connector CORE3 checks befo
 
 ## Implementation sequence
 
-After the shared dependency recipe and CORE1 view contract are established, [VIEW1](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) extracts core and Lit together using the synthetic app's catalog. Complete the bounded Lynx Web investigation before freezing the renderer-neutral interfaces. There is no dependency on finished React or Lynx implementation.
+After the shared dependency recipe and the CORE1 view contract (the first of the three [MCP connector](reusable_mcp_connector.blueprint.md#implementation-sequence) extraction steps) are established, [VIEW1](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) extracts core and Lit together using the synthetic app's catalog. Complete the bounded Lynx Web investigation before freezing the renderer-neutral interfaces. There is no dependency on finished React or Lynx implementation.
 
 VIEW1 can progress alongside CORE2 and CORE3 because the application already has a working Play implementation. Initially it can retain that application operation while adopting the public MCP view contract. As CORE2 lands, the working consumer must use the reusable action contract and rerun the affected integrated behavior. This overlap changes start order, not VIEW1's complete browse/description/Play obligations or CORE3's failure coverage.
 
 [VIEW2](https://github.com/MachineWisdomAI/saga-a2ui/issues/18) then moves the full account, selection, cancellation and teardown fixtures onto the public adapter. It integrates the completed policy and session source behavior and documents application cleanup and theme/component/resource hooks that the consumer actually uses.
 
-The complete [PACK1](https://github.com/MachineWisdomAI/saga-a2ui/issues/21) and [PACK2](https://github.com/MachineWisdomAI/saga-a2ui/issues/22) obligations remain: own-catalog and optional FaithfulCard consumers, full protected behavior, external installation, matched resources and upgrade/rollback evidence. Packing/release joins the completed CORE3 and VIEW2 outcomes; advancing VIEW1 does not remove that join. [Ansari migration](ansari_adoption.blueprint.md) can develop against pinned candidates while its merge and publication prerequisites remain explicit.
+The complete [PACK1](https://github.com/MachineWisdomAI/saga-a2ui/issues/21) and [PACK2](https://github.com/MachineWisdomAI/saga-a2ui/issues/22) obligations remain: own-catalog and optional FaithfulCard consumers, full protected behavior, external installation, matched resources and upgrade/rollback evidence. Full SDK qualification joins the completed CORE3 (the connector's complete failure and lifecycle contract) and VIEW2 outcomes with the optional components, and PACK1 and PACK2 (packaging and release) readiness follows; advancing VIEW1 does not remove that join. The path to the destination merge then continues through public npm installation of the exact versions. The Ansari design does not make external directory approval or shared publishing tooling new prerequisites for that merge; its required host runs and the public SDK/npm prerequisite remain. [Ansari migration](ansari_adoption.blueprint.md) can develop against pinned candidates while its merge and publication prerequisites remain explicit.
 
 ## Open decisions
 

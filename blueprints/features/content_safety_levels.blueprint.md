@@ -22,7 +22,11 @@ The application resolves one trusted policy when it creates a view. **Standard**
 
 For example, a description contains a paragraph, a quotation, a link and an image. Both modes keep their order, supplied wording and useful formatting. Standard can send the validated link to the host after the reader activates it. An image whose host is absent from the allowlist is shown as readable alternative/source text. Strict keeps the link destination and image reference readable without activating or loading either. If Standard has no supported link callback, its link is also readable and inert; it must not fall back to direct browser navigation.
 
-Neither the description, an MCP tool result nor an A2UI property can change this policy. The application's Play control has a separate declared action/media policy and fresh server authorization. Strict therefore leaves an authorized authored Play action available where the host supports it; a Markdown link cannot become a Play action.
+The content policy decides what Markdown in a description may do: open links and load images under Standard, or neither under Strict. The same policy value also drives the content-related restrictions the resource declares to the host, such as its content security policy (CSP), so the resource and the view cannot disagree.
+
+Two other kinds of decision are separate from it. *Delivery policy* belongs to the MCP connector: which recipient receives which projection and which host capabilities a protected operation requires, as the [reusable MCP connector design](reusable_mcp_connector.blueprint.md) describes. *Domain authorization* belongs to the application: the Play control has its own declared action/media policy and fresh server authorization. Strict therefore leaves an authorized authored Play action available where the host supports it; a Markdown link cannot become a Play action.
+
+Neither the description, an MCP tool result nor an A2UI property can change the content policy.
 
 ![Trusted application configuration supplies one content policy to resource CSP and the view. Markdown becomes inert content or explicitly permitted host-link and image effects; authored playback retains separate authorization.](../../diagrams/content-safety-levels.png)
 
@@ -78,15 +82,15 @@ Use the same ordinary and hostile descriptions in both modes. The browser test m
 | Standard/Strict resources are rebuilt, cached or replaced | Resource metadata and renderer behavior agree for the selected policy. Test the actual built resource and its identity, not just a configuration object. |
 | Authored Play is used under either level | Current authorization, recipient separation and media checks still apply; Strict alone does not disable the valid authored action or allow a content destination to inherit media permissions. |
 
-The integrated authenticated ChatGPT web and Claude web runs still exercise both levels, their readable fallbacks and authorized/denied playback using the actual built resource. A local browser test establishes application behavior, not the host's final enforcement. Record exact policy, source/resource identity, host and observed callbacks/requests. Deferring Captain signoff does not remove or defer these required runs; unavailable or failed evidence remains an open acceptance result.
+The integrated authenticated ChatGPT web and Claude web runs still exercise both levels, their readable fallbacks and authorized/denied playback using the actual built resource. A local browser test establishes application behavior, not the host's final enforcement. Record exact policy, source/resource identity, host and observed callbacks/requests. Deferring the final signoff does not remove or defer these required runs; unavailable or failed evidence remains an open acceptance result.
 
 ## Implementation sequence
 
 1. [POL1](https://github.com/MachineWisdomAI/saga-a2ui/issues/5) introduces the trusted policy value, maintained Markdown interpretation and Standard rendering in the existing Lit application. It preserves original input and makes configuration/content failures explicit. Browser tests cover visible content, real callbacks and image requests.
 2. [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7) adds Strict using the same policy contract, proves interleaved-instance isolation and cleanup, and verifies that authored Play retains its separate policy. Resource and renderer policy stay aligned.
-3. Exercise both modes with completed account/session isolation and playback in each required host. Retain implementation review, observed host evidence and final Captain signoff as separate outcomes.
+3. Exercise both modes with completed account/session isolation and playback in each required host. Implementation review, observed host evidence and final signoff stay separate outcomes.
 
-This work can proceed alongside account/session isolation. Content interpretation and policy decisions belong to this lane; session validity and result retirement belong to the lifetime lane. Integration preserves both contracts without sharing mutable configuration between instances.
+This work can proceed alongside [account and session isolation](account_session_isolation.blueprint.md). Content interpretation and policy decisions belong to this lane; session validity and result retirement belong to the lifetime lane. Integration preserves both contracts without sharing mutable configuration between instances.
 
 ## Open decisions
 
@@ -98,5 +102,6 @@ POL1 must select and pin a maintained Markdown library, document the supported d
 - [Panel contract](../../apps/lit-host/src/saga-panel/contract.ts)
 - [Public resource policy](../../apps/lit-host/src/mcp/server.ts)
 - [Authorized playback design](authorized_playback.blueprint.md)
+- [Reusable MCP connector](reusable_mcp_connector.blueprint.md)
 - [Account and session isolation](account_session_isolation.blueprint.md)
 - [Coding standards](../../CODING_STANDARDS.md)

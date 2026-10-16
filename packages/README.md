@@ -12,8 +12,9 @@ Dependency direction points toward renderer-independent contracts. Core must not
 The workspace root is not published. Packages are not yet implemented or installable. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
 
 The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
-proposes `@saga-a2ui/publish` as developer tooling behind the planned SAGA CLI.
-It would validate and prepare application packages for host directories, with
-host-specific formats kept outside runtime packages. The package and commands
-remain unapproved and unimplemented; core, MCP and renderers must not depend on
-publication tooling.
+proposes `@saga-a2ui/publish` as optional developer tooling behind the planned
+SAGA CLI. It would validate and prepare application packages for host
+directories, with host-specific formats kept outside runtime packages. The
+package and commands remain unapproved and unimplemented. Core, MCP and
+renderers must not depend on publication tooling, and an application's runtime
+does not need it.

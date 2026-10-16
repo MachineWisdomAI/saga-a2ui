@@ -47,16 +47,20 @@ The release notes will supply the exact installation command after that command
 has passed in a clean consumer. Do not infer a release version from a branch name
 or install an unverified dist-tag.
 
-Ansari's migration must merge against publicly available SDK source and public
-npm versions. Private CI packages can support development, but cannot satisfy
-that integration's public-installation gate. Source publication, package
-installation and actual-host acceptance remain separately recorded outcomes.
+The planned migration of the Ansari application into `iaser-ai/ansari` cannot merge until the
+public SDK source and exact public npm versions described above exist; private CI
+packages and locally packed candidates can support development but do not meet
+that requirement. The [Ansari migration design](../blueprints/features/ansari_adoption.blueprint.md)
+describes the full path. Source publication, package installation and
+actual-host acceptance are recorded as separate outcomes.
 
-Installing the SDK does not deploy an application or list it in ChatGPT or
-Claude. The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
-proposes shared tooling for application plugin packages and directory submission
-preparation. That tooling is not implemented, and its commands are not an
-alternative to the npm release procedure below.
+Releasing the SDK to npm gives developers libraries to install. It does not
+deploy an application; that is the application owner's work. A listing in
+ChatGPT or Claude comes from the host's own review of the deployed application.
+The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
+proposes optional shared tooling that prepares application plugin packages and
+directory submission materials. That tooling is not implemented, and its
+commands are not an alternative to the npm release procedure below.
 
 ## Publishing configuration
 
