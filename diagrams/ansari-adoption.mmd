@@ -1,0 +1,14 @@
+flowchart TD
+  baseline[Dependency decision and Ansari baseline] --> server[Prepare MCP delivery migration]
+  baseline --> view[Prepare core and Lit migration]
+  destination[Verify destination layout and MIT obligations] --> candidate[One destination transplant candidate]
+  server --> candidate
+  view --> candidate
+  sdk[Complete SDK quality and packaging checks] --> npm[Public SAGA source and npm packages]
+  candidate --> clean[Clean install and full regression checks]
+  npm --> clean
+  clean --> resource[Resource compatibility and rollback]
+  resource --> merge[One destination integration merge]
+  npm -->|hard merge prerequisite| merge
+  resource --> hosts[Run required actual-host checks]
+  hosts --> acceptance[Recorded evidence and maintainer acceptance]

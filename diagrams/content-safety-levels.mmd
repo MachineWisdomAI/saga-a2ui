@@ -1,0 +1,13 @@
+graph TD
+  A[Trusted app configuration] --> B[Validated instance policy]
+  B --> C[Resource CSP]
+  B --> D{Content level}
+  M[Original Markdown] --> N[Bounded inert interpretation]
+  N --> D
+  D -->|Standard| E[Validate HTTPS destinations]
+  E --> F[Supported host link callback]
+  E --> G[Exact-host images within CSP]
+  D -->|Strict| H[Readable inert links and images]
+  E -->|Blocked or unavailable| H
+  I[Authored Play control] --> J[Separate authorization and media policy]
+  C --> G

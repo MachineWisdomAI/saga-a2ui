@@ -1,0 +1,14 @@
+flowchart TD
+  listener[Application listener and verified identity] --> server[MCP server export]
+  public[Explicit public operation] --> server
+  server -->|validated arguments and request identity| handler[Application handler and authorization]
+  handler -->|domain result| projections[Validated model and view projections]
+  probe[Both web-host recipient probes] -.->|required before freezing mapping| projections
+  projections --> model[Model-visible safe result]
+  projections -->|supported recipient mapping| bridge[MCP view export]
+  bridge --> renderer[Application renderer and catalog]
+  server --> resource[Immutable resource and CSP]
+  resource --> bridge
+  handler -->|denied or failed| failure[Safe failure and retired work]
+  projections -->|invalid or unsupported| failure
+  failure --> renderer
