@@ -34,6 +34,8 @@ Core owns renderer-independent contracts and processing. A2UI knowledge stays un
 
 Lit owns mounting, binding integration, events, accessibility and disposal. Its interface accepts the application's catalog and explicit integrations rather than discovering them through a registry. The application chooses its renderer, host and trusted content policy independently. Upstream custom-element/catalog registration stays at the Lit integration seam; importing SAGA does not configure an application globally.
 
+Within one `CustomElementRegistry`, catalog registration may reuse an existing definition only when both tag and constructor match. A tag already bound to a different constructor must fail explicitly, preserving the first definition; the adapter must not silently use the existing component. Distinct implementations need distinct tag names.
+
 | Owner | Required behavior |
 | --- | --- |
 | `@saga-a2ui/core` | Validate supported A2UI input and apply typed message cases; import no MCP, renderer or DOM runtime. |
@@ -51,7 +53,7 @@ The early Lynx Web dependency/sandbox investigation is a prerequisite to VIEW1 i
 
 | Trigger | Visible result and cleanup |
 | --- | --- |
-| Unsupported version, malformed envelope or rejected component/update | The affected current view clears and shows a safe message; no supplied markup executes and no invalid action is dispatched. |
+| Unsupported version, malformed envelope or rejected component/update | The affected current view clears and shows a safe SAGA fallback: supplied markup stays inert and no invalid action is dispatched. Application-owned components remain responsible for safely rendering their own content. |
 | A valid result replaces an earlier answer or episode | Only the current result is visible; old bindings and resources do not persist as another active view. |
 | A result arrives during connection | It is handled once after the owning view is ready; initialization does not repeat the business request. |
 | Results arrive out of order after selection/account changes | The current request/session generation wins; retired data and audio cannot be restored. |
@@ -68,6 +70,7 @@ Host navigation uses only a supported advertised capability. When unavailable, s
 | Core is exercised without a DOM or renderer | Valid envelopes, message cases, field preservation and partial updates work; malformed, unsupported and state-invalid input returns explicit failure. |
 | The synthetic app uses installed public core/Lit exports | Browse, descriptions and Play retain their authorization, policy, disclosure and visible behavior with the application's catalog. |
 | Two independent catalogs and policy instances are mounted | Neither catalog, data, callbacks nor policy configuration changes the other instance. |
+| Two catalogs register the same tag in one `CustomElementRegistry` | Different constructors fail explicitly without changing the first definition; repeating the exact same tag and constructor is harmless. |
 | Early/repeated results, reversed selections, account changes and cancellation occur | Each accepted result renders once; no duplicate operations/listeners or stale private data/audio restoration occurs. |
 | A mounted view is disposed and then reconnected | Old subscriptions and sessions are released; late results are ignored; the new instance starts fresh. |
 | The built resource loads under declared CSP | Bindings, actual host-navigation callbacks, allowed/blocked image requests, keyboard interaction and narrow layouts behave as required. |
