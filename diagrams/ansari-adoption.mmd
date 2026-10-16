@@ -5,10 +5,13 @@ flowchart TD
   server --> candidate
   view --> candidate
   sdk[Complete SDK quality and packaging checks] --> npm[Public SAGA source and npm packages]
-  candidate --> clean[Clean install and full regression checks]
-  npm --> clean
-  clean --> resource[Resource compatibility and rollback]
-  resource --> merge[One destination integration merge]
+  candidate --> checks["Clean install, regressions<br/>resource compatibility and rollback"]
+  npm --> checks
+  checks --> merge["Destination source integration<br/>does not await marketplace approval"]
   npm -->|hard merge prerequisite| merge
-  resource --> hosts[Run required actual-host checks]
+  checks --> hosts["Deployed candidate endpoint<br/>and required actual-host checks"]
   hosts --> acceptance[Recorded evidence and maintainer acceptance]
+  baseline --> listingprep[Prepare listing materials in parallel]
+  listingprep --> submit[Authorized host submission]
+  hosts -->|qualified endpoint| submit
+  submit --> listing[Host review and publication]

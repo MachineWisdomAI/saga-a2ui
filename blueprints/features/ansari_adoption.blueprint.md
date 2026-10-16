@@ -6,7 +6,7 @@ dependencies: [reusable_mcp_connector, reusable_lit_adapter]
 date_added: 2026-10-15
 ---
 
-# Ansari adoption of SAGA
+# Migrate Ansari Faithful Cards to public SAGA packages
 
 Draft awaiting human design review.
 
@@ -26,7 +26,9 @@ The view receives the delivered answer through SAGA's MCP view interface. The ap
 
 The first public SAGA installation must use **npm packages**. Before the migration's ANSARI1 integration is merged, the SAGA source repository must be publicly accessible and the exact required package versions must be publicly installable from npm without private credentials. Private CI artifacts and local packed candidates may support development, but neither satisfies this merge prerequisite. Release tarballs are not an alternative distribution path for this migration.
 
-![Server and view preparation join in one destination candidate; public SAGA source and npm installation gate its merge, while actual-host checks produce evidence for acceptance.](../../diagrams/ansari-adoption.svg)
+The proposed release outcome also includes packaging Ansari for installation through ChatGPT's plugin directory and Claude's directory. Public source, a working hosted application and a discoverable host listing are separate deliverables. Listing preparation runs alongside migration; external directory review does not become a prerequisite for merging the open-source application.
+
+![Server and view preparation join in one destination candidate, gated by public SAGA installation. Host distribution preparation proceeds alongside migration; a qualified hosted release proceeds through separate directory review and publication.](../../diagrams/ansari-adoption.svg)
 
 [Editable Mermaid](../../diagrams/ansari-adoption.mmd) · [Editable Excalidraw](../../diagrams/ansari-adoption.excalidraw) · [PNG](../../diagrams/ansari-adoption.png)
 
@@ -42,6 +44,7 @@ SAGA owns reusable MCP delivery, renderer-independent A2UI processing and the Li
 | Presentation | Application-owned catalog/components, Markdown rules, branding, fonts, themes and source fidelity. Core/Lit supplies generic decoding, binding and disposal. |
 | Package and resource compatibility | Exact npm versions and the built resource form a tested combination; the application owns its answer-contract and resource rollout. |
 | Destination distribution | The application follows the verified `iaser-ai/ansari` layout and license, with third-party notices and redistribution rights preserved. |
+| Host distribution | The application publisher owns the hosted endpoint, listing identity, legal/support information and release approval. Proposed SAGA publishing tooling prepares and checks host artifacts; the host owns directory review. |
 
 The destination is a pnpm workspace driven by Turborepo: Node is at least 22.18.0, pnpm is pinned to 10.33.0, and the root `pnpm-lock.yaml` is authoritative. Its shared toolchain catalog currently selects TypeScript `~6.0.3`. Public npm distribution of SAGA does not require using the npm CLI inside this repository. The transplant must join the destination's scripts, environment declarations, cache inputs and CI task coverage rather than adding an independent lockfile or carrying over the old workspace root. A new application's checks must actually run in CI; existing API/auth/frontend checks alone cannot establish that.
 
@@ -66,6 +69,18 @@ The installed packages must expose real supported interfaces. Cross-checkout ali
 
 Preserve Standard with an empty image allowlist as the application default, and preserve the existing supported Strict behavior. Configuration and navigation callbacks remain instance-owned. Any difference between the current application's handling of invalid configuration and the SDK's declared contract needs an explicit compatibility decision; migration is not authority to silently loosen content rules.
 
+## Host packaging and directory publication
+
+The [host publication proposal](host_publication.blueprint.md) supplies reusable preparation and validation through a proposed `@saga-a2ui/publish` package behind the SAGA CLI. Ansari supplies its own listing copy, assets, endpoint and tested release identities. Hosting remains application-owned; a plugin package points to the deployed MCP service and its UI resources rather than deploying that service. The packaging tool is a development dependency, outside the server and browser runtime.
+
+For ChatGPT, prepare the plugin ZIP with its remote MCP connection, publisher metadata, assets and review material, then use OpenAI's [submission flow](https://developers.openai.com/plugins/deploy/submission). The answer card remains an MCP App UI. Additional [plugin extensions](https://developers.openai.com/plugins/build/extensions), such as a sidebar entry or conversation panel, require an explicit user experience and runtime capability design; packaging alone cannot add them. The initial proposal preserves the existing inline answer experience.
+
+For Claude, submit the hosted server as an MCP connector. Add a GitHub-backed plugin bundle if Ansari also supplies useful skills or onboarding; that bundle references the same endpoint and does not replace connector submission. Follow the current [directory publication guidance](https://claude.com/docs/directory/publish). A local Desktop bundle or Claude Code installation does not establish distribution of the web card.
+
+Prepare these artifacts against the exact application, SDK versions, built UI resource and advertised tools used in the required host runs. Use screenshots and examples from successful runs of that candidate. Keep test-account credentials outside package contents and public records. Track preparation, submission, platform approval and live listing separately for each host. A failed scan or review directs a repair; it does not turn a working custom connection into a public directory listing.
+
+The source migration can complete while a listing awaits external review. If shared publishing tooling is not ready, the same reviewed host artifacts can be prepared through the documented native flow. The proposal therefore adds a distribution outcome without making completion of the whole CLI or either marketplace queue a new dependency of ANSARI1. Required host runs and the public SDK/npm prerequisite remain intact.
+
 ## Verification outcomes
 
 Establish the comparison baseline before changing either integration. Reuse synthetic API responses, vetted public passages, the answer corpus and current layout tests. Retain only fixtures that can be redistributed in the destination; private questions, credentials and host-account material must not enter source, history or evidence.
@@ -79,6 +94,8 @@ Establish the comparison baseline before changing either integration. Reuse synt
 | A clean destination checkout installs exact public npm versions through pnpm | Root lint, typecheck, test and build tasks include the new app; its affected browser/layout checks pass without a sibling checkout, private package access or undeclared files. |
 | The complete package/resource/answer-contract combination is upgraded or restored | Current and supported preceding resources behave according to their own contracts; documented rollback restores a tested complete combination. |
 | Public source and dependency contents are inspected | Destination license and third-party notices cover included material; no private records or credentials are introduced. |
+| Host distribution artifacts are prepared from a tested candidate | Supported validators accept the package structure; endpoint, tool and resource identities match the host evidence. Required listing material is present or reported as missing; credentials and unrelated files are excluded. |
+| An authorized directory release becomes available | Retain the actual listing URL and version, then install through that listing in each claimed web host and reproduce the faithful answer. A custom connection, uploaded ZIP or pending review does not satisfy this outcome. |
 
 The required SDK CORE3, VIEW2, PACK1 and PACK2 outcomes remain intact, including both own-catalog and optional FaithfulCard packed consumers and the protected synthetic workflow. Ansari's different domain does not remove those SDK obligations. The destination transplant uses the resulting supported public packages, and its complete installation is verified independently of the SDK workspace.
 
@@ -90,6 +107,8 @@ First complete the shared SDK dependency decision and establish the Ansari compa
 
 The delivery migration (ANSARI1) and renderer migration (ANSARI2) can then be prepared in parallel against pinned SAGA candidates. Server work preserves the old view for its comparison; renderer work uses the existing delivery seam for its comparison. Shared manifests, resource/version identities and final composition have one integration owner. These are preparation slices for one destination migration, not separate in-place releases of the private application.
 
+In parallel, settle the long-term publisher and hosting owner, prepare listing assets and maintain the host package sources with the destination application. Finalize submission inputs against a qualified deployed candidate. Reconcile this new distribution outcome and shared CLI work during the normal Blueprint breakdown review; the existing migration tickets do not already cover it. Submit and release through the authorized owner when the platform prerequisites are met, recording each host's result independently.
+
 Before merging the destination migration, complete the required SDK release/packaging checks, make the SAGA source public through the authorized publication action, publish the tested npm versions, and verify an unauthenticated clean installation of those versions. This is a hard prerequisite for ANSARI1 integration, even if its implementation and review completed earlier. One destination PR joins both integrations and the complete installation, compatibility and rollback checks (ANSARI3). Branch from and target `develop`. The destination's required CI and maintainer review remain authoritative; a contributor's own workflow approvals do not replace them. Its contributor guide supports fork PRs and requires a maintainer-approved workflow run for a first-time fork contribution. Publication of SAGA does not grant destination merge permission.
 
 React parity, demo, CLI, tour and other Stage A work retain their requirements but do not impose an unrelated React-before-Ansari implementation sequence. The full SDK quality checks and host work remain. Normal Blueprint design approval and breakdown approval precede execution; pending final maintainer signoff can remain open while compatible downstream work advances. No publication or destination merge authority is created by this draft.
@@ -100,6 +119,8 @@ React parity, demo, CLI, tour and other Stage A work retain their requirements b
 2. **Which complete dependency recipe will SAGA publish?** The connector and adapter compatibility work must resolve the real upstream APIs before migration types and lockfiles are finalized. Exact npm versions must exist and install publicly before the destination merge.
 3. **Which source assets and fixtures are redistributable under MIT and their retained third-party terms?** The destination license is established; included fonts, branding, corpus provenance and any source-specific notices still need inspection. The source repository's current access does not establish those rights.
 4. **Which prior resource combinations remain supported after the transplant?** Exercise the current maintained rollback contract and define destination resource identities without pretending a previous resource contains SAGA. Keep application compatibility separate from a first-version SDK release.
+5. **Who operates the service and owns each host listing?** Choose the publisher organizations, stable endpoint/domain, support and privacy URLs, review access and update ownership before submission. Destination repository maintainers must participate where the host requires repository push access; SDK npm ownership does not determine the application publisher.
+6. **Does the first Claude release need a plugin bundle as well as its connector?** Define any useful skill or onboarding behavior before adding it. Sidebar, panel and other host-specific UI extensions remain separate proposals until their user experience and host support are established.
 
 ## References
 

@@ -52,6 +52,12 @@ npm versions. Private CI packages can support development, but cannot satisfy
 that integration's public-installation gate. Source publication, package
 installation and actual-host acceptance remain separately recorded outcomes.
 
+Installing the SDK does not deploy an application or list it in ChatGPT or
+Claude. The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
+proposes shared tooling for application plugin packages and directory submission
+preparation. That tooling is not implemented, and its commands are not an
+alternative to the npm release procedure below.
+
 ## Publishing configuration
 
 Maintainers must verify ownership and publish access for the npm scope before the

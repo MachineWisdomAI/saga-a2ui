@@ -10,3 +10,10 @@ Create implementation directories with working consumers as their tasks begin. F
 Dependency direction points toward renderer-independent contracts. Core must not depend on MCP, a renderer, or a DOM runtime. MCP and renderer adapters can consume core without depending on one another's implementations; the application connects them. The components package must not depend on MCP or renderers, and core must not require the optional components package. Renderer support for optional components belongs in an optional export.
 
 The workspace root is not published. Packages are not yet implemented or installable. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
+
+The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
+proposes `@saga-a2ui/publish` as developer tooling behind the planned SAGA CLI.
+It would validate and prepare application packages for host directories, with
+host-specific formats kept outside runtime packages. The package and commands
+remain unapproved and unimplemented; core, MCP and renderers must not depend on
+publication tooling.
