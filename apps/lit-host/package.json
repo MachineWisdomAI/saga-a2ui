@@ -16,11 +16,16 @@
   "dependencies": {
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@modelcontextprotocol/ext-apps": "1.7.5",
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "jose": "6.2.12",
     "lit": "^3.3.3",
-    "zod": "3.25.76"
+    "markdown-it": "15.0.2",
+    "zod": "4.6.7",
+    "zod3": "npm:zod@3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

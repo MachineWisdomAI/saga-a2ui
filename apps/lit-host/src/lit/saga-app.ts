@@ -3,6 +3,7 @@ import type { SurfaceModel, Subscription } from '@a2ui/web_core/v0_9';
 import { LitElement, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import type { IngestResult, MessageSession } from '../protocols/a2ui/v0_9/session.js';
+import { CONTENT_VIEW_REQUEST, ContentViewRequest, type ContentView } from './content-view.js';
 
 type Session = MessageSession<LitComponentApi>;
 
@@ -22,6 +23,8 @@ export interface SagaAppDependencies {
   /** Unchecked input applied to each new session (the fixture). */
   readonly initialInput: unknown;
   readonly surfaceId: string;
+  /** This view's immutable content policy, host link callback and enforcement result. */
+  readonly content: ContentView;
 }
 
 /**
@@ -49,8 +52,14 @@ export function createSagaAppElement(deps: SagaAppDependencies): typeof LitEleme
       return result;
     };
 
+    // Answers descriptions inside this view with this view's own content settings.
+    private readonly answerContentRequest = (event: Event) => {
+      if (event instanceof ContentViewRequest) event.provide(deps.content);
+    };
+
     connectedCallback() {
       super.connectedCallback();
+      this.addEventListener(CONTENT_VIEW_REQUEST, this.answerContentRequest);
       const session = deps.createSession();
       this.session = session;
       this.subscriptions = [
@@ -67,6 +76,7 @@ export function createSagaAppElement(deps: SagaAppDependencies): typeof LitEleme
 
     disconnectedCallback() {
       super.disconnectedCallback();
+      this.removeEventListener(CONTENT_VIEW_REQUEST, this.answerContentRequest);
       if (window.sagaSend === this.send) delete window.sagaSend;
       for (const subscription of this.subscriptions) subscription.unsubscribe();
       this.subscriptions = [];

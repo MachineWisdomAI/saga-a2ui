@@ -1,5 +1,5 @@
 import type { App, McpUiToolInputNotification, McpUiToolResultNotification } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Transport } from '@modelcontextprotocol/client';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '../protocols/a2ui/v0_9/session.js';
 import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
@@ -99,6 +99,18 @@ export interface EpisodeViewDependencies {
   readonly deliver: (input: unknown) => IngestResult;
   /** Shows a plain-text problem, or clears it when called with `undefined`. */
   readonly showProblem: (message: string | undefined) => void;
+  /**
+   * Ends the reader's consent to load images in this view. Called before each delivered result is
+   * applied (a new result is a new selection, even when its description is unchanged), so a view
+   * never shows images the reader agreed to for what it showed before. The view stays live, so
+   * the reader can consent again to the new selection.
+   */
+  readonly revokeImageConsent: () => void;
+  /**
+   * Ends image consent for good: called when the host asks the view to tear down and when the
+   * connection is disposed. Nothing still on screen may grant consent afterwards.
+   */
+  readonly retireImageConsent: () => void;
 }
 
 /** A connected episode view. */
@@ -119,8 +131,10 @@ const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: {
  * - An error or non-episode result removes the panel and shows a plain-text fallback, so
  *   stale content is never left beside a problem.
  * - A result the session rejects is treated like any other failure: panel removed, reason shown.
+ * - Image consent is revoked before any result is applied, and retired for good on host teardown
+ *   and on dispose.
  */
-export function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
+export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
   let panelShown = true;
 
   const showFailure = (problem: string) => {
@@ -131,10 +145,12 @@ export function connectEpisodeView(deps: EpisodeViewDependencies): Promise<Episo
     deps.showProblem(problem);
   };
 
-  return connectToolResultView({
+  const connection = await connectToolResultView({
     app: deps.app,
     transport: deps.transport,
+    onTeardown: deps.retireImageConsent,
     onToolResult(result) {
+      deps.revokeImageConsent();
       if (result.isError) return showFailure('The tool reported an error.');
       const episode = PublicEpisodeSchema.safeParse(result.structuredContent);
       if (!episode.success) return showFailure('The tool result was not a public episode.');
@@ -146,4 +162,10 @@ export function connectEpisodeView(deps: EpisodeViewDependencies): Promise<Episo
       deps.showProblem(undefined);
     },
   });
+  return {
+    dispose() {
+      connection.dispose();
+      deps.retireImageConsent();
+    },
+  };
 }

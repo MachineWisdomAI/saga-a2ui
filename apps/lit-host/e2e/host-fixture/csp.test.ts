@@ -28,6 +28,15 @@ describe('contentSecurityPolicy', () => {
     expect(policy).toContain('connect-src https://api.example.test');
   });
 
+  it('grants resource origins to fonts and media too, as the broad resourceDomains permission does', () => {
+    const empty = contentSecurityPolicy({ connectDomains: [], resourceDomains: [] });
+    expect(empty).toContain("font-src 'none'");
+    expect(empty).toContain("media-src 'none'");
+    const populated = contentSecurityPolicy({ connectDomains: [], resourceDomains: ['https://cdn.example.test'] });
+    expect(populated).toContain('font-src https://cdn.example.test');
+    expect(populated).toContain('media-src https://cdn.example.test');
+  });
+
   it('keeps the connect directive none while allowing named resource origins', () => {
     const policy = contentSecurityPolicy({
       connectDomains: [],

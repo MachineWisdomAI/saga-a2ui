@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Transport } from '@modelcontextprotocol/client';
 import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '../mcp/view.js';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
