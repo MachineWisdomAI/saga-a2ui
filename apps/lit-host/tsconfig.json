@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "e2e", "vite.config.ts", "vite.view.config.ts", "vite.subscriptions-view.config.ts", "vite.answer-view.config.ts", "vite.playback-view.config.ts", "vite.host-fixture.config.ts", "playwright.config.ts"]
+  "include": ["src", "e2e", "vite.config.ts", "vite.view.config.ts", "vite.subscriptions-view.config.ts", "vite.answer-view.config.ts", "vite.playback-view.config.ts", "vite.host-fixture.config.ts", "vite.catalog-isolation.config.ts", "playwright.config.ts"]
 }

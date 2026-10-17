@@ -1,5 +1,6 @@
-import { A2uiLitElement, A2uiSurface, type LitComponentApi } from '@a2ui/lit/v0_9';
+import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
 import { Catalog } from '@a2ui/web_core/v0_9';
+import { defineElements } from '@saga-a2ui/lit';
 import { html, nothing } from 'lit';
 import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
 import { SagaDescriptionElement } from './description.js';
@@ -34,12 +35,9 @@ const SagaPanel: LitComponentApi = {
 export const sagaCatalog = new Catalog<LitComponentApi>(SAGA_CATALOG_ID, 'v0.9', [SagaPanel]);
 
 /**
- * Explicit Lit integration setup: defines the custom elements the upstream renderer needs.
- * Call once at startup; repeated calls are harmless. Nothing registers at import time.
+ * Explicit setup: defines the catalog's custom element and the description element it uses.
+ * Call once at startup; repeating it is harmless. Nothing registers at import time.
  */
 export function registerLitElements(): void {
-  // `a2ui-surface` is defined as a side effect of importing upstream's A2uiSurface.
-  void A2uiSurface;
-  if (!customElements.get('saga-description')) customElements.define('saga-description', SagaDescriptionElement);
-  if (!customElements.get(SagaPanel.tagName)) customElements.define(SagaPanel.tagName, SagaPanelElement);
+  defineElements([SagaPanel, { tagName: 'saga-description', element: SagaDescriptionElement }]);
 }

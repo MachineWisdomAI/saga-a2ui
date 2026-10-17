@@ -1,0 +1,27 @@
+{
+  "name": "@saga-a2ui/core",
+  "private": true,
+  "description": "Renderer-independent SAGA A2UI processing: version-specific decoding, validated message cases and the message session",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./protocols/a2ui/v0_9": "./src/protocols/a2ui/v0_9/index.ts",
+    "./protocols/a2ui/zod3": "./src/protocols/a2ui/zod3.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@a2ui/web_core": "0.13.0",
+    "zod3": "npm:zod@3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  }
+}
