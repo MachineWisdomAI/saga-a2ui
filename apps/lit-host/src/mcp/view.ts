@@ -2,7 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
 import { connectToolResultView, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
-import type { IngestResult } from '../protocols/a2ui/v0_9/session.js';
+import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
 import { PublicEpisodeSchema } from './episode.js';
 

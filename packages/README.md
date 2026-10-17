@@ -14,7 +14,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ### Core
 
-`core/` holds renderer-independent interfaces, value objects and processing. It owns the A2UI wire-version protocols, including A2UI decoding, and keeps parsing and message cases under `src/protocols/a2ui/<version>/`, not in generic utilities or renderer adapters.
+`core/` (implemented, private) holds renderer-independent interfaces, value objects and processing. It owns the A2UI wire-version protocols, including A2UI decoding, and keeps parsing and message cases under `src/protocols/a2ui/<version>/`, not in generic utilities or renderer adapters.
 
 ### Delivery
 
@@ -38,6 +38,6 @@ Dependency direction points toward renderer-independent contracts. Core must not
 
 Renderers keep independent maturity and independent dependency and peer declarations. A renderer used with an application's own catalog must not pull in the optional components, including `FaithfulCard`, a Markdown parser, or any renderer the application did not select.
 
-The workspace root is not published. `mcp/` is implemented as a private, unreleased workspace package (no version, not installable from a registry); the other packages are not yet implemented. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
+The workspace root is not published. `core/`, `lit/` and `mcp/` are implemented as private, unreleased workspace packages (no version, not installable from a registry); the other packages are not yet implemented. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
 
 The new-project CLI templates and the existing-backend recipes are not packages. They are described in [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md).

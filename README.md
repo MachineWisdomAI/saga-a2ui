@@ -6,7 +6,7 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. One private, unreleased SDK package (`packages/mcp`) exists and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
+Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. Three private, unreleased SDK packages (`packages/core`, `packages/lit` and `packages/mcp`) exist and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
 
 The first implementation will exercise a small Lit application in ChatGPT and Claude. React and Lynx remain Stage A targets; Alexa+ enters the initial host investigation.
 
@@ -70,7 +70,7 @@ Test discovery asks Vitest for its file list (`vitest list --filesOnly` against 
 
 Passing verify does not guarantee coverage, host compatibility, or architecture.
 
-The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private; `packages/mcp` is the only SDK package so far (private, unreleased, no version).
+The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private; `packages/core`, `packages/lit` and `packages/mcp` are the SDK packages so far (private, unreleased, no version).
 
 ### Fixture rendering (A2UI v0.9)
 
@@ -78,19 +78,17 @@ The only application is `apps/lit-host` (private, not published). It deliberatel
 
 Modules in `apps/lit-host/src` (application-local; MCP delivery moved to `@saga-a2ui/mcp` later, see "Reusable MCP connector (CORE1)"):
 
-- `protocols/a2ui/v0_9/message.ts`: validated message value and `A2uiMessageVisitor` (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`). No catch-all, so a new case breaks incomplete visitors at typecheck.
-- `protocols/a2ui/v0_9/decoder.ts`: `MessageDecoder` strategy and the v0.9 implementation. Accepts `unknown`: one message, an array, or `{ messages: [...] }`. Validates with upstream `@a2ui/web_core` schemas and returns deep-frozen copies or a typed `DecodeFailure` (`unsupported-version` | `malformed`). It is the only place wire tags are read.
-- `protocols/a2ui/v0_9/session.ts`: `createMessageSession` owns one upstream `MessageProcessor` configured with `STRICT_VALIDATION`. Upstream decides component support, omitted types on partial updates, unknown surfaces/components and state. `ingest(input)` returns `{ ok: true }` or `{ ok: false, failure }`; `dispose()` ends the processor's lifetime.
+- `@saga-a2ui/core` (`packages/core`) owns the A2UI v0.9 message cases, `MessageDecoder` and `createMessageSession` that used to live here, plus the Zod 3 alias catalogs author schemas with. See "Core and Lit packages (VIEW1)".
 - `saga-panel/contract.ts`, `saga-panel/fixture.ts`: renderer-neutral `SagaPanel` contract and synthetic fixture data.
 - `lit/integration.ts`: Lit panel element, catalog, and the explicit `registerLitElements()` setup (nothing registers at import time).
-- `lit/saga-app.ts`: the view. It presents results (failures as inert text) and owns its session, subscriptions and `window.sagaSend` hook: connect creates and publishes them, disconnect unsubscribes, disposes and removes the hook, reconnect starts clean.
+- `lit/saga-app.ts`: the application's `saga-app` element, built on `createA2uiAppElement` from `@saga-a2ui/lit`. The package owns the session, subscriptions, rejection fallback (failures as inert text) and disposal; the application adds the heading, its content policy and the `window.sagaSend` hook.
 - `main.ts`: composition root; constructs and connects the above.
 
 Call path: `window.sagaSend(unknown)` -> `saga-app` -> `session.ingest` -> decoder -> visitor -> upstream processor -> surface model -> Lit.
 
-Invalid messages, unknown catalogs/components or wrongly typed properties produce a visible "Could not render this content" alert. Values render only as Lit text bindings, so supplied markup stays inert text. The description is the one value read as Markdown, under a trusted content policy; see "Standard descriptions (POL1)" below.
+Invalid messages, unknown catalogs/components or wrongly typed properties produce a visible "Could not render this content" alert and clear the surface (see "Core and Lit packages (VIEW1)"). Values render only as Lit text bindings, so supplied markup stays inert text. The description is the one value read as Markdown, under a trusted content policy; see "Standard descriptions (POL1)" below.
 
-`npm run test:headless` (vitest, Node) covers decoding and processing through `decoder`/`session` only. Browser tests cover rendering, binding, inert markup, recovery and mount/unmount.
+`npm run test:headless` (vitest, Node) covers decoding and processing through the public `@saga-a2ui/core` interface only (`packages/core/src/protocols/a2ui/v0_9/protocol.test.ts`). Browser tests cover rendering, binding, inert markup, recovery and mount/unmount.
 
 `e2e/*.spec.ts` drive the real processor through the typed `window.sagaSend` entry point and assert rendered output. Recipe (same commands as above): `npm ci && npm run typecheck && npm run build && npx playwright install chromium && npm run test:browser`.
 
@@ -318,6 +316,30 @@ Browse (`mcp/subscriptions-server.ts`) is the protected consumer: the existing `
 Run it: `npm run build && npm run serve:mcp` (the demo answers two fixed questions with a short delay and progress, streaming). Tests: `packages/mcp/src/server/operation.test.ts` (the connector over real Streamable HTTP and a real MCP client: projection, refusal, absent, failure, bound, disconnect, progress in both modes, concurrent principals, forged account, registration failures), `packages/mcp/src/view/view.test.ts` (bridge lifetime), `packages/mcp/src/exports.test.ts`, `src/mcp/answer.test.ts` (the real listener in both modes), `src/mcp/answer-view.test.ts` (delivery rules over a real `App`/`AppBridge`), and `e2e/answer-view.spec.ts` (real listener, real client, the built view in the sandboxed host fixture).
 
 Limits worth knowing: the local `AppBridge` fixture is not an actual host; ChatGPT web and Claude web were not run (MAP1 is the Captain's probe). STATE1/STATE2 are held, so no retained-state TTL, live-account switching or focus/resume revalidation exists, and no behavior from the proposed request/view lifetime or action-binding designs (#69, #73) is implemented or claimed. Packages are installed through the npm workspace link, not from a registry; exact public source and npm installation remain a release gate (PACK1/PACK2).
+
+### Core and Lit packages (VIEW1)
+
+`packages/core` (`@saga-a2ui/core`) and `packages/lit` (`@saga-a2ui/lit`) take renderer-independent A2UI processing and Lit binding out of the application. Both are **private, unreleased workspace packages** with no version, like `@saga-a2ui/mcp`; nothing is published and the version policy has nothing to enroll. This is a preparation slice: the interfaces may change until the combined CORE3/VIEW2 qualification, and owned callers migrate together. The application keeps its catalogs, components, content policy and its existing Play operation.
+
+| Export | Holds | Imports |
+| --- | --- | --- |
+| `@saga-a2ui/core/protocols/a2ui/v0_9` | `a2uiV0_9Decoder` (the `MessageDecoder` strategy), validated message cases with `A2uiMessageVisitor`, `createMessageSession` and the ingest result types | upstream `@a2ui/web_core` and Zod 3; no DOM, MCP or renderer (its `tsconfig` loads neither the DOM nor Node typings) |
+| `@saga-a2ui/core/protocols/a2ui/zod3` | `z`, the Zod 3 copy upstream A2UI builds on, for authoring catalog component schemas | `zod3` |
+| `@saga-a2ui/lit` | `createA2uiAppElement` (mounts one surface from a session and owns its lifecycle) and `defineElements` (explicit custom-element setup) | `lit`, upstream `@a2ui/lit`, the core types; no MCP, no Markdown parser, no optional components |
+
+**What the application keeps.** Its catalog (`saga-panel/` and `lit/integration.ts` for browse, descriptions and Play; `answer-card/` and `lit/answer-card.ts` for answers), the component implementations, the trusted content policy, host links, the Play operation, and the composition roots (`main.ts`, `view-main.ts`, `answer-main.ts`) that choose the decoder and session explicitly. Raw wire parsing exists only in core: renderer code receives validated messages.
+
+**Rejection.** `ingest(input)` never throws for bad input. When the current input is rejected (unsupported version, malformed envelope, or an upstream refusal of a component or update), the element clears the surface and shows a safe fallback (`role="alert"`, inert text). Messages of a rejected batch that were applied before the refusal stay applied in the session: there is no atomic rollback. The next input the session accepts removes the fallback and shows the surface again. An application that wants a fresh surface sends `deleteSurface` and creates it again, as the episode view does.
+
+**Registration.** `defineElements` defines tags that are free, leaves a tag bound to the very same constructor alone (so repeating setup, or two catalogs sharing a component, is harmless), and fails with `ElementConflictError` for a different constructor on an existing tag. The first definition is kept, and a failing call defines nothing. Nothing registers at import time.
+
+**Lifecycle.** Connecting creates a session, subscribes to the surface and applies the initial input. Disconnecting unsubscribes and disposes the session; a late `ingest` on a retired element is refused, and a reconnected element starts fresh.
+
+**Answer view.** `answer-main.ts` now renders the public answer through these packages with its own `AnswerCard` catalog: the view still decides which question and answer to show (`mcp/answer-view.ts`, unchanged), and each state is delivered as one `updateDataModel` that replaces the whole card, so a previous question, answer or problem cannot remain beside a new state. The answer view bundle contains neither the panel catalog nor the Markdown policy.
+
+Tests: `packages/core/src/protocols/a2ui/v0_9/protocol.test.ts` (decoding, message cases, field preservation, partial updates, rejections, session lifetime, no DOM), `packages/core/src/exports.test.ts` (supported names; the bundled graph holds no renderer, MCP or DOM runtime), `packages/lit/src/element-registration.test.ts` (the tag rule), `e2e/fixture.spec.ts` and `e2e/lifecycle.spec.ts` (rendering, rejection clears and recovers, partial application, mount and unmount), `e2e/catalog-isolation.spec.ts` (the panel and answer catalogs in one page and one registry: independent data, rejections and disposal; conflicting tag fails and keeps the first), `e2e/answer-view.spec.ts` (early, repeated and late delivery, binding, markup, teardown through the built view), `e2e/own-catalog-consumer/packed-consumer.test.ts` (an application with its own catalog built from the packed core and Lit tarballs, without optional components, FaithfulCard, a Markdown parser or server code), and `e2e/view-bundle.spec.ts` (built artifacts).
+
+Limits worth knowing. The packages are unversioned, which `npm pack` refuses, so the packed-consumer test packs a copy that carries a throwaway version; it proves the package contents and declared dependencies, not a registry install. Exact public source and npm installation, the combined protected/lifetime qualification (CORE3, VIEW2), STATE1/STATE2 and actual-host runs remain separate gates. Play still runs through the application's own operation; the reusable action contract (CORE2) is not used, and nothing from the proposed designs #69 or #73 is implemented or claimed. The early Lynx Web investigation that gates freezing the renderer-neutral interfaces has not been performed here, so these interfaces remain candidates.
 
 ### MCP Apps 2 recipe (MCPV2)
 

@@ -51,7 +51,7 @@ test('supplied markup is shown as inert text and never executed', async ({ page 
 // Which inputs are rejected, and why, is covered headlessly (protocol.test.ts). The browser
 // checks only that a rejection becomes visible, inert text and that the app recovers.
 test.describe('rejected input is presented safely', () => {
-  test('failure text is inert and the previous content stays', async ({ page }) => {
+  test('failure text is inert and the affected presentation is cleared', async ({ page }) => {
     const result = await sagaSend(page, [
       {
         version: 'v0.9',
@@ -65,7 +65,7 @@ test.describe('rejected input is presented safely', () => {
     await expect(page.getByTestId('failure')).toBeVisible();
     await expect(page.getByTestId('failure')).toContainText('Could not render this content');
     await expect(page.locator('saga-app img')).toHaveCount(0);
-    await expect(page.getByTestId('panel-title')).toHaveText('Sample title');
+    await expect(page.getByTestId('panel-title')).toHaveCount(0);
     expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   });
 
@@ -83,5 +83,23 @@ test.describe('rejected input is presented safely', () => {
     ]);
     await expect(page.getByTestId('failure')).toHaveCount(0);
     await expect(page.getByTestId('panel-title')).toHaveText('Recovered');
+  });
+
+  test('a rejected batch clears the panel, keeps what it already applied, and a valid replacement recovers', async ({ page }) => {
+    const result = await sagaSend(page, [
+      { version: 'v0.9', updateDataModel: { surfaceId: SURFACE, path: '/title', value: 'Applied before the rejection' } },
+      { version: 'v0.9', updateComponents: { surfaceId: SURFACE, components: [{ id: 'extra', component: 'Unsupported' }] } },
+    ]);
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'rejected' } });
+    await expect(page.getByTestId('failure')).toBeVisible();
+    await expect(page.getByTestId('panel')).toHaveCount(0);
+
+    // No atomic rollback is claimed: the first message of the rejected batch stays applied.
+    await sagaSend(page, [
+      { version: 'v0.9', updateDataModel: { surfaceId: SURFACE, path: '/description', value: 'Replacement description' } },
+    ]);
+    await expect(page.getByTestId('failure')).toHaveCount(0);
+    await expect(page.getByTestId('panel-title')).toHaveText('Applied before the rejection');
+    await expect(page.getByTestId('panel-description')).toHaveText('Replacement description');
   });
 });

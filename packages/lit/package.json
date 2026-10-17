@@ -1,0 +1,27 @@
+{
+  "name": "@saga-a2ui/lit",
+  "private": true,
+  "description": "Lit binding for SAGA A2UI: mounts a core message session's surface with an application's own catalog and owns its disposal",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@a2ui/lit": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "@saga-a2ui/core": "*",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  }
+}
