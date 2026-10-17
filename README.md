@@ -6,7 +6,7 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. No SDK packages or host compatibility are available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
+Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. One private, unreleased SDK package (`packages/mcp`) exists and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
 
 The first implementation will exercise a small Lit application in ChatGPT and Claude. React and Lynx remain Stage A targets; Alexa+ enters the initial host investigation.
 
@@ -70,13 +70,13 @@ Test discovery asks Vitest for its file list (`vitest list --filesOnly` against 
 
 Passing verify does not guarantee coverage, host compatibility, or architecture.
 
-The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private and no SDK packages exist yet.
+The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private; `packages/mcp` is the only SDK package so far (private, unreleased, no version).
 
 ### Fixture rendering (A2UI v0.9)
 
 `apps/lit-host` renders a developer-authored A2UI v0.9 surface from synthetic public data. Tested, exactly pinned versions: `@a2ui/lit` 0.13.0, `@a2ui/web_core` 0.13.0 (both Apache-2.0), `zod` 3.25.76 (required by both; each installs its own nested copy, see "MCP Apps 2 recipe" below), `lit` 3.3.3, Node 22.12.0+. The optional peer `@a2ui/markdown-it` is deliberately not installed.
 
-Modules in `apps/lit-host/src` (all application-local; no SDK packages):
+Modules in `apps/lit-host/src` (application-local; MCP delivery moved to `@saga-a2ui/mcp` later, see "Reusable MCP connector (CORE1)"):
 
 - `protocols/a2ui/v0_9/message.ts`: validated message value and `A2uiMessageVisitor` (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`). No catch-all, so a new case breaks incomplete visitors at typecheck.
 - `protocols/a2ui/v0_9/decoder.ts`: `MessageDecoder` strategy and the v0.9 implementation. Accepts `unknown`: one message, an array, or `{ messages: [...] }`. Validates with upstream `@a2ui/web_core` schemas and returns deep-frozen copies or a typed `DecodeFailure` (`unsupported-version` | `malformed`). It is the only place wire tags are read.
@@ -106,14 +106,14 @@ Pinned additions (exact; the MCP packages are the MCPV2 recipe below): `@modelco
 Modules in `apps/lit-host/src`:
 
 - `mcp/episode.ts`: public contract shared with the view (input shape, bounded `PublicEpisode`); imports only `zod`.
-- `mcp/server.ts`: `createEpisodeServer` registers one read-only tool `get_episode` (runtime-validated `episodeId`) and the `ui://saga-a2ui/episode-view.html` resource via `registerAppTool`/`registerAppResource`. Only `episodeId`, `title` and `description` are projected from a record. The resource is the built HTML served verbatim, so request data never enters cached HTML; its CSP metadata allows no network or external resources.
+- `mcp/server.ts`: `createEpisodeServer` declares one explicitly public, read-only operation `get_episode` (runtime-validated `episodeId`) and the `ui://saga-a2ui/episode-view.html` resource through `registerPublicOperation` from `@saga-a2ui/mcp/server`. Only `episodeId`, `title` and `description` are projected from a record. The resource is the built HTML served verbatim, so request data never enters cached HTML; its CSP metadata allows no network or external resources.
 - `mcp/listener.ts`: application-owned loopback Streamable HTTP hosting (`POST /mcp`, stateless, JSON responses, Host-header DNS-rebinding protection, no auth because the tool is public).
 - `mcp/view.ts`, `view-main.ts`, `view.html`: the view connects the MCP Apps `App` bridge, then turns each tool result into an A2UI data-model update and hands it to the existing session. Decoding stays in `protocols/a2ui`; rendering stays in `lit/`. `vite.view.config.ts` builds it to one HTML file with no server imports.
 - `e2e/host-fixture`, `e2e/mcp-view.spec.ts`: a test-only local host with a real `AppBridge` and a `sandbox="allow-scripts"` iframe. The spec makes real `tools/call` and `resources/read` requests over HTTP, delivers the result, and checks the wire result, rendered title, CSP and resource linkage. `e2e/view-bundle.spec.ts` checks the built artifacts for server code and credentials. The fixture is not evidence of compatibility with any actual host.
 
 ### MCP result lifecycle in the view (MCP2)
 
-`connectEpisodeView` (`apps/lit-host/src/mcp/view.ts`) owns the bridge connection's lifetime and nothing else: A2UI decoding stays in `protocols/a2ui`, and the session and surface lifetime stay with `saga-app`. It uses only the upstream `App` API from `@modelcontextprotocol/ext-apps`; there is no extra host handshake and no second fetch of the answer (the host delivers the result it already has).
+`connectEpisodeView` (`apps/lit-host/src/mcp/view.ts`) applies each result to the A2UI session over the bridge connection that `connectToolResultView` from `@saga-a2ui/mcp/view` owns, and nothing else: A2UI decoding stays in `protocols/a2ui`, and the session and surface lifetime stay with `saga-app`. It uses only the upstream `App` API from `@modelcontextprotocol/ext-apps`; there is no extra host handshake and no second fetch of the answer (the host delivers the result it already has).
 
 - Initialization: the `toolresult` listener (`addEventListener`) and `onteardown` are registered before `app.connect`, so a result the host sends right after the handshake is rendered exactly once.
 - Replacement: each valid public result is applied as a data-model update and replaces the one shown.
@@ -124,14 +124,14 @@ Tests: `src/mcp/view.test.ts` (`npm run test:headless`) joins a real `App` and `
 
 ### Subscriptions for the verified request identity (BROWSE1)
 
-A second, protected MCP endpoint, `POST /subscriptions/mcp`, returns the signed-in user's own subscriptions from a synthetic account fixture. Synthetic data only; no real Patreon access, no SDK packages, no actual-host (ChatGPT/Claude) acceptance. No new dependencies.
+A second, protected MCP endpoint, `POST /subscriptions/mcp`, returns the signed-in user's own subscriptions from a synthetic account fixture. Synthetic data only; no real Patreon access, no actual-host (ChatGPT/Claude) acceptance. No new dependencies. (This section describes the slice as built; its MCP delivery now runs through `@saga-a2ui/mcp`, see "Reusable MCP connector (CORE1)".)
 
 - `mcp/request-auth.ts`: application-owned authentication. A bearer credential is checked by an `OAuthTokenVerifier` (the MCP server package's own interface; an unknown credential is an `OAuthError` with `OAuthErrorCode.InvalidToken`) before any server is built or backend called. Missing credential: `401` with `WWW-Authenticate: Bearer realm=...`; malformed, unknown or expired: `401 invalid_token`; verified but not a user (service-only, no account or scope): `403 insufficient_scope`. The accepted credential is copied into a frozen, request-owned snapshot of the validated claims before it is attached to `req.auth`: the transport reads that context only after the body arrives, so a verifier that reuses or mutates its own `AuthInfo` cannot change which account an earlier request was authenticated as. The snapshot reaches the tool only as the SDK's per-request `ctx.http.authInfo`, read inside each invocation; an `accountId` argument is dropped. An optional `status` filter is the only declared argument, and it cannot name an account. There is no shared current-user state.
 - `mcp/dev-auth.ts`: **development-only** verifier with fixed public tokens (`DEV_TOKENS`). It throws when `NODE_ENV=production`, is imported only by `mcp/serve.ts` (the loopback demo) and tests, and is kept out of the browser bundles (checked by `e2e/view-bundle.spec.ts`). A remote host must pass its own configured `verifier` to `startEpisodeListener({ subscriptions })`; the listener has no default.
 - `mcp/subscriptions.ts`, `mcp/subscriptions-server.ts`: strict, bounded zod projection. Each field is copied from the backend record explicitly (no spreading) and the result is validated before serialization; a record that breaks the contract yields a generic tool error. Canary private fields never reach the wire.
 - View session: the result carries an opaque label (`vs_` + 22 characters, an HMAC of the sign-in id under a per-process key). `mcp/subscriptions-view.ts` pins the opening host delivery; a different label, an unknown shape, or an error clears the private view. A `toolinput` notification does not authenticate the next `toolresult` — those notifications are not correlated. When the host proxies server tool calls, a new input starts `App.callServerTool`, and only that response may establish or recover the pin. That read carries the declared `status` filter from the input's business arguments, so a filtered read stays filtered: an undeclared field such as `accountId` is dropped, and a status the tool does not support clears the view instead of widening the read. A finished read does not recycle its identity, so an older in-flight response cannot satisfy a later read or restore private rendering after a later refusal. An unsolicited notification cannot open private rendering, but an error, a changed label, or an unknown shape still clears the view while a correlated read is in flight and retires reads that started before that loss. Only a correlated read started after the loss may recover. A refusal of the proxied call (the listener's HTTP 401/403, before any tool handler) keeps the view cleared. The label controls freshness only; the server authorizes every call.
 - `subscriptions.html`, `src/subscriptions-main.ts`: the view, built to `dist/subscriptions-view/subscriptions.html`. States: subscriptions, empty, sign-in required, retry, problem. Values are written with `textContent`.
-- `mcp/view.ts` now exposes `connectToolResultView` (bridge lifetime), which the episode view and the subscriptions view share.
+- `connectToolResultView` (bridge lifetime) is the `@saga-a2ui/mcp/view` export that the episode, subscriptions, answer and playback views share.
 
 Try it locally (`npm run build` first): `curl -s -X POST http://127.0.0.1:3001/subscriptions/mcp -H 'authorization: Bearer dev-only-token-alice' -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_subscriptions","arguments":{}}}'`.
 
@@ -162,7 +162,7 @@ Tests: `src/mcp/subscriptions.test.ts` (real listener and bearer credentials ove
 
 ### Play an episode only after a fresh entitlement check (PLAY1)
 
-A third protected MCP endpoint, `POST /playback/mcp`, lets the signed-in synthetic subscriber press Play in an embedded Lit view and hear a protected episode. Synthetic accounts and a generated tone only; no real Patreon access, no SDK packages, no actual-host (ChatGPT/Claude) acceptance. One new runtime dependency: `jose` 6.2.12 (MIT) for JWT proofs and RFC 7638 key thumbprints; no MCP-UI, CopilotKit, AG-UI or Ora package is used.
+A third protected MCP endpoint, `POST /playback/mcp`, lets the signed-in synthetic subscriber press Play in an embedded Lit view and hear a protected episode. Synthetic accounts and a generated tone only; no real Patreon access, no actual-host (ChatGPT/Claude) acceptance. One new runtime dependency: `jose` 6.2.12 (MIT) for JWT proofs and RFC 7638 key thumbprints; no MCP-UI, CopilotKit, AG-UI or Ora package is used.
 
     npm run build && npm run serve:mcp   # also prints the playback URL; dev tokens only (see mcp/dev-auth.ts)
 
@@ -278,6 +278,46 @@ Limits worth knowing:
 - HTML blocks follow CommonMark: a line that starts an HTML block keeps the rest of that block as raw source, so Markdown inside it is no longer interpreted (Standard shows it as text too).
 
 Tests: `src/content/policy-strict.test.ts` (configuration, link and image decisions, Show images offers), `src/content/image-consent.test.ts` (grant, revoke, view-wide revoke, isolation between views), `src/content/markdown.test.ts` (raw HTML nodes, fragment inventory), `src/mcp/content-resource.test.ts` (Strict identity and embedded configuration), `src/mcp/view.test.ts` (revocation before each result, on teardown and dispose), `src/playback/content-policy-separation.test.ts` (Play under both levels), `scripts/candidate-identity.test.ts`, and `e2e/description-strict.spec.ts` against the built resource in the sandboxed fixture (placeholders, keyboard reveal and hide, hostile input before and after reveal and consent, zero requests before consent, only the permitted image after, disabled states, redirects, Hide images, late results, description change, new selection, teardown, view replacement, failure results, two concurrent views and interleaved Standard and Strict views, resource identity and restrictions). Helpers shared with `e2e/description.spec.ts` live in `e2e/description-harness.ts`.
+
+### Reusable MCP connector (CORE1)
+
+`packages/mcp` (`@saga-a2ui/mcp`) takes over MCP delivery from the application. It is a **private, unreleased workspace package** with no version (nothing is published, and the version policy has nothing to enroll). The Lit application consumes it through its package name and its three separate subpath exports. This is a preparation slice: the interfaces may change until CORE3, and owned callers migrate together.
+
+| Export | Holds | Imports |
+| --- | --- | --- |
+| `@saga-a2ui/mcp/server` | `registerPublicOperation`, `registerProtectedOperation`, `OperationConfigurationError` and the declaration types | MCP server and MCP Apps server helpers, Zod; no renderer, no view code |
+| `@saga-a2ui/mcp/view` | `connectToolResultView` (bridge lifetime: listeners installed before connect, delivery once, teardown, disposal) | types only; no server module, no Node built-in, no renderer |
+| `@saga-a2ui/mcp/policy` | `ViewCsp`, `CLOSED_VIEW_CSP`, `DEFAULT_OPERATION_BOUND_MS` | nothing |
+
+`packages/mcp/src/exports.test.ts` imports each subpath by name and bundles its module graph (dependencies included) to show a server consumer pulls in no renderer and a view consumer pulls in no server module; `e2e/view-bundle.spec.ts` repeats the check on the built views.
+
+**What the application keeps.** The listener (`mcp/listener.ts`: hosting, Host-header protection, body bounds), authentication (`mcp/request-auth.ts`), request classification (`mcp/protected-request.ts`), domain authorization (which subscriptions belong to the verified account), backend calls and the renderer. The connector never reads a credential: for a protected operation the application supplies `identity(authInfo)`, which turns the transport's per-request verified context into its own immutable value.
+
+**What the connector does** for each declared operation, in this order:
+
+1. *Registers* the tool and its `ui://` view resource on the application's `McpServer`. Protected registration without an identity resolver, sign-in failure text, projection, view or output contract throws `OperationConfigurationError` naming the missing requirement, before anything is served. A non-finite bound is refused the same way.
+2. *Validates input* with the declared Zod contract before the handler runs. Undeclared fields (for example an `accountId`) are dropped; the handler never sees them and a protected operation takes its identity only from the verified context.
+3. *Resolves identity* (protected only). No acceptable identity gives the declared sign-in text and the handler does not run. A public operation resolves nothing and hands its handler no identity.
+4. *Waits for the handler* only for its bound (`boundMs`, default 5 s) and the request's cancellation signal. A result that loses that race is ignored; a handler that throws or rejects gives the declared `unavailable` text with no message.
+5. *Projects explicitly*: `project(record)` builds the model-facing text and the structured data field by field; the connector validates the data against the strict output contract before serialization. A violation gives the declared `invalidOutput` text, not the validator's message.
+
+The handler returns `record`, `absent` (declared text) or `refused` (a fixed safe text for well-formed but unaccepted business input). Projections are the model-visible `content` text and the validated `structuredContent`. **No recipient mapping is adopted**: that depends on the Captain's MAP1 measurement in ChatGPT web and Claude web, so Play's app-only visibility and `_meta` payload stay in `playback/` until CORE2.
+
+Browse (`mcp/subscriptions-server.ts`) is the protected consumer: the existing `list_subscriptions` behavior, including the declared `status` filter, the opaque view-session label, concurrent principals, forged-account rejection, and the empty/denied/failed outcomes, passes its unchanged `subscriptions.test.ts` and `e2e/subscriptions-view.spec.ts`. The episode tool (`mcp/server.ts`) is the first public consumer.
+
+#### Public answer operation
+
+`POST /answer/mcp` (`startEpisodeListener({ answer })`, off unless configured) is a synthetic, explicitly public question-and-answer tool, `answer_question`, with its own built view (`dist/answer-view/answer.html`). No credential is read, none is fabricated, and a presented `Authorization` header is not treated as an identity. `responseMode` is `json` (one body when the answer is ready) or `event-stream` (progress notifications, then the answer, as server-sent events).
+
+- *Binding.* The result repeats the question exactly as asked (`{ question, answer }`, strict, bounded to 500 and 2000 characters). The view shows that pair. If the host also announced the question (`toolinput`), a result is shown only when its question is identical (no trimming or case folding); a result for another question, such as a late copy of an earlier answer, is ignored and the view keeps waiting.
+- *Early, repeated, late.* A result before any input is shown with its own question; an input for the question already answered keeps the answer; the same answer again is not shown again; a different answer to the same question replaces it. After host teardown or dispose nothing is delivered. An error, a malformed or undeclared-field result, or an unreadable input clears the answer and shows a problem; only the server's three known safe texts are shown verbatim.
+- *One handler call, progress, delay.* The handler runs once per call. `request.reportProgress` sends `notifications/progress` only to a caller that supplied a progress token and only while the operation is live; it is a quiet no-op after the operation finished, was cancelled or timed out. In `json` mode progress is not delivered but the delayed answer completes the one request.
+- *Bounds and cancellation (unchanged semantics).* The wait is bounded (`answerBoundMs`, 5 s) and a dropped HTTP request aborts the handler's signal; a late answer has nowhere to go. This is the existing per-operation wait, **not** the whole-request deadline contract, which CORE3 owns. The application cleans up work it cannot interrupt.
+- *No logging of questions.* Neither the connector nor the listener logs the question or answer.
+
+Run it: `npm run build && npm run serve:mcp` (the demo answers two fixed questions with a short delay and progress, streaming). Tests: `packages/mcp/src/server/operation.test.ts` (the connector over real Streamable HTTP and a real MCP client: projection, refusal, absent, failure, bound, disconnect, progress in both modes, concurrent principals, forged account, registration failures), `packages/mcp/src/view/view.test.ts` (bridge lifetime), `packages/mcp/src/exports.test.ts`, `src/mcp/answer.test.ts` (the real listener in both modes), `src/mcp/answer-view.test.ts` (delivery rules over a real `App`/`AppBridge`), and `e2e/answer-view.spec.ts` (real listener, real client, the built view in the sandboxed host fixture).
+
+Limits worth knowing: the local `AppBridge` fixture is not an actual host; ChatGPT web and Claude web were not run (MAP1 is the Captain's probe). STATE1/STATE2 are held, so no retained-state TTL, live-account switching or focus/resume revalidation exists, and no behavior from the proposed request/view lifetime or action-binding designs (#69, #73) is implemented or claimed. Packages are installed through the npm workspace link, not from a registry; exact public source and npm installation remain a release gate (PACK1/PACK2).
 
 ### MCP Apps 2 recipe (MCPV2)
 

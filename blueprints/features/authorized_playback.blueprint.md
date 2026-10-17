@@ -1,6 +1,6 @@
 ---
 feature_name: authorized_playback
-status: draft
+status: approved
 module_blueprints: []
 dependencies: []
 date_added: 2026-10-15
@@ -8,7 +8,13 @@ date_added: 2026-10-15
 
 # Authorized playback
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-15 at [`feb037e51e411ee4da9a71b9e1f6e4d51e1737f9`](https://github.com/MachineWisdomAI/saga-a2ui/blob/feb037e51e411ee4da9a71b9e1f6e4d51e1737f9/blueprints/features/authorized_playback.blueprint.md); the Content Safety clarification in [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/authorized_playback.blueprint.md) was approved on 2026-10-16.
+- Implementation: partial overall. Blueprint `feb037e51e411ee4da9a71b9e1f6e4d51e1737f9` implemented for PLAY1/PLAY2 at [`MachineWisdomAI/saga-a2ui@31759fabb596f7d59921eb3f85095bc2a3aba73b`](https://github.com/MachineWisdomAI/saga-a2ui/commit/31759fabb596f7d59921eb3f85095bc2a3aba73b) through [PR #56](https://github.com/MachineWisdomAI/saga-a2ui/pull/56) and [PR #58](https://github.com/MachineWisdomAI/saga-a2ui/pull/58). The [final PLAY2 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/58#pullrequestreview-5540944730) records the covered source behavior and local verification.
+- Remaining: integrated request/view lifetime work and authenticated ChatGPT/Claude playback/content-policy acceptance. The later content-policy clarification is covered by the source slices recorded in [Content Safety](content_safety_levels.blueprint.md#status); it is not part of the earlier PLAY1/PLAY2 implementation claim.
+- Proposed lifetime amendment: [Request and view lifetimes at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md), [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), remains draft. It does not approve the rejected account-switching machinery or replace the approved playback contract.
+- Sequencing: the approved 2026-10-17 amendment permits public-answer connector and passive-renderer preparation before the remaining lifetime work. This replaces only the extraction start-order sentence below; full playback, release and host acceptance remain required. See the approved amendment in [CORE1 #14](https://github.com/MachineWisdomAI/saga-a2ui/issues/14); that ticket owns the connector sequence update.
 
 ## Problem and current behavior
 

@@ -13,7 +13,7 @@ import {
   type DeclaredSubscriptionRead,
   type SubscriptionsResult,
 } from './subscriptions.js';
-import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from './view.js';
+import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
 
 /** What the view presents. Only `subscriptions` carries private subscription rows. */
 export type SubscriptionsViewState =

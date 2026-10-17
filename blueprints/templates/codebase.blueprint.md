@@ -6,6 +6,12 @@ implemented_features: []
 
 # Implementation name
 
+## Status
+
+- Implementation alignment: unverified.
+
+<!-- Follow the lifecycle record in blueprints/README.md. Replace unverified only after inspecting the implementation against the approved module/feature revision. Record Blueprint <design SHA> implemented at <code repository>@<landed code SHA>, covered scope, review/verification links and remaining gaps. Preserve previous mappings and distinguish proposed successor contracts from implemented behavior. -->
+
 <!-- Copy to codebases/<implementation-path>/codebase.blueprint.md. Replace prompts with inspected implementation facts and real links. Omit module_blueprint_commit until alignment with a specific module revision has been reviewed. -->
 
 ## Implementation and module contract
