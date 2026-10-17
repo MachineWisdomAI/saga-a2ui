@@ -68,10 +68,15 @@ export class SagaDescriptionElement extends LitElement {
     if (view === undefined) return html`<p data-testid="description-plain">${this.source}</p>`;
     const result = this.interpretation();
     if (!result.ok) {
-      return html`<p role="alert" data-testid="description-limit">
-        This description is too long to display (${result.failure.length} characters; the limit is
-        ${result.failure.limit}).
-      </p>`;
+      return result.failure.kind === 'too-long'
+        ? html`<p role="alert" data-testid="description-limit">
+            This description is too long to display (${result.failure.length} characters; the limit is
+            ${result.failure.limit}).
+          </p>`
+        : html`<p role="alert" data-testid="description-limit" data-reason="too-nested">
+            This description is nested too deeply to display (the nesting limit is
+            ${result.failure.limit} levels; a quote counts as one and a list item as two).
+          </p>`;
     }
     const counters: RenderCounters = { link: 0, image: 0 };
     return html`<style>

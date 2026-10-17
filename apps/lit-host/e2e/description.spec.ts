@@ -186,6 +186,25 @@ test.describe('ordinary and hostile descriptions', () => {
     await expect(view.getByTestId('description-limit')).toContainText('2001');
     await expect(view.getByTestId('description-content')).toHaveCount(0);
   });
+
+  test('a description nested past the limit is refused explicitly, and one just inside keeps its text', async ({ page }) => {
+    const { view, frame } = await open(page, { description: 'short' });
+    const send = (value: string) =>
+      frame.evaluate(
+        (description) =>
+          window.sagaSend?.({
+            version: 'v0.9',
+            updateDataModel: { surfaceId: 'fixture', path: '/description', value: description },
+          }),
+        value,
+      );
+    await send('> '.repeat(19) + 'visible-word');
+    await expect(view.getByTestId('description-content')).toContainText('visible-word');
+    await send('> '.repeat(20) + 'visible-word');
+    await expect(view.getByTestId('description-limit')).toHaveAttribute('data-reason', 'too-nested');
+    await expect(view.getByTestId('description-limit')).toContainText('nested too deeply');
+    await expect(view.getByTestId('description-content')).toHaveCount(0);
+  });
 });
 
 test.describe('Standard links go only through the host callback', () => {
@@ -448,5 +467,19 @@ test.describe('policy and resource identity', () => {
     await expect(view.getByTestId('view-problem')).toContainText('This view cannot start');
     await expect(view.locator('a2ui-surface')).toHaveCount(0);
     await expect(view.getByTestId('md-image')).toHaveCount(0);
+  });
+
+  test('an embedded host that would start a new CSP directive fails before anything is mounted', async ({ page }) => {
+    const { view, requests } = await open(page, {
+      description: `![chart](${IMAGE})`,
+      imageHosts: [IMAGE_HOST],
+      expectStart: false,
+      transformHtml: (html) =>
+        html.replace(`"imageHosts":["${IMAGE_HOST}"]`, `"imageHosts":["${IMAGE_HOST};bogus"]`),
+    });
+    await expect(view.getByTestId('view-problem')).toContainText('This view cannot start');
+    await expect(view.locator('a2ui-surface')).toHaveCount(0);
+    await expect(view.getByTestId('md-image')).toHaveCount(0);
+    expect(requests).toEqual([]);
   });
 });

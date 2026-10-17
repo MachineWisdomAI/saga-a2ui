@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_DESCRIPTION_LENGTH,
+  MAX_NESTING_LEVEL,
   parseDescription,
   type BlockNode,
   type InlineNode,
@@ -166,9 +167,97 @@ describe('the input bound', () => {
     });
   });
 
-  it('parses pathologically nested input within the bound without throwing', () => {
+  it('refuses pathologically nested blocks explicitly without throwing', () => {
     const nested = '>'.repeat(500) + ' deep\n\n' + '['.repeat(500) + 'x' + ']'.repeat(500);
-    const result = parseDescription(nested.slice(0, MAX_DESCRIPTION_LENGTH));
-    expect(result.ok).toBe(true);
+    expect(parseDescription(nested.slice(0, MAX_DESCRIPTION_LENGTH))).toEqual({
+      ok: false,
+      failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL },
+    });
+  });
+
+  it('parses pathologically nested inline brackets and emphasis without losing text', () => {
+    for (const source of [
+      '['.repeat(500) + 'visible-word' + ']'.repeat(500),
+      '*a '.repeat(300) + 'visible-word',
+      '*[a '.repeat(150) + 'visible-word' + ']*'.repeat(150),
+    ]) {
+      expect(visibleText(parsed(source.slice(0, MAX_DESCRIPTION_LENGTH)).blocks)).toContain('visible-word');
+    }
+  });
+});
+
+/** All text a reader would see in a block tree, in order. */
+function visibleText(blocks: readonly BlockNode[]): string {
+  return blocks
+    .map((block) => {
+      switch (block.kind) {
+        case 'paragraph':
+        case 'heading':
+          return plain(block.children);
+        case 'quote':
+          return visibleText(block.children);
+        case 'list':
+          return block.items.map(visibleText).join(' ');
+        case 'code-block':
+          return block.text;
+        case 'rule':
+          return '';
+      }
+    })
+    .join(' ');
+}
+
+describe('the nesting limit', () => {
+  const containers: readonly (readonly [string, string])[] = [
+    ['block quotes', '> '],
+    ['bullet lists', '- '],
+    ['ordered lists', '1. '],
+    ['quotes holding lists', '> - '],
+    ['lists holding quotes', '- > '],
+  ];
+
+  it.each(containers)('never silently drops text below the length bound: %s', (_name, prefix) => {
+    let refused = 0;
+    let preserved = 0;
+    for (let depth = 1; depth <= 60; depth += 1) {
+      const source = prefix.repeat(depth) + 'visible-word';
+      expect(source.length).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH);
+      const result = parseDescription(source);
+      if (result.ok) {
+        // Success must mean the text is still there to be rendered.
+        expect(visibleText(result.description.blocks)).toContain('visible-word');
+        preserved += 1;
+      } else {
+        expect(result.failure).toEqual({ kind: 'too-nested', limit: MAX_NESTING_LEVEL });
+        refused += 1;
+      }
+    }
+    // Both outcomes occur, and once the limit is reached every deeper document is refused.
+    expect(preserved).toBeGreaterThan(5);
+    expect(refused).toBeGreaterThan(0);
+    for (let depth = 60; depth <= 120; depth += 7) {
+      expect(parseDescription(prefix.repeat(depth) + 'visible-word').ok).toBe(false);
+    }
+  });
+
+  it('reproduces the reported case: twenty quotes around one word are refused, not emptied', () => {
+    const source = '> '.repeat(20) + 'visible-word';
+    expect(source.length).toBe(52);
+    expect(parseDescription(source)).toEqual({ ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } });
+  });
+
+  it('keeps the text of quotes nested just inside the limit', () => {
+    const result = parsed('> '.repeat(19) + 'visible-word');
+    expect(visibleText(result.blocks)).toBe('visible-word');
+  });
+
+  it('keeps the text of lists nested just inside the limit', () => {
+    expect(visibleText(parsed('- '.repeat(9) + 'visible-word').blocks)).toBe('visible-word');
+    expect(parseDescription('- '.repeat(10) + 'visible-word').ok).toBe(false);
+  });
+
+  it('does not refuse a long flat document or many sibling containers', () => {
+    const siblings = Array.from({ length: 100 }, (_unused, index) => `> quote ${index}\n\n- item ${index}`).join('\n\n');
+    expect(parseDescription(siblings.slice(0, MAX_DESCRIPTION_LENGTH)).ok).toBe(true);
   });
 });

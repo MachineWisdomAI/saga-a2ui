@@ -36,13 +36,41 @@ export interface ParsedDescription {
   readonly blocks: readonly BlockNode[];
 }
 
-export type ParseFailure = { readonly kind: 'too-long'; readonly limit: number; readonly length: number };
+/**
+ * The parser's block nesting ceiling. markdown-it silently stops reading a document once open
+ * block containers (block quotes, lists and list items each count one) reach this depth, which
+ * would drop the remaining text without any signal. It is fixed here so the limit is explicit and
+ * a document that reaches it is refused instead (see {@link parseDescription}).
+ */
+export const MAX_NESTING_LEVEL = 20;
+
+export type ParseFailure =
+  | { readonly kind: 'too-long'; readonly limit: number; readonly length: number }
+  | { readonly kind: 'too-nested'; readonly limit: number };
 
 export type ParseResult =
   | { readonly ok: true; readonly description: ParsedDescription }
   | { readonly ok: false; readonly failure: ParseFailure };
 
-const parser = new MarkdownIt('commonmark', { html: false, linkify: false, typographer: false });
+const parser = new MarkdownIt('commonmark', {
+  html: false,
+  linkify: false,
+  typographer: false,
+  maxNesting: MAX_NESTING_LEVEL,
+});
+
+/**
+ * True when a block container's content would be read at or beyond the parser's ceiling. An open
+ * token's `level` is the depth of its enclosing containers, so its content starts one deeper; the
+ * parser reads nothing at or past {@link MAX_NESTING_LEVEL}. Empty containers at the ceiling are
+ * refused too: the token stream cannot show whether anything was dropped, so the check is exact
+ * about the ceiling and conservative about content.
+ */
+function reachesNestingCeiling(tokens: readonly Token[]): boolean {
+  return tokens.some(
+    (token) => (token.type === 'blockquote_open' || token.type === 'list_item_open') && token.level + 1 >= MAX_NESTING_LEVEL,
+  );
+}
 
 /** Reads tokens left to right; the parser guarantees open/close tokens are balanced. */
 class TokenReader {
@@ -170,14 +198,17 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Interprets a description. Input over {@link MAX_DESCRIPTION_LENGTH} fails explicitly: it is not
- * truncated and no partial result is returned. The returned value is deeply immutable and keeps
+ * Interprets a description. Input over {@link MAX_DESCRIPTION_LENGTH}, or nested block containers
+ * that reach {@link MAX_NESTING_LEVEL}, fail explicitly: nothing is truncated or silently dropped
+ * and no partial result is returned. The returned value is deeply immutable and keeps
  * the supplied string as `source`.
  */
 export function parseDescription(source: string): ParseResult {
   if (source.length > MAX_DESCRIPTION_LENGTH) {
     return { ok: false, failure: { kind: 'too-long', limit: MAX_DESCRIPTION_LENGTH, length: source.length } };
   }
-  const blocks = readBlocks(new TokenReader(parser.parse(source, {})));
+  const tokens = parser.parse(source, {});
+  if (reachesNestingCeiling(tokens)) return { ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } };
+  const blocks = readBlocks(new TokenReader(tokens));
   return { ok: true, description: deepFreeze({ source, blocks }) };
 }

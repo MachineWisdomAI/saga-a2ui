@@ -46,6 +46,63 @@ describe('creating a content policy', () => {
   });
 
   it.each([
+    ['a semicolon that would start a CSP directive', 'images.example.com;bogus'],
+    ['a directive injected after a semicolon', 'images.example.com;script-src'],
+    ['a comma', 'images.example.com,evil.example'],
+    ['an apostrophe', "images.example.com'"],
+    ['a space', 'images.example.com evil.example'],
+    ['a quote', 'images.example.com"'],
+    ['an underscore', 'img_host.example.com'],
+    ['an exclamation mark', 'images!.example.com'],
+    ['braces', 'images{x}.example.com'],
+    ['a leading hyphen label', '-images.example.com'],
+    ['a trailing hyphen label', 'images-.example.com'],
+    ['an empty label', 'images..example.com'],
+    ['a leading dot', '.example.com'],
+    ['a bracketed IPv6 literal', '[::1]'],
+    ['a label over 63 characters', `${'a'.repeat(64)}.example.com`],
+    ['a name over 253 characters', `${'a'.repeat(60)}.`.repeat(5) + 'example.com'],
+    ['a non-canonical IPv4 form', '0x7f.1'],
+    ['a newline', 'images.example.com\nscript-src'],
+  ])('rejects %s before building a policy', (_name, host) => {
+    const created = createContentPolicy({ imageHosts: [host] });
+    expect(created.ok).toBe(false);
+    if (created.ok) return;
+    expect(created.failure.kind).toBe('invalid-image-host');
+  });
+
+  it.each(['images.example.com', 'a.b.c.example.org', 'xn--bcher-kva.example', 'cdn-1.example.com', 'localhost', '203.0.113.7', '1a.example.com'])(
+    'accepts the valid host %s and derives agreeing, well-formed restrictions',
+    (host) => {
+      const policy = policyWith([host]);
+      expect(policy.imageHosts).toEqual([host]);
+      expect(policy.resource.imageOrigins).toEqual([`https://${host}`]);
+      // The derived policy has exactly the expected directives: a host cannot add one.
+      const directives = policy.resource.contentSecurityPolicy.split('; ').map((directive) => directive.split(' ')[0]);
+      expect(directives).toEqual([
+        'default-src',
+        'script-src',
+        'style-src',
+        'img-src',
+        'font-src',
+        'media-src',
+        'connect-src',
+        'frame-src',
+        'object-src',
+        'base-uri',
+        'form-action',
+      ]);
+      expect(policy.resource.contentSecurityPolicy).toContain(`img-src https://${host};`);
+      expect(policy.decideImage(`https://${host}/a.png`, 'established').allowed).toBe(true);
+    },
+  );
+
+  it('rejects a delimiter host even when a valid host is listed beside it', () => {
+    const created = createContentPolicy({ imageHosts: ['images.example.com', 'images.example.com;bogus'] });
+    expect(created.ok).toBe(false);
+  });
+
+  it.each([
     ['an unsupported level', { level: 'strict' }],
     ['an unknown level', { level: 'permissive' }],
     ['a non-object', 'standard'],

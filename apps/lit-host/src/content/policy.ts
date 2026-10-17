@@ -66,11 +66,26 @@ const ConfigSchema = z
   })
   .strict();
 
-/** A host entry is valid only when it is already the canonical lowercase ASCII hostname. */
+/**
+ * One DNS label: lowercase letters, digits and interior hyphens, at most 63 characters. This is
+ * the character set a Content-Security-Policy host-source accepts, so a host that matches it means
+ * the same thing in the policy decision, the resource metadata and the derived `img-src`.
+ */
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * A host entry is valid only when it is already the canonical lowercase ASCII hostname (URL
+ * parsing must leave it unchanged) and every label uses only DNS characters. The second check is
+ * what keeps delimiters such as `;`, `,` or `'` and other characters URL parsing tolerates (`_`,
+ * `!`, `{`) out of the derived CSP, where they would end the source or start a new directive.
+ * Canonical dotted IPv4 addresses satisfy both checks; bracketed IPv6 literals do not and are
+ * rejected, as are single-label wildcards and empty labels.
+ */
 function isExactHost(candidate: unknown): candidate is string {
-  if (typeof candidate !== 'string' || candidate === '' || candidate.includes('*') || candidate.endsWith('.')) {
+  if (typeof candidate !== 'string' || candidate === '' || candidate.length > 253 || candidate.endsWith('.')) {
     return false;
   }
+  if (!candidate.split('.').every((label) => DNS_LABEL.test(label))) return false;
   try {
     return new URL(`https://${candidate}`).hostname === candidate;
   } catch {
