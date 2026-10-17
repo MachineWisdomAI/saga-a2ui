@@ -30,7 +30,7 @@ test('an unsupported component is rejected inside the message-list wrapper too',
     ],
   });
   await expect(page.getByTestId('failure')).toBeVisible();
-  await expect(page.getByTestId('panel-title')).toHaveText('Sample title');
+  await expect(page.getByTestId('panel-title')).toHaveCount(0);
 });
 
 test('removing the app releases the ingress hook; re-adding it shows one clean surface', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { CommonSchemas } from '@a2ui/web_core/v0_9';
-import { z } from '../protocols/a2ui/zod3.js';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
 export const SAGA_CATALOG_ID = 'https://saga-a2ui.local/catalogs/lit-host/v1';
 

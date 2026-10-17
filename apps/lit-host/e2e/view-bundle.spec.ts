@@ -59,13 +59,15 @@ test('the Lit application and host-fixture bundles contain no server code or cre
   }
 });
 
-test('the answer view is one self-contained document without server code, credentials or a renderer library', async () => {
+test('the answer view is one self-contained document without server code or credentials', async () => {
   const html = await readFile(new URL('../dist/answer-view/answer.html', import.meta.url), 'utf8');
   expect(html).not.toMatch(/<script[^>]+\bsrc=/); // no external script
   expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/);
   expect(violations(html, ['createAnswerServer', 'AnswerBackend'])).toEqual([]);
-  // The view is plain DOM: nothing of the Lit application or the A2UI libraries rides along.
-  expect(html).not.toMatch(/LitElement|@a2ui|customElements\.define\(\s*['"]saga-/);
+  // It renders through the SDK's Lit binding with its own catalog, and carries nothing of the
+  // panel catalog, its Markdown policy or any optional component.
+  expect(html).toContain('answer-card');
+  expect(html).not.toMatch(/saga-panel|saga-description|FaithfulCard|html_block/); // html_block: markdown-it rule
 });
 
 test('the player view is one self-contained document with no server code, credential or per-user value', async () => {

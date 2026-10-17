@@ -1,6 +1,5 @@
 import { NO_HOST_LINKS } from './content/host-links.js';
-import { a2uiV0_9Decoder } from './protocols/a2ui/v0_9/decoder.js';
-import { createMessageSession } from './protocols/a2ui/v0_9/session.js';
+import { a2uiV0_9Decoder, createMessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { registerLitElements, sagaCatalog } from './lit/integration.js';
 import { createSagaAppElement } from './lit/saga-app.js';
