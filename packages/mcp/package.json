@@ -1,0 +1,28 @@
+{
+  "name": "@saga-a2ui/mcp",
+  "private": true,
+  "description": "MCP and MCP Apps delivery for SAGA applications: separate server, view and policy exports",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./server": "./src/server/index.ts",
+    "./view": "./src/view/index.ts",
+    "./policy": "./src/policy/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/server": "2.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/node": "2.1.1",
+    "@types/node": "22.20.5",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  }
+}

@@ -21,6 +21,7 @@
     "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
+    "@saga-a2ui/mcp": "*",
     "jose": "6.2.12",
     "lit": "^3.3.3",
     "markdown-it": "15.0.2",
