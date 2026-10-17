@@ -7,7 +7,12 @@ status: draft
 
 # Module name
 
-Draft awaiting human design review.
+## Status
+
+- Design: draft awaiting human approval.
+- Implementation: not started.
+
+<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination module directory). On approval, update status above and pin the reviewed contract revision. Record Blueprint <design SHA> implemented at <code repository>@<landed code SHA> for each implementation, with covered scope, review/verification links and gaps. Preserve earlier mappings when adding a successor. -->
 
 <!-- Copy to modules/<module_name>.blueprint.md. Replace prompts with the module contract. -->
 

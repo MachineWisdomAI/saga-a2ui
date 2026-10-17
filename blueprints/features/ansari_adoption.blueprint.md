@@ -1,6 +1,6 @@
 ---
 feature_name: ansari_adoption
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_mcp_connector, reusable_lit_adapter]
 date_added: 2026-10-15
@@ -8,7 +8,12 @@ date_added: 2026-10-15
 
 # Migrate Ansari Faithful Cards to public SAGA packages
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/ansari_adoption.blueprint.md).
+- Implementation: not started. The existing application is the migration source; no landed destination migration or public SAGA installation is established.
+- The approved 2026-10-17 sequencing amendment permits server preparation after [CORE1 #14](https://github.com/MachineWisdomAI/saga-a2ui/issues/14) and view preparation after CORE1 plus [VIEW1 #17](https://github.com/MachineWisdomAI/saga-a2ui/issues/17). It preserves the single migration and all final release, host and destination-maintainer gates.
+- Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
 
 ## Problem and current behavior
 
@@ -131,7 +136,7 @@ In parallel, confirm the proposed IASER ownership arrangement and authorized acc
 
 The public-release prerequisite described under "From parallel preparation to the destination merge" applies to the ANSARI3 merge even if implementation and review completed earlier. Branch from and target `develop`. The destination's required CI and maintainer review remain authoritative; a contributor's own workflow approvals do not replace them. Its contributor guide supports fork PRs and requires a maintainer-approved workflow run for a first-time fork contribution. Publication of SAGA does not grant destination merge permission.
 
-React parity, demo, CLI and tour work in the SDK keep their requirements but do not impose a React-before-Ansari implementation sequence. The full SDK quality checks and host work remain. Normal Blueprint design approval and breakdown approval precede execution; pending final maintainer signoff can remain open while compatible downstream work advances. No publication or destination merge authority is created by this draft.
+React parity, demo, CLI and tour work in the SDK keep their requirements but do not impose a React-before-Ansari implementation sequence. The full SDK quality checks and host work remain. Normal Blueprint design approval and breakdown approval precede execution; pending final maintainer signoff can remain open while compatible downstream work advances. Design approval grants no publication or destination merge authority.
 
 ## Open decisions
 

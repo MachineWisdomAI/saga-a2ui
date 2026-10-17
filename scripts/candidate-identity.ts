@@ -23,7 +23,7 @@ const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 /** Lockfile path of every package the MCP seam and the A2UI boundary depend on, by role. */
 export const RECIPE_PACKAGES = {
-  'MCP Apps': 'apps/lit-host/node_modules/@modelcontextprotocol/ext-apps',
+  'MCP Apps': 'node_modules/@modelcontextprotocol/ext-apps',
   'MCP client': 'node_modules/@modelcontextprotocol/client',
   'MCP core': 'node_modules/@modelcontextprotocol/core',
   'MCP server': 'node_modules/@modelcontextprotocol/server',

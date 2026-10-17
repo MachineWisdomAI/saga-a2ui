@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
-import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '../mcp/view.js';
+import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
   MEDIA_PATH_PREFIX,
