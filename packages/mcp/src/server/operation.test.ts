@@ -371,6 +371,19 @@ describe('protected operation', () => {
     expect(calls.inputs).toEqual([]);
   });
 
+  it('says only the declared unavailable text when the identity resolver throws, and never runs the handler', async () => {
+    const calls = newCalls();
+    const identity = () => {
+      throw new Error('canary-private-identity-diagnostic');
+    };
+    const client = await (await host(protectedNotes({ identity }, calls))).connect('alice');
+    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(JSON.stringify(result)).not.toContain('canary-private-identity-diagnostic');
+    expect(calls.inputs).toEqual([]);
+  });
+
   it('applies the same output validation and absent text as a public operation', async () => {
     const client = await (await host(protectedNotes())).connect('bob');
     const absent = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'nope' } });

@@ -304,7 +304,13 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
 ): void {
   assertConfigured(operation, true);
   register(server, operation, async (args, ctx) => {
-    const identity = operation.identity(ctx.http?.authInfo);
+    let identity: Identity | undefined;
+    try {
+      identity = operation.identity(ctx.http?.authInfo);
+    } catch {
+      // The resolver is application code; whatever it threw may name the identity provider.
+      return failure(operation.failures.unavailable);
+    }
     if (identity === undefined) return failure(operation.failures.signInRequired);
     return execute(operation, ctx, (request) => ({
       handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, identity, request)),
