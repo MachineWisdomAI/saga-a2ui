@@ -1,0 +1,17 @@
+graph TD
+  D["dispatch(action, input):<br/>validate input, run activation prefix<br/>synchronously, create attempt<br/>(id, signal, deadline)"]
+  M["Middleware chain (ordered):<br/>may refuse, bound or decorate;<br/>may not change validated input"]
+  H["Handler and client continuation<br/>under the same signal and deadline"]
+  S["Attempt settles once:<br/>ok, failed or cancelled"]
+  R["Owner retires: new selection,<br/>label loss, teardown, disposal"]
+  P["Telemetry projection:<br/>redact before emission"]
+  O["Observers: logging, metrics,<br/>tracing, analytics"]
+  D --> M
+  M --> H
+  H --> S
+  R -.->|abort signal| S
+  D -->|started| P
+  H -->|progressed| P
+  S -->|settled or retired| P
+  P --> O
+  O -.-|cannot change outcome| S
