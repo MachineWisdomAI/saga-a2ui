@@ -1,6 +1,6 @@
 ---
 feature_name: application_setup
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_mcp_connector]
 date_added: 2026-10-16
@@ -8,13 +8,17 @@ date_added: 2026-10-16
 
 # Application setup for new and existing backends
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/application_setup.blueprint.md).
+- Implementation: not started. No completed implementation or verification of this contract is recorded.
+- Acceptance: the CLI, maintained templates and qualified server/renderer pairs still need implementation and verification.
 
 ## Problem and current behavior
 
 A TypeScript developer who already runs a backend, and an SDK implementer who maintains the starting points, need one way to get SAGA's MCP delivery into an application without copying an unverified example. No SAGA CLI, template, starter or guide exists today, and the packages described in the [package layout](../../packages/README.md) are not yet installable.
 
-The planned work is already ticketed. [STARTER1](https://github.com/MachineWisdomAI/saga-a2ui/issues/23) is the clean starter, [DEMO1](https://github.com/MachineWisdomAI/saga-a2ui/issues/24) the demo, [GUIDE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/25) and [GUIDE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) the developer guides with their attach-to-an-existing-backend recipes, and [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29) the CLI. This feature covers the scope of those four roles (starter, demo, developer guide, CLI) and adds the decisions below. It dispatches nothing; the Blueprint and the implementation breakdown still need review.
+The planned work is already ticketed. [STARTER1](https://github.com/MachineWisdomAI/saga-a2ui/issues/23) is the clean starter, [DEMO1](https://github.com/MachineWisdomAI/saga-a2ui/issues/24) the demo, [GUIDE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/25) and [GUIDE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) the developer guides with their attach-to-an-existing-backend recipes, and [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29) the CLI. This feature covers the scope of those four roles (starter, demo, developer guide, CLI) and adds the decisions below. The design is approved; implementation follows the accepted ticket breakdown and separate dispatch authority.
 
 The server side depends on official `@modelcontextprotocol` middleware. Package choices were checked against the upstream typescript-sdk `packages/middleware` source on 2026-10-16 and are compared below. Available source is not proof that an adapter installs or works with SAGA. The [reusable MCP connector](reusable_mcp_connector.blueprint.md) already selects Node integration 2.1.1, together with MCP Apps 2.0.3, split MCP SDK 2.3.1 and Zod 4.2+, and that selection is not yet qualified. This design pins no further versions; the versions for the other adapters, and qualification of each pair, remain open.
 

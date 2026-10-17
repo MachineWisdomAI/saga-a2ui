@@ -1,6 +1,6 @@
 ---
 feature_name: reusable_lit_adapter
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_mcp_connector]
 date_added: 2026-10-15
@@ -8,7 +8,13 @@ date_added: 2026-10-15
 
 # Reusable Lit adapter
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_lit_adapter.blueprint.md).
+- Implementation: not started. VIEW1/VIEW2 remain delivery work; the existing application-local Lit renderer does not implement the reusable package contract.
+- The approved 2026-10-17 sequencing amendment in [VIEW1 #17](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) permits passive-renderer preparation after CORE1, retaining existing lifecycle safeguards. VIEW2 still requires STATE2; full qualification remains required.
+- Proposed terminology/lifetime revision: [this Blueprint at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/reusable_lit_adapter.blueprint.md) in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft.
+- Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
 
 ## Problem and current behavior
 

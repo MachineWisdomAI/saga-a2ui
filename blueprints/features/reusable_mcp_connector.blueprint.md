@@ -1,6 +1,6 @@
 ---
 feature_name: reusable_mcp_connector
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [authorized_playback, account_session_isolation, content_safety_levels]
 date_added: 2026-10-15
@@ -8,7 +8,13 @@ date_added: 2026-10-15
 
 # Reusable MCP connector
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/reusable_mcp_connector.blueprint.md).
+- The Content Safety/reference clarification at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_mcp_connector.blueprint.md) is also approved; the approved 2026-10-17 sequencing amendment in [CORE1 #14](https://github.com/MachineWisdomAI/saga-a2ui/issues/14) changes preparation order only. CORE1 owns incorporating that amendment into the sequence below; the amendment already overrides the older start-order clauses.
+- Implementation: not yet recorded as landed. [CORE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/14) is underway; [MCP v2 qualification PR #71](https://github.com/MachineWisdomAI/saga-a2ui/pull/71) is prerequisite application work, not implementation of the reusable connector.
+- Proposed terminology/lifetime revision: [this Blueprint at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/reusable_mcp_connector.blueprint.md) in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft. It does not supersede this approved baseline.
+- Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
 
 ## Problem and current behavior
 

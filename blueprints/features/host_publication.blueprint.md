@@ -1,6 +1,6 @@
 ---
 feature_name: host_publication
-status: draft
+status: approved
 module_blueprints: []
 dependencies: []
 date_added: 2026-10-16
@@ -8,7 +8,11 @@ date_added: 2026-10-16
 
 # Prepare an application for host publication
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
+- Implementation: not started. No completed implementation or verification of this contract is recorded.
+- Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions.
 
 ## Problem and current behavior
 
@@ -69,7 +73,7 @@ An accepted implementation would demonstrate these outcomes:
 
 After design approval, reconcile additive coverage with CLI1 and CLI2 and consider a further CLI implementation slice, here called CLI3; no new issue is assigned to it. Establish the release-input and evidence interface, then exercise both host adapters with one application before adding portal handoff. Preserve init/demo and the full renderer matrix, including init's fail-closed behavior against overwrites, unsafe symlinks, implicit installs and remote hooks.
 
-Publication tooling is optional developer tooling, and neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md). If the tooling is not ready, a first listing can be prepared through each platform's native flow. The migration's existing gate remains unchanged: the SAGA source must be public and the exact required package versions must install anonymously from public npm. This draft creates no implementation tickets or approval claims.
+Publication tooling is optional developer tooling, and neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md). If the tooling is not ready, a first listing can be prepared through each platform's native flow. The migration's existing gate remains unchanged: the SAGA source must be public and the exact required package versions must install anonymously from public npm. Design approval creates no implementation tickets or publication authority.
 
 ## Open decisions
 
