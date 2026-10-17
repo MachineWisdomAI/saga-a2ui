@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fragmentsOf,
   MAX_DESCRIPTION_LENGTH,
   MAX_NESTING_LEVEL,
   parseDescription,
@@ -28,6 +29,8 @@ function plain(nodes: readonly InlineNode[]): string {
           return plain(node.children);
         case 'image':
           return `[image ${node.alt}]`;
+        case 'raw-html':
+          return node.text;
         case 'softbreak':
           return ' ';
         case 'hardbreak':
@@ -109,13 +112,32 @@ describe('parsing a description', () => {
     expect(code).toEqual({ kind: 'code-block', text: 'code\n' });
   });
 
-  it('turns raw HTML into visible text rather than elements', () => {
+  it('keeps raw HTML as source text in marked nodes, never as elements', () => {
     const description = parsed('Hello <b>bold</b> and <script>alert(1)</script>\n\n<div onclick="x()">block</div>');
-    const text = description.blocks.map((block) => (block.kind === 'paragraph' ? plain(block.children) : '')).join('|');
-    expect(text).toContain('<b>bold</b>');
-    expect(text).toContain('<script>alert(1)</script>');
-    expect(text).toContain('<div onclick="x()">block</div>');
-    expect(JSON.stringify(description.blocks)).not.toContain('"html');
+    const [paragraph, block] = description.blocks as [BlockNode, BlockNode];
+    // The reader's text is unchanged and in order; each tag is a node the renderer can recognise.
+    expect(paragraph.kind === 'paragraph' && plain(paragraph.children)).toBe(
+      'Hello <b>bold</b> and <script>alert(1)</script>',
+    );
+    expect(paragraph.kind === 'paragraph' && paragraph.children.filter((child) => child.kind === 'raw-html')).toEqual([
+      { kind: 'raw-html', text: '<b>' },
+      { kind: 'raw-html', text: '</b>' },
+      { kind: 'raw-html', text: '<script>' },
+      { kind: 'raw-html', text: '</script>' },
+    ]);
+    expect(block).toEqual({ kind: 'raw-html-block', text: '<div onclick="x()">block</div>' });
+  });
+
+  it('keeps a comment and an unclosed tag as raw HTML source too', () => {
+    const [paragraph, comment] = parsed('a <span class="x"> b\n\n<!-- note -->').blocks as [BlockNode, BlockNode];
+    expect(paragraph.kind === 'paragraph' && paragraph.children).toContainEqual({ kind: 'raw-html', text: '<span class="x">' });
+    expect(comment).toEqual({ kind: 'raw-html-block', text: '<!-- note -->' });
+  });
+
+  it('keeps hostile markup following an HTML block start in the source text of that block', () => {
+    const source = '<script>window.x = 1</script><img src="https://images.example.com/x.png" onerror="y()"> ~~s~~';
+    const description = parsed(source);
+    expect(description.blocks).toEqual([{ kind: 'raw-html-block', text: source }]);
   });
 
   it('keeps unsupported syntax such as tables and strikethrough as source text', () => {
@@ -150,6 +172,35 @@ describe('parsing a description', () => {
 
   it('returns no blocks for an empty description', () => {
     expect(parsed('').blocks).toEqual([]);
+  });
+});
+
+describe('the fragments a description references', () => {
+  it('counts links and raw markup and lists image sources in source order, through every nesting', () => {
+    const description = parsed(
+      [
+        'Intro [one](https://a.example/) and ![first](https://images.example.com/1.png).',
+        '',
+        '> Quoted [two *emphasised* ![nested](https://images.example.com/2.png)](http://b.example/) <b>',
+        '',
+        '- item ![third](https://images.example.com/3.png)',
+        '',
+        '<div>block</div>',
+      ].join('\n'),
+    );
+    expect(fragmentsOf(description)).toEqual({
+      links: 2,
+      images: [
+        'https://images.example.com/1.png',
+        'https://images.example.com/2.png',
+        'https://images.example.com/3.png',
+      ],
+      rawHtml: 2,
+    });
+  });
+
+  it('reports nothing for ordinary text', () => {
+    expect(fragmentsOf(parsed('Just *words*.\n\n- and a list'))).toEqual({ links: 0, images: [], rawHtml: 0 });
   });
 });
 
@@ -199,6 +250,7 @@ function visibleText(blocks: readonly BlockNode[]): string {
         case 'list':
           return block.items.map(visibleText).join(' ');
         case 'code-block':
+        case 'raw-html-block':
           return block.text;
         case 'rule':
           return '';

@@ -71,6 +71,44 @@ describe('the content-policy resource', () => {
   });
 });
 
+function configured(config: object): ContentPolicy {
+  const created = createContentPolicy(config);
+  if (!created.ok) throw new Error(created.failure.message);
+  return created.policy;
+}
+
+describe('the resource of a Strict policy', () => {
+  const HOSTS = ['images.example.com'];
+
+  it('declares exactly what Standard declares for the same hosts, so Show images can use only mount-time permissions', () => {
+    const strict = contentResource(VIEW, configured({ level: 'strict', imageHosts: HOSTS }));
+    const standard = contentResource(VIEW, configured({ level: 'standard', imageHosts: HOSTS }));
+    expect(strict.csp).toEqual(standard.csp);
+    expect(strict.csp.resourceDomains).toEqual(['https://images.example.com']);
+  });
+
+  it('never shares an identity with another policy variant, even when the declared metadata is equal', () => {
+    // A cache keyed by URI must not hand a Strict view a Standard document, or the reverse.
+    const uris = [
+      configured({}),
+      configured({ level: 'strict' }),
+      configured({ level: 'strict', blockedPresentation: 'inert-text' }),
+      configured({ imageHosts: HOSTS }),
+      configured({ level: 'strict', imageHosts: HOSTS }),
+      configured({ level: 'strict', imageHosts: HOSTS, blockedPresentation: 'inert-text' }),
+    ].map((policy) => contentResource(VIEW, policy).uri);
+    expect(new Set(uris).size).toBe(uris.length);
+    expect(uris[0]).toBe(EPISODE_VIEW_URI);
+    expect(contentResource(VIEW, configured({ level: 'strict', imageHosts: HOSTS })).uri).toBe(uris[4]);
+  });
+
+  it('embeds the level and presentation so the view rebuilds the same Strict policy', () => {
+    const policy = configured({ level: 'strict', imageHosts: HOSTS, blockedPresentation: 'inert-text' });
+    const rebuilt = policyFromEmbedded(embeddedJson(contentResource(VIEW, policy).html));
+    expect(rebuilt.ok && rebuilt.policy.configuration).toEqual(policy.configuration);
+  });
+});
+
 describe('reading an embedded configuration', () => {
   it('falls back to the default Standard policy only when nothing is embedded', () => {
     const rebuilt = policyFromEmbedded(null);
@@ -80,7 +118,9 @@ describe('reading an embedded configuration', () => {
   it.each([
     ['text that is not JSON', 'not json'],
     ['a wildcard host', '{"level":"standard","imageHosts":["*.example.com"]}'],
-    ['an unsupported level', '{"level":"strict","imageHosts":[]}'],
+    ['an unknown level', '{"level":"permissive","imageHosts":[]}'],
+    ['a presentation on Standard', '{"level":"standard","imageHosts":[],"blockedPresentation":"placeholder"}'],
+    ['an unknown presentation', '{"level":"strict","imageHosts":[],"blockedPresentation":"collapsed"}'],
   ])('fails explicitly for %s instead of guessing a policy', (_name, text) => {
     expect(policyFromEmbedded(text).ok).toBe(false);
   });

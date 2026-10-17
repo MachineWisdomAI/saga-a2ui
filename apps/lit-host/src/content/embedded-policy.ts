@@ -24,10 +24,7 @@ export function embedPolicy(viewHtml: string, policy: ContentPolicy): string {
   const head = HEAD_OPENING.exec(viewHtml);
   if (head === null) throw new Error('The view document has no <head> to carry its content restrictions.');
   const restrictions = `<meta http-equiv="Content-Security-Policy" content="${policy.resource.contentSecurityPolicy}">`;
-  const configuration = `<script type="application/json" id="${CONTENT_POLICY_ELEMENT_ID}">${inertJson({
-    level: policy.level,
-    imageHosts: policy.imageHosts,
-  })}</script>`;
+  const configuration = `<script type="application/json" id="${CONTENT_POLICY_ELEMENT_ID}">${inertJson(policy.configuration)}</script>`;
   const charset = CHARSET_META.exec(viewHtml);
   const insertAt =
     charset !== null && charset.index > head.index

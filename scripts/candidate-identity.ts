@@ -145,18 +145,34 @@ export function summarizeReceipt(receiptText: string): Record<string, unknown> {
   };
 }
 
-/** `--image-host HOST` (repeatable) selects the same image origins the served policy was built with. */
-export function policyFromArgs(argv: readonly string[]): ContentPolicy {
-  const imageHosts: string[] = [];
+/** Every value given for a repeatable `--name VALUE` option, in order. */
+function optionValues(argv: readonly string[], name: string): string[] {
+  const values: string[] = [];
   argv.forEach((arg, index) => {
-    if (arg !== '--image-host') return;
-    const host = argv[index + 1];
-    if (host === undefined) throw new Error('--image-host requires a host');
-    imageHosts.push(host);
+    if (arg !== name) return;
+    const value = argv[index + 1];
+    if (value === undefined) throw new Error(`${name} requires a value`);
+    values.push(value);
   });
-  if (imageHosts.length === 0) return DEFAULT_CONTENT_POLICY;
-  const created = createContentPolicy({ imageHosts });
-  if (!created.ok) throw new Error(`Invalid --image-host configuration: ${created.failure.message}`);
+  return values;
+}
+
+/**
+ * Builds the policy the served resource was configured with: `--level strict`,
+ * `--blocked-presentation placeholder|inert-text` and `--image-host HOST` (repeatable) are the
+ * same settings the application passes to `createContentPolicy`. Without any, the default policy.
+ */
+export function policyFromArgs(argv: readonly string[]): ContentPolicy {
+  const [level] = optionValues(argv, '--level');
+  const [blockedPresentation] = optionValues(argv, '--blocked-presentation');
+  const imageHosts = optionValues(argv, '--image-host');
+  if (level === undefined && blockedPresentation === undefined && imageHosts.length === 0) return DEFAULT_CONTENT_POLICY;
+  const created = createContentPolicy({
+    ...(level === undefined ? {} : { level }),
+    ...(blockedPresentation === undefined ? {} : { blockedPresentation }),
+    imageHosts,
+  });
+  if (!created.ok) throw new Error(`Invalid content policy configuration: ${created.failure.message}`);
   return created.policy;
 }
 

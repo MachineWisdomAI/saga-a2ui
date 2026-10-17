@@ -19,19 +19,21 @@ export interface ContentResource {
 /**
  * Derives the episode view resource from one policy. The identity, the declared origins and the
  * restrictions inside the document all come from that policy, so a cached resource cannot supply
- * another policy's variant: the default policy keeps the base URI, and every different set of
- * image origins gets its own. Image origins are the only declared domains; the host's broad
+ * another policy's variant: the default policy keeps the base URI, and every different
+ * configuration gets its own. That includes a Strict policy whose declared domains equal a
+ * Standard policy's: the host metadata is the same but the embedded configuration, and so the
+ * view's behavior, is not. Image origins are the only declared domains; the host's broad
  * `resourceDomains` permission is narrowed to images by the restrictions in the document.
  */
 export function contentResource(viewHtml: string, policy: ContentPolicy): ContentResource {
   const origins = policy.resource.imageOrigins;
-  const uri =
-    origins.length === 0
-      ? EPISODE_VIEW_URI
-      : EPISODE_VIEW_URI.replace(
-          /\.html$/,
-          `-${createHash('sha256').update(origins.join('\n')).digest('hex').slice(0, 12)}.html`,
-        );
+  const isDefault = policy.level === 'standard' && origins.length === 0;
+  const uri = isDefault
+    ? EPISODE_VIEW_URI
+    : EPISODE_VIEW_URI.replace(
+        /\.html$/,
+        `-${createHash('sha256').update(JSON.stringify(policy.configuration)).digest('hex').slice(0, 12)}.html`,
+      );
   return {
     uri,
     html: embedPolicy(viewHtml, policy),
