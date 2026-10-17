@@ -1,17 +1,17 @@
 graph TD
-  D["dispatch(action, input):<br/>validate input, run activation prefix<br/>synchronously, create attempt<br/>(id, signal, deadline)"]
-  M["Middleware chain (ordered):<br/>may refuse, bound or decorate;<br/>may not change validated input"]
-  H["Handler and client continuation<br/>under the same signal and deadline"]
-  S["Attempt settles once:<br/>ok, failed or cancelled"]
-  R["Owner retires: new selection,<br/>label loss, teardown, disposal"]
-  P["Telemetry projection:<br/>redact before emission"]
-  O["Observers: logging, metrics,<br/>tracing, analytics"]
-  D --> M
-  M --> H
-  H --> S
-  R -.->|abort signal| S
-  D -->|started| P
-  H -->|progressed| P
-  S -->|settled or retired| P
-  P --> O
-  O -.-|cannot change outcome| S
+  A["1. Construction<br/>immutable definition, no invocation state"] --> B["2. Exact instance binding<br/>handle.bindAction on one occurrence"]
+  B --> C{"Event admitted?<br/>stale installation, then revalidate<br/>active invocation, then busy policy"}
+  C -- "no" --> Z["Ignored, reported to observer"]
+  C -- "yes" --> D["3. Event turn: input, atActivation<br/>synchronous, same call stack"]
+  D --> E["4. Prerequisites<br/>sequential, may refuse"]
+  E --> F["5. Handler<br/>abort signal, work deadline"]
+  F --> G["6. onSuccess, if configured<br/>required hook, own budget"]
+  G --> H["7. Primary outcome decided once<br/>succeeded, failed or canceled"]
+  S["Decides at the moment it occurs:<br/>stage failure, deadline expiry,<br/>cancellation (replaced, disposed,<br/>subject changed). First one wins.<br/>A decided outcome is never rewritten."] -. "fixes the outcome" .-> H
+  H --> I["8. onFailure or onCanceled, if configured<br/>only the hook for the decided outcome"]
+  I --> J["9. Release owned tokens, if any<br/>reverse order, each bounded"]
+  J --> K["10. Finalization: invocation settled<br/>onFinally runs here if configured<br/>binding idle only if this invocation<br/>still owns its state; disposed stays disposed"]
+  O["Observer: telemetry only<br/>never awaited, cannot change the outcome"]
+  D -. "phase events" .-> O
+  H -. "phase events" .-> O
+  K -. "phase events" .-> O
