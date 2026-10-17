@@ -29,18 +29,34 @@ export interface ImageConsentScope {
    * arrives. Subscribers are told after the grants are dead, so they re-render without images.
    */
   revokeAll(): void;
-  /** Called after each `revokeAll`. */
+  /**
+   * Ends this view's consent for good, for example when the host tears the view down or the
+   * connection is disposed. Like `revokeAll`, but terminal: afterwards `grant()` returns a grant
+   * that is already dead, so a control still on screen or held by old code cannot bring images
+   * back. A fresh view has a fresh scope. Idempotent.
+   */
+  retire(): void;
+  /** True once `retire` has been called. */
+  readonly retired: boolean;
+  /** Called after each `revokeAll` and `retire`. */
   subscribe(onRevokeAll: () => void): ConsentSubscription;
 }
 
 export function createImageConsentScope(): ImageConsentScope {
   const liveGrants = new Set<{ live: boolean }>();
   const subscribers = new Set<() => void>();
+  let retired = false;
+
+  const revokeAll = () => {
+    for (const state of liveGrants) state.live = false;
+    liveGrants.clear();
+    for (const notify of [...subscribers]) notify();
+  };
 
   return {
     grant(): ImageConsent {
-      const state = { live: true };
-      liveGrants.add(state);
+      const state = { live: !retired };
+      if (!retired) liveGrants.add(state);
       return {
         get live() {
           return state.live;
@@ -51,10 +67,13 @@ export function createImageConsentScope(): ImageConsentScope {
         },
       };
     },
-    revokeAll() {
-      for (const state of liveGrants) state.live = false;
-      liveGrants.clear();
-      for (const notify of [...subscribers]) notify();
+    revokeAll,
+    retire() {
+      retired = true;
+      revokeAll();
+    },
+    get retired() {
+      return retired;
     },
     subscribe(onRevokeAll) {
       subscribers.add(onRevokeAll);

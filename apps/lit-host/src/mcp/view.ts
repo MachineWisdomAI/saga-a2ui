@@ -101,11 +101,16 @@ export interface EpisodeViewDependencies {
   readonly showProblem: (message: string | undefined) => void;
   /**
    * Ends the reader's consent to load images in this view. Called before each delivered result is
-   * applied (a new result is a new selection, even when its description is unchanged), when the
-   * host asks the view to tear down, and when the connection is disposed, so a view never shows
-   * images the reader agreed to for what it showed before.
+   * applied (a new result is a new selection, even when its description is unchanged), so a view
+   * never shows images the reader agreed to for what it showed before. The view stays live, so
+   * the reader can consent again to the new selection.
    */
   readonly revokeImageConsent: () => void;
+  /**
+   * Ends image consent for good: called when the host asks the view to tear down and when the
+   * connection is disposed. Nothing still on screen may grant consent afterwards.
+   */
+  readonly retireImageConsent: () => void;
 }
 
 /** A connected episode view. */
@@ -126,7 +131,8 @@ const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: {
  * - An error or non-episode result removes the panel and shows a plain-text fallback, so
  *   stale content is never left beside a problem.
  * - A result the session rejects is treated like any other failure: panel removed, reason shown.
- * - Image consent ends before any result is applied, on host teardown and on dispose.
+ * - Image consent is revoked before any result is applied, and retired for good on host teardown
+ *   and on dispose.
  */
 export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
   let panelShown = true;
@@ -142,7 +148,7 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
   const connection = await connectToolResultView({
     app: deps.app,
     transport: deps.transport,
-    onTeardown: deps.revokeImageConsent,
+    onTeardown: deps.retireImageConsent,
     onToolResult(result) {
       deps.revokeImageConsent();
       if (result.isError) return showFailure('The tool reported an error.');
@@ -159,7 +165,7 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
   return {
     dispose() {
       connection.dispose();
-      deps.revokeImageConsent();
+      deps.retireImageConsent();
     },
   };
 }

@@ -281,6 +281,54 @@ test.describe('revoking consent', () => {
     await expect(opened.view.getByTestId('md-image')).toHaveCount(0);
   });
 
+  test('host teardown retires consent for good: the remaining control cannot grant, and no request follows', async ({ page }) => {
+    const opened = await open(page, strict({ description: `A picture: ![late](https://${IMAGE_HOST}/after-teardown.png)` }));
+    const toggle = opened.view.getByTestId('images-toggle');
+    await expect(toggle).toBeEnabled();
+    await opened.teardown();
+    await expect(toggle).toBeDisabled();
+    await expect(opened.view.getByTestId('images-unavailable')).toHaveAttribute('data-reason', 'view-ended');
+    // Even if the disabled state were bypassed, the retired view hands out no live grant.
+    await toggle.evaluate((element) => {
+      element.removeAttribute('disabled');
+      (element as HTMLElement).click();
+    });
+    await settle(page);
+    await expect(opened.view.getByTestId('md-image')).toHaveCount(0);
+    expect(imageRequests(opened.requests)).toEqual([]);
+  });
+
+  test('a legitimate selection change still allows fresh consent in a live view', async ({ page }) => {
+    const opened = await open(page, strict({ description: () => ORDINARY }));
+    await opened.deliverEpisode('ep-2');
+    await opened.view.getByRole('button', { name: 'Show images' }).click();
+    await expect(opened.view.getByTestId('md-image')).toHaveCount(1);
+    await expect.poll(() => imageRequests(opened.requests)).toEqual([IMAGE]);
+  });
+
+  test('a control kept from a replaced description cannot grant consent for the replacement', async ({ page }) => {
+    const replacement = `https://${IMAGE_HOST}/replacement.png`;
+    const opened = await open(page, strict());
+    await expect(opened.view.getByRole('button', { name: 'Show images' })).toBeVisible();
+    const retained = await opened.view.getByTestId('images-toggle').elementHandle();
+    if (retained === null) throw new Error('the Show images control was not rendered');
+    await sendDescription(opened.frame, 'Plain text, no picture');
+    await expect(opened.view.getByTestId('images-toggle')).toHaveCount(0);
+    expect(await retained.evaluate((element) => element.isConnected)).toBe(false);
+    await sendDescription(opened.frame, `Another picture: ![next](${replacement})`);
+    await expect(opened.view.getByRole('button', { name: 'Show images' })).toBeVisible();
+
+    await retained.evaluate((element) => (element as HTMLElement).click());
+    await settle(page);
+    await expect(opened.view.getByTestId('md-image')).toHaveCount(0);
+    expect(imageRequests(opened.requests)).toEqual([]); // the replacement was never consented to
+
+    // Its own fresh control still works.
+    await opened.view.getByRole('button', { name: 'Show images' }).click();
+    await expect(opened.view.getByTestId('md-image')).toHaveCount(1);
+    await expect.poll(() => imageRequests(opened.requests)).toEqual([replacement]);
+  });
+
   test('a replaced view starts without consent, and the old view cannot lend its own', async ({ page }) => {
     const opened = await open(page, strict());
     await grant(opened);

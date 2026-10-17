@@ -46,5 +46,6 @@ if (!content.ok) {
       problem.hidden = message === undefined;
     },
     revokeImageConsent: () => content.view.consent.revokeAll(),
+    retireImageConsent: () => content.view.consent.retire(),
   });
 }

@@ -58,6 +58,8 @@ export class SagaDescriptionElement extends LitElement {
   @state() private sourceRevealed = false;
   /** The reader's current consent to load images. Absent until Show images, and after any revocation. */
   @state() private consent?: ImageConsent;
+  /** True once the view has retired image consent for good (host teardown). No control can grant after it. */
+  @state() private consentEnded = false;
 
   private view?: ContentView;
   private parsed?: Interpretation;
@@ -74,7 +76,11 @@ export class SagaDescriptionElement extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.view = requestContentView(this);
-    this.revocationWatch = this.view?.consent.subscribe(() => this.retireImages());
+    this.consentEnded = this.view?.consent.retired === true;
+    this.revocationWatch = this.view?.consent.subscribe(() => {
+      this.retireImages();
+      this.consentEnded = this.view?.consent.retired === true;
+    });
   }
 
   override disconnectedCallback(): void {
@@ -164,6 +170,9 @@ export class SagaDescriptionElement extends LitElement {
     const granted = this.consent?.live === true;
     const offer = view.policy.offerImages(fragments.images, view.imageEnforcement);
     const unavailableReason = !granted && !offer.available ? offer.reason : undefined;
+    const ended = !granted && this.consentEnded;
+    // The controls belong to the description revision they were rendered for; see `current`.
+    const revision = this.generation;
     return html`<div class="content-controls" data-testid="description-controls">
       ${blockable
         ? html`<button type="button" data-testid="source-toggle" @click=${() => (this.sourceRevealed = !this.sourceRevealed)}>
@@ -175,14 +184,23 @@ export class SagaDescriptionElement extends LitElement {
         : html`<button
               type="button"
               data-testid="images-toggle"
-              ?disabled=${unavailableReason !== undefined}
-              @click=${() => (granted ? this.retireImages() : this.showImages(view))}
+              ?disabled=${unavailableReason !== undefined || ended}
+              @click=${() => {
+                if (!this.current(view, revision)) return;
+                if (granted) this.retireImages();
+                else this.showImages(view);
+              }}
             >
               ${granted ? 'Hide images' : 'Show images'}
             </button>
             <span role="status" data-testid="images-status"
               >${granted ? 'Images shown.' : nothing}</span
             >
+            ${ended
+              ? html`<span data-testid="images-unavailable" data-reason="view-ended"
+                  >Images can no longer be shown: this view has ended.</span
+                >`
+              : nothing}
             ${unavailableReason === undefined
               ? nothing
               : html`<span data-testid="images-unavailable" data-reason=${unavailableReason}
@@ -192,14 +210,25 @@ export class SagaDescriptionElement extends LitElement {
     </div>`;
   }
 
-  /** Records consent for the current description, only when this element still belongs to `view`. */
+  /**
+   * Whether a control rendered for `view` at description revision `revision` still belongs to
+   * this element's current state. A control the reader (or old code) kept hold of after the
+   * description changed, or after the element was disconnected, is stale and must do nothing:
+   * consent is for the description the reader was shown, not whatever is current when it fires.
+   */
+  private current(view: ContentView, revision: number): boolean {
+    return this.view === view && this.generation === revision;
+  }
+
+  /** Records consent for the current description. Callers have already checked the control is current. */
   private showImages(view: ContentView): void {
     const interpretation = this.interpretation();
     if (this.view !== view || !interpretation.ok) return;
     if (!view.policy.offerImages(interpretation.fragments.images, view.imageEnforcement).available) return;
     this.imageEpoch += 1;
     this.consent?.revoke();
-    this.consent = view.consent.grant();
+    const grant = view.consent.grant();
+    if (grant.live) this.consent = grant; // a retired view hands out only dead grants
   }
 
   private block(node: BlockNode, r: Rendering): TemplateResult {

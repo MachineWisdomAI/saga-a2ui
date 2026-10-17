@@ -34,6 +34,37 @@ describe('a consent grant', () => {
   });
 });
 
+describe('retiring a view', () => {
+  it('kills live grants, tells subscribers, and makes every later grant dead', () => {
+    const scope = createImageConsentScope();
+    const live = scope.grant();
+    let told = 0;
+    scope.subscribe(() => (told += 1));
+    expect(scope.retired).toBe(false);
+    scope.retire();
+    expect(scope.retired).toBe(true);
+    expect(live.live).toBe(false);
+    expect(told).toBe(1);
+    expect(scope.grant().live).toBe(false);
+    scope.retire(); // idempotent
+    expect(scope.grant().live).toBe(false);
+  });
+
+  it('does not make a plain revocation terminal', () => {
+    const scope = createImageConsentScope();
+    scope.revokeAll();
+    expect(scope.retired).toBe(false);
+    expect(scope.grant().live).toBe(true);
+  });
+
+  it('does not reach another view', () => {
+    const a = createImageConsentScope();
+    const b = createImageConsentScope();
+    a.retire();
+    expect(b.grant().live).toBe(true);
+  });
+});
+
 describe('revoking a whole view', () => {
   it('retires every live grant, and a grant made afterwards is fresh', () => {
     const scope = createImageConsentScope();
