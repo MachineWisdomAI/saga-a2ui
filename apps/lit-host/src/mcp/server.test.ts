@@ -3,11 +3,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createContentPolicy } from '../content/policy.js';
 import { EPISODE_TOOL_NAME, EPISODE_VIEW_URI } from './episode.js';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import type { EpisodeRecord } from './server.js';
 
-const VIEW_HTML = '<!doctype html><title>view</title><saga-app></saga-app>';
+const VIEW_HTML = '<!doctype html><html><head><title>view</title></head><body><saga-app></saga-app></body></html>';
 
 // The record carries a field the public result must never expose.
 const records: readonly (EpisodeRecord & { internalNotes: string })[] = [
@@ -77,17 +78,50 @@ describe('episode MCP server over streamable HTTP', () => {
 
     expect(first.contents).toHaveLength(1);
     const [content] = first.contents;
-    expect(content).toMatchObject({ uri: EPISODE_VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: VIEW_HTML });
+    expect(content).toMatchObject({ uri: EPISODE_VIEW_URI, mimeType: RESOURCE_MIME_TYPE });
+    expect(content && 'text' in content && content.text).toContain('<saga-app></saga-app>');
     expect(second.contents).toEqual(first.contents);
     expect(JSON.stringify(first)).not.toContain('Second title');
   });
 
-  it('declares a CSP that allows no network or external resources', async () => {
+  it('declares a CSP that allows no network or external resources by default', async () => {
     const { client } = await connect();
     const { contents } = await client.readResource({ uri: EPISODE_VIEW_URI });
     expect(contents[0]?._meta).toEqual({
       ui: { csp: { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } },
     });
+  });
+
+  it('serves a configured image host under its own resource identity, declaring only that origin', async () => {
+    const created = createContentPolicy({ imageHosts: ['images.example.com'] });
+    if (!created.ok) throw new Error(created.failure.message);
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      contentPolicy: created.policy,
+      port: 0,
+    });
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(listener.url)));
+    open.listener = listener;
+    open.client = client;
+
+    const { tools } = await client.listTools();
+    const uri = (tools[0]?._meta as { ui: { resourceUri: string } }).ui.resourceUri;
+    expect(uri).not.toBe(EPISODE_VIEW_URI);
+    const { contents } = await client.readResource({ uri });
+    expect(contents[0]?._meta).toEqual({
+      ui: {
+        csp: {
+          connectDomains: [],
+          resourceDomains: ['https://images.example.com'],
+          frameDomains: [],
+          baseUriDomains: [],
+        },
+      },
+    });
+    // The base resource of the default policy is not served by this variant.
+    await expect(client.readResource({ uri: EPISODE_VIEW_URI })).rejects.toThrow();
   });
 
   it.each([

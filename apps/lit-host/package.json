@@ -20,6 +20,7 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "jose": "6.2.12",
     "lit": "^3.3.3",
+    "markdown-it": "15.0.2",
     "zod": "3.25.76"
   },
   "devDependencies": {

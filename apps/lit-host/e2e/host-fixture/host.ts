@@ -35,6 +35,12 @@ declare global {
      * recover a session. Absent, a proxied call fails closed.
      */
     handleToolCall?: (params: CallToolRequest['params']) => Promise<CallToolResult>;
+    /**
+     * Receives a view's `ui/open-link` request. The host advertises the `openLinks` capability only
+     * when this is set before `mountView`; absent, the host offers no link opening at all. The
+     * fixture never navigates anywhere itself: the test decides what the host does.
+     */
+    handleOpenLink?: (params: { url: string }) => Promise<{ isError?: boolean }>;
   }
 }
 
@@ -50,7 +56,13 @@ window.mountView = async (resource, options) => {
     `<head><meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(resource.csp)}">`,
   );
 
-  bridge = new AppBridge(null, { name: 'local-host-fixture', version: '0.0.0' }, { serverTools: {} });
+  const openLink = window.handleOpenLink;
+  bridge = new AppBridge(
+    null,
+    { name: 'local-host-fixture', version: '0.0.0' },
+    openLink ? { serverTools: {}, openLinks: {} } : { serverTools: {} },
+  );
+  if (openLink) bridge.onopenlink = ({ url }) => openLink({ url });
   bridge.oncalltool = (params) => {
     if (!window.handleToolCall) throw new Error('The host fixture has no tool caller.');
     return window.handleToolCall(params);
