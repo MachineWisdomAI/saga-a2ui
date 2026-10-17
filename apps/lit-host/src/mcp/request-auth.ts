@@ -1,7 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { OAuthError, OAuthErrorCode, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 // Application-owned request authentication for protected MCP endpoints. A pluggable
@@ -86,7 +84,7 @@ export async function authenticate(
   try {
     authInfo = await verifier.verifyAccessToken(match[1]);
   } catch (error) {
-    if (error instanceof InvalidTokenError) return reject(requirement, 401, 'invalid_token', 'Invalid credential');
+    if (OAuthError.isInstance(error) && error.code === OAuthErrorCode.InvalidToken) return reject(requirement, 401, 'invalid_token', 'Invalid credential');
     return { ok: false, status: 500, error: 'server_error' };
   }
   if (typeof authInfo.expiresAt !== 'number' || authInfo.expiresAt <= nowSeconds()) {

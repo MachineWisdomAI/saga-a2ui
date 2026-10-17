@@ -1,7 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { InMemoryTransport, type CallToolRequest, type CallToolResult } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PublicEpisode } from '../mcp/episode.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';

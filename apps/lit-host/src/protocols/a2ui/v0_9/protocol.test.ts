@@ -1,6 +1,6 @@
 import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from '../zod3.js';
 import { a2uiV0_9Decoder } from './decoder.js';
 import type { A2uiMessageVisitor, ValidatedMessage } from './message.js';
 import { createMessageSession } from './session.js';

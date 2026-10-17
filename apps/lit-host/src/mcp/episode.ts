@@ -7,11 +7,11 @@ export const EPISODE_TOOL_NAME = 'get_episode';
 export const EPISODE_VIEW_URI = 'ui://saga-a2ui/episode-view.html';
 
 /** Caller input: a short slug. Anything else is rejected before the catalog is consulted. */
-export const EpisodeRequestShape = {
+export const EpisodeRequestSchema = z.object({
   episodeId: z
     .string()
     .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'episodeId must be 1-64 lowercase letters, digits or hyphens'),
-};
+});
 
 /**
  * The only data this prototype publishes about an episode. Bounded so a result cannot grow
