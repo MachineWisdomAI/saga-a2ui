@@ -1,5 +1,5 @@
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
+import { registerPublicOperation, type OperationOutcome } from '@saga-a2ui/mcp/server';
 import type { ContentPolicy } from '../content/policy.js';
 import { contentResource } from './content-resource.js';
 import {
@@ -38,55 +38,39 @@ export interface EpisodeServerOptions {
 
 /** Copy only the public fields; the explicit projection is what keeps other fields private. */
 function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
-  return PublicEpisodeSchema.parse({
-    episodeId: record.id,
-    title: record.title,
-    description: record.description,
-  });
+  return { episodeId: record.id, title: record.title, description: record.description };
 }
 
 /**
- * Builds an MCP server with one read-only public tool and the HTML resource it links to.
- * No authentication, playback or other tools exist here: the data is public and synthetic.
+ * Builds an MCP server with one explicitly public, read-only operation and the HTML resource it
+ * links to. No authentication, playback or other tools exist here: the data is public and synthetic.
  */
 export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-episode-demo', version: '0.0.0' });
   const view = contentResource(options.viewHtml, options.contentPolicy);
 
-  registerAppTool(
-    server,
-    EPISODE_TOOL_NAME,
-    {
-      title: 'Get episode',
-      description: 'Returns the public title and description of one synthetic episode.',
-      inputSchema: EpisodeRequestSchema,
-      outputSchema: PublicEpisodeSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      _meta: { ui: { resourceUri: view.uri } },
+  registerPublicOperation(server, {
+    name: EPISODE_TOOL_NAME,
+    title: 'Get episode',
+    description: 'Returns the public title and description of one synthetic episode.',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    input: EpisodeRequestSchema,
+    output: PublicEpisodeSchema,
+    view: { ...view, title: 'Episode view' },
+    failures: {
+      absent: 'No public episode has that id.',
+      unavailable: 'The episode is unavailable.',
+      invalidOutput: 'The episode could not be shown.',
     },
-    async ({ episodeId }) => {
+    handle: ({ episodeId }): OperationOutcome<EpisodeRecord> => {
       const record = options.catalog.find(episodeId);
-      if (!record) {
-        return { isError: true, content: [{ type: 'text', text: 'No public episode has that id.' }] };
-      }
-      const episode = toPublicEpisode(record);
-      return {
-        content: [{ type: 'text', text: `${episode.title} (${episode.episodeId})` }],
-        structuredContent: episode,
-      };
+      return record ? { kind: 'record', record } : { kind: 'absent' };
     },
-  );
-
-  registerAppResource(server, 'Episode view', view.uri, {}, async () => ({
-    contents: [
-      {
-        uri: view.uri,
-        mimeType: RESOURCE_MIME_TYPE,
-        text: view.html,
-        _meta: { ui: { csp: view.csp } },
-      },
-    ],
-  }));
+    project: (record) => {
+      const episode = toPublicEpisode(record);
+      return { text: `${episode.title} (${episode.episodeId})`, data: episode };
+    },
+  });
 
   return server;
 }
