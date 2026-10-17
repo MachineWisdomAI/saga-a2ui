@@ -99,7 +99,7 @@ The integrated authenticated ChatGPT web and Claude web runs still exercise both
 2. [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7) adds Strict’s blocked-fragment presentation and revocable Show images interaction, proves interleaved-instance isolation and cleanup, and preserves authored Play’s separate policy. Resource and renderer policy stay aligned.
 3. Exercise both modes with the required lifetime behavior and playback in each required host. Implementation review, observed host evidence and final signoff stay separate outcomes.
 
-Content interpretation and policy decisions can proceed independently. The [account and session isolation proposal](account_session_isolation.blueprint.md) is rejected, so the required lifetime behavior needs design reconciliation before integration. Existing authentication, isolation, cancellation and cleanup requirements remain; no replacement lifetime design is approved.
+Content interpretation and policy decisions can proceed independently. [Request and view lifetimes](request_view_lifetimes.blueprint.md) proposes the required lifetime behavior in place of the rejected account/session proposal. The replacement design and breakdown await human approval before integration. Existing authentication, isolation, cancellation and cleanup requirements remain.
 
 ## Open decisions
 
@@ -112,5 +112,5 @@ POL1 must select and pin a maintained Markdown library, document the supported d
 - [Public resource policy](../../apps/lit-host/src/mcp/server.ts)
 - [Authorized playback design](authorized_playback.blueprint.md)
 - [Reusable MCP connector](reusable_mcp_connector.blueprint.md)
-- [Rejected account/session proposal](account_session_isolation.blueprint.md)
+- [Request and view lifetimes](request_view_lifetimes.blueprint.md)
 - [Coding standards](../../CODING_STANDARDS.md)

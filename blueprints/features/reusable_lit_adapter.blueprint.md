@@ -16,7 +16,7 @@ A Lit application should be able to use SAGA's validated A2UI processing and vie
 
 The protocol implementation already delegates supported schema and state validation to upstream A2UI. It accepts unchecked input, returns validated message cases, and visits each case to update a processor session. The view subscribes to surface creation/deletion and disposes its session on disconnect. These are useful responsibilities to extract. The demo heading, global `window.sagaSend` test hook, episode schema and synthetic catalog remain application details.
 
-This feature introduces `@saga-a2ui/core` and `@saga-a2ui/lit` with a working own-catalog consumer. It preserves the complete browse, description and authorized Play workflow, followed by account/session and asynchronous-lifetime verification. Ansari supplies a second application-owned catalog; neither consumer is required to adopt SAGA's optional FaithfulCard.
+This feature introduces `@saga-a2ui/core` and `@saga-a2ui/lit` with a working own-catalog consumer. It preserves the complete browse, description and authorized Play workflow, followed by the proposed [request and view lifetime verification](request_view_lifetimes.blueprint.md#verification-outcomes). Ansari supplies a second application-owned catalog; neither consumer is required to adopt SAGA's optional FaithfulCard.
 
 ## Proposed behavior
 
@@ -99,4 +99,4 @@ The complete [PACK1](https://github.com/MachineWisdomAI/saga-a2ui/issues/21) and
 
 - [Coding standards](../../CODING_STANDARDS.md), [package direction](../../packages/README.md), and [reusable MCP connector](reusable_mcp_connector.blueprint.md).
 - [A2UI decoder](../../apps/lit-host/src/protocols/a2ui/v0_9/decoder.ts), [validated messages](../../apps/lit-host/src/protocols/a2ui/v0_9/message.ts), [processor session](../../apps/lit-host/src/protocols/a2ui/v0_9/session.ts), [Lit lifecycle](../../apps/lit-host/src/lit/saga-app.ts), and [catalog integration](../../apps/lit-host/src/lit/integration.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b`.
-- [Authorized playback](authorized_playback.blueprint.md), [rejected account/session proposal](account_session_isolation.blueprint.md), [content safety](content_safety_levels.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
+- [Authorized playback](authorized_playback.blueprint.md), [request and view lifetimes](request_view_lifetimes.blueprint.md), [content safety](content_safety_levels.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).

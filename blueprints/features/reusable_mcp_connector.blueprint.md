@@ -2,7 +2,7 @@
 feature_name: reusable_mcp_connector
 status: draft
 module_blueprints: []
-dependencies: [authorized_playback, account_session_isolation, content_safety_levels]
+dependencies: [authorized_playback, request_view_lifetimes, content_safety_levels]
 date_added: 2026-10-15
 ---
 
@@ -85,7 +85,7 @@ CORE3 retains its full callback, contract, disclosure and transport verification
 
 ## Implementation sequence
 
-Besides PLAY1 and PLAY2, two further groups of existing tickets feed this extraction: [STATE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/12) and [STATE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/13) cover account/session lifetime, selection races and the deadline and cancellation path. Their identities and dependency edges remain, but their scope awaits design and breakdown reconciliation because the [account and session isolation proposal](account_session_isolation.blueprint.md) is rejected. Existing authentication, isolation and ordinary lifecycle obligations remain; no replacement design is approved. Meanwhile, [POL1](https://github.com/MachineWisdomAI/saga-a2ui/issues/5) and [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7) cover Standard and Strict content behavior.
+Besides PLAY1 and PLAY2, two further groups of existing tickets feed this extraction: [STATE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/12) and [STATE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/13) have proposed scope for view retirement, selection races and bounded request completion (see [request and view lifetimes](request_view_lifetimes.blueprint.md)). Their identities and dependency edges remain; the replacement design and breakdown await human approval. Existing authentication and isolation safeguards remain. [POL1](https://github.com/MachineWisdomAI/saga-a2ui/issues/5) and [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7) cover Standard and Strict content behavior.
 
 Two lines of work run in parallel. The first settles the dependency recipe: migrate and qualify the selected v2 target, then repeat the affected mapping path on it before CORE1 adopts the projection mapping. The 1.7.5 baseline run in both web hosts has already happened. The second prepares extraction characterization tests and completes the application policy/session behavior the working consumer needs. Use the merged Play implementation and its tests as the extraction starting point. Preserve its required behavior while migrating callers and removing superseded code.
 
@@ -110,4 +110,4 @@ Blueprint approval and implementation-breakdown approval remain required before 
 - [Application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md), which describes how new and existing applications wire their authentication and server integration to this connector's verified-identity hook.
 - [Package ownership](../../packages/README.md), [coding standards](../../CODING_STANDARDS.md), and [version policy](../../docs/version-policy.md).
 - [Application listener](../../apps/lit-host/src/mcp/listener.ts), [subscriptions server](../../apps/lit-host/src/mcp/subscriptions-server.ts), [request classification](../../apps/lit-host/src/mcp/protected-request.ts), [bridge lifecycle](../../apps/lit-host/src/mcp/view.ts), and [playback server](../../apps/lit-host/src/playback/playback-server.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b`.
-- [Authorized playback](authorized_playback.blueprint.md), [rejected account/session proposal](account_session_isolation.blueprint.md), [content safety](content_safety_levels.blueprint.md), [reusable Lit adapter](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/reusable_lit_adapter.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
+- [Authorized playback](authorized_playback.blueprint.md), [request and view lifetimes](request_view_lifetimes.blueprint.md), [content safety](content_safety_levels.blueprint.md), [reusable Lit adapter](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/reusable_lit_adapter.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
