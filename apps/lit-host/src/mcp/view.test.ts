@@ -1,6 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import { afterEach, describe, expect, it } from 'vitest';
 import { a2uiV0_9Decoder } from '../protocols/a2ui/v0_9/decoder.js';
@@ -26,6 +26,8 @@ interface Harness {
   readonly app: App;
   readonly problems: (string | undefined)[];
   deliveries: unknown[];
+  /** `revoke` for each image-consent revocation and `deliver` for each hand-off, in order. */
+  readonly events: string[];
   surface(): SurfaceModel<ComponentApi> | undefined;
   title(): unknown;
   /** Connects a view. Pass `onInitialized` to act while the handshake is still in flight. */
@@ -47,6 +49,7 @@ function harness(): Harness {
   toClean.push({ session, app, bridge });
   const problems: (string | undefined)[] = [];
   const deliveries: unknown[] = [];
+  const events: string[] = [];
 
   return {
     session,
@@ -54,6 +57,7 @@ function harness(): Harness {
     app,
     problems,
     deliveries,
+    events,
     surface: () => current,
     title: () => current?.dataModel.get('/title'),
     async connect(onInitialized) {
@@ -65,9 +69,12 @@ function harness(): Harness {
         transport: viewSide,
         deliver: (input) => {
           deliveries.push(input);
+          events.push('deliver');
           return session.ingest(input);
         },
         showProblem: (message) => problems.push(message),
+        revokeImageConsent: () => events.push('revoke'),
+        retireImageConsent: () => events.push('retire'),
       });
     },
   };
@@ -161,6 +168,47 @@ describe('episode view result handling', () => {
     expect(h.title()).toBe('Before');
   });
 
+  it.each([
+    ['a valid result', episode('ep-001', 'First')],
+    ['an error result', { isError: true, content: [] }],
+    ['a result that is not a public episode', { content: [], structuredContent: { surprise: true } }],
+  ])('revokes image consent before it applies %s', async (_name, result) => {
+    const h = harness();
+    await h.connect();
+    await h.bridge.sendToolResult(result);
+    await expect.poll(() => h.events.length).toBeGreaterThan(0);
+    expect(h.events[0]).toBe('revoke');
+    expect(h.events.indexOf('revoke')).toBeLessThan(h.events.indexOf('deliver'));
+  });
+
+  it('starts a new consent period for every result, even a repeat of the one shown', async () => {
+    const h = harness();
+    await h.connect();
+    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
+    await expect.poll(() => h.title()).toBe('Same');
+    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
+    await expect.poll(() => h.events.filter((event) => event === 'revoke').length).toBe(2);
+  });
+
+  it('retires image consent for good when the host asks the view to tear down, and on dispose', async () => {
+    const h = harness();
+    const view = await h.connect();
+    await h.bridge.teardownResource({});
+    expect(h.events).toEqual(['retire']);
+    view.dispose();
+    expect(h.events).toEqual(['retire', 'retire']);
+  });
+
+  it('does not touch consent for results that arrive after disposal', async () => {
+    const h = harness();
+    const view = await h.connect();
+    view.dispose();
+    h.events.length = 0;
+    await h.bridge.sendToolResult(episode('ep-002', 'After')).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.events).toEqual([]);
+  });
+
   it('clears the prior surface when the session rejects a later result', async () => {
     const h = harness();
     let reject = false;
@@ -178,6 +226,8 @@ describe('episode view result handling', () => {
           ? { ok: false, failure: { kind: 'rejected', message: 'Controlled ingestion rejection' } }
           : h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
+      retireImageConsent: () => undefined,
     });
     await bridge.sendToolResult(episode('ep-001', 'Before'));
     await expect.poll(() => h.title()).toBe('Before');
@@ -189,110 +239,5 @@ describe('episode view result handling', () => {
     await bridge.sendToolResult(episode('ep-003', 'Recovered'));
     await expect.poll(() => h.title()).toBe('Recovered');
     expect(h.problems.at(-1)).toBeUndefined();
-  });
-
-  it('closes the app on dispose after host teardown so it can reconnect', async () => {
-    const h = harness();
-    const view = await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'Before'));
-    await expect.poll(() => h.title()).toBe('Before');
-    await h.bridge.teardownResource({});
-    view.dispose();
-
-    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
-    toClean.push({ bridge: bridge2 });
-    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-    await bridge2.connect(hostSide);
-    await connectEpisodeView({
-      app: h.app,
-      transport: viewSide,
-      deliver: (input) => h.session.ingest(input),
-      showProblem: (message) => h.problems.push(message),
-    });
-    await bridge2.sendToolResult(episode('ep-002', 'Again'));
-    await expect.poll(() => h.title()).toBe('Again');
-  });
-
-  it('delivers each result once after reconnecting the same app', async () => {
-    const h = harness();
-    const first = await h.connect();
-    first.dispose();
-    await h.app.close();
-    await h.bridge.close();
-
-    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
-    toClean.push({ bridge: bridge2 });
-    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-    await bridge2.connect(hostSide);
-    await connectEpisodeView({
-      app: h.app,
-      transport: viewSide,
-      deliver: (input) => {
-        h.deliveries.push(input);
-        return h.session.ingest(input);
-      },
-      showProblem: (message) => h.problems.push(message),
-    });
-
-    h.deliveries.length = 0;
-    await bridge2.sendToolResult(episode('ep-001', 'Again'));
-    await expect.poll(() => h.title()).toBe('Again');
-    expect(h.deliveries).toHaveLength(1);
-  });
-
-  it('ignores a repeated dispose of an old connection after the app reconnects', async () => {
-    const h = harness();
-    const first = await h.connect();
-    first.dispose();
-    await h.app.close();
-    await h.bridge.close();
-
-    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
-    toClean.push({ bridge: bridge2 });
-    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-    await bridge2.connect(hostSide);
-    await connectEpisodeView({
-      app: h.app,
-      transport: viewSide,
-      deliver: (input) => h.session.ingest(input),
-      showProblem: (message) => h.problems.push(message),
-    });
-
-    first.dispose();
-    await bridge2.sendToolResult(episode('ep-001', 'Still live'));
-    await expect.poll(() => h.title()).toBe('Still live');
-    await expect(bridge2.teardownResource({})).resolves.toBeDefined();
-  });
-
-  it('releases its handlers when the connection fails', async () => {
-    const h = harness();
-    const [viewSide] = InMemoryTransport.createLinkedPair();
-    // No host is listening: initialize never completes, so close the pipe to make it fail.
-    const pending = connectEpisodeView({
-      app: h.app,
-      transport: viewSide,
-      deliver: (input) => h.session.ingest(input),
-      showProblem: (message) => h.problems.push(message),
-    });
-    await viewSide.close();
-    await expect(pending).rejects.toBeDefined();
-
-    // A later, healthy connection delivers once.
-    const bridge2 = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
-    toClean.push({ bridge: bridge2 });
-    const [view2, host2] = InMemoryTransport.createLinkedPair();
-    await bridge2.connect(host2);
-    await connectEpisodeView({
-      app: h.app,
-      transport: view2,
-      deliver: (input) => {
-        h.deliveries.push(input);
-        return h.session.ingest(input);
-      },
-      showProblem: () => undefined,
-    });
-    await bridge2.sendToolResult(episode('ep-001', 'Healthy'));
-    await expect.poll(() => h.title()).toBe('Healthy');
-    expect(h.deliveries).toHaveLength(1);
   });
 });

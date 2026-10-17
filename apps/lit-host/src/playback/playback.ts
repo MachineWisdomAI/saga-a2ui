@@ -46,7 +46,7 @@ export const RecipientKeySchema = z.object({
   crv: z.literal('P-256'),
   x: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   y: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-  d: z.undefined(),
+  d: z.undefined().optional(),
 });
 
 /** Finite bounds for the Play request. Enforced before the handler or any backend is reached. */
@@ -65,22 +65,21 @@ export const PLAYBACK_UNAVAILABLE_TEXT = 'Playback is unavailable.';
 /** Tool failure: the result broke its own contract, so nothing was sent. Carries no field values. */
 export const PLAYBACK_INVALID_RESULT_TEXT = 'The playback result could not be shown.';
 
+/** The one rule for an episode id: a short lowercase slug. Requests and projections both use it. */
+const EPISODE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
 /**
  * The only business input Play accepts. Strict, so a forged `accountId` (or any other field)
  * is rejected as invalid input instead of being silently dropped: the caller is the verified
  * principal, never a value in the arguments. Every issue carries the same fixed sentence, because
- * the pinned MCP SDK copies zod's issue text into the tool failure it returns.
+ * the MCP SDK copies zod's issue text into the tool failure it returns.
  */
-/** The one rule for an episode id: a short lowercase slug. Requests and projections both use it. */
-const EPISODE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-export const PlayRequestSchema = z
-  .object({
-    episodeId: z
-      .string({ required_error: PLAYBACK_UNREADABLE_REQUEST_TEXT, invalid_type_error: PLAYBACK_UNREADABLE_REQUEST_TEXT })
-      .regex(EPISODE_SLUG, PLAYBACK_UNREADABLE_REQUEST_TEXT),
-  })
-  .strict(PLAYBACK_UNREADABLE_REQUEST_TEXT);
+export const PlayRequestSchema = z.strictObject(
+  {
+    episodeId: z.string({ error: PLAYBACK_UNREADABLE_REQUEST_TEXT }).regex(EPISODE_SLUG, PLAYBACK_UNREADABLE_REQUEST_TEXT),
+  },
+  { error: PLAYBACK_UNREADABLE_REQUEST_TEXT },
+);
 
 /**
  * Model projection: the only thing the model is ever told about a Play. Fixed text, no fields

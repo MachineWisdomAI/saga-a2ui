@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
-import { ZodError } from 'zod';
+import { McpServer } from '@modelcontextprotocol/server';
+import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
+import { registerProtectedOperation, type OperationOutcome } from '@saga-a2ui/mcp/server';
 import { identityFromAuthInfo } from './request-auth.js';
 import {
   INVALID_OUTPUT_TEXT,
@@ -11,10 +11,9 @@ import {
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SUBSCRIPTIONS_VIEW_URI,
   SUBSCRIPTION_LIMITS,
-  SubscriptionsRequestShape,
+  SubscriptionsRequestSchema,
   SubscriptionsResultSchema,
   isSubscriptionStatus,
-  type SubscriptionsResult,
 } from './subscriptions.js';
 
 /** What the application's backend knows about one subscription. Only four fields are published. */
@@ -56,112 +55,72 @@ export interface SubscriptionsServerOptions {
   readonly readBoundMs?: number;
 }
 
-const VIEW_CSP = { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } as const;
-
-/**
- * Builds each field from the record explicitly (no spreading), then validates the result.
- * A record with an unsupported value fails here, before anything is serialized.
- */
-function toSubscriptionsResult(account: AccountSubscriptions, viewSession: string): SubscriptionsResult {
-  return SubscriptionsResultSchema.parse({
-    displayName: account.displayName,
-    subscriptions: account.subscriptions.map((record) => ({
-      subscriptionId: record.subscriptionId,
-      creator: record.creator,
-      tier: record.tier,
-      status: record.status,
-    })),
-    viewSession,
-  });
-}
-
-const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
-
-const RETIRED = Symbol('retired-browse-read');
-
-/**
- * Waits for one backend read only until the bound or the request abort signal.
- * A resolution that loses that race is ignored, so it cannot become the tool result.
- */
-function readWithinBound<T>(operation: Promise<T>, boundMs: number, signal: AbortSignal): Promise<T | typeof RETIRED> {
-  if (signal.aborted) return Promise.resolve(RETIRED);
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: T | typeof RETIRED) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
-      resolve(signal.aborted ? RETIRED : value);
-    };
-    const onAbort = () => finish(RETIRED);
-    const timer = setTimeout(onAbort, boundMs);
-    signal.addEventListener('abort', onAbort, { once: true });
-    operation.then(
-      (value) => finish(value),
-      () => finish(RETIRED),
-    );
-  });
+/** The account's subscriptions as published for one request: already filtered, with the sign-in that read them. */
+interface PublishedAccount {
+  readonly account: AccountSubscriptions;
+  readonly signInId: string;
 }
 
 /**
- * One read-only tool whose identity is the SDK's per-request verified auth context
- * (`extra.authInfo`), read inside each invocation. The server holds no current-user state, and
- * no tool argument can name an account.
+ * One read-only protected operation. The application decides which account the verified request
+ * names (`identityFromAuthInfo`) and which subscriptions belong to it; the connector supplies the
+ * per-request context, validates input and output and bounds the wait. The server holds no
+ * current-user state, and no tool argument can name an account.
  */
 export function createSubscriptionsServer(options: SubscriptionsServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-subscriptions-demo', version: '0.0.0' });
 
-  registerAppTool(
-    server,
-    SUBSCRIPTIONS_TOOL_NAME,
-    {
-      title: 'List my subscriptions',
-      description: 'Returns the signed-in user’s own subscriptions.',
-      inputSchema: SubscriptionsRequestShape,
-      outputSchema: SubscriptionsResultSchema.shape,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      _meta: { ui: { resourceUri: SUBSCRIPTIONS_VIEW_URI } },
+  registerProtectedOperation(server, {
+    name: SUBSCRIPTIONS_TOOL_NAME,
+    title: 'List my subscriptions',
+    description: 'Returns the signed-in user’s own subscriptions.',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    input: SubscriptionsRequestSchema,
+    output: SubscriptionsResultSchema,
+    view: {
+      uri: SUBSCRIPTIONS_VIEW_URI,
+      title: 'Subscriptions view',
+      html: options.viewHtml,
+      csp: CLOSED_VIEW_CSP,
     },
-    async (args, extra) => {
+    boundMs: options.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs,
+    failures: {
+      absent: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+      unavailable: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+      invalidOutput: INVALID_OUTPUT_TEXT,
+      signInRequired: SIGN_IN_REQUIRED_TEXT,
+    },
+    identity: identityFromAuthInfo,
+    async handle(args, identity): Promise<OperationOutcome<PublishedAccount>> {
       if (args.status !== undefined && !isSubscriptionStatus(args.status)) {
-        return failure(INVALID_SUBSCRIPTION_INPUT_TEXT);
+        return { kind: 'refused', text: INVALID_SUBSCRIPTION_INPUT_TEXT };
       }
-      const identity = identityFromAuthInfo(extra.authInfo);
-      if (!identity) return failure(SIGN_IN_REQUIRED_TEXT);
-      const boundMs = options.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs;
-      try {
-        const account = await readWithinBound(
-          options.backend.listSubscriptions(identity.accountId),
-          boundMs,
-          extra.signal,
-        );
-        if (account === RETIRED || extra.signal.aborted || !account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
-        const published = args.status === undefined
-          ? account
-          : {
-              displayName: account.displayName,
-              subscriptions: account.subscriptions.filter((record) => record.status === args.status),
-            };
-        const result = toSubscriptionsResult(published, options.labelViewSession(identity.signInId));
-        if (extra.signal.aborted) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
-        return {
-          content: [{ type: 'text', text: `${result.displayName}: ${result.subscriptions.length} subscription(s)` }],
-          structuredContent: result,
-        };
-      } catch (error) {
-        // The failure text deliberately omits backend detail and validation messages.
-        if (error instanceof ZodError) return failure(INVALID_OUTPUT_TEXT);
-        return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
-      }
+      const account = await options.backend.listSubscriptions(identity.accountId);
+      if (!account) return { kind: 'absent' };
+      const published = args.status === undefined
+        ? account
+        : {
+            displayName: account.displayName,
+            subscriptions: account.subscriptions.filter((record) => record.status === args.status),
+          };
+      return { kind: 'record', record: { account: published, signInId: identity.signInId } };
     },
-  );
-
-  registerAppResource(server, 'Subscriptions view', SUBSCRIPTIONS_VIEW_URI, {}, async () => ({
-    contents: [
-      { uri: SUBSCRIPTIONS_VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: options.viewHtml, _meta: { ui: { csp: VIEW_CSP } } },
-    ],
-  }));
+    // Each field is copied from the record explicitly (no spreading); the connector validates the
+    // result against the strict output contract before anything is serialized.
+    project: ({ account, signInId }) => ({
+      text: `${account.displayName}: ${account.subscriptions.length} subscription(s)`,
+      data: {
+        displayName: account.displayName,
+        subscriptions: account.subscriptions.map((record) => ({
+          subscriptionId: record.subscriptionId,
+          creator: record.creator,
+          tier: record.tier,
+          status: record.status,
+        })),
+        viewSession: options.labelViewSession(signInId),
+      },
+    }),
+  });
 
   return server;
 }

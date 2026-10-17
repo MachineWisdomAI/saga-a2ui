@@ -15,6 +15,10 @@ export function contentSecurityPolicy(csp: ResourceCsp): string {
     `script-src 'unsafe-inline' ${resources}`.trim(), // the view is one inline script
     `style-src 'unsafe-inline' ${resources}`.trim(),
     `img-src ${resources || "'none'"}`,
+    // MCP Apps `resourceDomains` is one broad permission: it covers images, scripts,
+    // stylesheets, fonts and media alike. Narrowing it is the resource document's job.
+    `font-src ${resources || "'none'"}`,
+    `media-src ${resources || "'none'"}`,
     `connect-src ${csp.connectDomains.join(' ') || "'none'"}`,
     "base-uri 'none'",
     "form-action 'none'",

@@ -5,7 +5,7 @@ import {
   UpdateDataModelMessageSchema,
   formatZodIssue,
 } from '@a2ui/web_core/v0_9';
-import type { z } from 'zod';
+import type { z } from '../zod3.js';
 import type {
   CreateSurfaceMessage,
   DeleteSurfaceMessage,

@@ -1,0 +1,11 @@
+flowchart LR
+  metadata[Application-owned metadata] --> prepare["Proposed @saga-a2ui/publish<br/>check / prepare"]
+  release[Release identity and host evidence] --> prepare
+  endpoint[Deployed endpoint] --> prepare
+  prepare --> chatgpt[ChatGPT ZIP]
+  prepare --> claude["Claude connector details<br/>optional GitHub plugin bundle"]
+  chatgpt --> handoff[Authorized host portal handoff]
+  claude --> handoff
+  handoff --> review[Host review]
+  review --> listed[Approved listing and publication]
+  prepare -.-> claims["Prepared ≠ runtime passed ≠ listed"]

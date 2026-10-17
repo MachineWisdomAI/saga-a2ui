@@ -1,0 +1,13 @@
+graph TD
+  A[Authenticated result] --> B[Current session and selection]
+  B --> C[Start correlated request]
+  C --> D{Still current on completion?}
+  D -->|Yes| E[Show current content or play]
+  D -->|No| F[Discard late result]
+  G[Session change, selection change, expiry or failure] --> H[Retire pending generation]
+  H --> I[Clear private content and stop audio]
+  I --> J[Fresh authenticated read]
+  J -->|Valid current result| B
+  J -->|Denied or unavailable| K[Readable recovery state]
+  G --> D
+  L[Focus or resume] --> I
