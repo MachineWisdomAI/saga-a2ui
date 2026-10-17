@@ -1,6 +1,6 @@
 ---
 feature_name: content_safety_levels
-status: draft
+status: approved
 module_blueprints: []
 dependencies: []
 date_added: 2026-10-15
@@ -8,7 +8,12 @@ date_added: 2026-10-15
 
 # Content safety levels
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/content_safety_levels.blueprint.md).
+- Implementation: partial overall. Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for POL1/POL2 at [`MachineWisdomAI/saga-a2ui@6d3916da15a6207a5a546f06a86f772fd31b9ce3`](https://github.com/MachineWisdomAI/saga-a2ui/commit/6d3916da15a6207a5a546f06a86f772fd31b9ce3) through [PR #70](https://github.com/MachineWisdomAI/saga-a2ui/pull/70) and [PR #72](https://github.com/MachineWisdomAI/saga-a2ui/pull/72). The [POL1 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/70#pullrequestreview-5555182721) and [POL2 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/72#pullrequestreview-5555391827) record local source qualification, including actual browser requests and stale-control regressions.
+- Remaining: integration with the required request/view lifetimes and authenticated ChatGPT/Claude checks. The public episode view has no identity/session-retirement signal; this record does not claim retained-state TTL, focus/resume behavior or integrated host acceptance.
+- Proposed lifetime amendment: [Request and view lifetimes at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md) remains draft in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69). The rejected account/session proposal supplies no implementation authority.
 
 ## Problem and current behavior
 

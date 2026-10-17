@@ -8,7 +8,12 @@ date_added: YYYY-MM-DD
 
 # Capability name
 
-Draft awaiting human design review.
+## Status
+
+- Design: draft awaiting human approval.
+- Implementation: not started.
+
+<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination feature directory). On approval, update status above and pin the reviewed design revision. Record completed scope as Blueprint <design SHA> implemented at <code repository>@<landed code SHA>, with review/verification links and remaining acceptance gaps. Preserve that record when adding a draft or approved successor and its replacement scope. -->
 
 <!-- Copy to features/<capability>.blueprint.md. Replace prompts with subject-matter prose before review; use only real module/feature references. -->
 

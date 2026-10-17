@@ -13,6 +13,12 @@ Rejected on 2026-10-16. This proposal is not approved for implementation. No dem
 
 Existing authentication, authorization and request isolation remain required, as do ordinary selection, cancellation and cleanup obligations. No replacement design is approved.
 
+## Status
+
+- Design: rejected on 2026-10-16; the decision concerns [`ff0f4da45c40cf2581d7f3198a2fceb04aba593b`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/blueprints/features/account_session_isolation.blueprint.md). The original proposal and diagram remain below.
+- Implementation: no implementation of this rejected contract is claimed. Existing authentication and ordinary lifecycle safeguards have their own requirements.
+- Proposed successor: [Request and view lifetimes at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md), [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft. No approved replacement exists; this proposal remains rejected.
+
 ## Rejected proposal retained for reference
 
 The remaining text and diagram preserve the rejected design; their proposed requirements are not a current implementation contract.
