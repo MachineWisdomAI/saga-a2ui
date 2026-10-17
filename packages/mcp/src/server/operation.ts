@@ -1,5 +1,5 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
-import type { AuthInfo, CallToolResult, McpServer, ServerContext, StandardSchemaWithJSON, ToolAnnotations } from '@modelcontextprotocol/server';
+import type { AuthInfo, CallToolResult, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 import { DEFAULT_OPERATION_BOUND_MS, type ViewCsp } from '../policy/index.js';
 
@@ -126,13 +126,29 @@ const isFunction = (value: unknown): boolean => typeof value === 'function';
 const isText = (value: unknown): boolean => typeof value === 'string' && value.length > 0;
 const isSchema = (value: unknown): boolean => typeof value === 'object' && value !== null && isFunction((value as { safeParse?: unknown }).safeParse);
 
-/** Fails before anything is registered, so a misconfigured protected operation is never served. */
-function assertConfigured(declaration: Partial<Declaration<z.ZodObject, z.ZodObject>> & {
-  readonly failures?: Partial<ProtectedFailures>;
+/** The fields registration checks, as an untrusted caller (plain JavaScript, a cast) might supply them. */
+interface UncheckedDeclaration {
+  readonly name?: unknown;
+  readonly title?: unknown;
+  readonly description?: unknown;
+  readonly annotations?: unknown;
+  readonly input?: unknown;
+  readonly output?: unknown;
+  readonly view?: { readonly uri?: unknown; readonly title?: unknown; readonly html?: unknown; readonly csp?: unknown };
+  readonly failures?: {
+    readonly absent?: unknown;
+    readonly unavailable?: unknown;
+    readonly invalidOutput?: unknown;
+    readonly signInRequired?: unknown;
+  };
+  readonly boundMs?: number;
   readonly handle?: unknown;
   readonly project?: unknown;
   readonly identity?: unknown;
-}, requireIdentity: boolean): void {
+}
+
+/** Fails before anything is registered, so a misconfigured protected operation is never served. */
+function assertConfigured(declaration: UncheckedDeclaration, requireIdentity: boolean): void {
   const problems: string[] = [];
   const needs = (present: boolean, requirement: string) => {
     if (!present) problems.push(`missing ${requirement}`);
@@ -154,7 +170,7 @@ function assertConfigured(declaration: Partial<Declaration<z.ZodObject, z.ZodObj
   }
   const bound = declaration.boundMs;
   if (bound !== undefined && !(Number.isFinite(bound) && bound > 0)) problems.push('boundMs must be a finite positive number');
-  if (problems.length > 0) throw new OperationConfigurationError(declaration.name ?? '(unnamed)', problems);
+  if (problems.length > 0) throw new OperationConfigurationError(isText(declaration.name) ? String(declaration.name) : '(unnamed)', problems);
 }
 
 const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
@@ -192,17 +208,20 @@ function requestFor(ctx: ServerContext, live: { open: boolean }): OperationReque
     signal: ctx.mcpReq.signal,
     async reportProgress(update) {
       if (!live.open || progressToken === undefined || ctx.mcpReq.signal.aborted) return;
-      await ctx.mcpReq.notify({ method: 'notifications/progress', params: { progressToken, ...update } }).catch(() => undefined);
+      const { progress, total, message } = update;
+      await ctx.mcpReq
+        .notify({ method: 'notifications/progress', params: { progressToken, progress, total, message } })
+        .catch(() => undefined);
     },
   };
 }
 
 /**
  * Runs the steps every operation shares, after its access mode has settled who the caller is.
- * `serve` is the access mode's own part: it calls the handler and projects the record.
+ * `run` is the access mode's own part: it calls the handler and supplies the projection.
  */
-async function execute<Output extends z.ZodObject, Found>(
-  declaration: Declaration<z.ZodObject, Output> & { readonly failures: OperationFailures },
+async function execute<Found>(
+  declaration: Pick<Declaration<z.ZodObject, z.ZodObject>, 'output' | 'boundMs'> & { readonly failures: OperationFailures },
   ctx: ServerContext,
   run: (request: OperationRequest) => {
     readonly handling: Promise<OperationOutcome<Found>>;
@@ -221,7 +240,7 @@ async function execute<Output extends z.ZodObject, Found>(
     const parsed = declaration.output.safeParse(projection.data);
     if (!parsed.success) return failure(declaration.failures.invalidOutput);
     if (signal.aborted) return failure(declaration.failures.unavailable);
-    return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data as Record<string, unknown> };
+    return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
   } catch {
     // A projection that throws is a fault of the application's mapping; say nothing about it.
     return failure(declaration.failures.unavailable);
@@ -247,8 +266,8 @@ function register(
     {
       title: declaration.title,
       description: declaration.description,
-      inputSchema: declaration.input as StandardSchemaWithJSON,
-      outputSchema: declaration.output as StandardSchemaWithJSON,
+      inputSchema: declaration.input,
+      outputSchema: declaration.output,
       annotations: declaration.annotations,
       _meta: { ui: { resourceUri: declaration.view.uri } },
     },
@@ -265,7 +284,7 @@ export function registerPublicOperation<Input extends z.ZodObject, Output extend
   server: McpServer,
   operation: PublicOperation<Input, Output, Found>,
 ): void {
-  assertConfigured(operation as never, false);
+  assertConfigured(operation, false);
   register(server, operation, (args, ctx) =>
     execute(operation, ctx, (request) => ({
       handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, request)),
@@ -283,7 +302,7 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
   server: McpServer,
   operation: ProtectedOperation<Input, Output, Found, Identity>,
 ): void {
-  assertConfigured(operation as never, true);
+  assertConfigured(operation, true);
   register(server, operation, async (args, ctx) => {
     const identity = operation.identity(ctx.http?.authInfo);
     if (identity === undefined) return failure(operation.failures.signInRequired);
