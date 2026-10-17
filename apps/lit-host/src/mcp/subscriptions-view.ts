@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Transport } from '@modelcontextprotocol/client';
 import {
   EMPTY_SUBSCRIPTIONS_TEXT,
   INVALID_OUTPUT_TEXT,

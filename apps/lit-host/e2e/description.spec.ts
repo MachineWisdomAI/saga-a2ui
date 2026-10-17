@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { expect, test, type Frame, type FrameLocator, type Page } from '@playwright/test';
 import { createContentPolicy, type ContentPolicy } from '../src/content/policy.js';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';

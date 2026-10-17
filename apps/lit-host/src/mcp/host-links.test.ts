@@ -1,6 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge, type McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAppHostLinks } from './host-links.js';
 

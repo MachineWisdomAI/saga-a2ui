@@ -76,9 +76,9 @@ export function declaredSubscriptionRead(argumentsFromHost: unknown): DeclaredSu
  * optional filter the tool itself checks; any other argument (for example `accountId`) is
  * dropped by input validation and cannot select an account.
  */
-export const SubscriptionsRequestShape = {
+export const SubscriptionsRequestSchema = z.object({
   status: z.string().max(SUBSCRIPTION_LIMITS.maxArgumentString).optional(),
-};
+});
 
 /**
  * Opaque label for one sign-in, minted by the server. It is derived with a server-held key, so

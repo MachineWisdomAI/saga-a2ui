@@ -1,8 +1,6 @@
 import { request } from 'node:http';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { OAuthError, OAuthErrorCode, type AuthInfo } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from './dev-auth.js';
@@ -197,7 +195,7 @@ describe('identity is immutable per request', () => {
         verifier: {
           async verifyAccessToken(token) {
             const account = token === 'alice-token' ? DEV_ACCOUNTS.alice : token === 'bob-token' ? DEV_ACCOUNTS.bob : undefined;
-            if (!account) throw new InvalidTokenError('Unknown credential');
+            if (!account) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown credential');
             reused.extra = { accountId: account, signInId: `sign-in-${account}` };
             return reused;
           },

@@ -1,10 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { McpServer } from '@modelcontextprotocol/server';
 import type { ContentPolicy } from '../content/policy.js';
 import { contentResource } from './content-resource.js';
 import {
   EPISODE_TOOL_NAME,
-  EpisodeRequestShape,
+  EpisodeRequestSchema,
   PublicEpisodeSchema,
   type PublicEpisode,
 } from './episode.js';
@@ -59,8 +59,8 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
     {
       title: 'Get episode',
       description: 'Returns the public title and description of one synthetic episode.',
-      inputSchema: EpisodeRequestShape,
-      outputSchema: PublicEpisodeSchema.shape,
+      inputSchema: EpisodeRequestSchema,
+      outputSchema: PublicEpisodeSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       _meta: { ui: { resourceUri: view.uri } },
     },

@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { ZodError } from 'zod';
 import { identityFromAuthInfo } from './request-auth.js';
@@ -11,7 +11,7 @@ import {
   SUBSCRIPTIONS_UNAVAILABLE_TEXT,
   SUBSCRIPTIONS_VIEW_URI,
   SUBSCRIPTION_LIMITS,
-  SubscriptionsRequestShape,
+  SubscriptionsRequestSchema,
   SubscriptionsResultSchema,
   isSubscriptionStatus,
   type SubscriptionsResult,
@@ -106,7 +106,7 @@ function readWithinBound<T>(operation: Promise<T>, boundMs: number, signal: Abor
 
 /**
  * One read-only tool whose identity is the SDK's per-request verified auth context
- * (`extra.authInfo`), read inside each invocation. The server holds no current-user state, and
+ * (`ctx.http.authInfo`), read inside each invocation. The server holds no current-user state, and
  * no tool argument can name an account.
  */
 export function createSubscriptionsServer(options: SubscriptionsServerOptions): McpServer {
@@ -118,25 +118,25 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
     {
       title: 'List my subscriptions',
       description: 'Returns the signed-in user’s own subscriptions.',
-      inputSchema: SubscriptionsRequestShape,
-      outputSchema: SubscriptionsResultSchema.shape,
+      inputSchema: SubscriptionsRequestSchema,
+      outputSchema: SubscriptionsResultSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       _meta: { ui: { resourceUri: SUBSCRIPTIONS_VIEW_URI } },
     },
-    async (args, extra) => {
+    async (args, ctx) => {
       if (args.status !== undefined && !isSubscriptionStatus(args.status)) {
         return failure(INVALID_SUBSCRIPTION_INPUT_TEXT);
       }
-      const identity = identityFromAuthInfo(extra.authInfo);
+      const identity = identityFromAuthInfo(ctx.http?.authInfo);
       if (!identity) return failure(SIGN_IN_REQUIRED_TEXT);
       const boundMs = options.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs;
       try {
         const account = await readWithinBound(
           options.backend.listSubscriptions(identity.accountId),
           boundMs,
-          extra.signal,
+          ctx.mcpReq.signal,
         );
-        if (account === RETIRED || extra.signal.aborted || !account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+        if (account === RETIRED || ctx.mcpReq.signal.aborted || !account) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
         const published = args.status === undefined
           ? account
           : {
@@ -144,7 +144,7 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
               subscriptions: account.subscriptions.filter((record) => record.status === args.status),
             };
         const result = toSubscriptionsResult(published, options.labelViewSession(identity.signInId));
-        if (extra.signal.aborted) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
+        if (ctx.mcpReq.signal.aborted) return failure(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
         return {
           content: [{ type: 'text', text: `${result.displayName}: ${result.subscriptions.length} subscription(s)` }],
           structuredContent: result,

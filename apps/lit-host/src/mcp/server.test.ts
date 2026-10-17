@@ -1,6 +1,5 @@
 import { request as httpRequest } from 'node:http';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createContentPolicy } from '../content/policy.js';

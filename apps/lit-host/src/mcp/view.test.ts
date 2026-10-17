@@ -1,6 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import { afterEach, describe, expect, it } from 'vitest';
 import { a2uiV0_9Decoder } from '../protocols/a2ui/v0_9/decoder.js';
