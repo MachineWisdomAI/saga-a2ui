@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ViewCsp } from '@saga-a2ui/mcp/policy';
 import { embedPolicy } from '../content/embedded-policy.js';
 import type { ContentPolicy } from '../content/policy.js';
 import { EPISODE_VIEW_URI } from './episode.js';
@@ -8,12 +9,7 @@ export interface ContentResource {
   readonly uri: string;
   readonly html: string;
   /** The `_meta.ui.csp` the host reads before mounting. */
-  readonly csp: {
-    readonly connectDomains: readonly string[];
-    readonly resourceDomains: readonly string[];
-    readonly frameDomains: readonly string[];
-    readonly baseUriDomains: readonly string[];
-  };
+  readonly csp: ViewCsp;
 }
 
 /**

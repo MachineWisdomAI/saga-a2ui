@@ -38,6 +38,6 @@ Dependency direction points toward renderer-independent contracts. Core must not
 
 Renderers keep independent maturity and independent dependency and peer declarations. A renderer used with an application's own catalog must not pull in the optional components, including `FaithfulCard`, a Markdown parser, or any renderer the application did not select.
 
-The workspace root is not published. Packages are not yet implemented or installable. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
+The workspace root is not published. `mcp/` is implemented as a private, unreleased workspace package (no version, not installable from a registry); the other packages are not yet implemented. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
 
 The new-project CLI templates and the existing-backend recipes are not packages. They are described in [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md).
