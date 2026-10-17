@@ -169,8 +169,36 @@ describe('candidate identity', () => {
       expect(policyFromArgs(['--image-host', 'images.example.com', '--out', 'x']).resource.imageOrigins).toEqual([
         'https://images.example.com',
       ]);
-      expect(() => policyFromArgs(['--image-host', 'images.example.com;bogus'])).toThrow(/Invalid --image-host/);
-      expect(() => policyFromArgs(['--image-host'])).toThrow(/requires a host/);
+      expect(() => policyFromArgs(['--image-host', 'images.example.com;bogus'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--image-host'])).toThrow(/requires a value/);
+    });
+
+    it('builds a Strict policy from --level and --blocked-presentation, and rejects invalid values', () => {
+      expect(policyFromArgs([]).level).toBe('standard');
+      expect(policyFromArgs(['--level', 'strict']).level).toBe('strict');
+      expect(policyFromArgs(['--level', 'strict']).blockedPresentation).toBe('placeholder');
+      expect(
+        policyFromArgs(['--level', 'strict', '--blocked-presentation', 'inert-text', '--image-host', 'images.example.com']),
+      ).toMatchObject({ level: 'strict', blockedPresentation: 'inert-text', imageHosts: ['images.example.com'] });
+      expect(() => policyFromArgs(['--level', 'permissive'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--blocked-presentation', 'inert-text'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--level'])).toThrow(/requires a value/);
+    });
+
+    it('reports a different served identity for Strict than for Standard with the same hosts', () => {
+      const root = fixtureRoot();
+      try {
+        const hosts = ['--image-host', 'images.example.com'];
+        const standard = episodeResourceIdentity(root, policyFromArgs(hosts)) as { uri: string; sha256: string };
+        const strict = episodeResourceIdentity(root, policyFromArgs(['--level', 'strict', ...hosts])) as {
+          uri: string;
+          sha256: string;
+        };
+        expect(strict.uri).not.toBe(standard.uri);
+        expect(strict.sha256).not.toBe(standard.sha256);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     });
   });
 });

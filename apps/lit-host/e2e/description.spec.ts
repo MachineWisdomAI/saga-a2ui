@@ -1,146 +1,18 @@
-import { readFile } from 'node:fs/promises';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { expect, test, type Frame, type FrameLocator, type Page } from '@playwright/test';
-import { createContentPolicy, type ContentPolicy } from '../src/content/policy.js';
-import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
-import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
-import type { HostedResource } from './host-fixture/host.js';
+import { expect, test, type Frame } from '@playwright/test';
+import {
+  cleanupServedResources,
+  IMAGE,
+  IMAGE_HOST,
+  imageRequests,
+  open,
+  policyOf,
+  serveResource,
+} from './description-harness.js';
 
-// Descriptions rendered by the built view, in the sandboxed iframe of the local host fixture,
-// against a real MCP listener. Every https request the view makes is observed at the browser's
-// network boundary (and answered locally, so no test depends on the internet): a blocked image
-// is proved by the absence of a request, not by a source-text assertion. The host's link
-// callback is the fixture's real `ui/open-link` handler.
+// Standard descriptions rendered by the built view; see description-harness.ts for how the
+// resource is served, mounted in the local host fixture and observed at the network boundary.
 
-const builtView = new URL('../dist/view/view.html', import.meta.url);
-const IMAGE_HOST = 'images.example.com';
-const IMAGE = `https://${IMAGE_HOST}/ok.png`;
-const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
-
-interface Opened {
-  readonly page: Page;
-  readonly view: FrameLocator;
-  readonly frame: Frame;
-  readonly resource: HostedResource;
-  /** Every https request that reached the network layer, in order. */
-  readonly requests: string[];
-  /** Every URL the host's open-link handler received. */
-  readonly openLinkCalls: string[];
-  /** Main-frame and iframe navigations after the view mounted. */
-  readonly navigations: string[];
-}
-
-interface OpenOptions {
-  readonly imageHosts?: readonly string[];
-  readonly description: string;
-  /** How the host treats links: absent (no capability), allow, deny, or a custom handler. */
-  readonly hostLinks?: 'absent' | 'allow' | 'deny' | ((url: string) => Promise<{ isError?: boolean }>);
-  /** Rewrites the served document, e.g. to remove the restrictions or corrupt the configuration. */
-  readonly transformHtml?: (html: string) => string;
-  /** Skip waiting for the host handshake (a view that refuses to start never completes it). */
-  readonly expectStart?: boolean;
-}
-
-const listeners: EpisodeListener[] = [];
-const clients: Client[] = [];
-
-test.afterEach(async () => {
-  await Promise.all(clients.splice(0).map((client) => client.close()));
-  await Promise.all(listeners.splice(0).map((listener) => listener.close()));
-});
-
-function policyOf(imageHosts: readonly string[]): ContentPolicy {
-  const created = createContentPolicy({ imageHosts });
-  if (!created.ok) throw new Error(created.failure.message);
-  return created.policy;
-}
-
-async function serveResource(options: OpenOptions): Promise<{ resource: HostedResource; client: Client }> {
-  const listener = await startEpisodeListener({
-    viewHtml: await readFile(builtView, 'utf8'),
-    catalog: { find: (id) => ({ id, title: 'Episode title', description: options.description }) },
-    contentPolicy: policyOf(options.imageHosts ?? []),
-    port: 0,
-  });
-  listeners.push(listener);
-  const client = new Client({ name: 'e2e-host', version: '0.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(listener.url)));
-  clients.push(client);
-  const { tools } = await client.listTools();
-  const uri = (tools[0]?._meta as { ui: { resourceUri: string } }).ui.resourceUri;
-  const { contents } = await client.readResource({ uri });
-  const [content] = contents;
-  if (!content || !('text' in content)) throw new Error('resources/read returned no text');
-  const ui = (content._meta as { ui: { csp: HostedResource['csp'] } }).ui;
-  return { resource: { html: options.transformHtml?.(content.text) ?? content.text, csp: ui.csp }, client };
-}
-
-/** Answers every https request locally and records it. Redirects and probes have fixed paths. */
-async function observeNetwork(page: Page, requests: string[]): Promise<void> {
-  await page.route(/^https:\/\//, async (route) => {
-    const url = new URL(route.request().url());
-    requests.push(url.href);
-    const cors = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
-    if (url.pathname === '/redirect-out.png') {
-      return route.fulfill({ status: 302, headers: { ...cors, location: 'https://other.example.net/stolen.png' } });
-    }
-    if (url.pathname.endsWith('.js')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'text/javascript', body: 'window.__external = 1;' });
-    }
-    if (url.pathname.endsWith('.css')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'text/css', body: 'body { color: red; }' });
-    }
-    if (url.pathname.endsWith('.woff2')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'font/woff2', body: 'not a font' });
-    }
-    if (url.pathname.endsWith('.mp3')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'audio/mpeg', body: 'not audio' });
-    }
-    return route.fulfill({ status: 200, headers: cors, contentType: 'image/svg+xml', body: SVG });
-  });
-}
-
-async function open(page: Page, options: OpenOptions): Promise<Opened> {
-  const requests: string[] = [];
-  const openLinkCalls: string[] = [];
-  const navigations: string[] = [];
-  await observeNetwork(page, requests);
-  const links = options.hostLinks ?? 'absent';
-  if (links !== 'absent') {
-    await page.exposeFunction('handleOpenLink', async (params: { url: string }) => {
-      openLinkCalls.push(params.url);
-      if (typeof links === 'function') return links(params.url);
-      return links === 'deny' ? { isError: true } : {};
-    });
-  }
-  const { resource, client } = await serveResource(options);
-  await page.goto('/host-fixture/index.html');
-  const mounted = page.evaluate((value) => window.mountView?.(value), resource);
-  if (options.expectStart === false) {
-    void mounted.catch(() => undefined);
-    await expect.poll(() => page.frames().length).toBe(2); // the iframe exists; the handshake never completes
-  } else {
-    await mounted;
-  }
-  const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
-  if (frame === undefined) throw new Error('the host fixture did not mount a view frame');
-  if (options.expectStart !== false) {
-    const result = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId: 'ep-1' } });
-    await page.evaluate((payload) => window.deliverToolResult?.(payload), result as never);
-  }
-  page.on('framenavigated', (navigated) => navigations.push(navigated.url()));
-  return {
-    page,
-    view: page.frameLocator('iframe[title="MCP App view"]'),
-    frame,
-    resource,
-    requests,
-    openLinkCalls,
-    navigations,
-  };
-}
-
-const imageRequests = (requests: readonly string[]) => requests.filter((url) => /\.(png|svg)$/.test(new URL(url).pathname));
+test.afterEach(cleanupServedResources);
 
 test.describe('ordinary and hostile descriptions', () => {
   test('keeps text, formatting and order, and leaves the supplied string unchanged', async ({ page }) => {

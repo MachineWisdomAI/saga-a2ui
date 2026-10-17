@@ -45,5 +45,6 @@ if (!content.ok) {
       problem.textContent = message ?? '';
       problem.hidden = message === undefined;
     },
+    revokeImageConsent: () => content.view.consent.revokeAll(),
   });
 }

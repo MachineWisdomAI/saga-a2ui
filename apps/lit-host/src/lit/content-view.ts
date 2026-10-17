@@ -1,17 +1,21 @@
 import type { HostLinks } from '../content/host-links.js';
 import { CONTENT_POLICY_ELEMENT_ID, policyFromEmbedded } from '../content/embedded-policy.js';
+import { createImageConsentScope, type ImageConsentScope } from '../content/image-consent.js';
 import { establishImageEnforcement, type ContentPolicy, type ImageEnforcement } from '../content/policy.js';
 
 /**
  * Everything a description needs from its view, passed explicitly when the view is created: the
- * immutable trusted policy, the one way to ask the host to open a link, and whether the image
- * restrictions the policy relies on are demonstrably in force. Nothing here is module-wide state,
- * so two views with different policies never share or change each other's effects.
+ * immutable trusted policy, the one way to ask the host to open a link, whether the image
+ * restrictions the policy relies on are demonstrably in force, and this view's own scope for the
+ * reader's revocable image consent. Nothing here is module-wide state, so two views never share
+ * or change each other's effects or consent. The scope is separate from the policy: whoever
+ * observes a retirement signal for the view (a new selection, teardown) calls `consent.revokeAll()`.
  */
 export interface ContentView {
   readonly policy: ContentPolicy;
   readonly hostLinks: HostLinks;
   readonly imageEnforcement: ImageEnforcement;
+  readonly consent: ImageConsentScope;
 }
 
 export const CONTENT_VIEW_REQUEST = 'saga-content-view-request';
@@ -59,6 +63,7 @@ export function contentViewFromDocument(doc: Document, hostLinks: HostLinks): Do
       policy: created.policy,
       hostLinks,
       imageEnforcement: establishImageEnforcement(created.policy, applied),
+      consent: createImageConsentScope(),
     },
   };
 }

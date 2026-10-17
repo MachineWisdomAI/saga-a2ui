@@ -26,6 +26,8 @@ interface Harness {
   readonly app: App;
   readonly problems: (string | undefined)[];
   deliveries: unknown[];
+  /** `revoke` for each image-consent revocation and `deliver` for each hand-off, in order. */
+  readonly events: string[];
   surface(): SurfaceModel<ComponentApi> | undefined;
   title(): unknown;
   /** Connects a view. Pass `onInitialized` to act while the handshake is still in flight. */
@@ -47,6 +49,7 @@ function harness(): Harness {
   toClean.push({ session, app, bridge });
   const problems: (string | undefined)[] = [];
   const deliveries: unknown[] = [];
+  const events: string[] = [];
 
   return {
     session,
@@ -54,6 +57,7 @@ function harness(): Harness {
     app,
     problems,
     deliveries,
+    events,
     surface: () => current,
     title: () => current?.dataModel.get('/title'),
     async connect(onInitialized) {
@@ -65,9 +69,11 @@ function harness(): Harness {
         transport: viewSide,
         deliver: (input) => {
           deliveries.push(input);
+          events.push('deliver');
           return session.ingest(input);
         },
         showProblem: (message) => problems.push(message),
+        revokeImageConsent: () => events.push('revoke'),
       });
     },
   };
@@ -161,6 +167,47 @@ describe('episode view result handling', () => {
     expect(h.title()).toBe('Before');
   });
 
+  it.each([
+    ['a valid result', episode('ep-001', 'First')],
+    ['an error result', { isError: true, content: [] }],
+    ['a result that is not a public episode', { content: [], structuredContent: { surprise: true } }],
+  ])('revokes image consent before it applies %s', async (_name, result) => {
+    const h = harness();
+    await h.connect();
+    await h.bridge.sendToolResult(result);
+    await expect.poll(() => h.events.length).toBeGreaterThan(0);
+    expect(h.events[0]).toBe('revoke');
+    expect(h.events.indexOf('revoke')).toBeLessThan(h.events.indexOf('deliver'));
+  });
+
+  it('starts a new consent period for every result, even a repeat of the one shown', async () => {
+    const h = harness();
+    await h.connect();
+    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
+    await expect.poll(() => h.title()).toBe('Same');
+    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
+    await expect.poll(() => h.events.filter((event) => event === 'revoke').length).toBe(2);
+  });
+
+  it('revokes image consent when the host asks the view to tear down, and on dispose', async () => {
+    const h = harness();
+    const view = await h.connect();
+    await h.bridge.teardownResource({});
+    expect(h.events).toEqual(['revoke']);
+    view.dispose();
+    expect(h.events).toEqual(['revoke', 'revoke']);
+  });
+
+  it('does not touch consent for results that arrive after disposal', async () => {
+    const h = harness();
+    const view = await h.connect();
+    view.dispose();
+    h.events.length = 0;
+    await h.bridge.sendToolResult(episode('ep-002', 'After')).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.events).toEqual([]);
+  });
+
   it('clears the prior surface when the session rejects a later result', async () => {
     const h = harness();
     let reject = false;
@@ -178,6 +225,7 @@ describe('episode view result handling', () => {
           ? { ok: false, failure: { kind: 'rejected', message: 'Controlled ingestion rejection' } }
           : h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
     });
     await bridge.sendToolResult(episode('ep-001', 'Before'));
     await expect.poll(() => h.title()).toBe('Before');
@@ -208,6 +256,7 @@ describe('episode view result handling', () => {
       transport: viewSide,
       deliver: (input) => h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
     });
     await bridge2.sendToolResult(episode('ep-002', 'Again'));
     await expect.poll(() => h.title()).toBe('Again');
@@ -232,6 +281,7 @@ describe('episode view result handling', () => {
         return h.session.ingest(input);
       },
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
     });
 
     h.deliveries.length = 0;
@@ -256,6 +306,7 @@ describe('episode view result handling', () => {
       transport: viewSide,
       deliver: (input) => h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
     });
 
     first.dispose();
@@ -273,6 +324,7 @@ describe('episode view result handling', () => {
       transport: viewSide,
       deliver: (input) => h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
+      revokeImageConsent: () => undefined,
     });
     await viewSide.close();
     await expect(pending).rejects.toBeDefined();
@@ -290,6 +342,7 @@ describe('episode view result handling', () => {
         return h.session.ingest(input);
       },
       showProblem: () => undefined,
+      revokeImageConsent: () => undefined,
     });
     await bridge2.sendToolResult(episode('ep-001', 'Healthy'));
     await expect.poll(() => h.title()).toBe('Healthy');

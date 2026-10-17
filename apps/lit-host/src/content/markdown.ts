@@ -6,9 +6,11 @@ import MarkdownIt, { type Token } from 'markdown-it';
 // produced here, and nothing here decides whether a link or image may be used: that is the
 // content policy's job.
 //
-// Supported dialect: CommonMark as implemented by markdown-it's "commonmark" preset with raw HTML
-// disabled and no linkify, typographer, tables or strikethrough. Raw HTML and every unsupported
-// construct therefore stay in the text as written (`<b>x</b>` is the characters `<b>x</b>`).
+// Supported dialect: CommonMark as implemented by markdown-it's "commonmark" preset with no
+// linkify, typographer, tables or strikethrough. Raw HTML is recognised only so it can be kept as
+// source: the parser's html tokens become `raw-html` and `raw-html-block` nodes carrying their
+// characters, which a renderer shows as text (or a placeholder) and never as elements, so
+// `<b>x</b>` stays the characters `<b>x</b>`. Every other unsupported construct is plain text.
 
 /** The longest description (in UTF-16 code units) that is interpreted. Longer input is refused. */
 export const MAX_DESCRIPTION_LENGTH = 2000;
@@ -19,6 +21,8 @@ export type InlineNode =
   | { readonly kind: 'emphasis' | 'strong'; readonly children: readonly InlineNode[] }
   | { readonly kind: 'link'; readonly destination: string; readonly children: readonly InlineNode[] }
   | { readonly kind: 'image'; readonly source: string; readonly alt: string }
+  /** An HTML tag or comment inside a line, exactly as written. Never rendered as markup. */
+  | { readonly kind: 'raw-html'; readonly text: string }
   | { readonly kind: 'softbreak' }
   | { readonly kind: 'hardbreak' };
 
@@ -28,6 +32,8 @@ export type BlockNode =
   | { readonly kind: 'quote'; readonly children: readonly BlockNode[] }
   | { readonly kind: 'list'; readonly ordered: boolean; readonly start: number; readonly items: readonly (readonly BlockNode[])[] }
   | { readonly kind: 'code-block'; readonly text: string }
+  /** A block of raw HTML, exactly as written (without its final line ending). Never rendered as markup. */
+  | { readonly kind: 'raw-html-block'; readonly text: string }
   | { readonly kind: 'rule' };
 
 export interface ParsedDescription {
@@ -53,7 +59,7 @@ export type ParseResult =
   | { readonly ok: false; readonly failure: ParseFailure };
 
 const parser = new MarkdownIt('commonmark', {
-  html: false,
+  html: true, // recognised so it can be kept as source; no renderer is ever asked for HTML output
   linkify: false,
   typographer: false,
   maxNesting: MAX_NESTING_LEVEL,
@@ -128,6 +134,9 @@ function readInlines(reader: TokenReader, closeType?: string): InlineNode[] {
       case 'image':
         nodes.push({ kind: 'image', source: stringAttribute(token, 'src'), alt: token.content });
         break;
+      case 'html_inline':
+        nodes.push({ kind: 'raw-html', text: token.content });
+        break;
       default:
         // `text`, `text_special` and anything unrecognised: only its characters, as text.
         nodes.push({ kind: 'text', text: token.content });
@@ -178,6 +187,9 @@ function readBlocks(reader: TokenReader, closeType?: string): BlockNode[] {
       case 'code_block':
         blocks.push({ kind: 'code-block', text: token.content });
         break;
+      case 'html_block':
+        blocks.push({ kind: 'raw-html-block', text: token.content.replace(/\n$/, '') });
+        break;
       case 'hr':
         blocks.push({ kind: 'rule' });
         break;
@@ -187,6 +199,42 @@ function readBlocks(reader: TokenReader, closeType?: string): BlockNode[] {
     }
   }
   return blocks;
+}
+
+/** What a description references that a content policy may have to block. */
+export interface DescriptionFragments {
+  readonly links: number;
+  /** Image sources in source order, including images inside link labels. */
+  readonly images: readonly string[];
+  /** Raw HTML tags, comments and blocks, which are never rendered as markup. */
+  readonly rawHtml: number;
+}
+
+/** The single walk over a parsed description that inventories its blockable fragments. */
+export function fragmentsOf(description: ParsedDescription): DescriptionFragments {
+  let links = 0;
+  let rawHtml = 0;
+  const images: string[] = [];
+  const inlines = (nodes: readonly InlineNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === 'link') {
+        links += 1;
+        inlines(node.children);
+      } else if (node.kind === 'emphasis' || node.kind === 'strong') inlines(node.children);
+      else if (node.kind === 'image') images.push(node.source);
+      else if (node.kind === 'raw-html') rawHtml += 1;
+    }
+  };
+  const blocks = (nodes: readonly BlockNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === 'paragraph' || node.kind === 'heading') inlines(node.children);
+      else if (node.kind === 'quote') blocks(node.children);
+      else if (node.kind === 'list') for (const item of node.items) blocks(item);
+      else if (node.kind === 'raw-html-block') rawHtml += 1;
+    }
+  };
+  blocks(description.blocks);
+  return { links, images, rawHtml };
 }
 
 function deepFreeze<T>(value: T): T {

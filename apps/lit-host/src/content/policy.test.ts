@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createContentPolicy, establishImageEnforcement, type ContentPolicy } from './policy.js';
+import { createContentPolicy, establishImageEnforcement, type ContentPolicy, type ImageContext } from './policy.js';
+
+const ESTABLISHED: ImageContext = { enforcement: 'established', consent: 'not-granted' };
+const UNESTABLISHED: ImageContext = { enforcement: 'unestablished', consent: 'not-granted' };
 
 // The trusted policy is exercised only through its public interface: construction from
 // unchecked configuration, link and image decisions, and the derived resource restrictions.
@@ -93,7 +96,7 @@ describe('creating a content policy', () => {
         'form-action',
       ]);
       expect(policy.resource.contentSecurityPolicy).toContain(`img-src https://${host};`);
-      expect(policy.decideImage(`https://${host}/a.png`, 'established').allowed).toBe(true);
+      expect(policy.decideImage(`https://${host}/a.png`, ESTABLISHED).allowed).toBe(true);
     },
   );
 
@@ -103,8 +106,8 @@ describe('creating a content policy', () => {
   });
 
   it.each([
-    ['an unsupported level', { level: 'strict' }],
     ['an unknown level', { level: 'permissive' }],
+    ['a level in the wrong case', { level: 'Strict' }],
     ['a non-object', 'standard'],
     ['an unknown setting', { imageHosts: [], allowAllImages: true }],
     ['a non-array allowlist', { imageHosts: 'images.example.com' }],
@@ -124,7 +127,7 @@ describe('creating a content policy', () => {
     const policy = policyWith(['images.example.com']);
     expect(() => (policy.imageHosts as string[]).push('evil.example')).toThrow(TypeError);
     expect(() => (policy.resource.imageOrigins as string[]).push('https://evil.example')).toThrow(TypeError);
-    expect(policy.decideImage('https://evil.example/x.png', 'established').allowed).toBe(false);
+    expect(policy.decideImage('https://evil.example/x.png', ESTABLISHED).allowed).toBe(false);
   });
 });
 
@@ -164,14 +167,14 @@ describe('image decisions', () => {
   const policy = policyWith(['images.example.com']);
 
   it('allows an HTTPS image from an exactly listed host once enforcement is established', () => {
-    expect(policy.decideImage('https://images.example.com/a/b.png?x=1', 'established')).toEqual({
+    expect(policy.decideImage('https://images.example.com/a/b.png?x=1', ESTABLISHED)).toEqual({
       allowed: true,
       url: 'https://images.example.com/a/b.png?x=1',
     });
   });
 
   it('keeps every image inert when enforcement is not established, even from a listed host', () => {
-    expect(policy.decideImage('https://images.example.com/a.png', 'unestablished')).toEqual({
+    expect(policy.decideImage('https://images.example.com/a.png', UNESTABLISHED)).toEqual({
       allowed: false,
       reason: 'enforcement-unestablished',
     });
@@ -179,7 +182,7 @@ describe('image decisions', () => {
 
   it('allows no image under the default empty allowlist', () => {
     const empty = policyWith();
-    expect(empty.decideImage('https://images.example.com/a.png', 'established')).toEqual({
+    expect(empty.decideImage('https://images.example.com/a.png', ESTABLISHED)).toEqual({
       allowed: false,
       reason: 'host-not-allowed',
     });
@@ -194,7 +197,7 @@ describe('image decisions', () => {
     ['the listed host in the path of another host', 'https://evil.test/images.example.com/x.png'],
     ['a non-default port', 'https://images.example.com:8443/x.png'],
   ])('refuses %s', (_name, source) => {
-    const decision = policy.decideImage(source, 'established');
+    const decision = policy.decideImage(source, ESTABLISHED);
     expect(decision.allowed).toBe(false);
   });
 
@@ -205,11 +208,11 @@ describe('image decisions', () => {
     ['a data URL', 'data:image/png;base64,AAAA', 'not-https'],
     ['a relative path', 'x.png', 'malformed'],
   ])('refuses %s with a specific reason', (_name, source, reason) => {
-    expect(policy.decideImage(source, 'established')).toEqual({ allowed: false, reason });
+    expect(policy.decideImage(source, ESTABLISHED)).toEqual({ allowed: false, reason });
   });
 
   it('matches a host written in uppercase in the image URL', () => {
-    expect(policy.decideImage('https://IMAGES.example.com/x.png', 'established')).toMatchObject({ allowed: true });
+    expect(policy.decideImage('https://IMAGES.example.com/x.png', ESTABLISHED)).toMatchObject({ allowed: true });
   });
 });
 
