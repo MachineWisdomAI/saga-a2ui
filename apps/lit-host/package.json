@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "vite",
-    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.answer-view.config.ts && vite build --config vite.playback-view.config.ts && vite build --config vite.host-fixture.config.ts",
+    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.answer-view.config.ts && vite build --config vite.playback-view.config.ts && vite build --config vite.host-fixture.config.ts && vite build --config vite.catalog-isolation.config.ts",
     "serve:mcp": "tsx src/mcp/serve.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
@@ -21,12 +21,13 @@
     "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
+    "@saga-a2ui/core": "*",
+    "@saga-a2ui/lit": "*",
     "@saga-a2ui/mcp": "*",
     "jose": "6.2.12",
     "lit": "^3.3.3",
     "markdown-it": "15.0.2",
-    "zod": "4.6.7",
-    "zod3": "npm:zod@3.25.76"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
