@@ -1,5 +1,5 @@
 graph TD
-  V1["View: press Play,<br/>start attempt, arm bound timer"]
+  V1["View: user activates a server action;<br/>start attempt, arm bound timer"]
   S1["Server: accept request, then start<br/>deadline, signal, terminal gate"]
   S2["Server: authenticate, then work;<br/>deadline still runs after headers"]
   S3["Server: first of result, deadline<br/>or disconnect decides;<br/>one response, or none"]
@@ -7,7 +7,7 @@ graph TD
   V3["Attempt current:<br/>present result"]
   V4["Attempt retired:<br/>drop answer"]
   T["View: new selection, label loss,<br/>bound expiry or host teardown"]
-  V5["View: retire attempt, stop timer,<br/>abort fetch, stop player"]
+  V5["View: retire attempt, stop timer,<br/>abort resource request,<br/>release client-held resource"]
   N["Retiring does not guarantee<br/>the server stops"]
   V1 -->|request sent| S1
   S1 --> S2

@@ -28,6 +28,16 @@ Use `diagram` when an illustration clarifies the architecture or flow. Store edi
 
 Blueprints and linked implementation issues must be usable without private planning context. Keep internal discussion, audit chronology and approval provenance in the private planning records. User documentation draws on these designs together with verified implementation and release behavior.
 
+## Action vocabulary
+
+Blueprints describe user-initiated behavior with two kinds of action, following A2UI's split between events and functions, instead of the example application's control names.
+
+- A **server action** is an operation the view sends to the application server and waits on. In A2UI it is the `event` form of a component's `action`; in SAGA's MCP Apps delivery it travels as a server tool call (`App.callServerTool`) that the host proxies. It is a remote procedure call: the server authenticates and authorizes every one, it has a round trip, and it can be cancelled, time out or answer late.
+- A **client action** is an operation handled entirely by code running in the view, with no request to the application server. In A2UI it is the `functionCall` form of a component's `action`; in a view it is a JavaScript function. It may act on client-held resources that an earlier server action's result created, and it cannot grant, extend or change authorization.
+- A server action's result may start a **client continuation**: client-side work the view performs before it presents the outcome, such as acquiring a protected resource with a capability the result carried and starting a client-held resource with it. An **attempt** is one server action together with its continuation, from the user's activation to a terminal view state.
+
+Use these terms in proposals, interface tables, failure tables and verification outcomes. Name the example application's controls only when grounding current behavior in inspected source, and map them to the generic terms once, in the Blueprint's terms section. In the example, Play is a protected server action (authorize, issue a media capability) with a client continuation (acquire the bytes, start the player); Pause and Resume are client actions on the player; Show images and Hide images are client actions on consent state; the subscription read and its retry are server actions; an opener that selects an item is a host notification, not an action. Use *user* for the person, since the application's HTTP listener already uses the word *listener*.
+
 ## Upstream guidance and SAGA adaptations
 
 The source links are pinned to A2UI revision `1657e70119eaa3b76c2a106ac60c7c4dcfe206e0` so the adopted conventions can be compared with upstream changes.
