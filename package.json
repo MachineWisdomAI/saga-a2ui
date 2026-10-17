@@ -10,9 +10,13 @@
     "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/lit-host-app",
     "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app",
     "test:headless": "vitest run",
+    "candidate:identity": "tsx scripts/candidate-identity.ts",
     "verify": "tsx scripts/verify.ts"
   },
   "license": "Apache-2.0",
+  "dependencies": {
+    "zod": "4.6.7"
+  },
   "engines": {
     "node": ">=22.12.0"
   },

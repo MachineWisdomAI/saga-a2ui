@@ -1,5 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { McpServer } from '@modelcontextprotocol/server';
+import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { calculateJwkThumbprint } from 'jose';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
 import type { ViewSessionLabeler } from '../mcp/subscriptions-server.js';
@@ -70,27 +70,26 @@ const failure = (text: string) => ({ isError: true as const, content: [{ type: '
 export function createPlaybackServer(options: PlaybackServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-playback-demo', version: '0.0.0' });
 
-  // `registerAppTool` types its input as a raw shape, which strips unknown keys. Play needs a
-  // strict object so a forged `accountId` is rejected, so this registers through the SDK's
-  // `registerTool` and writes the same two `_meta` keys upstream's helper writes: `ui` and the
-  // legacy flat `ui/resourceUri` that older hosts read.
-  server.registerTool(
+  // The input is a strict object, so a forged `accountId` is rejected instead of dropped.
+  // `registerAppTool` also writes the legacy flat `ui/resourceUri` key that older hosts read.
+  registerAppTool(
+    server,
     PLAY_TOOL_NAME,
     {
       title: 'Play episode',
       description: 'Starts foreground playback of one episode for the signed-in listener.',
       inputSchema: PlayRequestSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-      _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI, visibility: ['app'] }, 'ui/resourceUri': PLAYBACK_VIEW_URI },
+      _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI, visibility: ['app'] } },
     },
-    async ({ episodeId }, extra) => {
+    async ({ episodeId }, ctx) => {
       // The principal comes only from the verified request context, never from the arguments.
-      const identity = identityFromAuthInfo(extra.authInfo);
+      const identity = identityFromAuthInfo(ctx.http?.authInfo);
       if (!identity) return failure(PLAYBACK_UNSUPPORTED_TEXT); // the listener already refused this; fail closed anyway
 
       // Routing is checked before any protected work: without a usable recipient key the view
       // cannot receive a bound capability, so nothing is looked up or fetched.
-      const recipient = RecipientKeySchema.safeParse(extra._meta?.[RECIPIENT_KEY_META]);
+      const recipient = RecipientKeySchema.safeParse(ctx.mcpReq._meta?.[RECIPIENT_KEY_META]);
       if (!recipient.success) return failure(PLAYBACK_UNSUPPORTED_TEXT);
 
       // The pinned SDK copies a thrown message into the tool failure, so nothing escapes this
@@ -128,7 +127,8 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
   // The only model-visible tool. A host renders a view when a tool that links it is called, and
   // the model cannot call Play, so this is what mounts the player. It checks no entitlement and
   // issues nothing: it publishes the same public fields `get_episode` does, plus the sign-in label.
-  server.registerTool(
+  registerAppTool(
+    server,
     OPEN_TOOL_NAME,
     {
       title: 'Open playable episode',
@@ -136,10 +136,10 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
       inputSchema: PlayRequestSchema,
       outputSchema: OpenedEpisodeSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI }, 'ui/resourceUri': PLAYBACK_VIEW_URI },
+      _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI } },
     },
-    async ({ episodeId }, extra) => {
-      const identity = identityFromAuthInfo(extra.authInfo);
+    async ({ episodeId }, ctx) => {
+      const identity = identityFromAuthInfo(ctx.http?.authInfo);
       if (!identity) return failure(PLAYBACK_UNSUPPORTED_TEXT);
       try {
         const episode = options.backend.findEpisode(episodeId);

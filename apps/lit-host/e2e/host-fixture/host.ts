@@ -1,5 +1,5 @@
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
-import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/client';
 import { contentSecurityPolicy, type ResourceCsp } from './csp.js';
 
 // Test-only local host. It stands in for a chat host just enough to exercise the MCP Apps

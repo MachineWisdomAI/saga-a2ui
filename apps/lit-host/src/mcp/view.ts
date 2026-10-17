@@ -1,5 +1,5 @@
 import type { App, McpUiToolInputNotification, McpUiToolResultNotification } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Transport } from '@modelcontextprotocol/client';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '../protocols/a2ui/v0_9/session.js';
 import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';

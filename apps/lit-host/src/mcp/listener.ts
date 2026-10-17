@@ -1,8 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { createMediaService, type MediaStore } from '../playback/media-service.js';
 import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
 import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
@@ -146,7 +145,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     parsedBody?: unknown,
     maxRequestBodySize?: number,
   ): Promise<void> {
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
       enableDnsRebindingProtection: true,

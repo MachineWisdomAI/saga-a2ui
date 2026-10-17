@@ -1,6 +1,4 @@
-import type { OAuthTokenVerifier } from '@modelcontextprotocol/sdk/server/auth/provider.js';
-import { InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { OAuthError, OAuthErrorCode, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { PLAYBACK_SCOPE, SUBSCRIPTIONS_SCOPE } from './request-auth.js';
 
 // DEVELOPMENT ONLY. Fixed, public, synthetic credentials for the local recipe and its tests.
@@ -46,7 +44,7 @@ export function createDevelopmentVerifier(): OAuthTokenVerifier {
         case DEV_TOKENS.service:
           return { token, clientId: 'development-service', scopes: ['service'], expiresAt: now + HOUR_SECONDS };
         default:
-          throw new InvalidTokenError('Unknown credential');
+          throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown credential');
       }
     },
   };
