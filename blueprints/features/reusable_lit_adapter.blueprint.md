@@ -11,7 +11,7 @@ date_added: 2026-10-15
 ## Status
 
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_lit_adapter.blueprint.md).
-- Implementation: not started. VIEW1/VIEW2 remain delivery work; the existing application-local Lit renderer does not implement the reusable package contract.
+- Implementation: partial. The VIEW1 preparation slice (private, unreleased `@saga-a2ui/core` and `@saga-a2ui/lit` with the synthetic application as consumer, plus passive answer rendering) is in review in [PR #76](https://github.com/MachineWisdomAI/saga-a2ui/pull/76) against Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663`; its landed SHA is pending merge. Missing: CORE2 action contract re-run, the Lynx Web investigation, VIEW2, and PACK1/PACK2. This slice does not complete the design.
 - The approved 2026-10-17 sequencing amendment in [VIEW1 #17](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) permits passive-renderer preparation after CORE1, retaining existing lifecycle safeguards. VIEW2 still requires STATE2; full qualification remains required.
 - Proposed terminology/lifetime revision: [this Blueprint at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/reusable_lit_adapter.blueprint.md) in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft.
 - Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
