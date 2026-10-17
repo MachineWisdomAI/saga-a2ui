@@ -7,6 +7,7 @@ import { createMediaService, type MediaStore } from '../playback/media-service.j
 import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
 import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
 import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
+import { createAnswerServer, type AnswerBackend } from './answer-server.js';
 import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
 import { SUBSCRIPTION_LIMITS, SUBSCRIPTIONS_TOOL_NAME } from './subscriptions.js';
@@ -51,6 +52,19 @@ export interface PlaybackEndpointOptions {
   readonly nowSeconds?: () => number;
 }
 
+/** Optional public endpoint: a question in, an answer out. No credential is read or required. */
+export interface AnswerEndpointOptions {
+  readonly viewHtml: string;
+  readonly backend: AnswerBackend;
+  /**
+   * How a call is answered. `json` (the default) returns one body when the answer is ready.
+   * `event-stream` streams progress notifications and then the answer as server-sent events.
+   */
+  readonly responseMode?: 'json' | 'event-stream';
+  /** Finite wait for one answer. Defaults to the documented answer bound. */
+  readonly answerBoundMs?: number;
+}
+
 /** Header values arrive as `string | string[]`; a repeated header is not a valid credential. */
 function singleHeader(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -67,6 +81,8 @@ export interface EpisodeListenerOptions {
   readonly subscriptions?: SubscriptionsEndpointOptions;
   /** When absent, the protected path does not exist. */
   readonly playback?: PlaybackEndpointOptions;
+  /** When absent, the public answer path does not exist. */
+  readonly answer?: AnswerEndpointOptions;
 }
 
 export interface EpisodeListener {
@@ -76,6 +92,8 @@ export interface EpisodeListener {
   readonly subscriptionsUrl?: string;
   /** Protected endpoint (bearer credential required); undefined unless configured. */
   readonly playbackUrl?: string;
+  /** Public answer endpoint (no credential); undefined unless configured. */
+  readonly answerUrl?: string;
   close(): Promise<void>;
 }
 
@@ -83,6 +101,7 @@ const HOST = '127.0.0.1';
 const MCP_PATH = '/mcp';
 const SUBSCRIPTIONS_PATH = '/subscriptions/mcp';
 const PLAYBACK_PATH = '/playback/mcp';
+const ANSWER_PATH = '/answer/mcp';
 
 /** What the protected subscriptions endpoint accepts: its one tool, within the browse bounds. */
 const SUBSCRIPTIONS_POLICY: ProtectedRequestPolicy = {
@@ -147,10 +166,11 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     res: ServerResponse,
     parsedBody?: unknown,
     maxRequestBodySize?: number,
+    enableJsonResponse = true,
   ): Promise<void> {
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
-      enableJsonResponse: true,
+      enableJsonResponse,
       enableDnsRebindingProtection: true,
       allowedHosts,
       ...(maxRequestBodySize === undefined ? {} : { maxRequestBodySize }),
@@ -349,8 +369,19 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
       return serveMedia(req, res, mediaMatch[1]);
     }
     const protectedEndpoint = protectedEndpointAt(path);
-    if (path !== MCP_PATH && !protectedEndpoint) return void res.writeHead(404).end();
+    const answerEndpoint = path === ANSWER_PATH ? options.answer : undefined;
+    if (path !== MCP_PATH && !protectedEndpoint && !answerEndpoint) return void res.writeHead(404).end();
     if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();
+
+    // Public by design: nothing is authenticated and the server is built without any identity.
+    if (answerEndpoint) {
+      const server = createAnswerServer({
+        viewHtml: answerEndpoint.viewHtml,
+        backend: answerEndpoint.backend,
+        ...(answerEndpoint.answerBoundMs === undefined ? {} : { answerBoundMs: answerEndpoint.answerBoundMs }),
+      });
+      return serve(server, req, res, undefined, undefined, answerEndpoint.responseMode !== 'event-stream');
+    }
 
     if (protectedEndpoint) return serveProtected(protectedEndpoint, req, res);
     await serve(
@@ -368,6 +399,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     url: `http://${HOST}:${port}${MCP_PATH}`,
     ...(options.subscriptions ? { subscriptionsUrl: `http://${HOST}:${port}${SUBSCRIPTIONS_PATH}` } : {}),
     ...(options.playback ? { playbackUrl: `http://${HOST}:${port}${PLAYBACK_PATH}` } : {}),
+    ...(options.answer ? { answerUrl: `http://${HOST}:${port}${ANSWER_PATH}` } : {}),
     close: () =>
       new Promise<void>((resolve, reject) => {
         http.close((error) => (error ? reject(error) : resolve()));

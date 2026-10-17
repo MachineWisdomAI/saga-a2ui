@@ -4,11 +4,12 @@ import type { MediaStore } from '../playback/media-service.js';
 import type { PlaybackBackend } from '../playback/playback-server.js';
 import { toneWav } from '../playback/synthetic-media.js';
 import { startEpisodeListener } from './listener.js';
+import type { AnswerBackend } from './answer-server.js';
 import type { EpisodeCatalog, EpisodeRecord } from './server.js';
 import type { AccountSubscriptions } from './subscriptions-server.js';
 
 // Local demo entry (`npm run serve:mcp`). Synthetic data only; no real credentials are read.
-// `/mcp` is public. `/subscriptions/mcp` uses the DEVELOPMENT-ONLY verifier and its fixed,
+// `/mcp` and `/answer/mcp` are public. `/subscriptions/mcp` uses the DEVELOPMENT-ONLY verifier and its fixed,
 // public tokens, which is acceptable only because this process listens on loopback. A remote
 // host must pass its own configured `OAuthTokenVerifier` instead.
 const episodes: readonly EpisodeRecord[] = [
@@ -43,12 +44,29 @@ const playbackBackend: PlaybackBackend = {
 };
 const mediaStore: MediaStore = { read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }) };
 
+// Synthetic public answers. The "knowledge base" is two fixed sentences; the short pauses and
+// progress reports stand in for a real backend that takes its time.
+const knowledge: Readonly<Record<string, string>> = {
+  'What is SAGA?': 'SAGA is a synthetic example application.',
+  'Why is the sky blue?': 'Shorter wavelengths scatter more in the atmosphere.',
+};
+const answerBackend: AnswerBackend = {
+  async answer(question, request) {
+    await request.reportProgress({ progress: 1, total: 2, message: 'Looking up the question' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (request.signal.aborted) return undefined;
+    await request.reportProgress({ progress: 2, total: 2, message: 'Writing the answer' });
+    return knowledge[question];
+  },
+};
+
 const viewHtml = await readFile(new URL('../../dist/view/view.html', import.meta.url), 'utf8');
 const subscriptionsViewHtml = await readFile(
   new URL('../../dist/subscriptions-view/subscriptions.html', import.meta.url),
   'utf8',
 );
 const playbackViewHtml = await readFile(new URL('../../dist/playback-view/playback.html', import.meta.url), 'utf8');
+const answerViewHtml = await readFile(new URL('../../dist/answer-view/answer.html', import.meta.url), 'utf8');
 const listener = await startEpisodeListener({
   viewHtml,
   catalog,
@@ -58,6 +76,8 @@ const listener = await startEpisodeListener({
     backend: { listSubscriptions: async (accountId) => accounts[accountId] },
     verifier: createDevelopmentVerifier(),
   },
+  // Public: no verifier, because the operation reads no credential and has no identity.
+  answer: { viewHtml: answerViewHtml, backend: answerBackend, responseMode: 'event-stream' },
   playback: {
     viewHtml: playbackViewHtml,
     backend: playbackBackend,
@@ -68,3 +88,4 @@ const listener = await startEpisodeListener({
 console.log(`MCP server listening at ${listener.url}`);
 console.log(`Protected subscriptions endpoint (development tokens only): ${listener.subscriptionsUrl}`);
 console.log(`Protected playback endpoint (development tokens only): ${listener.playbackUrl}`);
+console.log(`Public answer endpoint (no credential): ${listener.answerUrl}`);
