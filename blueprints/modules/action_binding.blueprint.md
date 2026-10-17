@@ -1,7 +1,7 @@
 ---
 name: action_binding
 type: module
-status: draft
+status: approved
 description: Defines how application code builds an action with a fluent builder, attaches it directly to one rendered component occurrence in Lit, React or Lynx, and what prerequisite, hook, cancellation and cleanup behavior that action has.
 ---
 
@@ -9,11 +9,13 @@ description: Defines how application code builds an action with a fluent builder
 
 ## Status
 
-- **Design.** Draft. Four directions are accepted and recorded here as direction, not as approval of this Blueprint: the public interface is a fluent builder; the callable attaches directly to a renderer-created instance or to a renderer-owned handle for it; SAGA has no action registry, handler-name lookup at activation or global action bus; and `before` means reusable asynchronous prerequisites such as session validation. A public interface for composing operations was considered and rejected. Everything else in this document is a proposal for human review. No human approval of this Blueprint has been recorded, and the document does not authorize implementation, merge or release.
+- **Design.** Approved by the human owner on 2026-10-17. The public interface is a fluent builder; the callable attaches directly to a renderer-created instance or to a renderer-owned handle for it; SAGA has no action registry, handler-name lookup at activation or global action bus; and `before` means reusable asynchronous prerequisites such as session validation. A public interface for composing operations was considered and rejected. The approval includes the concrete Lit, React and Lynx attachment and lifecycle proposals. The documented open decisions and feasibility questions remain open; approval does not supply missing runtime evidence or decide the separate migration choices owned by #69.
+- **Design record.** The approved revision is `MachineWisdomAI/saga-a2ui@a60acdaf002b8fcca57bcdbd88e30e9c96acfda8`: the [Blueprint](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/blueprints/modules/action_binding.blueprint.md), [declaration and evidence companion](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/blueprints/modules/action_binding.evidence.md), and diagram bundle ([Mermaid](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/diagrams/action-binding.mmd), [Excalidraw](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/diagrams/action-binding.excalidraw), [SVG](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/diagrams/action-binding.svg), [PNG](https://github.com/MachineWisdomAI/saga-a2ui/blob/a60acdaf002b8fcca57bcdbd88e30e9c96acfda8/diagrams/action-binding.png)). This status-only update records the human decision without changing that reviewed design.
 - **Action module.** Not implemented. No package contains an action builder, an action runtime or a per-instance callback attachment, and no record of the form "Blueprint `<design SHA>` implemented at `<code repository>@<landed code SHA>`" exists for it.
 - **Verified existing code.** SDK main [`c3eecaa`](https://github.com/MachineWisdomAI/saga-a2ui/tree/c3eecaad89fcefc540ee7816a8b41731cb65e9d0) has the private, unreleased `@saga-a2ui/mcp`, `@saga-a2ui/core` and `@saga-a2ui/lit` packages. The behavior described under [Current implementation baseline](#current-implementation-baseline) was read in source and test files at that commit. Reading is not running, and no test was run for this Blueprint.
 - **Type-level evidence.** The declarations in the [evidence companion](./action_binding.evidence.md) compile, and each intended negative case is rejected. That shows the examples are well typed against proposed declarations. It shows nothing about runtime ordering, timing, threads or any renderer.
 - **Adapter and host evidence.** None. No SAGA Lit attachment, React adapter or Lynx adapter exists. Nothing has run in a browser, on a ReactLynx runtime, or in ChatGPT web or Claude web.
+- **Acceptance.** Implementation, renderer and host qualification, installation and release remain unverified or not started as recorded below. Design approval does not authorize implementation dispatch, merge, package release or deployment.
 - **Related records.** [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), reconciled at [`1e02dc6`](https://github.com/MachineWisdomAI/saga-a2ui/blob/1e02dc6a67f3781344dd5c476cc6ea64073a37d3/blueprints/features/request_view_lifetimes.blueprint.md#status), is a draft; its proposed lifetime corrections are not started, and it keeps ownership of them. `authorized_playback` and `content_safety_levels` are approved designs with partial implementation, and the reusable Lit adapter and reusable MCP connector Blueprints are partly implemented. This document changes none of those records. Under the [repository lifecycle policy](https://github.com/MachineWisdomAI/saga-a2ui/blob/1e02dc6a67f3781344dd5c476cc6ea64073a37d3/blueprints/README.md#lifecycle-and-revision-records), design, implementation and acceptance are separate records, and documentation review or merge is not design approval.
 
 ## Purpose and boundaries
@@ -78,7 +80,7 @@ The table separates what exists from what it does not show. None of it is a run 
 
 ## Interfaces and behavior
 
-Every name in this section is illustrative until the design is approved and implemented, and every rule is a proposal until a runtime implements it. The numbers in examples are examples, not defaults. The declarations behind the examples are in the [evidence companion](./action_binding.evidence.md#a-authoring-declarations).
+The exported names remain illustrative pending implementation review. The rules describe the approved design, not existing runtime behavior. The numbers in examples are examples, not defaults. The declarations behind the examples are in the [evidence companion](./action_binding.evidence.md#a-authoring-declarations).
 
 ### Authoring
 
