@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
+import type { ContentPolicy } from '../content/policy.js';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';
@@ -118,6 +119,8 @@ export interface PlaybackHarnessOptions {
   readonly mediaBytes?: Uint8Array;
   /** The view document the listener serves. Defaults to a placeholder; browser tests pass the built view. */
   readonly viewHtml?: string;
+  /** Trusted content policy of the public episode view served beside the playback endpoint. */
+  readonly contentPolicy?: ContentPolicy;
   readonly failEntitlementWith?: string;
   readonly capabilityTtlSeconds?: number;
   readonly nowSeconds?: () => number;
@@ -132,6 +135,7 @@ export async function startPlaybackHarness(
   const listener = await startEpisodeListener({
     viewHtml,
     catalog: { find: () => undefined },
+    ...(options.contentPolicy === undefined ? {} : { contentPolicy: options.contentPolicy }),
     port: 0,
     playback: {
       viewHtml,

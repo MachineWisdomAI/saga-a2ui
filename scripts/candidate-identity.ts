@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EPISODE_VIEW_URI } from '../apps/lit-host/src/mcp/episode.js';
+import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '../apps/lit-host/src/content/policy.js';
+import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';
 import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
 
@@ -12,7 +13,11 @@ import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
 // Actual-host mapping (MAP1) measures this candidate, so it needs identities, not descriptions.
 // It reads the lockfile and the built output; it starts nothing and records no secrets.
 //
-//   npm run build && npm run candidate:identity [-- --out FILE]
+//   npm run build && npm run candidate:identity [-- --out FILE] [--image-host HOST ...]
+//
+// The episode view is reported as served (policy applied, same construction path as the MCP
+// server), with the raw build identified separately. Pass the --image-host values the candidate
+// is configured with; the default is the default policy.
 
 const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -33,9 +38,11 @@ export const RECIPE_PACKAGES = {
   'zod-to-json-schema (A2UI boundary)': 'node_modules/@a2ui/web_core/node_modules/zod-to-json-schema',
 } as const;
 
-/** Built single-file views, each served verbatim as the resource at the named URI. */
-export const BUILT_VIEWS = [
-  { uri: EPISODE_VIEW_URI, file: 'apps/lit-host/dist/view/view.html' },
+/** The built episode view. It is not served verbatim: the content policy shapes URI and bytes. */
+export const EPISODE_VIEW_FILE = 'apps/lit-host/dist/view/view.html';
+
+/** Built single-file views served verbatim as the resource at the named URI. */
+export const VERBATIM_VIEWS = [
   { uri: SUBSCRIPTIONS_VIEW_URI, file: 'apps/lit-host/dist/subscriptions-view/subscriptions.html' },
   { uri: PLAYBACK_VIEW_URI, file: 'apps/lit-host/dist/playback-view/playback.html' },
 ] as const;
@@ -78,13 +85,35 @@ function git(root: string, args: string[]): string | null {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-export function candidateIdentity(root: string): Record<string, unknown> {
+/**
+ * The served episode resource under `policy`, built by the same `contentResource` the MCP server
+ * registers, so the reported URI, byte count and hash are those of the document a host receives.
+ * The raw build is reported alongside under its own names; it is not what is served.
+ */
+export function episodeResourceIdentity(root: string, policy: ContentPolicy = DEFAULT_CONTENT_POLICY): Record<string, unknown> {
+  const raw = fs.readFileSync(path.join(root, EPISODE_VIEW_FILE));
+  const resource = contentResource(raw.toString('utf8'), policy);
+  const served = Buffer.from(resource.html, 'utf8');
+  return {
+    uri: resource.uri,
+    file: EPISODE_VIEW_FILE,
+    imageOrigins: policy.resource.imageOrigins,
+    bytes: served.length,
+    sha256: sha256Hex(served),
+    rawBuild: { bytes: raw.length, sha256: sha256Hex(raw) },
+  };
+}
+
+export function candidateIdentity(root: string, policy: ContentPolicy = DEFAULT_CONTENT_POLICY): Record<string, unknown> {
   const lockText = fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8');
   const lock = JSON.parse(lockText) as { packages: Record<string, LockEntry> };
-  const views = BUILT_VIEWS.map((view) => {
-    const bytes = fs.readFileSync(path.join(root, view.file));
-    return { uri: view.uri, file: view.file, bytes: bytes.length, sha256: sha256Hex(bytes) };
-  });
+  const views = [
+    episodeResourceIdentity(root, policy),
+    ...VERBATIM_VIEWS.map((view) => {
+      const bytes = fs.readFileSync(path.join(root, view.file));
+      return { uri: view.uri, file: view.file, bytes: bytes.length, sha256: sha256Hex(bytes) };
+    }),
+  ];
   const dirty = git(root, ['status', '--porcelain', '--untracked-files=no']);
   const receiptPath = path.join(root, '.wise-agents', 'verify-receipts', 'latest.json');
   return {
@@ -116,11 +145,26 @@ export function summarizeReceipt(receiptText: string): Record<string, unknown> {
   };
 }
 
+/** `--image-host HOST` (repeatable) selects the same image origins the served policy was built with. */
+export function policyFromArgs(argv: readonly string[]): ContentPolicy {
+  const imageHosts: string[] = [];
+  argv.forEach((arg, index) => {
+    if (arg !== '--image-host') return;
+    const host = argv[index + 1];
+    if (host === undefined) throw new Error('--image-host requires a host');
+    imageHosts.push(host);
+  });
+  if (imageHosts.length === 0) return DEFAULT_CONTENT_POLICY;
+  const created = createContentPolicy({ imageHosts });
+  if (!created.ok) throw new Error(`Invalid --image-host configuration: ${created.failure.message}`);
+  return created.policy;
+}
+
 function main(argv: string[]): void {
   const flag = argv.indexOf('--out');
   const out = flag === -1 ? undefined : argv[flag + 1];
   if (flag !== -1 && out === undefined) throw new Error('--out requires a file');
-  const text = `${JSON.stringify(candidateIdentity(toolRoot), null, 2)}\n`;
+  const text = `${JSON.stringify(candidateIdentity(toolRoot, policyFromArgs(argv)), null, 2)}\n`;
   if (out === undefined) process.stdout.write(text);
   else {
     fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });

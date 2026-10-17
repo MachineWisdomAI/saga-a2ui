@@ -1,8 +1,9 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
+import type { ContentPolicy } from '../content/policy.js';
+import { contentResource } from './content-resource.js';
 import {
   EPISODE_TOOL_NAME,
-  EPISODE_VIEW_URI,
   EpisodeRequestSchema,
   PublicEpisodeSchema,
   type PublicEpisode,
@@ -24,21 +25,16 @@ export interface EpisodeCatalog {
 }
 
 export interface EpisodeServerOptions {
-  /** The built, immutable view document. Served verbatim; never combined with request data. */
+  /** The built, immutable view document. Combined only with the trusted policy, never request data. */
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
+  /**
+   * The trusted content policy for this server's view. It fixes the resource's identity, its
+   * declared image origins and the restrictions inside the document. Nothing in a tool result
+   * or description can change it.
+   */
+  readonly contentPolicy: ContentPolicy;
 }
-
-/**
- * The view loads no network resources and makes no requests: the host delivers data over the
- * MCP Apps bridge. Empty domain lists make that explicit in the resource metadata.
- */
-const VIEW_CSP = {
-  connectDomains: [],
-  resourceDomains: [],
-  frameDomains: [],
-  baseUriDomains: [],
-} as const;
 
 /** Copy only the public fields; the explicit projection is what keeps other fields private. */
 function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
@@ -55,6 +51,7 @@ function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
  */
 export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-episode-demo', version: '0.0.0' });
+  const view = contentResource(options.viewHtml, options.contentPolicy);
 
   registerAppTool(
     server,
@@ -65,7 +62,7 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
       inputSchema: EpisodeRequestSchema,
       outputSchema: PublicEpisodeSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      _meta: { ui: { resourceUri: EPISODE_VIEW_URI } },
+      _meta: { ui: { resourceUri: view.uri } },
     },
     async ({ episodeId }) => {
       const record = options.catalog.find(episodeId);
@@ -80,13 +77,13 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
     },
   );
 
-  registerAppResource(server, 'Episode view', EPISODE_VIEW_URI, {}, async () => ({
+  registerAppResource(server, 'Episode view', view.uri, {}, async () => ({
     contents: [
       {
-        uri: EPISODE_VIEW_URI,
+        uri: view.uri,
         mimeType: RESOURCE_MIME_TYPE,
-        text: options.viewHtml,
-        _meta: { ui: { csp: VIEW_CSP } },
+        text: view.html,
+        _meta: { ui: { csp: view.csp } },
       },
     ],
   }));
