@@ -1,6 +1,6 @@
 ---
 feature_name: reusable_mcp_connector
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [authorized_playback, account_session_isolation, content_safety_levels]
 date_added: 2026-10-15
@@ -8,7 +8,13 @@ date_added: 2026-10-15
 
 # Reusable MCP connector
 
-Draft awaiting human design review.
+## Status
+
+- Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/reusable_mcp_connector.blueprint.md).
+- The Content Safety/reference clarification at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_mcp_connector.blueprint.md) is also approved; the approved 2026-10-17 sequencing amendment in [CORE1 #14](https://github.com/MachineWisdomAI/saga-a2ui/issues/14) changes preparation order only. The amendment is incorporated below at [Blueprint revision `6c268cc924886d4f7dfeb1668d83d0e17324f00b`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c268cc924886d4f7dfeb1668d83d0e17324f00b/blueprints/features/reusable_mcp_connector.blueprint.md).
+- Implementation: partial overall. The approved baseline and sequencing amendment recorded at Blueprint revision `6c268cc924886d4f7dfeb1668d83d0e17324f00b` are implemented for the [CORE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/14) browse/public-answer extraction slice at [SDK code `6c268cc924886d4f7dfeb1668d83d0e17324f00b`](https://github.com/MachineWisdomAI/saga-a2ui/commit/6c268cc924886d4f7dfeb1668d83d0e17324f00b), via [PR #75](https://github.com/MachineWisdomAI/saga-a2ui/pull/75) and its [source/preparation approval](https://github.com/MachineWisdomAI/saga-a2ui/pull/75#pullrequestreview-5558284379). CORE2 Play migration and the full CORE3 contract remain outstanding. This is an unversioned, private workspace package; actual-host qualification, public source/npm installation and destination acceptance are not established by this slice.
+- Proposed terminology/lifetime revision: [this Blueprint at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/reusable_mcp_connector.blueprint.md) in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft. It does not supersede this approved baseline.
+- Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
 
 ## Problem and current behavior
 

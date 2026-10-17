@@ -31,5 +31,6 @@ Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before designing, implementing, 
 - The plan is approved. Refine one task at a time and keep implementation within the selected ticket. Do not repeat the entire planning process.
 - The private Lit application renders A2UI fixtures and the public answer view. `packages/mcp` (`@saga-a2ui/mcp`), `packages/core` (`@saga-a2ui/core`) and `packages/lit` (`@saga-a2ui/lit`) are the extracted SDK packages (private, unversioned and unreleased); no other SDK package exists yet. Use README.md for current build and browser-test commands.
 - Follow CONTRIBUTING.md for document names: supersedable documents use `YYYY-MM-DD_title_vN.ext`; evergreen guides keep stable names.
+- When authoring, approving, implementing, superseding or reconciling a Blueprint, follow [its lifecycle records](blueprints/README.md#lifecycle-and-revision-records). Before submitting implementation PR approval, follow [contribution review](CONTRIBUTING.md#review).
 
 - Before preparing or reviewing a PR, follow [PR descriptions and retained artifacts](docs/change-hygiene.md). Keep disposable evidence ignored; stage retained artifacts through Git LFS and verify their pointers before pushing.
