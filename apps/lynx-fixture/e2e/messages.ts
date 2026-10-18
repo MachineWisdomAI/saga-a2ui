@@ -65,3 +65,20 @@ export const notesLayout = (notes: ReadonlyArray<{ id: string; title: string }>)
   ]),
   updateData(NOTES, '/', { notes }),
 ];
+
+/**
+ * ACT4: a fixed control that waits for a session (`review-order`, showing the order at `/order/id`)
+ * and a template whose rows each carry a pending piece of work (`row-stage`, one per note).
+ */
+export const ASYNC = 'async';
+export const asyncLayout = (notes: ReadonlyArray<{ id: string; title: string }>) => [
+  createSurface(ASYNC),
+  updateComponents(ASYNC, [
+    { id: 'root', component: 'Column', children: ['review-order', 'stage-list'] },
+    ...orderControl('review-order', 'Review'),
+    { id: 'stage-list', component: 'Column', children: { componentId: 'row-stage', path: '/notes' } },
+    { id: 'row-stage', component: 'ActionButton', child: 'row-stage-label', noteId: { path: 'id' } },
+    { id: 'row-stage-label', component: 'Text', text: { path: 'title' } },
+  ]),
+  updateData(ASYNC, '/', { order: { id: 'order-1' }, notes }),
+];

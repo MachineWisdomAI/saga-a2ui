@@ -21,8 +21,12 @@ export interface FakeInstance {
   readonly instance: OpenInstance<ControlEvents>;
   /** Delivers `activate` the way the renderer's event handler would. */
   press(): ReturnType<OpenInstance<ControlEvents>['activate']>;
-  /** Replaces what this instance's data scope shows. */
+  /** Replaces what this instance's data scope shows, with no notification: the adapter saw nothing. */
   show(data: Record<string, unknown>): void;
+  /** Replaces what the data scope shows and tells every subscribed wake-up, as an observing adapter does. */
+  change(data: Record<string, unknown>): void;
+  /** How many wake-up subscriptions the runtime holds on this instance right now. */
+  readonly watching: number;
   /** The renderer destroys the instance: it stops being live and retires. */
   destroy(): void;
   /** The instance stops being live before the renderer has retired it. */
@@ -32,10 +36,11 @@ export interface FakeInstance {
 export function renderInstance(
   host: InstanceHost,
   componentId: string,
-  options: { dataPath?: string; data?: Record<string, unknown>; kind?: typeof Control } = {},
+  options: { dataPath?: string; data?: Record<string, unknown>; kind?: typeof Control; observable?: boolean } = {},
 ): FakeInstance {
   let live = true;
   let data = options.data ?? {};
+  const wakeUps = new Set<() => void>();
   const instance = host.open<ControlEvents>({
     kind: options.kind ?? Control,
     componentId,
@@ -43,12 +48,29 @@ export function renderInstance(
     events: ['activate', 'change'],
     isLive: () => live,
     read: (path) => data[path],
+    ...(options.observable === false
+      ? {}
+      : {
+          watchScope: (revalidate: () => void) => {
+            wakeUps.add(revalidate);
+            return () => {
+              wakeUps.delete(revalidate);
+            };
+          },
+        }),
   });
   return {
     instance,
     press: () => instance.activate('activate', 'click'),
     show(next) {
       data = next;
+    },
+    change(next) {
+      data = next;
+      for (const wakeUp of [...wakeUps]) wakeUp();
+    },
+    get watching() {
+      return wakeUps.size;
     },
     destroy() {
       live = false;

@@ -3,6 +3,9 @@ import { Catalog, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import { basicCatalog, ButtonApi, ColumnApi, ListApi, RowApi, TextApi } from '@a2ui/web_core/v0_9/basic_catalog';
 import {
   Action,
+  prerequisite,
+  proceed,
+  refuse,
   type ActionBinding,
   type ActionDefinition,
   type InstanceHandle,
@@ -142,6 +145,12 @@ export interface ReactActionConsumer {
   newSurface(): void;
   unmount(): void;
   mount(): void;
+  /**
+   * Scenario `async` only: the session prerequisite and the row work wait for the test. Each entry
+   * is one pending request; answering it is the test's choice and ordering.
+   */
+  readonly pendingSessions: ((answer: 'signed-in' | 'signed-out') => void)[];
+  readonly pendingRows: { noteId: string; release: () => void }[];
 }
 
 declare global {
@@ -160,6 +169,8 @@ const consumer: ReactActionConsumer = {
   identities: { ...__REACT_ACTION_CONSUMER_IDENTITIES__, runtimeReact: reactVersion, runtimeReactDom: reactDomVersion },
   failSetup: false,
   failDiscovery: undefined,
+  pendingSessions: [],
+  pendingRows: [],
   send: (input) => current.session.ingest(input),
   getById: (id) => {
     try {
@@ -215,6 +226,98 @@ const probe = Action.local<ActionButtonActivation>('probe')
   .run(() => void consumer.log.push({ action: 'probe' }))
   .build();
 
+// ---------------------------------------------------------------------------------------------
+// Scenario `async` (ACT4), chosen with `?scenario=async` so that the synchronous scenario keeps its
+// exact layout and bindings: a Save-style action whose session prerequisite waits for the test,
+// and a row action with a subject that waits for the test too.
+// ---------------------------------------------------------------------------------------------
+
+const scenario = new URLSearchParams(location.search).get('scenario');
+
+/** The binding state and the last message a hook presented, outside the React root. */
+function present(kind: 'phase' | 'message', text: string): void {
+  const element = document.querySelector(`[data-${kind}]`);
+  if (element) element.textContent = text;
+}
+
+const asyncLayout = (): unknown[] => [
+  { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId: SURFACE_ID,
+      components: [
+        { id: 'root', component: 'Column', children: ['save-draft', 'rows'] },
+        { id: 'save-draft', component: 'ActionButton', child: 'save-draft-label' },
+        { id: 'save-draft-label', component: 'Text', text: 'Save draft' },
+        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        { id: 'row', component: 'Row', children: ['row-title', 'row-stage'] },
+        { id: 'row-title', component: 'Text', text: { path: 'title' } },
+        { id: 'row-stage', component: 'ActionButton', child: 'row-stage-label' },
+        { id: 'row-stage-label', component: 'Text', text: 'Stage' },
+      ],
+    },
+  },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId: SURFACE_ID,
+      value: {
+        draft: 'hello',
+        rows: [
+          { id: 'n-1', title: 'Alpha' },
+          { id: 'n-2', title: 'Beta' },
+        ],
+      },
+    },
+  },
+];
+
+const requireSession = prerequisite(
+  'session',
+  () =>
+    new Promise<ReturnType<typeof proceed<{ readonly user: string }>> | ReturnType<typeof refuse>>((resolve) => {
+      consumer.pendingSessions.push((answer) => resolve(answer === 'signed-in' ? proceed({ user: 'u-1' }) : refuse('sign-in-required')));
+    }),
+);
+
+const saveDraft = Action.local<ActionButtonActivation>('save-draft')
+  .input((event) => ({ text: String(event.read('/draft') ?? '') }))
+  .before(requireSession)
+  .run(({ params, provided }) => {
+    consumer.log.push({ action: 'save-draft', user: provided.user, length: params.text.length });
+    return { user: provided.user };
+  })
+  .limits({ deadlineMs: 5000, hookMs: 1000 })
+  .onSuccess(({ result, current }) => {
+    if (current()) present('message', `saved by ${result.user}`);
+  })
+  .onFailure((context) => {
+    if (context.current()) present('message', context.failure.kind === 'refused' ? `refused: ${context.failure.reason}` : `failed: ${context.failure.kind}`);
+  })
+  .onCanceled(({ cause, stage }) => void consumer.log.push({ action: 'save-draft-canceled', cause, stage }))
+  .build();
+
+const stage = Action.local<ActionButtonActivation>('stage-note')
+  .input((event) => {
+    const noteId = event.read('id');
+    if (typeof noteId !== 'string' || noteId === '') throw new Error('this row shows no note');
+    return { noteId };
+  })
+  .run(
+    ({ params }) =>
+      new Promise<void>((resolve) => {
+        consumer.log.push({ action: 'stage-started', noteId: params.noteId });
+        consumer.pendingRows.push({ noteId: params.noteId, release: resolve });
+      }),
+  )
+  .limits({ hookMs: 1000 })
+  .onSuccess(({ params, current }) => {
+    if (current()) present('message', `staged ${params.noteId}`);
+  })
+  .onCanceled(({ params, cause }) => present('message', `canceled ${params.noteId}: ${cause}`))
+  .build();
+
 function trace(handle: InstanceHandle<ActionButtonEvents>, binding: ActionBinding): void {
   consumer.bindings.push({ componentId: handle.id, dataPath: handle.dataPath, handle, binding });
   binding.subscribe(() => consumer.phases.push(`${handle.id}|${handle.dataPath}|${binding.id}|${binding.state.phase}`));
@@ -235,7 +338,7 @@ function openSession(): Session {
       consumer.upstream.push(action);
     });
   });
-  const result = session.ingest(layout());
+  const result = session.ingest(scenario === 'async' ? asyncLayout() : layout());
   if (!result.ok || !surface) throw new Error('the layout did not create a surface');
   return { session, surface };
 }
@@ -248,6 +351,17 @@ function makeSetup(): (view: InstanceView) => void {
   consumer.failSetup = false;
   return (view) => {
     latestView = view;
+    if (scenario === 'async') {
+      view.watchById('save-draft', ActionButton, (handle) => {
+        const binding = handle.bindAction('activate', saveDraft);
+        binding.subscribe(() => present('phase', binding.state.phase));
+        trace(handle, binding);
+      });
+      view.watchById('row-stage', ActionButton, (handle) => {
+        trace(handle, handle.bindAction('activate', stage, { subject: () => handle.read('id') }));
+      });
+      return;
+    }
     const bind = (id: string, action: ActionDefinition<ActionButtonActivation>) =>
       view.watchById(id, ActionButton, (handle) => {
         trace(handle, handle.bindAction('activate', action));
@@ -313,6 +427,15 @@ function render(): void {
       ),
     ),
   );
+}
+
+if (scenario === 'async') {
+  // Outside the React root, so unmounting the application cannot remove what the hooks last showed.
+  for (const kind of ['phase', 'message']) {
+    const line = document.createElement('p');
+    line.dataset[kind] = '';
+    document.body.append(line);
+  }
 }
 
 consumer.mount();

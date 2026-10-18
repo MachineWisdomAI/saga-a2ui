@@ -136,7 +136,10 @@ test.describe('event-turn environment tagging', () => {
     const fixture = await Fixture.open(page);
     const shape = await fixture.send<{ definitionKeys: string[]; planKeys: string[]; frozen: boolean }>('definition-shape');
     expect(shape.definitionKeys).toEqual(['label', 'plan']);
-    expect(shape.planKeys).toEqual(['invoke', 'label']);
+    // What a definition carries grows with the module (prerequisites, limits, hooks); none of it
+    // names an environment, thread or bundle, which is what a bind-time check would need.
+    expect(shape.planKeys).toContain('label');
+    expect(shape.planKeys.filter((key) => /environment|thread|background|main|bundle|runtime/i.test(key))).toEqual([]);
     expect(shape.frozen).toBe(true);
   });
 });

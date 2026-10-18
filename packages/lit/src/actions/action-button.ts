@@ -75,6 +75,16 @@ export class ActionButtonElement extends A2uiLitElement<typeof ActionButtonApi> 
       isLive,
       // This instance's own scope, not this.context, which a same-tag reuse may already have replaced.
       read: (dataPath) => (isLive() ? context.dataContext.resolveDynamicValue<unknown>({ path: dataPath }) : undefined),
+      // The runtime holds this only while an invocation is not settled. `DataModel.subscribe` calls
+      // back synchronously inside `set` and also for an ancestor or descendant of the scope's path;
+      // the microtask lets the whole change finish before the runtime reads the application's
+      // subject, so an A, B, A inside one call stack is not seen, and it runs before the next click.
+      // A subject that reads state outside the data model gets no wake-up here, only the runtime's
+      // own checkpoints.
+      watchScope: (revalidate) => {
+        const subscription = surface.dataModel.subscribe(path, () => queueMicrotask(revalidate));
+        return () => subscription.unsubscribe();
+      },
     });
   }
 
