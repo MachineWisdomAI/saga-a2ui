@@ -24,7 +24,7 @@ export const answerConsumerSource = path.join(repoRoot, 'examples', 'answer-cons
 export const answerConsumerDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'answer-consumer');
 
 /** The packages the consumer imports itself, besides the SDK packages. */
-export const ANSWER_CONSUMER_OWN_DEPENDENCIES = ['@a2ui/lit', '@a2ui/web_core', 'lit'];
+export const ANSWER_CONSUMER_OWN_DEPENDENCIES = ['@a2ui/lit', '@a2ui/web_core', '@modelcontextprotocol/server', 'lit', 'zod'];
 
 export interface PreparedConsumer {
   readonly consumer: string;
@@ -35,7 +35,7 @@ export interface PreparedConsumer {
 export function prepareAnswerConsumer(work: string): PreparedConsumer {
   const consumer = path.join(work, 'consumer');
   fs.cpSync(answerConsumerSource, consumer, { recursive: true, filter: (from) => !from.includes('node_modules') });
-  const sdk = installPackedSdk(work, consumer, ['core', 'lit', 'components']);
+  const sdk = installPackedSdk(work, consumer, ['core', 'lit', 'components', 'mcp']);
   linkDeclaredDependencies(consumer, sdk, ANSWER_CONSUMER_OWN_DEPENDENCIES);
   return { consumer, sdk };
 }

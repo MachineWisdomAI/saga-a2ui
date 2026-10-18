@@ -15,7 +15,7 @@ import { build, type InlineConfig, type PluginOption } from 'vite';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export type SdkPackage = 'core' | 'lit' | 'components';
+export type SdkPackage = 'core' | 'lit' | 'components' | 'mcp';
 
 export interface PackedManifest {
   readonly name?: string;
@@ -109,6 +109,33 @@ export async function bundleConsumerEntry(consumer: string, entry: string): Prom
   const outputs = (Array.isArray(result) ? result : [result]).flatMap((one) => ('output' in one ? one.output : []));
   const chunks = outputs.flatMap((output) => (output.type === 'chunk' ? [output] : []));
   return { modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)), code: chunks.map((chunk) => chunk.code).join('\n') };
+}
+
+/**
+ * Builds one consumer server entry for Node and reports every module in its graph. The installed
+ * SDK packages are bundled in (their sources are TypeScript, which Node cannot load from
+ * node_modules); every other dependency stays external and resolves from the consumer's links.
+ */
+export async function bundleConsumerServer(consumer: string, entry: string): Promise<{ file: string; modules: string[] }> {
+  const outDir = path.join(consumer, '.server');
+  const result = await build({
+    configFile: false,
+    root: consumer,
+    logLevel: 'silent',
+    ssr: { noExternal: [/^@saga-a2ui\//] },
+    build: {
+      write: true,
+      outDir,
+      emptyOutDir: true,
+      minify: false,
+      ssr: path.join(consumer, entry),
+      target: 'es2022',
+      rollupOptions: { output: { entryFileNames: 'server.mjs', format: 'es' } },
+    },
+  });
+  const outputs = (Array.isArray(result) ? result : [result]).flatMap((one) => ('output' in one ? one.output : []));
+  const chunks = outputs.flatMap((output) => (output.type === 'chunk' ? [output] : []));
+  return { file: path.join(outDir, 'server.mjs'), modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)) };
 }
 
 /** Builds the consumer's HTML application into `outDir`. Plugins come from the repository's own tooling. */

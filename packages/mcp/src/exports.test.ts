@@ -48,6 +48,7 @@ describe('package subpath exports', () => {
       'OperationConfigurationError',
       'registerProtectedOperation',
       'registerPublicOperation',
+      'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
     expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_BOUND_MS']);

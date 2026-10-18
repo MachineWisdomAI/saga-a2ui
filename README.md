@@ -305,7 +305,7 @@ Tests: `packages/components/src/faithful-card/policy-strict.test.ts` (configurat
 
 | Export | Holds | Imports |
 | --- | --- | --- |
-| `@saga-a2ui/mcp/server` | `registerPublicOperation`, `registerProtectedOperation`, `OperationConfigurationError` and the declaration types | MCP server and MCP Apps server helpers, Zod; no renderer, no view code |
+| `@saga-a2ui/mcp/server` | `registerPublicOperation`, `registerProtectedOperation`, `viewUriForHtml`, `OperationConfigurationError` and the declaration types | MCP server and MCP Apps server helpers, Zod; no renderer, no view code |
 | `@saga-a2ui/mcp/view` | `connectToolResultView` (bridge lifetime: listeners installed before connect, delivery once, teardown, disposal) | types only; no server module, no Node built-in, no renderer |
 | `@saga-a2ui/mcp/policy` | `ViewCsp`, `CLOSED_VIEW_CSP`, `DEFAULT_OPERATION_BOUND_MS` | nothing |
 
@@ -321,7 +321,21 @@ Tests: `packages/components/src/faithful-card/policy-strict.test.ts` (configurat
 4. *Waits for the handler* only for its bound (`boundMs`, default 5 s) and the request's cancellation signal. A result that loses that race is ignored; a handler that throws or rejects gives the declared `unavailable` text with no message.
 5. *Projects explicitly*: `project(record)` builds the model-facing text and the structured data field by field; the connector validates the data against the strict output contract before serialization. A violation gives the declared `invalidOutput` text, not the validator's message.
 
+6. *Links the result to its view.* Every result the operation returns, success or fixed-text failure (absent, refused, unavailable, invalid output, sign-in required), carries `_meta.ui.resourceUri` set to the declared `view.uri`, so a host can mount the view from the result alone and not only from tool discovery. The value comes from the trusted declaration after the result is built; a tool argument, the handler's record or the projection cannot select another resource, and `content`, `structuredContent`, the resource's MIME type and its CSP are unchanged. A request the server rejects before the operation runs (for example an input that fails its contract) is answered by the protocol layer and carries no link.
+
 The handler returns `record`, `absent` (declared text) or `refused` (a fixed safe text for well-formed but unaccepted business input). Projections are the model-visible `content` text and the validated `structuredContent`. **No recipient mapping is adopted**: that depends on the Captain's MAP1 measurement in ChatGPT web and Claude web, so Play's app-only visibility and `_meta` payload stay in `playback/` until CORE2.
+
+#### Content identity for a served view (`viewUriForHtml`)
+
+A host or proxy that caches `ui://` resources by URI cannot see that an application's HTML changed if the URI stays the same. `viewUriForHtml(html)` from `@saga-a2ui/mcp/server` derives the URI from the SHA-256 of the exact document, `ui://sha256/<64 lowercase hex digits>.html`, and the application uses it as `OperationView.uri`:
+
+    const html = fs.readFileSync('dist/answer/index.html', 'utf8');   // the final, built document
+    registerPublicOperation(server, { ...declaration, view: { uri: viewUriForHtml(html), title: 'Answer', html, csp: CLOSED_VIEW_CSP } });
+
+- Apply it to the **final** HTML, after every build, inlining and stamping step. The same bytes always give the same URI; a change to any byte, in the application or in an SDK bundle inlined into it, gives a new one.
+- It accepts a string (hashed as its UTF-8 encoding, which is what the connector serves) or a `Uint8Array`. A string with an unpaired surrogate has no exact UTF-8 bytes, so it throws `RangeError` rather than being hashed with a substituted character.
+- It is a pure function: no registry, global state or cache, and no action API. It identifies bytes only; it does not authenticate the document or its builder and does not cover the CSP declared beside it. A host that already holds the URI keeps what it cached under it, so the identity helps only once the application serves the new URI.
+- The synthetic `examples/answer-consumer` shows both pieces from the installed packages alone (`server/answer-server.ts`): `scripts/answer-consumer.test.ts` builds its page, serves it through the packed `@saga-a2ui/mcp`, and checks over JSON and server-sent events that results, tool discovery and the resource read agree, that hostile question text does not change the link, and that a changed page gets a different URI.
 
 Browse (`mcp/subscriptions-server.ts`) is the protected consumer: the existing `list_subscriptions` behavior, including the declared `status` filter, the opaque view-session label, concurrent principals, forged-account rejection, and the empty/denied/failed outcomes, passes its unchanged `subscriptions.test.ts` and `e2e/subscriptions-view.spec.ts`. The episode tool (`mcp/server.ts`) is the first public consumer.
 
@@ -393,7 +407,7 @@ and lists `faithfulCardEntry` in its own catalog. The card's two A2UI properties
 
 **Policy and consent are unchanged in behavior.** Standard and Strict, exact-host images, the enforcement gate, Show/Hide images and revocation work as described in POL1 and POL2; the code moved and its owners did not. Policy and consent live in the components package without any transport; the host callback and every DOM interaction live in the Lit element, and each card gets them through its own view, so two cards on one page keep separate policy, callbacks and consent. Consent is revoked by new content, by the view's `revokeAll` and `retire`, by Hide images, and by disconnecting the card, and a control kept from earlier content or from before a disconnect does nothing. A reconnected card starts fresh. No invisible account change is detected, because the view receives no such signal.
 
-**Installed, not aliased.** `scripts/build-answer-consumer.ts` packs the core, Lit and components packages, unpacks them as installed dependencies of a clean directory outside the repository, links only the third-party packages their manifests declare, and builds `examples/answer-consumer` against those copies. It records the source commit, runtime, tarball digests and built page digest in `apps/lit-host/dist/answer-consumer/identity.json` (ignored). Reproduce it from a clean checkout:
+**Installed, not aliased.** `scripts/build-answer-consumer.ts` packs the core, Lit, components and mcp packages (the browser page uses the first three; the mcp package serves it, see "Content identity for a served view"), unpacks them as installed dependencies of a clean directory outside the repository, links only the third-party packages their manifests declare, and builds `examples/answer-consumer` against those copies. It records the source commit, runtime, tarball digests and built page digest in `apps/lit-host/dist/answer-consumer/identity.json` (ignored). Reproduce it from a clean checkout:
 
     nvm use && npm ci
     npx playwright install chromium

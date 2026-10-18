@@ -10,6 +10,9 @@
     "@saga-a2ui/components": "*",
     "@saga-a2ui/core": "*",
     "@saga-a2ui/lit": "*",
-    "lit": "^3.3.3"
+    "@saga-a2ui/mcp": "*",
+    "@modelcontextprotocol/server": "2.3.1",
+    "lit": "^3.3.3",
+    "zod": "4.6.7"
   }
 }
