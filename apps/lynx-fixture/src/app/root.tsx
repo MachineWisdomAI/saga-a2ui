@@ -1,4 +1,4 @@
-import { A2UI, Button, Column, List, Text, functionRegistry, type CatalogInput, type Surface } from '@lynx-js/genui/a2ui';
+import { A2UI, Button, Column, List, Text, functionRegistry, registerBasicFunctions, type CatalogInput, type Surface } from '@lynx-js/genui/a2ui';
 import { SignalStore } from '@lynx-js/genui/a2ui/store';
 import { useEffect, useSyncExternalStore } from '@lynx-js/react';
 import { ActionHostContext, createActionControl } from '../adapter/action-control.js';
@@ -9,6 +9,10 @@ import { attach } from './setup.js';
 
 // Module scope: one stable component type for the life of the bundle. The catalog array is a
 // module constant for the same reason.
+// The A2UI basic-catalog functions (equals, not, required and the rest), so a layout's check can
+// call one. Registered into the same shared registry the processor resolves calls from.
+registerBasicFunctions();
+
 // A registered client function with an observable effect. GenUI resolves function calls found
 // anywhere in a component's properties, so the tests use it to see where resolution runs.
 functionRegistry.register({

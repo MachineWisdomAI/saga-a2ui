@@ -35,6 +35,23 @@ export interface ActionControl {
   readonly firstScreenProbe: CatalogComponent;
 }
 
+const noUnsubscribe = (): void => undefined;
+const noSubscribe = (): (() => void) => noUnsubscribe;
+const noSnapshot = (): undefined => undefined;
+
+/**
+ * The `checks` rules as the agent wrote them, from the public `surface.components` store, and
+ * the component's own resource as the update notification (what `NodeRenderer` subscribes to), so
+ * a replaced rule list re-renders the control. The array keeps its identity until the stored
+ * component is replaced, which is what `useChecks` keys its re-evaluation on.
+ */
+function useStoredChecks(surface: GenericComponentProps['surface'], componentId: string): CheckLike[] | undefined {
+  const resource = surface.resources.get(componentId);
+  useSyncExternalStore(resource === undefined ? noSubscribe : resource.subscribe, resource === undefined ? noSnapshot : resource.getSnapshot, resource === undefined ? noSnapshot : resource.getSnapshot);
+  const stored: unknown = (surface.components.get(componentId) as Record<string, unknown> | undefined)?.['checks'];
+  return Array.isArray(stored) ? (stored as CheckLike[]) : undefined;
+}
+
 /**
  * One generic catalog component for every instance of the kind. It is created once, at module
  * scope: React remounts instances when the component function identity changes, and that would
@@ -98,16 +115,17 @@ export function createActionControl(options: ActionControlOptions): ActionContro
   function ActionControlView(props: GenericComponentProps) {
     const { token, onTap, componentId, child } = useSlotView(props);
 
-    // The supported checks seam, the one the published `Button` uses: GenUI evaluates the rule
-    // list reactively and this adapter implements no expression interpreter of its own. Like
-    // `Button`, the control is interactive only when `isValid` and every check pass, and it shows
+    // The supported checks seam, the one the published `Button` uses: GenUI's exported `useChecks`
+    // evaluates the rule list reactively and this adapter implements no expression interpreter of
+    // its own. The control is interactive only when `isValid` and every check pass, and it shows
     // the first failure's message. Checks gate the interface; they authorize nothing.
-    const checked = useChecks({
-      checks: Array.isArray(props['checks']) ? (props['checks'] as CheckLike[]) : undefined,
-      componentId,
-      surface: props.surface,
-      dataContextPath: props.dataContextPath,
-    });
+    //
+    // The hook is given the component's stored rules, not `props['checks']`. By the time props
+    // arrive, GenUI has already replaced a `{ path }` or function-call condition with its current
+    // value, which `useChecks` does not recognise and so counts as passing, and the rule no longer
+    // names the data it depends on. The stored rule keeps the binding, so the hook evaluates it
+    // against the current data model and re-evaluates when that model changes.
+    const checked = useChecks({ checks: useStoredChecks(props.surface, componentId), componentId, surface: props.surface, dataContextPath: props.dataContextPath });
     const enabled = props['isValid'] !== false && checked.ok;
 
     return (
@@ -115,7 +133,7 @@ export function createActionControl(options: ActionControlOptions): ActionContro
         <view id={componentId} bindtap={token === undefined || !enabled ? undefined : onTap}>
           {child === undefined ? null : <NodeRenderer component={child} surface={props.surface} />}
         </view>
-        {!checked.ok && checked.firstFailureMessage ? <text id={`${componentId}-error`}>{checked.firstFailureMessage}</text> : null}
+        {!checked.ok && typeof checked.firstFailureMessage === 'string' && checked.firstFailureMessage !== '' ? <text id={`${componentId}-error`}>{checked.firstFailureMessage}</text> : null}
       </>
     );
   }
