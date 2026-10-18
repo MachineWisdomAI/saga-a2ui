@@ -25,10 +25,12 @@ export interface Held<Token> {
   /**
    * Moves responsibility for the token to `adopt`, which is called synchronously and must finish
    * synchronously. Returns true when `adopt` returned a non-thenable value and the invocation was
-   * still active: the owner now holds the token and the scope will not release it. Returns false
-   * and adopts nothing when the invocation had already ended (the scope has released or will
-   * release the token) or when the scope no longer holds it (already transferred). If `adopt`
-   * throws, the throw propagates and ownership stays with the scope. If it returns a thenable the
+   * still active when it returned: the owner now holds the token and the scope will not release
+   * it. Returns false when the invocation had already ended (the scope has released or will
+   * release the token) or when the scope no longer holds it (already transferred), in which case
+   * `adopt` is not called; it also returns false when `adopt` itself ended the invocation, and
+   * the scope releases the token. If `adopt` throws, or inspecting what it returned throws, the
+   * throw propagates and ownership stays with the scope. If it returns a thenable the
    * types could not see, `transfer` throws a `TypeError`, ownership stays with the scope, and a
    * later rejection reaches the observer as a `cleanup-error` with step `adopt`. Work the callback
    * already started is not recalled, so the owner's own `end(token)` must be idempotent.
@@ -38,7 +40,10 @@ export interface Held<Token> {
 
 /** The part of the scope that may be used inside the event turn. */
 export interface ActivationScope {
-  /** True from the start of the invocation until its outcome is decided (work activity, not freshness). */
+  /**
+   * True from the start of the invocation until its outcome is decided or, inside `atActivation`,
+   * until a cancellation from inside the callback is noted (work activity, not freshness).
+   */
   readonly active: boolean;
   /**
    * Takes responsibility for a token the caller already holds, synchronously. Needs `limits`. If
@@ -90,6 +95,8 @@ interface Entry extends Hold {
 /** The tokens one invocation owns, in the order it came to own them. */
 export class InvocationResources {
   private readonly entries: Entry[] = [];
+  /** True once the runtime's release sweep found nothing left to take. */
+  private sweepFinished = false;
 
   /** The scope an `atActivation` callback receives: synchronous ownership only, so no `acquire`. */
   readonly activation: ActivationScope;
@@ -127,6 +134,7 @@ export class InvocationResources {
       this.entries.splice(index, 1);
       return entry;
     }
+    this.sweepFinished = true;
     return undefined;
   }
 
@@ -171,35 +179,41 @@ export class InvocationResources {
     if (typeof adopt !== 'function') throw new TypeError(`Action '${this.host.label}': transfer needs an adopt function.`);
     // While the owner adopts, the entry is not the runtime's to release, whatever adoption does.
     entry.state = 'adopting';
-    let returned: unknown;
+    let completed = false;
     try {
       // Interop assertion: `entry.token` is the `Token` this `Held` was created with.
-      returned = adopt(entry.token as Token);
-    } catch (error) {
-      this.adoptionRefused(entry);
-      throw error;
+      const returned: unknown = adopt(entry.token as Token);
+      // Inspecting the returned value is part of adoption: a hostile `then` accessor must not leave
+      // the entry adopting.
+      if (isThenable(returned)) {
+        this.reportLateRejection(returned);
+        throw new TypeError(
+          `Action '${this.host.label}': the adopt callback returned a promise. Adoption is synchronous, ` +
+            'so the scope still owns the token and will release it.',
+        );
+      }
+      // A completed transfer needs an invocation that is still active: adoption may have ended it.
+      completed = this.host.isActive();
+    } finally {
+      if (completed) {
+        entry.state = 'transferred';
+        this.remove(entry);
+      } else {
+        this.adoptionRefused(entry);
+      }
     }
-    if (isThenable(returned)) {
-      this.reportLateRejection(returned);
-      this.adoptionRefused(entry);
-      throw new TypeError(
-        `Action '${this.host.label}': the adopt callback returned a promise. Adoption is synchronous, ` +
-          'so the scope still owns the token and will release it.',
-      );
-    }
-    entry.state = 'transferred';
-    this.remove(entry);
-    return true;
+    return completed;
   }
 
   /**
-   * The owner did not take the token, so the scope still owns it. If the invocation ended while the
-   * owner was adopting, the end-of-invocation release may already have passed over this entry:
-   * release it now rather than leak it.
+   * The owner did not take the token, so the scope still owns it. The runtime's release sweep
+   * takes every held entry it finds, so if it has not finished yet it will find this one. If it
+   * already passed over the entry while it was adopting, nothing else will release it: do it now
+   * rather than leak it.
    */
   private adoptionRefused(entry: Entry): void {
     entry.state = 'held';
-    if (this.host.isActive()) return;
+    if (!this.sweepFinished) return;
     const hookMs = this.host.hookMs();
     if (hookMs === undefined) return;
     entry.state = 'taken';

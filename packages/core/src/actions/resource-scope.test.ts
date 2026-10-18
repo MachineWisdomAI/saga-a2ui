@@ -247,6 +247,69 @@ describe('activation work, ownership of an existing token and acquisition after 
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
+  it('lets a throw from the activation callback win over a disposal inside it: no canceled hook runs without its activation value', async () => {
+    const owner = new PlayerOwner();
+    const holder: { dispose?: () => void } = {};
+    const failure = new Error('activation failed after disposing');
+    const seen: string[] = [];
+    const outcomes: Outcome<unknown>[] = [];
+    let ran = false;
+    const action = Action.local<Press>('dispose-then-throw')
+      .atActivation(({ scope }): { readonly token: string } => {
+        scope.own(owner.begin(), (lease) => owner.end(lease));
+        holder.dispose?.();
+        throw failure;
+      })
+      .run(() => void (ran = true))
+      .limits({ hookMs: 100 })
+      .onCanceled(({ activation }) => void seen.push(`canceled:${activation.token}`))
+      .onFailure((context) => void seen.push(`failed:${context.stage}`))
+      .onFinally(({ outcome }) => void outcomes.push(outcome))
+      .build();
+    const { control, binding } = rig(action);
+    holder.dispose = () => binding.dispose();
+
+    control.press();
+    await settle();
+
+    expect(ran).toBe(false);
+    // The activation did not complete, so no activation value exists; the failure is the outcome and
+    // the cancellation, already obsolete, keeps the failure hook from presenting.
+    expect(seen).toEqual([]);
+    expect(outcomes[0]).toEqual({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: failure } });
+    expect(owner.calls).toEqual(['begin:1', 'end:1']);
+  });
+
+  it('treats a disposal inside the activation callback as ending the scope at once, while the canceled hook still gets the value it returns', async () => {
+    const owner = new PlayerOwner();
+    const holder: { dispose?: () => void } = {};
+    const seen: string[] = [];
+    const action = Action.local<Press>('dispose-then-own')
+      .atActivation(({ scope }) => {
+        const held = scope.own(owner.begin(), (lease) => owner.end(lease));
+        holder.dispose?.();
+        seen.push(`active:${scope.active}`);
+        try {
+          scope.own('late', () => void seen.push('late released'));
+        } catch (error) {
+          seen.push(error instanceof InvocationEndedError ? 'late refused' : 'late other');
+        }
+        return held;
+      })
+      .run(() => undefined)
+      .limits({ hookMs: 100 })
+      .onCanceled(({ activation }) => void seen.push(`canceled:${activation.token.id}`))
+      .build();
+    const { control, binding } = rig(action);
+    holder.dispose = () => binding.dispose();
+
+    control.press();
+    await settle();
+
+    expect(seen).toEqual(['active:false', 'late released', 'late refused', 'canceled:1']);
+    expect(owner.calls).toEqual(['begin:1', 'end:1']);
+  });
+
   it('reports the scope active until the outcome is decided, which is work activity and not freshness', async () => {
     const seen: Record<string, boolean> = {};
     const action = Action.local<Press>('active')
@@ -823,6 +886,115 @@ describe('transfer', () => {
 
     // Nothing owns the token and nothing will take it: the scope releases it rather than leak it.
     expect(released).toEqual(['released']);
+  });
+
+  it('reports a transfer false and releases the token when adoption disposed the binding and returned, in a resumed handler', async () => {
+    const owner = new PlayerOwner();
+    const holder: { binding?: { dispose(): void } } = {};
+    const answers: boolean[] = [];
+    const action = Action.local<Press>('adopt-disposes-resumed')
+      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .run(async ({ activation }) => {
+        await Promise.resolve();
+        answers.push(activation.transfer(() => holder.binding?.dispose()));
+      })
+      .limits({ hookMs: 100 })
+      .build();
+    const { control, binding } = rig(action);
+    holder.binding = binding;
+
+    control.press();
+    await settle();
+
+    // An ended invocation cannot report a completed transfer, and the scope still owes the release.
+    expect(answers).toEqual([false]);
+    expect(owner.calls).toEqual(['begin:1', 'end:1']);
+  });
+
+  it('reports a transfer false and releases the token after the canceled hook when adoption disposed the binding, in a synchronous handler', async () => {
+    const owner = new PlayerOwner();
+    const holder: { binding?: { dispose(): void } } = {};
+    const answers: boolean[] = [];
+    const order: string[] = [];
+    const action = Action.local<Press>('adopt-disposes-sync')
+      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .run(({ activation }) => {
+        answers.push(activation.transfer(() => holder.binding?.dispose()));
+      })
+      .limits({ hookMs: 100 })
+      .onCanceled(() => void order.push(`canceled after ${owner.calls.join(',')}`))
+      .build();
+    const { control, binding } = rig(action);
+    holder.binding = binding;
+
+    control.press();
+    await settle();
+
+    expect(answers).toEqual([false]);
+    // The release was not skipped and did not jump ahead of the outcome hook.
+    expect(order).toEqual(['canceled after begin:1']);
+    expect(owner.calls).toEqual(['begin:1', 'end:1']);
+  });
+
+  it('keeps ownership with the scope when inspecting what adoption returned throws', async () => {
+    const owner = new PlayerOwner();
+    const failure = new Error('then accessor refused');
+    let caught: unknown;
+    let again: boolean | undefined;
+    const action = Action.local<Press>('adopt-hostile-then')
+      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .run(({ activation }) => {
+        try {
+          activation.transfer(
+            (): unknown => ({
+              get then(): never {
+                throw failure;
+              },
+            }),
+          );
+        } catch (error) {
+          caught = error;
+        }
+        // The entry is held again, not stuck adopting: it can still be transferred.
+        again = activation.transfer(() => undefined);
+      })
+      .limits({ hookMs: 100 })
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await settle();
+
+    expect(caught).toBe(failure);
+    expect(again).toBe(true);
+  });
+
+  it('releases the token when inspecting what adoption returned throws and the handler lets it escape', async () => {
+    const owner = new PlayerOwner();
+    const failure = new Error('then accessor refused');
+    const outcomes: Outcome<unknown>[] = [];
+    const action = Action.local<Press>('adopt-hostile-then-escapes')
+      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .run(({ activation }) => {
+        activation.transfer(
+          (): unknown => ({
+            get then(): never {
+              throw failure;
+            },
+          }),
+        );
+      })
+      .limits({ hookMs: 100 })
+      .onFailure(() => undefined)
+      .onFinally(({ outcome }) => void outcomes.push(outcome))
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await settle();
+
+    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: failure } }]);
+    expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 });
 

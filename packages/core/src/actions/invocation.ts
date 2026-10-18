@@ -145,6 +145,9 @@ export class Invocation<Event> {
   private workStartedAt = 0;
   private unwatch: () => void = noUnsubscribe;
   private activating = false;
+  /** True while the `atActivation` callback runs, when a cancellation is noted but not yet decided. */
+  private activationRunning = false;
+  private pendingCancel: CancelCause | undefined;
   private rethrow: { readonly error: unknown } | undefined;
 
   private replacedFlag = false;
@@ -159,7 +162,7 @@ export class Invocation<Event> {
     this.resources = new InvocationResources({
       label: plan.label,
       // The scope is active until the outcome is decided: that is work activity, not freshness.
-      isActive: () => this.outcome === undefined,
+      isActive: () => this.outcome === undefined && this.pendingCancel === undefined,
       hookMs: () => this.plan.limits?.hookMs,
       report: (step) => this.emit('cleanup-error', { cleanupStep: step }),
     });
@@ -261,6 +264,13 @@ export class Invocation<Event> {
   }
 
   private cancel(cause: CancelCause): void {
+    if (this.activationRunning) {
+      // The activation has not produced its value yet. Whether this is a cancellation or the
+      // callback's own failure is decided when the callback returns, so a canceled hook that is
+      // typed as carrying `activation` never runs without one. The scope stops being active now.
+      this.pendingCancel ??= cause;
+      return;
+    }
     const stage = this.stage;
     this.controller.abort();
     this.abandonStep();
@@ -308,10 +318,12 @@ export class Invocation<Event> {
   /**
    * Runs `atActivation` synchronously. What it took into the scope before it threw is released by
    * the ordinary end of the invocation. The runtime never continues the invocation inside the
-   * callback's own call stack: a cancellation from inside it (`dispose()`, say) waits until it
-   * returns, and `activation` is set by then so the canceled hook can still end that resource.
-   * One case has no value to set: the callback disposed the binding and then threw, so a canceled
-   * hook typed as carrying `activation` sees `undefined` (the scope still releases what it owned).
+   * callback's own call stack: a cancellation from inside it (`dispose()`, say) is noted and
+   * decided when the callback returns. If the callback returned, `activation` is set by then, so
+   * the canceled hook can still end that resource. If it threw, no activation value exists, so the
+   * callback's failure is the outcome (stage `input`, which carries no `activation`) and the
+   * cancellation only leaves the invocation obsolete: the failure hook does not present, and the
+   * scope still releases what it owned.
    */
   private activate(event: Event): boolean {
     const { activate } = this.plan;
@@ -319,24 +331,32 @@ export class Invocation<Event> {
     let returned: unknown;
     let threw: { readonly error: unknown } | undefined;
     this.depth += 1;
+    this.activationRunning = true;
     try {
       returned = activate({ event, scope: this.resources.activation });
+      // A thenable is a failure of the callback, so the check belongs to the same boundary.
+      if (isThenable(returned)) {
+        discardOutcome(returned);
+        returned = undefined;
+        throw new TypeError(
+          `The atActivation callback of action '${this.plan.label}' returned a promise. ` +
+            'It runs in the event itself; start awaited work in before or run.',
+        );
+      }
     } catch (error) {
       threw = { error };
     }
+    this.activationRunning = false;
     this.depth -= 1;
-    if (threw === undefined && isThenable(returned)) {
-      discardOutcome(returned);
-      returned = undefined;
-      threw = {
-        error: new TypeError(
-          `The atActivation callback of action '${this.plan.label}' returned a promise. ` +
-            'It runs in the event itself; start awaited work in before or run.',
-        ),
-      };
+    const pending = this.pendingCancel;
+    this.pendingCancel = undefined;
+    if (threw !== undefined) {
+      this.decide({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: threw.error } });
+    } else {
+      this.activation = returned;
     }
-    if (threw !== undefined) this.decide({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: threw.error } });
-    else this.activation = returned;
+    // A cancellation noted inside the callback is decided now, after the activation value exists.
+    if (pending !== undefined) this.cancel(pending);
     this.drain();
     return this.outcome === undefined;
   }
