@@ -75,6 +75,9 @@ describe('@saga-a2ui/core exports', () => {
   it('keep the action module free of any renderer, MCP package or DOM runtime', async () => {
     const { modules } = await bundledModules('@saga-a2ui/core/actions');
     expect(modules.some((id) => id.endsWith('/packages/core/src/actions/instance-host.ts'))).toBe(true); // the graph was really walked
+    // Server actions reach their server through the application's transport: the module for them is in the
+    // graph, and nothing of any MCP package is.
+    expect(modules.some((id) => id.endsWith('/packages/core/src/actions/server.ts'))).toBe(true);
     const forbidden = /node_modules\/(lit|lit-html|lit-element|@lit|@lit-labs|react|react-dom|jsdom|happy-dom|@modelcontextprotocol|@a2ui)\//;
     expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
     expect(modules.filter((id) => id.includes('/packages/lit/') || id.includes('/packages/mcp/'))).toEqual([]);

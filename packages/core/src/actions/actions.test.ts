@@ -762,10 +762,8 @@ describe('what the types refuse', () => {
         handle.bindAction('hover', toggle());
         // @ts-expect-error this definition needs an event the control does not deliver
         handle.bindAction('activate', needsNumber);
-        // @ts-expect-error a local handler has no `call`: server actions are a later slice
+        // @ts-expect-error a local handler has no `call`: only a server action can reach a server
         Action.local<InstanceEvent<string>>('ctx').run(({ call }) => call);
-        // @ts-expect-error server actions are a later slice and are not declared
-        Action.server;
         // @ts-expect-error `eventTurn` is a later slice and is not declared
         void Action.local<InstanceEvent<string>>('later').run(() => undefined).build().eventTurn;
         // @ts-expect-error bindAction takes the subject reader and nothing else

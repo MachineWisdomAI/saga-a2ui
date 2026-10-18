@@ -21,6 +21,8 @@ import {
   type ActionButtonActivation,
   type ActionButtonEvents,
 } from '@saga-a2ui/lit/actions';
+import { archiveNoteWith, requireNoteId } from '../archive-fixture/archive.js';
+import { createArchiveLab, wording, type ArchiveLab } from '../archive-fixture/lab.js';
 
 // Test-only page: a synthetic application with its own catalog (upstream Column, Row, List, Text
 // and Button, plus the opt-in ActionButton), two app elements so that two mounts can be compared,
@@ -92,6 +94,8 @@ export interface ActionConsumer {
   readonly pendingRows: { app: string; noteId: string; release: () => void }[];
   /** Scenario `resource` only: the application's own owner of a single shared player. */
   readonly player: PlayerOwner;
+  /** Scenario `server` only: each app's test-controlled environment for the Archive server action. */
+  readonly archive: Record<string, ArchiveLab>;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -196,6 +200,7 @@ const consumer: ActionConsumer = {
   pendingSessions: [],
   pendingRows: [],
   player: new PlayerOwner(),
+  archive: {},
   stopDiscovery: (app) => (stoppers[app] ?? []).forEach((stop) => stop()),
   send: (app, input) => {
     const element = document.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>(`[data-app="${app}"]`);
@@ -228,11 +233,6 @@ consumer.bindAgain = (index) => {
 };
 consumer.layout = () => layout(SURFACE_ID);
 window.actionConsumer = consumer;
-
-function requireNoteId(value: unknown): string {
-  if (typeof value !== 'string' || value === '') throw new Error('this row shows no note');
-  return value;
-}
 
 // App code: the definitions are built once and shared by every binding that uses them.
 const makeToggle = (app: string): ActionDefinition<ActionButtonActivation> =>
@@ -558,10 +558,84 @@ function resourceAttachFor(app: string) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Scenario `server` (ACT6): the non-playback Archive server action over a test-controlled
+// transport. Two rows render one component id with different notes, an upstream Button sits beside
+// them in the same surface, and the spec answers every prerequisite and protected request.
+// ---------------------------------------------------------------------------------------------
+
+const serverLayout = (surfaceId: string) => [
+  { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId,
+      components: [
+        { id: 'root', component: 'Column', children: ['upstream-button', 'rows'] },
+        { id: 'upstream-button', component: 'Button', child: 'upstream-label', action: { event: { name: 'upstream-press' } } },
+        { id: 'upstream-label', component: 'Text', text: 'Upstream' },
+        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        { id: 'row', component: 'Row', children: ['row-title', 'row-archive'] },
+        { id: 'row-title', component: 'Text', text: { path: 'title' } },
+        { id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
+        { id: 'row-archive-label', component: 'Text', text: 'Archive' },
+      ],
+    },
+  },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId,
+      value: {
+        rows: [
+          { id: 'n-1', title: 'Alpha' },
+          { id: 'n-2', title: 'Beta' },
+        ],
+      },
+    },
+  },
+];
+
+function serverAttachFor(app: string) {
+  const { lab, environment } = createArchiveLab((noteId, message) => {
+    const key = noteId ?? 'input';
+    let line = document.querySelector(`[data-note="${app}:${key}"]`);
+    if (!line) {
+      line = document.createElement('p');
+      line.setAttribute('data-note', `${app}:${key}`);
+      document.querySelector(`#${app}`)?.append(line);
+    }
+    line.textContent = wording(message);
+    consumer.log.push({ app, action: 'archive-shown', noteId: key, kind: message.kind });
+  });
+  consumer.archive[app] = lab;
+  const archive = archiveNoteWith((event: ActionButtonActivation) => requireNoteId(event.read('id')), environment);
+  return (view: InstanceView): void => {
+    consumer.attachCalls[app] = (consumer.attachCalls[app] ?? 0) + 1;
+    consumer.views[app] = view;
+    view.watchById('row-archive', ActionButton, (handle) => {
+      const binding = handle.bindAction('activate', archive, { subject: () => handle.read('id') });
+      trace(app, handle, binding);
+    });
+  };
+}
+
 const layoutFor = (surfaceId: string) =>
-  scenario === 'resource' ? resourceLayout(surfaceId) : scenario === 'async' ? asyncLayout(surfaceId) : layout(surfaceId);
+  scenario === 'server'
+    ? serverLayout(surfaceId)
+    : scenario === 'resource'
+      ? resourceLayout(surfaceId)
+      : scenario === 'async'
+        ? asyncLayout(surfaceId)
+        : layout(surfaceId);
 const attachForScenario = (app: string) =>
-  scenario === 'resource' ? resourceAttachFor(app) : scenario === 'async' ? asyncAttachFor(app) : attachFor(app);
+  scenario === 'server'
+    ? serverAttachFor(app)
+    : scenario === 'resource'
+      ? resourceAttachFor(app)
+      : scenario === 'async'
+        ? asyncAttachFor(app)
+        : attachFor(app);
 
 function defineApp(app: string): void {
   customElements.define(

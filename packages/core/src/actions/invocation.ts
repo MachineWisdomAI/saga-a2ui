@@ -11,6 +11,7 @@ import type {
 } from './outcome.js';
 import { readAnswer, type Prerequisite } from './prerequisite.js';
 import { InvocationResources } from './scope.js';
+import { requestTimeout, type ServerCalls, type ServerTransport } from './server.js';
 import { discardOutcome, isThenable } from './thenable.js';
 
 // One activation that was admitted, from the user's event to its settlement. The runtime owns every
@@ -480,8 +481,32 @@ export class Invocation<Event> {
           signal: this.controller.signal,
           scope: this.resources.invocation,
           current: () => this.currentFor(step),
+          ...(this.plan.transport === undefined ? {} : { call: this.serverCall(step, this.plan.transport) }),
         }),
     );
+  }
+
+  /**
+   * The handler's way to reach the server. The runtime, not the handler, builds the request
+   * options: the invocation's signal, and as timeout what is left of the work deadline, or less if
+   * the handler asked for less. A call from a handler the runtime stopped waiting for sends nothing.
+   * A rejection of the transport is the handler's to see, and arrives as `handler-error` unless
+   * the deadline or a cancellation decided first.
+   */
+  private serverCall(step: Step, transport: ServerTransport): ServerCalls['call'] {
+    const { label, limits } = this.plan;
+    return async (name, args, options) => {
+      // Reading the options first makes a malformed request fail the same way at any time.
+      const asked = (options as { timeoutMs?: unknown } | undefined)?.timeoutMs;
+      if (typeof name !== 'string' || name === '') throw new TypeError(`Action '${label}': a server call needs a tool name.`);
+      this.recheck();
+      const remainingMs = (limits?.deadlineMs ?? 0) - (Date.now() - this.workStartedAt);
+      if (!step.eligible || this.controller.signal.aborted || remainingMs <= 0) {
+        throw new Error(`Action '${label}': the invocation stopped waiting for this handler, so the request was not sent.`);
+      }
+      const timeout = requestTimeout(label, remainingMs, asked);
+      return transport.callServerTool({ name, arguments: args }, { signal: this.controller.signal, timeout });
+    };
   }
 
   private armDeadline(): void {
