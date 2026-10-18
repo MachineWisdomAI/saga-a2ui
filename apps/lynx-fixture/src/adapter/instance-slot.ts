@@ -69,6 +69,7 @@ export class InstanceSlot {
   #watch: ItemWatch | undefined;
   #snapshot: SlotSnapshot = Object.freeze({ installation: undefined, keyProp: undefined, epoch: 0, binding: undefined });
   readonly #listeners = new Set<() => void>();
+  readonly #wakeUps = new Set<() => void>();
 
   constructor(private readonly config: SlotConfig) {
     countOnMainThread('slotsConstructed');
@@ -102,7 +103,10 @@ export class InstanceSlot {
     this.#keyProp = this.config.itemKeyProp(where.sourceComponentId);
     if (this.#keyProp !== undefined) {
       this.#watch = new ItemWatch(
-        () => this.#publish(),
+        () => {
+          this.#publish();
+          this.#wake();
+        },
         (event) => this.config.probe(this, event),
       );
       this.#watch.start(where, this.#keyProp);
@@ -115,6 +119,17 @@ export class InstanceSlot {
       events: ['activate'],
       isLive: () => installation.live,
       read: (prop) => (installation.live && this.#where !== undefined ? readLive(this.#where, prop) : undefined),
+      // The runtime holds this only while an invocation is not settled. The item watch is this
+      // adapter's own observation, kept while idle for tap admission; it keeps its epoch whatever the
+      // runtime does with its subscription. Signals notify inside a batch, so the microtask lets the
+      // whole batch finish before the runtime reads the application's subject: an A, B, A inside one
+      // batch is not seen. A subject on a property that has no item watch gets no wake-up here.
+      watchScope: (revalidate) => {
+        this.#wakeUps.add(revalidate);
+        return () => {
+          this.#wakeUps.delete(revalidate);
+        };
+      },
     });
     // Setup has already run inside `host.open`, so what it bound is published below. From here a
     // dispose or a rebind on the handle publishes a new snapshot, and the next render's token
@@ -201,6 +216,12 @@ export class InstanceSlot {
   noteRender(shownKey: unknown): void {
     countOnMainThread('renders');
     this.config.probe(this, { type: 'render', shownKey, epoch: this.#watch?.epoch ?? 0 });
+  }
+
+  /** Tells every wake-up the runtime holds that what this instance shows changed, once the batch is done. */
+  #wake(): void {
+    if (this.#wakeUps.size === 0) return;
+    for (const revalidate of [...this.#wakeUps]) queueMicrotask(revalidate);
   }
 
   #refuse(outcome: Exclude<Activation, 'delivered' | 'failed'>): Activation {

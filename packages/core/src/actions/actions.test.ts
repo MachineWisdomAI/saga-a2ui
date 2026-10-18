@@ -537,7 +537,8 @@ describe('failures of an invocation', () => {
     try {
       const hidden: unknown = Promise.reject(new Error('late'));
       const action = Action.local<InstanceEvent<string>>('hidden')
-        .run(() => hidden as undefined)
+        .input(() => hidden as undefined)
+        .run(() => undefined)
         .build();
       const control = renderInstance(host, 'c');
       const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
@@ -741,14 +742,13 @@ describe('the immutable builder', () => {
 
 // Type-level cases. These lines are checked by `npm run typecheck`, not at runtime.
 describe('what the types refuse', () => {
-  it('rejects asynchronous input and handlers, unknown events, and a definition for the wrong event', () => {
-    // @ts-expect-error an async handler is a later slice
-    Action.local<InstanceEvent<string>>('async-run').run(async () => undefined);
+  it('rejects asynchronous input, unknown events, and a definition for the wrong event', () => {
     // @ts-expect-error an async input extractor
     Action.local<InstanceEvent<string>>('async-input').input(async () => 1);
     // @ts-expect-error a union with a promise is still asynchronous
-    Action.local<InstanceEvent<string>>('union').run((): Promise<number> | undefined => undefined);
-    // An always-throwing handler returns never and stays valid.
+    Action.local<InstanceEvent<string>>('union-input').input((): Promise<number> | undefined => undefined);
+    // An asynchronous handler is valid, and so is one that always throws.
+    Action.local<InstanceEvent<string>>('async-run').run(async () => undefined);
     Action.local<InstanceEvent<string>>('throws').run(() => {
       throw new Error('x');
     });
@@ -762,14 +762,16 @@ describe('what the types refuse', () => {
         handle.bindAction('hover', toggle());
         // @ts-expect-error this definition needs an event the control does not deliver
         handle.bindAction('activate', needsNumber);
-        // @ts-expect-error a handler context carries params and nothing else yet
-        Action.local<InstanceEvent<string>>('ctx').run(({ signal }) => signal);
-        // @ts-expect-error prerequisites are a later slice and are not declared
-        Action.local<InstanceEvent<string>>('later').before;
-        // @ts-expect-error hooks and limits are a later slice and are not declared
-        Action.local<InstanceEvent<string>>('later').run(() => undefined).limits;
-        // @ts-expect-error bindAction takes no options yet
-        handle.bindAction('activate', toggle(), { subject: () => 1 });
+        // @ts-expect-error the handler context has no invocation scope: resource ownership is a later slice
+        Action.local<InstanceEvent<string>>('ctx').run(({ scope }) => scope);
+        // @ts-expect-error a local handler has no `call`: server actions are a later slice
+        Action.local<InstanceEvent<string>>('ctx').run(({ call }) => call);
+        // @ts-expect-error server actions are a later slice and are not declared
+        Action.server;
+        // @ts-expect-error `atActivation` is a later slice and is not declared
+        Action.local<InstanceEvent<string>>('later').atActivation;
+        // @ts-expect-error bindAction takes the subject reader and nothing else
+        handle.bindAction('activate', toggle(), { resource: 1 });
       });
     });
   });

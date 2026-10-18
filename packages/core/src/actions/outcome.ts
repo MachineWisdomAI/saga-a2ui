@@ -1,0 +1,99 @@
+// The vocabulary of how one invocation ends. An outcome is decided once and never edited; every
+// failed and canceled variant names the stage it was decided in, so a hook (and `onFinally`) can
+// tell "the handler never started" from "the handler may already have done its work".
+
+/** 'subject-changed': the binding's subject reader returned a different value than at activation. */
+export type CancelCause = 'replaced' | 'disposed' | 'subject-changed';
+
+/**
+ * Failures during the synchronous activation prefix. Nothing was awaited and no prerequisite or
+ * handler has run. Only `invalid-input` exists in this slice: `atActivation` is a later one.
+ */
+export type InputFailure = { readonly kind: 'invalid-input'; readonly error: unknown };
+
+/** Failures while prerequisites run. The handler has not started and `provided` is incomplete. */
+export type PrerequisiteFailure =
+  | { readonly kind: 'refused'; readonly prerequisite: string; readonly reason: string }
+  | { readonly kind: 'prerequisite-error'; readonly prerequisite: string; readonly error: unknown }
+  | { readonly kind: 'timeout' };
+
+/**
+ * Failures once the handler has started. `handler-error` and `timeout` say only that the handler
+ * threw or had not settled: what it already did is unknown to the runtime. The two success-hook
+ * kinds are different: the handler returned `result` before the required hook failed.
+ */
+export type RunningFailure<Result> =
+  | { readonly kind: 'handler-error'; readonly error: unknown }
+  | { readonly kind: 'timeout' }
+  | { readonly kind: 'success-hook-error'; readonly error: unknown; readonly result: Result }
+  | { readonly kind: 'success-hook-timeout'; readonly result: Result };
+
+/** Steps after the outcome is decided. Resource release and adoption arrive with the scope (ACT5). */
+export type CleanupStep = 'onFailure' | 'onCanceled' | 'onFinally';
+
+/** A diagnostic about cleanup. It never changes the primary outcome. */
+export type CleanupError =
+  | { readonly step: CleanupStep; readonly reason: 'threw'; readonly error: unknown }
+  | { readonly step: CleanupStep; readonly reason: 'budget-exceeded' | 'obsolete' };
+
+/**
+ * Canceled stages: 'prerequisites' and 'running' are before the handler's result was observed, so
+ * no result exists. 'completing' is after it was observed, while the required success hook had not
+ * finished, so the result is part of the outcome.
+ */
+export type Outcome<Result> =
+  | { readonly status: 'succeeded'; readonly result: Result }
+  | { readonly status: 'failed'; readonly stage: 'input'; readonly failure: InputFailure }
+  | { readonly status: 'failed'; readonly stage: 'prerequisites'; readonly failure: PrerequisiteFailure }
+  | { readonly status: 'failed'; readonly stage: 'running'; readonly failure: RunningFailure<Result> }
+  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'prerequisites' }
+  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'running' }
+  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'completing'; readonly result: Result };
+
+/**
+ * The freshness check supplied to one callback. Each prerequisite, the handler and each hook gets
+ * its own, distinct from the signal. It is true only while the runtime is still waiting for
+ * this very callback, the binding is not disposed or replaced, the adapter reports the instance
+ * live, and the subject (when one was given) still equals the one captured at activation. Each
+ * call reads liveness and the subject afresh. It is a cooperative check for the moment before a
+ * synchronous presentation write; it cannot recall a write that has already started.
+ */
+export interface Freshness {
+  current(): boolean;
+}
+
+/** What a prerequisite that adds no values provides. */
+export type NoValues = Record<never, never>;
+
+/** Telemetry: no parameters, provided values, results or error objects, by construction. */
+export type ObservedPhase =
+  | 'ignored'
+  | 'started'
+  | 'prerequisites-settled'
+  | 'handler-settled'
+  | 'outcome-decided'
+  | 'cleanup-error'
+  | 'late-settlement'
+  | 'finished';
+
+export interface ObservedEvent {
+  readonly label: string;
+  /** Opaque, runtime-generated, unique within the page session; derived from no input. */
+  readonly bindingId: string;
+  /** Absent for 'ignored', where no invocation exists. */
+  readonly invocationId?: string;
+  /** Only for 'ignored': the invocation that was already busy. */
+  readonly busyInvocationId?: string;
+  readonly ignoredReason?: 'busy';
+  readonly phase: ObservedPhase;
+  readonly elapsedMs: number;
+  readonly status?: 'succeeded' | 'failed' | 'canceled';
+  readonly failureKind?: string;
+  readonly cleanupStep?: CleanupStep;
+}
+
+/**
+ * The runtime catches a synchronous throw and attaches a rejection handler to a returned promise,
+ * so neither changes the action or becomes an unhandled rejection. It never awaits the result.
+ */
+export type ActionObserver = (event: ObservedEvent) => void | PromiseLike<void>;

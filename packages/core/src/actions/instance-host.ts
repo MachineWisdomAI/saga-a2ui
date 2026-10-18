@@ -35,6 +35,19 @@ export interface InstanceEvent<Native = unknown> {
 
 type NativeOf<Event> = Event extends InstanceEvent<infer Native> ? Native : never;
 
+/**
+ * Optional, per binding. `subject` reads, through a supported application or renderer API and not
+ * through a view object captured by an earlier render, the semantic item the instance shows now
+ * (for a list row, a token that changes whenever the shown item changes). The runtime captures it
+ * at activation and compares a fresh read with `Object.is` at its own decision points and on every
+ * `current()` call. A reader that throws at activation ends the invocation as `invalid-input`; one
+ * that throws later counts as a change. Without `subject`, an invocation's target is the instance
+ * alone: a replaced row is not detected, which is right for a fixed control and wrong for a row.
+ */
+export interface BindOptions {
+  readonly subject?: () => unknown;
+}
+
 /** A handle stands for one rendered instance. Disposing a binding does not retire its handle. */
 export interface InstanceHandle<Events> {
   /** The component ID as the adapter reports it. For discovery and diagnostics, not an instance key. */
@@ -48,7 +61,11 @@ export interface InstanceHandle<Events> {
    * handle is stale (its instance was retired or is no longer live, or its setup ended), or when `action` was not built
    * by `Action`.
    */
-  bindAction<Name extends keyof Events & string>(event: Name, action: ActionDefinition<Events[Name]>): ActionBinding;
+  bindAction<Name extends keyof Events & string>(
+    event: Name,
+    action: ActionDefinition<Events[Name]>,
+    options?: BindOptions,
+  ): ActionBinding;
 }
 
 export interface InstanceView {
@@ -71,6 +88,13 @@ export interface OpenInfo<Events> {
   readonly isLive: () => boolean;
   /** Reads this instance's own data scope. */
   readonly read: (path: string) => unknown;
+  /**
+   * Optional. Calls `revalidate` after each change the adapter can observe in what this instance
+   * shows, and returns the unsubscribe. The runtime subscribes only while an invocation is not
+   * settled, and a call requests the same recheck that any checkpoint performs. An adapter's own
+   * observation of its instance, kept while nothing runs, is separate and stays the adapter's.
+   */
+  readonly watchScope?: (revalidate: () => void) => () => void;
 }
 
 export interface OpenInstance<Events> {
@@ -125,6 +149,7 @@ interface InstanceRecord {
   readonly events: ReadonlySet<string>;
   readonly isLive: () => boolean;
   readonly read: (path: string) => unknown;
+  readonly watchScope: ((revalidate: () => void) => () => void) | undefined;
   readonly slots: Map<string, Slot>;
   readonly listeners: Set<() => void>;
   retired: boolean;
@@ -202,7 +227,15 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
       id: record.componentId,
       dataPath: record.dataPath,
       read: (path) => (record.retired || !record.isLive() ? undefined : record.read(path)),
-      bindAction<Name extends keyof Events & string>(event: Name, action: ActionDefinition<Events[Name]>) {
+      bindAction<Name extends keyof Events & string>(
+        event: Name,
+        action: ActionDefinition<Events[Name]>,
+        options?: BindOptions,
+      ) {
+        const subject = options?.subject;
+        if (subject !== undefined && typeof subject !== 'function') {
+          throw new TypeError(`The subject option for '${record.componentId}' must be a function.`);
+        }
         // `isLive` is read fresh: the renderer may have dropped this instance's model before it retires the element.
         if (!registration.active || record.retired || !record.isLive()) {
           throw new Error(
@@ -228,7 +261,12 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
           if (detached) announce(record);
         };
         // Throws for a definition `Action` did not build, before anything is installed.
-        const { binding, activate } = createBinding(action, detach);
+        const { binding, activate } = createBinding(action, {
+          detach,
+          isLive: () => !record.retired && record.isLive(),
+          subject,
+          watchScope: record.watchScope,
+        });
         record.slots.set(event, {
           installation,
           binding,
@@ -336,6 +374,7 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
         events: new Set(info.events),
         isLive: info.isLive,
         read: info.read,
+        watchScope: info.watchScope,
         slots: new Map(),
         listeners: new Set(),
         retired: closed,

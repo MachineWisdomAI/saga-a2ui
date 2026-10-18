@@ -31,6 +31,8 @@ const ITEM_KEY_PROPS: Readonly<Record<string, string>> = {
   'submit-order': 'orderId',
   'cancel-order': 'orderId',
   'row-archive': 'noteId',
+  'review-order': 'orderId',
+  'row-stage': 'noteId',
 };
 
 const actionButton = createActionControl({

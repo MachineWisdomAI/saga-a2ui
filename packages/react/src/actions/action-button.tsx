@@ -50,6 +50,15 @@ function InstanceBoundary({ node, children }: { readonly node: ComponentNode; re
       isLive: () => !node.disposed,
       // This instance's own scope: a node's context is fixed when it is created.
       read: (path) => context.dataContext.resolveDynamicValue<unknown>({ path }),
+      // The runtime holds this only while an invocation is not settled. `DataModel.subscribe` calls
+      // back synchronously inside `set` and also for an ancestor or descendant of the scope's path;
+      // the microtask lets the whole change finish before the runtime reads the application's
+      // subject. A node without a surface model offers no wake-up, only the runtime's checkpoints.
+      watchScope: (revalidate) => {
+        const { surface, path } = context.dataContext;
+        const subscription = surface?.dataModel.subscribe(path, () => queueMicrotask(revalidate));
+        return () => subscription?.unsubscribe();
+      },
     });
     instance.current = open;
     // Runs synchronously when the resolver disposes the node, whichever of this and the cleanup below

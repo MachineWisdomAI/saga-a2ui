@@ -2,10 +2,14 @@ import { basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
 import { Catalog, createFunctionImplementation, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import {
   Action,
+  prerequisite,
+  proceed,
+  refuse,
   type ActionBinding,
   type ActionDefinition,
   type InstanceHandle,
   type InstanceView,
+  type PrerequisiteContext,
 } from '@saga-a2ui/core/actions';
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
@@ -80,6 +84,12 @@ export interface ActionConsumer {
   bindAgain(index: number): string;
   /** The messages that create the surface with the consumer's layout and data. */
   layout(): unknown[];
+  /**
+   * Scenario `async` only: the session prerequisite and the row work wait for the test. Each entry
+   * is one pending request; answering it is the test's choice and ordering.
+   */
+  readonly pendingSessions: ((answer: 'signed-in' | 'signed-out') => void)[];
+  readonly pendingRows: { app: string; noteId: string; release: () => void }[];
 }
 
 declare global {
@@ -100,6 +110,8 @@ const consumer: ActionConsumer = {
   views: {},
   surfaces: {},
   failSetupFor: undefined,
+  pendingSessions: [],
+  pendingRows: [],
   stopDiscovery: (app) => (stoppers[app] ?? []).forEach((stop) => stop()),
   send: (app, input) => {
     const element = document.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>(`[data-app="${app}"]`);
@@ -246,6 +258,122 @@ const layout = (surfaceId: string) => [
   },
 ];
 
+// ---------------------------------------------------------------------------------------------
+// Scenario `async` (ACT4): a Save-style action with ordered prerequisites, and a row action that
+// carries a subject. The page is chosen with `?scenario=async` so that the synchronous scenario
+// above keeps its exact layout and bindings.
+// ---------------------------------------------------------------------------------------------
+
+const scenario = new URLSearchParams(location.search).get('scenario');
+
+/** The binding state and the last message a hook presented, as the user would see them. */
+function present(app: string, kind: 'phase' | 'message', text: string): void {
+  const element = document.querySelector(`[data-${kind}="${app}"]`);
+  if (element) element.textContent = text;
+}
+
+const asyncLayout = (surfaceId: string) => [
+  { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId,
+      components: [
+        { id: 'root', component: 'Column', children: ['save-draft', 'rows'] },
+        { id: 'save-draft', component: 'ActionButton', child: 'save-draft-label' },
+        { id: 'save-draft-label', component: 'Text', text: 'Save draft' },
+        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        { id: 'row', component: 'Row', children: ['row-title', 'row-stage'] },
+        { id: 'row-title', component: 'Text', text: { path: 'title' } },
+        { id: 'row-stage', component: 'ActionButton', child: 'row-stage-label' },
+        { id: 'row-stage-label', component: 'Text', text: 'Stage' },
+      ],
+    },
+  },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId,
+      value: {
+        draft: 'hello',
+        rows: [
+          { id: 'n-1', title: 'Alpha' },
+          { id: 'n-2', title: 'Beta' },
+        ],
+      },
+    },
+  },
+];
+
+/** Waits for the test to answer: the session is either valid or absent. */
+const requireSession = prerequisite(
+  'session',
+  () =>
+    new Promise<ReturnType<typeof proceed<{ readonly user: string }>> | ReturnType<typeof refuse>>((resolve) => {
+      consumer.pendingSessions.push((answer) => resolve(answer === 'signed-in' ? proceed({ user: 'u-1' }) : refuse('sign-in-required')));
+    }),
+);
+
+/** Needs the extracted text, so it can only be declared after `input`. */
+const requireText = prerequisite('text', ({ params }: PrerequisiteContext<unknown, { readonly text: string }>) =>
+  params.text === '' ? refuse('empty-draft') : proceed({ length: params.text.length }),
+);
+
+const makeSaveDraft = (app: string) =>
+  Action.local<ActionButtonActivation>('save-draft')
+    .input((event) => ({ text: String(event.read('/draft') ?? '') }))
+    .before(requireSession)
+    .before(requireText)
+    .run(({ provided }) => {
+      consumer.log.push({ app, action: 'save-draft', user: provided.user, length: provided.length });
+      return { user: provided.user, length: provided.length };
+    })
+    .limits({ deadlineMs: 5000, hookMs: 1000 })
+    .onSuccess(({ result, current }) => {
+      if (current()) present(app, 'message', `saved by ${result.user} (${result.length})`);
+    })
+    .onFailure((context) => {
+      if (!context.current()) return;
+      present(app, 'message', context.failure.kind === 'refused' ? `refused: ${context.failure.reason}` : `failed: ${context.failure.kind}`);
+    })
+    .onCanceled(({ cause, stage }) => void consumer.log.push({ app, action: 'save-draft-canceled', cause, stage }))
+    .build();
+
+/** Work on one row that waits for the test; the subject is the row's own item. */
+const makeStage = (app: string) =>
+  Action.local<ActionButtonActivation>('stage-note')
+    .input((event) => ({ noteId: requireNoteId(event.read('id')) }))
+    .run(
+      ({ params }) =>
+        new Promise<void>((resolve) => {
+          consumer.log.push({ app, action: 'stage-started', noteId: params.noteId });
+          consumer.pendingRows.push({ app, noteId: params.noteId, release: resolve });
+        }),
+    )
+    .limits({ hookMs: 1000 })
+    .onSuccess(({ params, current }) => {
+      if (current()) present(app, 'message', `staged ${params.noteId}`);
+    })
+    .onCanceled(({ params, cause }) => present(app, 'message', `canceled ${params.noteId}: ${cause}`))
+    .build();
+
+function asyncAttachFor(app: string) {
+  const saveDraft = makeSaveDraft(app);
+  const stage = makeStage(app);
+  return (view: InstanceView): void => {
+    consumer.attachCalls[app] = (consumer.attachCalls[app] ?? 0) + 1;
+    consumer.views[app] = view;
+    view.watchById('save-draft', ActionButton, (handle) => {
+      const binding = handle.bindAction('activate', saveDraft);
+      binding.subscribe(() => present(app, 'phase', binding.state.phase));
+      trace(app, handle, binding);
+    });
+    view.watchById('row-stage', ActionButton, (handle) => {
+      trace(app, handle, handle.bindAction('activate', stage, { subject: () => handle.read('id') }));
+    });
+  };
+}
+
 function defineApp(app: string): void {
   customElements.define(
     `${app}-app`,
@@ -260,10 +388,10 @@ function defineApp(app: string): void {
         });
         return session;
       },
-      initialInput: layout(SURFACE_ID),
+      initialInput: scenario === 'async' ? asyncLayout(SURFACE_ID) : layout(SURFACE_ID),
       surfaceId: SURFACE_ID,
       actions: createLitActions({
-        attach: attachFor(app),
+        attach: scenario === 'async' ? asyncAttachFor(app) : attachFor(app),
         onSetupError: (error) => consumer.setupErrors.push(String(error)),
       }),
     }),
@@ -276,6 +404,13 @@ defineApp('two');
 
 for (const app of ['one', 'two']) {
   const section = document.querySelector(`#${app}`);
+  if (scenario === 'async') {
+    for (const kind of ['phase', 'message']) {
+      const line = document.createElement('p');
+      line.dataset[kind] = app;
+      section?.append(line);
+    }
+  }
   const element = document.createElement(`${app}-app`);
   element.dataset.app = app;
   section?.append(element);

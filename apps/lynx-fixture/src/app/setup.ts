@@ -1,6 +1,6 @@
 import type { ActionBinding, InstanceHandle, InstanceView } from '@saga-a2ui/core/actions';
 import { ActionButton, type ActionButtonEvents } from '../adapter/kind.js';
-import { archiveNote, cancelOrder, submitOrder } from './definitions.js';
+import { archiveNote, cancelOrder, reviewOrder, stageNote, submitOrder } from './definitions.js';
 
 /** Test-driver hook: told about each handle and binding the application's setup makes. */
 export interface SetupObserver {
@@ -31,6 +31,16 @@ export function attach(view: InstanceView, observer: SetupObserver): void {
   view.watchById('row-archive', ActionButton, (handle) => {
     observer.discovered(handle);
     observer.bound(handle, handle.bindAction('activate', archiveNote));
+  });
+  // ACT4: asynchronous local actions. The subject is read from the exact handle's own instance, so
+  // a position that starts showing another item is told apart from the item it showed at the tap.
+  view.watchById('review-order', ActionButton, (handle) => {
+    observer.discovered(handle);
+    observer.bound(handle, handle.bindAction('activate', reviewOrder, { subject: () => handle.read('orderId') }));
+  });
+  view.watchById('row-stage', ActionButton, (handle) => {
+    observer.discovered(handle);
+    observer.bound(handle, handle.bindAction('activate', stageNote, { subject: () => handle.read('noteId') }));
   });
   // Setup that binds and then throws: nothing may stay bound.
   view.watchById('flaky', ActionButton, (handle) => {

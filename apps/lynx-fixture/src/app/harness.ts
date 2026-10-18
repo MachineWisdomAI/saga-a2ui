@@ -3,7 +3,7 @@ import type { ActionBinding, InstanceHandle } from '@saga-a2ui/core/actions';
 import type { InstanceSlot, SlotProbe } from '../adapter/instance-slot.js';
 import type { ActionButtonEvents, LynxTap } from '../adapter/kind.js';
 import { onBackground, onMainThread, trace } from '../trace.js';
-import { archiveNote, cancelOrder, failingAction, presentation, submitOrder } from './definitions.js';
+import { archiveNote, cancelOrder, failingAction, pendingRows, pendingSessions, presentation, submitOrder } from './definitions.js';
 import type { SessionHolder } from './session.js';
 import type { SetupObserver } from './setup.js';
 
@@ -164,6 +164,22 @@ export function installHarness(holder: SessionHolder): Driver {
     'definition-shape'() {
       const plan = (submitOrder as unknown as { plan?: object }).plan ?? {};
       return { definitionKeys: Object.getOwnPropertyNames(submitOrder).sort(), planKeys: Object.getOwnPropertyNames(plan).sort(), frozen: Object.isFrozen(submitOrder) };
+    },
+    // ACT4: the test answers the pending prerequisite or releases a row's work, in the order it chooses.
+    'pending-sessions'() {
+      return { count: pendingSessions.length, rows: pendingRows.map((row) => row.noteId) };
+    },
+    'answer-session'(command) {
+      const answer = pendingSessions.shift();
+      if (answer === undefined) throw new Error('no pending session request');
+      answer(command['answer'] === 'signed-out' ? 'signed-out' : 'signed-in');
+      return { answered: true };
+    },
+    'release-row'(command) {
+      const index = pendingRows.findIndex((row) => row.noteId === command['noteId']);
+      if (index < 0) throw new Error('no pending row work');
+      pendingRows.splice(index, 1)[0]?.release();
+      return { released: true };
     },
     'clear-store'() {
       holder.current().store.clear();
