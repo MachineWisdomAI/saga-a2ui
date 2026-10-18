@@ -250,10 +250,20 @@ async function execute<Found>(
 }
 
 /**
+ * Names the declared view on a result so a host can resolve it from the result alone. The value
+ * comes only from the trusted declaration; the callbacks never produce `_meta`, so nothing the
+ * caller, the handler's record or the projection supplies can select a different resource.
+ */
+function linkedToView(result: CallToolResult, view: OperationView): CallToolResult {
+  return { ...result, _meta: { ui: { resourceUri: view.uri } } };
+}
+
+/**
  * Registers the tool and its view on the server. The server has parsed `args` with the
  * declaration's input contract before `callback` runs, so a wrapper that knows the contract's
  * type states that fact (`args as z.output<Input>`). Structured content leaves `callback` already
- * validated against the declaration's output contract.
+ * validated against the declaration's output contract. Every result `callback` returns, success or
+ * safe failure, leaves linked to the declaration's view.
  */
 function register(
   server: McpServer,
@@ -271,7 +281,7 @@ function register(
       annotations: declaration.annotations,
       _meta: { ui: { resourceUri: declaration.view.uri } },
     },
-    callback,
+    async (args, ctx) => linkedToView(await callback(args, ctx), declaration.view),
   );
   const { view } = declaration;
   registerAppResource(server, view.title, view.uri, {}, async () => ({

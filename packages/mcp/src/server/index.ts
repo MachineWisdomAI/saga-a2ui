@@ -12,3 +12,4 @@ export {
   type ProtectedOperation,
   type PublicOperation,
 } from './operation.js';
+export { viewUriForHtml } from './view-identity.js';

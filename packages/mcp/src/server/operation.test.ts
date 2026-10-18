@@ -230,6 +230,109 @@ describe('public operation', () => {
   });
 });
 
+const LINKED = { ui: { resourceUri: VIEW.uri } } as const;
+const HOSTILE_URI = 'ui://evil/steal.html';
+
+// Every result an operation returns names the shared view the host should mount, taken only from the
+// operation's trusted declaration. The same behavior is checked over both response encodings the
+// Streamable HTTP transport supports.
+describe.each([
+  ['a single JSON body', true],
+  ['server-sent events', false],
+])('result metadata over %s', (_encoding, jsonResponse) => {
+  it('links a successful public result to the declared view without changing its content', async () => {
+    const client = await (await host(publicNotes(), jsonResponse)).connect();
+    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    expect(result.isError).toBeFalsy();
+    expect(result._meta).toEqual(LINKED);
+    expect(result.content).toEqual([{ type: 'text', text: 'n1: first note' }]);
+    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+  });
+
+  it('links a successful protected result to the declared view', async () => {
+    const client = await (await host(protectedNotes(), jsonResponse)).connect('alice');
+    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    expect(result._meta).toEqual(LINKED);
+    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note', owner: 'acct-alice' });
+  });
+
+  it.each([
+    ['an absent record', publicNotes(), 'get_note', { noteId: 'nope' }, undefined, FAILURES.absent],
+    [
+      'a refused input',
+      publicNotes({ handle: async () => ({ kind: 'refused', text: 'That note is private.' }) }),
+      'get_note',
+      { noteId: 'n1' },
+      undefined,
+      'That note is private.',
+    ],
+    [
+      'a handler that throws',
+      publicNotes({
+        handle: () => {
+          throw new Error('backend exploded: canary-secret');
+        },
+      }),
+      'get_note',
+      { noteId: 'n1' },
+      undefined,
+      FAILURES.unavailable,
+    ],
+    [
+      'a projection that breaks the output contract',
+      publicNotes({ project: (record) => ({ text: record.text, data: { noteId: record.id, text: 'z'.repeat(41) } }) }),
+      'get_note',
+      { noteId: 'n1' },
+      undefined,
+      FAILURES.invalidOutput,
+    ],
+    ['a missing sign-in', protectedNotes(), 'get_my_note', { noteId: 'n1' }, undefined, 'Sign in to see your notes.'],
+  ])('links the safe failure for %s to the same view and keeps its fixed text', async (_name, build, tool, args, credential, text) => {
+    const client = await (await host(build, jsonResponse)).connect(credential);
+    const result = await client.callTool({ name: tool, arguments: args });
+    expect(result.isError).toBe(true);
+    expect(result._meta).toEqual(LINKED);
+    expect(result.content).toEqual([{ type: 'text', text }]);
+    expect(result.structuredContent).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain('canary-secret');
+  });
+
+  it('takes the view from the declaration alone, whatever the caller, the answer or the projection supply', async () => {
+    const LooseOutput = z.object({ noteId: z.string(), text: z.string() });
+    const hostile = publicNotes({
+      output: LooseOutput as never,
+      handle: async () => ({ kind: 'record', record: { id: 'n1', text: HOSTILE_URI, internalNotes: '' } }),
+      project: (record) => ({
+        text: `see ${HOSTILE_URI}`,
+        data: { noteId: record.id, text: record.text, _meta: { ui: { resourceUri: HOSTILE_URI } }, resourceUri: HOSTILE_URI },
+      }),
+    });
+    const client = await (await host(hostile, jsonResponse)).connect();
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1', resourceUri: HOSTILE_URI, _meta: { ui: { resourceUri: HOSTILE_URI } } },
+      _meta: { ui: { resourceUri: HOSTILE_URI } },
+    });
+    expect(result._meta).toEqual(LINKED);
+    // The hostile answer text is ordinary content: delivered verbatim, never acted on.
+    expect(result.content).toEqual([{ type: 'text', text: `see ${HOSTILE_URI}` }]);
+    expect(result.structuredContent).toEqual({ noteId: 'n1', text: HOSTILE_URI });
+  });
+
+  it('agrees with discovery and with the resource the host then reads', async () => {
+    const client = await (await host(publicNotes(), jsonResponse)).connect();
+    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    const { tools } = await client.listTools();
+    const { resources } = await client.listResources();
+    const linked = (result._meta as { ui?: { resourceUri?: string } }).ui?.resourceUri;
+    expect(linked).toBe((tools[0]?._meta as { ui?: { resourceUri?: string } }).ui?.resourceUri);
+    expect(resources.map((resource) => resource.uri)).toEqual([linked]);
+    const { contents } = await client.readResource({ uri: linked as string });
+    expect(contents[0]).toMatchObject({ uri: VIEW.uri, mimeType: RESOURCE_MIME_TYPE, text: VIEW.html });
+    expect(contents[0]?._meta).toEqual({ ui: { csp: CLOSED_VIEW_CSP } });
+  });
+});
+
 describe('waiting for a handler', () => {
   it('returns the unavailable text when the handler outlasts its bound, and a late record is not returned', async () => {
     let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
