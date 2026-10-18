@@ -14,7 +14,7 @@ For published stable public contracts, use semantic versioning and proportionate
 
 Application meaning, presentation protocols, renderers, and host delivery change for different reasons. Keep their implementations separate. Renderer-independent code is not necessarily protocol-independent: an A2UI decoder belongs to an A2UI module even when it lives in core.
 
-The following ownership is the target for SDK extraction. `@saga-a2ui/mcp`, `@saga-a2ui/core` and `@saga-a2ui/lit` are extracted (private and unreleased, with the Lit application as their working consumer); the rest are planned. Create each with working consumers, not empty scaffolding. [Package layout](packages/README.md) records the intended dependencies.
+The following ownership is the target for SDK extraction. `@saga-a2ui/mcp`, `@saga-a2ui/core` and `@saga-a2ui/lit` are extracted (private and unreleased, with the Lit application as their working consumer), and `@saga-a2ui/react` exists only as the action-attachment qualification slice whose consumer is its own React fixtures; the rest are planned. Create each with working consumers, not empty scaffolding. [Package layout](packages/README.md) records the intended dependencies.
 
 | Owner | Responsibility | Keep out |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
 import { componentKind, type InstanceEvent, type OpenInstance } from '@saga-a2ui/core/actions';
 import { html, nothing } from 'lit';
-import { ActionButtonApi } from './action-button-schema.js';
+import { ActionButtonApi } from '@saga-a2ui/core/actions/action-button-schema';
 import { hostOf } from './mount-owner.js';
 
 /** The event an `ActionButton` delivers: the instance's data scope plus the DOM click. */

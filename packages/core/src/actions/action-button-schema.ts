@@ -1,5 +1,5 @@
 import { CommonSchemas } from '@a2ui/web_core/v0_9';
-import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
+import { z } from '../protocols/a2ui/zod3.js';
 
 /**
  * Contract of the opt-in action control. It has no `action` property at all: a layout names the

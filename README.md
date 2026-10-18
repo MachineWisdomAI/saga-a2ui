@@ -6,7 +6,7 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. Three private, unreleased SDK packages (`packages/core`, `packages/lit` and `packages/mcp`) exist and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
+Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally. Four private, unreleased SDK packages (`packages/core`, `packages/lit`, `packages/mcp` and `packages/react`, the last only a qualification slice of direct action attachment) exist and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
 
 The first implementation will exercise a small Lit application in ChatGPT and Claude. React and Lynx remain Stage A targets; Alexa+ enters the initial host investigation.
 
@@ -18,7 +18,7 @@ The first implementation will exercise a small Lit application in ChatGPT and Cl
 | `@saga-a2ui/mcp` | MCP app integration, data and action boundaries, and protocol error mapping |
 | `@saga-a2ui/components` | Optional renderer-neutral component contracts and shared component behavior |
 | `@saga-a2ui/lit` | Lit renderer integration |
-| `@saga-a2ui/react` | React renderer integration |
+| `@saga-a2ui/react` | React renderer integration (private; only the optional `/actions` qualification slice exists) |
 | `@saga-a2ui/lynx` | Lynx renderer integration |
 
 Developers retain their normal renderer tools and write the code that calls their APIs. A2A is a later integration; no placeholder package is published.
@@ -370,6 +370,7 @@ ACT1 is the first slice of the [action binding](blueprints/modules/action_bindin
 | Export | Holds | Imports |
 | --- | --- | --- |
 | `@saga-a2ui/core/actions` | `Action.local(label)`, `componentKind`, `createInstanceHost` and their types | nothing outside core: no Lit, no DOM, no MCP, no third-party module |
+| `@saga-a2ui/core/actions/action-button-schema` | `ActionButtonApi`, the renderer-neutral contract of the opt-in control (moved here by ACT2 so the Lit and React controls share it) | upstream `@a2ui/web_core` and core's Zod 3 export; no renderer |
 | `@saga-a2ui/lit/actions` | `ActionButton` (the kind token for setup code), `actionButtonEntry` and `ActionButtonElement` (the opt-in control), `createLitActions` | `lit`, upstream `@a2ui/lit`, core; imported by nothing in the main `@saga-a2ui/lit` entry |
 
 Application code follows three steps; the rest is the SDK's:
@@ -406,6 +407,44 @@ createA2uiAppElement({
 Implemented in ACT1: immutable `Action.local(...).input(...).run(...).build()` with synchronous input and handler, binding state and subscription, direct attachment through `bindAction(event, definition)`, `getById`/`watchById`, ownership of setup, and the Lit control. **Not implemented**, and deliberately not declared (no placeholder methods, no ignored options): `atActivation`, `before`/prerequisites, `limits`, the four hooks, `whenBusy('replace')`, `observe`, the `subject` option, asynchronous handlers, the invocation scope with resource ownership and transfer, `Action.server`, the React and Lynx adapters, and migration of Play or any controller. They belong to ACT2 (React qualification), ACT3 (Lynx qualification), ACT4 (asynchronous local actions), ACT5 (resource scopes) and ACT6 (server actions and the joined contract); CORE2, CORE3 and VIEW2 are separate. Controller safeguards in the Play and subscriptions views are untouched.
 
 Tests: `packages/core/src/actions/actions.test.ts` (through the public interface with a renderer-free fake adapter, plus the type-level cases checked by `npm run typecheck`), `packages/core/src/exports.test.ts` (supported names; the bundled graph has no renderer, MCP or DOM runtime and no dependency at all), `apps/lit-host/e2e/action-binding.spec.ts` against the built consumer `dist/action-consumer` (a catalog of upstream Column, Row, List, Text and Button plus `ActionButton`, two app elements, repeated IDs and data paths, later rows, replacement, stale events, two mounts, a second surface mount, setup failure, surface deletion, disconnect and reconnect, rejection and recovery), and `packed-consumer.test.ts` (both consumers from the packed packages). The browser run is local Chromium through Playwright; it is not evidence for any actual host, React or Lynx.
+
+### Qualifying the shared action seam in React (ACT2)
+
+ACT2 gives ACT1's shared runtime a second, real renderer before ACT4 builds on it. `packages/react` (`@saga-a2ui/react`, private, unreleased and unversioned like the other SDK packages) has one export, `@saga-a2ui/react/actions`, and it is **not React parity**: it is the smallest React A2UI consumer of the common seam, with its fixtures kept for REACT1/REACT2 to adopt. Full workflow, optional FaithfulCard, a packed or public package and any named host remain with E15 and are not claimed here.
+
+| Export | Holds | Imports |
+| --- | --- | --- |
+| `@saga-a2ui/react/actions` | `ActionButton` (kind token), `ActionButtonEntry` (the opt-in catalog entry), `InstanceHostProvider`, `useActionSetup` and the activation types | React, upstream `@a2ui/react` 0.13.0 and `@a2ui/web_core`, `@saga-a2ui/core` (actions and the shared control contract); no Lit, no MCP |
+
+The application writes the same three steps as for Lit; only the third differs:
+
+```tsx
+// 3. List ActionButtonEntry in the catalog, mount one provider per rendered surface, and run setup under it.
+function SaveActions() {
+  useActionSetup(setup); // `setup` has a stable identity, e.g. a module constant or useCallback
+  return null;
+}
+const setup = (view: InstanceView) =>
+  view.watchById('save', ActionButton, (handle) => handle.bindAction('activate', save));
+
+<InstanceHostProvider onSetupError={reportSetupProblem}>
+  <SaveActions />
+  <A2uiSurface surface={surface} />
+</InstanceHostProvider>
+```
+
+- **What an instance is.** The component function is not the instance: React may re-run it, discard a render before it commits, or mount a second copy. The instance is the span of one layout effect for one committed `(host, node)` pair of the control's boundary (a wrapper around the entry's generated `view`). A render React never commits publishes nothing. The press handler reads the committed instance at press time and calls its installed callable directly: no handler name, registry or lookup, and nothing from Lit.
+- **Retirement.** An instance retires through the layout effect's cleanup (host or node change, unmount), through `node.addCleanup` (the upstream resolver disposes a node synchronously, before React has updated the screen) and through the host's `close()`. Each path is idempotent and disposes the instance's bindings, so a retired handle cannot bind and an old cleanup cannot detach a newer installation. The adapter's liveness pull is `!node.disposed`; retirement is the commit-time signal, which is why a separate "committed entry" check in the proposal's sketch was dropped (no test could tell it apart, because retirement already covers it).
+- **Provider and setup.** `InstanceHostProvider` creates its host in an effect and closes it in the cleanup, so Strict Mode's simulated unmount closes the first host and the second effect makes another; children render only once a host exists (one extra render). Closing is terminal: a reference kept to a closed host can neither register a setup nor open an instance. `useActionSetup` registers `setup` per `(host, setup)` pair and ends the registration in its cleanup, disposing the bindings made through it, so changing the definition disposes the old binding before the new one binds. A setup that throws reports to `onSetupError` and then propagates to the nearest error boundary (the React counterpart of Lit's safe fallback), leaving nothing bound. A discovery callback that throws loses only its own bindings and reports to `onSetupError` alone.
+- **Discovery timing in the published runtime.** `A2uiSurface` 0.13.0 renders its loading placeholder in the first commit and creates its resolver only when the store subscribes, so no instance exists while the first setup effect runs. `getById` at that moment finds none; use `watchById`, which delivers present and later instances (and call `getById` later, from a retained view, for a unique ID). A new `surface` prop passes through the placeholder again, so the root boundary remounts rather than receiving a new `node` prop; the effect still depends on `node`, which no test can reach in this version.
+- **Data scopes.** Repeated IDs give separate instances with separate `dataPath`s. The event's `read(path)` answers only during delivery and `handle.read(path)` is the live reader (`undefined` once retired). Replacing the item at a position keeps the instance and its binding, and the next press and the reader see the new item.
+- **Upstream Button.** `@a2ui/react` 0.13.0 ships no basic catalog. The test catalog builds Column, Row, List, Text and Button the way an application does, from `createComponentImplementation` over the upstream `@a2ui/web_core` component contracts; its Button calls the resolved `action`, which dispatches on the surface exactly as an upstream renderer's Button does. An `ActionButton` press dispatches nothing upstream, and an upstream Button press runs no attached definition.
+
+**Exact identities the fixtures ran on** (asserted by `runtime-identity.test.ts`, not just printed): `@a2ui/react` 0.13.0 (the published package, not the 0.14.0 commit `45633b9` that the proposal inspected), one shared `@a2ui/web_core` 0.13.0 copy for the renderer, core and this package, React and React DOM 19.3.1, `@types/react` and `@types/react-dom` 19.3.0, jsdom 30.1.3 for the DOM, and Vitest 5.0.4 on Node 22 or newer (the recorded run used Node 26.7.0 and npm 12.0.2). Resolved tarball integrity is in `package-lock.json`. Installing `@a2ui/react` pulled `@a2ui/markdown-it` 0.2.2 at its newest allowed range, whose peer `@a2ui/web_core ^0.14.0` installed a second, hoisted `web_core` 0.14.0 above every package's pinned 0.13.0. The root `package.json` therefore overrides `@a2ui/markdown-it` to 0.2.1 (the release in the `^0.2.1` range whose peer is `^0.13.0`); the lockfile change is additive. Moving React or all renderers to 0.14.0 is a separate dependency decision that this slice does not make.
+
+Tests: `packages/react/src/actions/actions.test.ts` runs a real React 19 root in jsdom with Strict Mode on by default, a real `A2uiSurface` and real message sessions from core, and presses real DOM controls. It covers two instances each running only their own definition once, an unbound control and an upstream Button, a failing `checks` rule, Strict Mode, a transition that is held and then discarded, keyed-child replacement, surface swap, synchronous resolver disposal before React updates the screen, a host that changes under a node that stays, unmount and provider closing, repeated IDs, later and removed rows, same-position data replacement, the delivery-only event reader, setup and discovery failure, duplicate attachment, dispose and rebind, and a changed definition. `runtime-identity.test.ts` pins the versions above. `packages/core/src/exports.test.ts` also checks the shared contract's export. Mutation checks (breaking one lifecycle rule at a time and watching tests fail) were run by hand and are recorded in the pull request; they are not part of the suite.
+
+**Limits.** The DOM is jsdom, not a browser: it is evidence for React's lifecycle and event system, not for layout, paint, focus or timing between a frame and an event. Nothing ran on a React version other than 19.3.1, against `@a2ui/react` 0.14.0, in a packed or installed-from-registry consumer, or in any named host. No common-seam defect in ACT1 was found; the shared contract needed no change here beyond sharing the control's schema. Asynchronous work, cancellation, hooks and subjects are ACT4's and are neither exercised nor claimed. ACT3 (Lynx) still has to challenge the seam before ACT4.
 
 ### MCP Apps 2 recipe (MCPV2)
 

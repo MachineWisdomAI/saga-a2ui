@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./actions": "./src/actions/index.ts",
+    "./actions/action-button-schema": "./src/actions/action-button-schema.ts",
     "./protocols/a2ui/v0_9": "./src/protocols/a2ui/v0_9/index.ts",
     "./protocols/a2ui/zod3": "./src/protocols/a2ui/zod3.ts"
   },
