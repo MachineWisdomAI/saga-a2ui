@@ -6,8 +6,8 @@ import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
 import { FaithfulCardContentElement } from '@saga-a2ui/lit/faithful-card';
 
 // Lit implementation of the panel contract. The title is a Lit text binding. The description is
-// handed to the optional FaithfulCard element, which interprets it as restricted Markdown under the enclosing
-// view's trusted content policy; supplied strings are never parsed as markup.
+// handed to the optional FaithfulCard element, which interprets it as restricted Markdown under the
+// enclosing view's trusted reader and content policy; supplied strings are never parsed as markup.
 export class SagaPanelElement extends A2uiLitElement<typeof SagaPanelApi> {
   protected readonly api = SagaPanelApi;
 
