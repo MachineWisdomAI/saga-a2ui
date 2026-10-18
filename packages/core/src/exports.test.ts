@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
+import * as actions from '@saga-a2ui/core/actions';
 import * as a2uiV0_9 from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
@@ -41,5 +42,18 @@ describe('@saga-a2ui/core exports', () => {
     const forbidden = /node_modules\/(lit|lit-html|lit-element|@lit|@lit-labs|react|react-dom|jsdom|happy-dom|@modelcontextprotocol|@a2ui\/lit)\//;
     expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
     expect(modules.filter((id) => id.includes('/packages/lit/') || id.includes('/packages/mcp/'))).toEqual([]);
+  });
+
+  it('expose exactly the supported names for actions', () => {
+    expect(Object.keys(actions).sort()).toEqual(['Action', 'componentKind', 'createInstanceHost']);
+  });
+
+  it('keep the action module free of any renderer, MCP package or DOM runtime', async () => {
+    const { modules } = await bundledModules('@saga-a2ui/core/actions');
+    expect(modules.some((id) => id.endsWith('/packages/core/src/actions/instance-host.ts'))).toBe(true); // the graph was really walked
+    const forbidden = /node_modules\/(lit|lit-html|lit-element|@lit|@lit-labs|react|react-dom|jsdom|happy-dom|@modelcontextprotocol|@a2ui)\//;
+    expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
+    expect(modules.filter((id) => id.includes('/packages/lit/') || id.includes('/packages/mcp/'))).toEqual([]);
+    expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]); // the module needs no dependency at all
   });
 });
