@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
-import type { ContentPolicy } from '../content/policy.js';
+import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';

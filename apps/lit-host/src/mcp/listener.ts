@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { DEFAULT_CONTENT_POLICY, type ContentPolicy } from '../content/policy.js';
+import { DEFAULT_CONTENT_POLICY, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { createMediaService, type MediaStore } from '../playback/media-service.js';
 import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
 import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';

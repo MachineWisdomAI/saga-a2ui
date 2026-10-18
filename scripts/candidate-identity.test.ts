@@ -12,7 +12,7 @@ import {
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '../apps/lit-host/src/content/policy.js';
+import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
 import { EPISODE_VIEW_URI } from '../apps/lit-host/src/mcp/episode.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';

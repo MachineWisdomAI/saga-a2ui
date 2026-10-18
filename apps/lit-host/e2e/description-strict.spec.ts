@@ -45,7 +45,7 @@ const sendDescription = (frame: Frame, value: string) =>
 test.describe('Strict blocked fragments', () => {
   test('default to accessible placeholders in their original positions, with no request and no callback', async ({ page }) => {
     const { view, requests, openLinkCalls, navigations } = await open(page, strict());
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     await expect(content.locator('p').first()).toHaveText('Intro with emphasis.');
     // The link stays inside the quotation and the image and markup stay in the last paragraph.
     const quote = content.locator('blockquote');
@@ -71,7 +71,7 @@ test.describe('Strict blocked fragments', () => {
 
   test('can be revealed and hidden as inert text from the keyboard, causing no effect', async ({ page }) => {
     const { view, requests, openLinkCalls, navigations } = await open(page, strict());
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     const toggle = view.getByRole('button', { name: 'Reveal source' });
     await toggle.focus();
     await page.keyboard.press('Enter');
@@ -97,7 +97,7 @@ test.describe('Strict blocked fragments', () => {
 
   test('can start as readable inert text when the trusted application chooses it', async ({ page }) => {
     const { view, requests } = await open(page, strict({ blockedPresentation: 'inert-text' }));
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     await expect(content).toContainText(`[link](${LINK})`);
     await expect(content.getByTestId('md-image-blocked')).toHaveAttribute('data-presentation', 'source');
     await view.getByRole('button', { name: 'Hide source' }).click();
@@ -108,7 +108,7 @@ test.describe('Strict blocked fragments', () => {
 
   test('offers no source control for a description with nothing to block', async ({ page }) => {
     const { view } = await open(page, strict({ description: 'Just *words*.' }));
-    await expect(view.getByTestId('description-content')).toHaveText('Just words.');
+    await expect(view.getByTestId('card-content')).toHaveText('Just words.');
     await expect(view.getByRole('button')).toHaveCount(0);
   });
 
@@ -119,7 +119,7 @@ test.describe('Strict blocked fragments', () => {
       `![suffix](https://${IMAGE_HOST}.evil.test/s.png) ![sub](https://a.${IMAGE_HOST}/s.png) ` +
       `![plain](http://${IMAGE_HOST}/p.png) ![cred](https://u:p@${IMAGE_HOST}/c.png) ![port](https://${IMAGE_HOST}:8443/p.png)`;
     const { view, frame, requests, openLinkCalls } = await open(page, strict({ description }));
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     const pwned = () => frame.evaluate(() => (window as unknown as { __pwned?: number }).__pwned);
 
     await view.getByRole('button', { name: 'Reveal source' }).click();
@@ -144,7 +144,7 @@ test.describe('Show images', () => {
       `![cred](https://user:pw@${IMAGE_HOST}/c.png) ![plain](http://${IMAGE_HOST}/p.png)`,
     ].join('\n');
     const { view, requests, openLinkCalls } = await open(page, strict({ description }));
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     const show = view.getByRole('button', { name: 'Show images' });
 
     await view.getByRole('button', { name: 'Reveal source' }).click();
@@ -254,7 +254,7 @@ test.describe('revoking consent', () => {
     await grant(opened);
     const next = `A different picture: ![chart](${IMAGE})`;
     await sendDescription(opened.frame, next);
-    await expect(opened.view.getByTestId('description-content')).toContainText('A different picture');
+    await expect(opened.view.getByTestId('card-content')).toContainText('A different picture');
     await expect(opened.view.getByTestId('md-image')).toHaveCount(0);
     await expect(opened.view.getByRole('button', { name: 'Show images' })).toBeVisible();
     await settle(page);

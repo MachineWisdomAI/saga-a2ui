@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { HostLinks } from '../content/host-links.js';
+import type { HostLinks } from '@saga-a2ui/lit/faithful-card';
 
 /**
  * Opens validated links through the upstream MCP Apps `ui/open-link` request, and only when the

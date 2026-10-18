@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createContentPolicy, type ContentPolicy } from '../content/policy.js';
+import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { policyFromEmbedded } from '../content/embedded-policy.js';
 import { EPISODE_VIEW_URI } from './episode.js';
 import { contentResource } from './content-resource.js';

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ViewCsp } from '@saga-a2ui/mcp/policy';
 import { embedPolicy } from '../content/embedded-policy.js';
-import type { ContentPolicy } from '../content/policy.js';
+import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { EPISODE_VIEW_URI } from './episode.js';
 
 /** What the MCP server registers: the identity, the document and the host metadata. */

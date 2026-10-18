@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   fragmentsOf,
-  MAX_DESCRIPTION_LENGTH,
   MAX_NESTING_LEVEL,
-  parseDescription,
+  parseMarkdown,
   type BlockNode,
   type InlineNode,
-  type ParsedDescription,
+  type ParsedMarkdown,
 } from './markdown.js';
 
-function parsed(source: string): ParsedDescription {
-  const result = parseDescription(source);
+/** The episode consumer's settings: CommonMark and its 2,000 UTF-16-unit bound. */
+const COMMONMARK = { dialect: 'commonmark', maxLength: 2000 } as const;
+
+function parsed(source: string): ParsedMarkdown {
+  const result = parseMarkdown(source, COMMONMARK);
   if (!result.ok) throw new Error(`unexpected failure: ${result.failure.kind}`);
-  return result.description;
+  return result.parsed;
 }
 
 /** The text a reader would see for inline content, in order, with no formatting. */
@@ -206,21 +208,21 @@ describe('the fragments a description references', () => {
 
 describe('the input bound', () => {
   it('accepts a description exactly at the limit', () => {
-    expect(parseDescription('a'.repeat(MAX_DESCRIPTION_LENGTH)).ok).toBe(true);
+    expect(parseMarkdown('a'.repeat(COMMONMARK.maxLength), COMMONMARK).ok).toBe(true);
   });
 
   it('rejects a longer description explicitly, without truncating it', () => {
-    const source = 'a'.repeat(MAX_DESCRIPTION_LENGTH + 1);
-    const result = parseDescription(source);
+    const source = 'a'.repeat(COMMONMARK.maxLength + 1);
+    const result = parseMarkdown(source, COMMONMARK);
     expect(result).toEqual({
       ok: false,
-      failure: { kind: 'too-long', limit: MAX_DESCRIPTION_LENGTH, length: MAX_DESCRIPTION_LENGTH + 1 },
+      failure: { kind: 'too-long', limit: COMMONMARK.maxLength, length: COMMONMARK.maxLength + 1 },
     });
   });
 
   it('refuses pathologically nested blocks explicitly without throwing', () => {
     const nested = '>'.repeat(500) + ' deep\n\n' + '['.repeat(500) + 'x' + ']'.repeat(500);
-    expect(parseDescription(nested.slice(0, MAX_DESCRIPTION_LENGTH))).toEqual({
+    expect(parseMarkdown(nested.slice(0, COMMONMARK.maxLength), COMMONMARK)).toEqual({
       ok: false,
       failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL },
     });
@@ -232,7 +234,7 @@ describe('the input bound', () => {
       '*a '.repeat(300) + 'visible-word',
       '*[a '.repeat(150) + 'visible-word' + ']*'.repeat(150),
     ]) {
-      expect(visibleText(parsed(source.slice(0, MAX_DESCRIPTION_LENGTH)).blocks)).toContain('visible-word');
+      expect(visibleText(parsed(source.slice(0, COMMONMARK.maxLength)).blocks)).toContain('visible-word');
     }
   });
 });
@@ -273,11 +275,11 @@ describe('the nesting limit', () => {
     let preserved = 0;
     for (let depth = 1; depth <= 60; depth += 1) {
       const source = prefix.repeat(depth) + 'visible-word';
-      expect(source.length).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH);
-      const result = parseDescription(source);
+      expect(source.length).toBeLessThanOrEqual(COMMONMARK.maxLength);
+      const result = parseMarkdown(source, COMMONMARK);
       if (result.ok) {
         // Success must mean the text is still there to be rendered.
-        expect(visibleText(result.description.blocks)).toContain('visible-word');
+        expect(visibleText(result.parsed.blocks)).toContain('visible-word');
         preserved += 1;
       } else {
         expect(result.failure).toEqual({ kind: 'too-nested', limit: MAX_NESTING_LEVEL });
@@ -288,14 +290,14 @@ describe('the nesting limit', () => {
     expect(preserved).toBeGreaterThan(5);
     expect(refused).toBeGreaterThan(0);
     for (let depth = 60; depth <= 120; depth += 7) {
-      expect(parseDescription(prefix.repeat(depth) + 'visible-word').ok).toBe(false);
+      expect(parseMarkdown(prefix.repeat(depth) + 'visible-word', COMMONMARK).ok).toBe(false);
     }
   });
 
   it('reproduces the reported case: twenty quotes around one word are refused, not emptied', () => {
     const source = '> '.repeat(20) + 'visible-word';
     expect(source.length).toBe(52);
-    expect(parseDescription(source)).toEqual({ ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } });
+    expect(parseMarkdown(source, COMMONMARK)).toEqual({ ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } });
   });
 
   it('keeps the text of quotes nested just inside the limit', () => {
@@ -305,11 +307,11 @@ describe('the nesting limit', () => {
 
   it('keeps the text of lists nested just inside the limit', () => {
     expect(visibleText(parsed('- '.repeat(9) + 'visible-word').blocks)).toBe('visible-word');
-    expect(parseDescription('- '.repeat(10) + 'visible-word').ok).toBe(false);
+    expect(parseMarkdown('- '.repeat(10) + 'visible-word', COMMONMARK).ok).toBe(false);
   });
 
   it('does not refuse a long flat document or many sibling containers', () => {
     const siblings = Array.from({ length: 100 }, (_unused, index) => `> quote ${index}\n\n- item ${index}`).join('\n\n');
-    expect(parseDescription(siblings.slice(0, MAX_DESCRIPTION_LENGTH)).ok).toBe(true);
+    expect(parseMarkdown(siblings.slice(0, COMMONMARK.maxLength), COMMONMARK).ok).toBe(true);
   });
 });
