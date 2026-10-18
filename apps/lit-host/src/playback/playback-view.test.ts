@@ -18,8 +18,12 @@ const EP2: PublicEpisode = { episodeId: 'ep-2', title: 'Another protected episod
 interface FakePlayer extends AudioPlayer {
   readonly started: ArrayBuffer[];
   readonly calls: string[];
-  /** Holds the next `start` until the test releases it, to model slow decoding. */
-  holdNextStart(): { release(outcome?: 'started' | 'blocked'): void };
+  /**
+   * Holds the next `start` until the test releases it, to model slow decoding. `survivesStop` models
+   * a player that does not reject a pending start when `stop()` runs, which the AudioPlayer contract
+   * forbids; the real player's own ordering is checked separately in the browser.
+   */
+  holdNextStart(options?: { survivesStop?: boolean }): { release(outcome?: 'started' | 'blocked'): void };
   failNextStart(): void;
   outcome: 'started' | 'blocked';
   /** What the next `resume` reports once the audio clock has (or has not) advanced. */
@@ -34,8 +38,10 @@ interface FakePlayer extends AudioPlayer {
 function fakePlayer(): FakePlayer {
   let ended: (() => void) | undefined;
   let held: { resolve(outcome: 'started' | 'blocked'): void; reject(error: Error): void } | undefined;
+  let heldSurvivesStop = false;
   let heldResume: { resolve(outcome: 'resumed' | 'blocked'): void; reject(error: Error): void } | undefined;
   let hold = false;
+  let holdSurvivesStop = false;
   let fail = false;
   let holdResume = false;
   let failPause = false;
@@ -59,6 +65,7 @@ function fakePlayer(): FakePlayer {
       }
       if (hold) {
         hold = false;
+        heldSurvivesStop = holdSurvivesStop;
         return new Promise((resolve, reject) => {
           held = { resolve, reject };
         });
@@ -84,15 +91,25 @@ function fakePlayer(): FakePlayer {
     stop() {
       player.calls.push('stop');
       live = false;
-      held?.reject(new Error('stopped'));
-      held = undefined;
+      if (!heldSurvivesStop) {
+        held?.reject(new Error('stopped'));
+        held = undefined;
+      }
       heldResume?.reject(new Error('stopped'));
       heldResume = undefined;
     },
     onEnded: (listener) => void (ended = listener),
-    holdNextStart() {
+    holdNextStart(options) {
       hold = true;
-      return { release: (outcome = 'started') => (player.started.push(new ArrayBuffer(0)), held?.resolve(outcome)) };
+      holdSurvivesStop = options?.survivesStop ?? false;
+      return {
+        release(outcome = 'started') {
+          player.started.push(new ArrayBuffer(0));
+          held?.resolve(outcome);
+          held = undefined;
+          heldSurvivesStop = false;
+        },
+      };
     },
     failNextStart: () => void (fail = true),
     holdNextResume() {
@@ -106,6 +123,7 @@ function fakePlayer(): FakePlayer {
 }
 
 interface Rig {
+  readonly app: App;
   readonly harness: PlaybackHarness;
   readonly player: FakePlayer;
   readonly states: PlaybackViewState[];
@@ -172,6 +190,7 @@ async function rig(options: {
   const view = await connectPlaybackView({ app, transport: viewSide, player, show: (state) => states.push(state) });
   cleanup.push({ app, bridge, harness });
   return {
+    app,
     harness,
     player,
     states,
@@ -820,5 +839,169 @@ describe('Recovery when the media service is unavailable', () => {
     expect(mediaFetches(first.urls)).toHaveLength(1);
     expect(mediaFetches(second.urls)).toHaveLength(1);
     expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
+  });
+});
+
+// Host teardown (STATE1). The bridge stops delivering notifications and answers the host, but the
+// view's own controls and every asynchronous continuation of an earlier press would still run. The
+// view retires its work on teardown without disposing the connection; the later dispose() closes it
+// once.
+describe('host teardown of the playback view', () => {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
+
+  it('makes Play inert: no audio unlock, no host call and nothing presented', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+    const calls = r.player.calls.length;
+
+    r.view.play();
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+    expect(r.player.calls.length).toBe(calls);
+    expect(r.forwarded).toEqual([]);
+  });
+
+  it('makes Pause and Resume inert', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+    const calls = r.player.calls.length;
+
+    r.view.pause();
+    r.view.resume();
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+    expect(r.player.calls.slice(calls)).toEqual([]);
+  });
+
+  it('keeps a Resume that was still being confirmed from presenting after teardown', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.view.pause();
+    await expect.poll(() => r.last()?.kind).toBe('paused');
+    const waking = r.player.holdNextResume();
+    r.view.resume();
+    await expect.poll(() => r.player.calls.includes('resume')).toBe(true);
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    waking.release('resumed');
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('presents nothing when the audio ends after teardown', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    r.player.endPlayback();
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('makes a Play whose host call was in flight start no acquisition, player work or presentation', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const inFlight = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    inFlight.release();
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.player.calls).not.toContain('start');
+  });
+
+  it('presents nothing when a start that was pending at teardown settles', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const decoding = r.player.holdNextStart({ survivesStop: true });
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    decoding.release('started');
+    await settled();
+
+    expect(r.states.length).toBe(shown);
+    expect(kinds(r)).not.toContain('playing');
+  });
+
+  it('leaves the connection for dispose(), which closes it once however often it is called', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    let closes = 0;
+    const close = r.app.close.bind(r.app);
+    r.app.close = () => (closes += 1, close());
+    await r.bridge.teardownResource({});
+    expect(closes).toBe(0);
+
+    r.view.dispose();
+    r.view.dispose();
+
+    expect(closes).toBe(1);
+  });
+});
+
+// A late completion belongs to the acquisition that started it. The AudioPlayer seam holds one
+// resource, so an old start's cleanup may release it only while no newer Play has taken it over.
+describe('late player-start cleanup is scoped to its own acquisition', () => {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
+
+  it('does not stop the audio of a newer Play when an older start settles late', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const older = r.player.holdNextStart({ survivesStop: true });
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+
+    await r.select(EP2); // retires the older Play
+    r.view.play();
+    await expect.poll(() => r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    const shown = r.states.length;
+    const calls = r.player.calls.length;
+
+    older.release('started');
+    await settled();
+
+    expect(r.player.calls.slice(calls)).toEqual([]);
+    expect(r.states.length).toBe(shown);
+    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+  });
+
+  it('still releases the player when a retired start settles and no newer Play exists', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const older = r.player.holdNextStart({ survivesStop: true });
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    await r.select(EP2);
+    const calls = r.player.calls.length;
+
+    older.release('started');
+    await settled();
+
+    expect(r.player.calls.slice(calls)).toEqual(['stop']);
+    expect(kinds(r)).not.toContain('playing');
   });
 });

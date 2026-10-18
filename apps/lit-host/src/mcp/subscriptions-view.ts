@@ -88,6 +88,9 @@ function incomingBytes(value: unknown): number {
  *
  * A read that does not finish within its bound is retired the same way: the late result is not
  * shown. Retry calls the safe read (`list_subscriptions` with no arguments) and nothing else.
+ * Host teardown retires the read in flight, its timer and the private rows, and `retry` and
+ * `select` then do nothing. It does not close the connection; the later `dispose()` does, once.
+ *
  * The label says only whether the data on screen is still from the sign-in it started with. It
  * never grants access; the server authorizes every call from the verified request.
  */
@@ -96,11 +99,17 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
   let shown: SubscriptionsResult | undefined;
   let selectedId: string | undefined;
   let invalidated = false;
+  // Delivery and presentation have ended. `tornDown` is the host's teardown request: it retires the
+  // view's own work but leaves closing the connection to `dispose()`, which the host's later close
+  // and the application's disposal still reach exactly once. `disposed` is that later disposal.
+  let tornDown = false;
   let disposed = false;
   let nextRead = 0;
   let activeRead = 0;
   let readTimer: ReturnType<typeof setTimeout> | undefined;
   const readBoundMs = deps.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs;
+
+  const retired = () => disposed || tornDown;
 
   const stopTimer = () => {
     if (readTimer === undefined) return;
@@ -121,7 +130,7 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
 
   const clear = (state: SubscriptionsViewState) => {
     dropPrivate();
-    if (!disposed) deps.show(state);
+    if (!retired()) deps.show(state);
   };
 
   type IncomingResult =
@@ -147,21 +156,21 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     if (data.subscriptions.length === 0) {
       shown = undefined;
       selectedId = undefined;
-      if (!disposed) deps.show({ kind: 'empty', displayName: data.displayName, message: EMPTY_SUBSCRIPTIONS_TEXT });
+      if (!retired()) deps.show({ kind: 'empty', displayName: data.displayName, message: EMPTY_SUBSCRIPTIONS_TEXT });
       return;
     }
     shown = data;
     if (selectedId !== undefined && !data.subscriptions.some((item) => item.subscriptionId === selectedId)) {
       selectedId = undefined;
     }
-    if (disposed) return;
+    if (retired()) return;
     deps.show(selectedId === undefined
       ? { kind: 'subscriptions', subscriptions: data }
       : { kind: 'subscriptions', subscriptions: data, selectedId });
   };
 
   const apply = (result: ToolResult) => {
-    if (disposed) return;
+    if (retired()) return;
     const incoming = readIncoming(result);
     switch (incoming.kind) {
       case 'error':
@@ -184,7 +193,7 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
   };
 
   const settleRead = (generation: number, run: () => void) => {
-    if (generation !== activeRead || disposed) return;
+    if (generation !== activeRead || retired()) return;
     activeRead = 0;
     stopTimer();
     run();
@@ -196,7 +205,7 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
   // finish, so a late resolution cannot emit. The read carries the declared arguments of the
   // input that started it: the optional status filter, and nothing else.
   const readThroughHost = (declared: DeclaredSubscriptionRead) => {
-    if (!deps.app.getHostCapabilities()?.serverTools || disposed) return;
+    if (!deps.app.getHostCapabilities()?.serverTools || retired()) return;
     stopTimer();
     const generation = ++nextRead;
     activeRead = generation;
@@ -234,6 +243,13 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
       }
       readThroughHost(declared);
     },
+    onTeardown() {
+      // The host closes the connection after it answers, and nothing else says the view is going
+      // away. Retire the read, its timer and the private rows now; `dispose()` closes the connection.
+      tornDown = true;
+      retireReads();
+      dropPrivate();
+    },
     onToolResult(result) {
       // Session loss is not freshness. Classify it before suppressing uncorrelated positive
       // data, clear immediately, and retire reads that started before the loss so a later
@@ -252,7 +268,7 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
       readThroughHost({ kind: 'unfiltered' });
     },
     select(subscriptionId) {
-      if (disposed || shown === undefined) return;
+      if (retired() || shown === undefined) return;
       if (!shown.subscriptions.some((item) => item.subscriptionId === subscriptionId)) return;
       selectedId = subscriptionId;
       deps.show({ kind: 'subscriptions', subscriptions: shown, selectedId });

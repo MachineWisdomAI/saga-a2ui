@@ -608,3 +608,43 @@ test.describe('nothing is fetched or disclosed after a refusal', () => {
     expect(JSON.stringify(resource.body)).not.toContain(capability);
   });
 });
+
+// Host teardown (STATE1) in the built page. The fixture asks the view to tear down and leaves the
+// iframe in place, so a control that is still rendered can be pressed. In a real host the page may
+// disappear instead; what this shows is that nothing the view does afterwards depends on that.
+test.describe('the built player after host teardown', () => {
+  test('is silent at once, and a still-rendered Pause or Play control does nothing', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing');
+    const requests = host.calls.length;
+
+    await page.evaluate(() => window.teardownView?.());
+    await expect.poll(() => silent(page)).toBe(true);
+    await button(host.view).click(); // Pause, still rendered
+    await button(host.view).click();
+    await page.waitForTimeout(300);
+
+    expect(await audioClocks(page)).toHaveLength(1); // no new context was prepared
+    expect(await silent(page)).toBe(true);
+    expect(host.calls).toHaveLength(requests);
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
+    await expect(status(host.view)).toContainText('Playing'); // nothing was presented after teardown
+  });
+
+  test('presses on a ready Play control after teardown make no request and unlock no audio', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await expect(status(host.view)).toContainText('Ready to play');
+
+    await page.evaluate(() => window.teardownView?.());
+    await button(host.view).click();
+    await page.waitForTimeout(300);
+
+    expect(host.calls).toEqual([]);
+    expect(await audioClocks(page)).toEqual([]);
+    expect(host.harness.playback.entitlementChecks).toEqual([]);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+  });
+});

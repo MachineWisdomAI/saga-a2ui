@@ -611,3 +611,107 @@ describe('declared status filter in host-initiated reads', () => {
     expect(JSON.stringify(h.last())).not.toMatch(/Bob|Creator/);
   });
 });
+
+// Host teardown (STATE1): the bridge stops delivering notifications, but the view's own timer, its
+// in-flight proxied read, and its retry and select controls would still run. Teardown retires them
+// without closing the connection; the later dispose() closes it once.
+describe('host teardown of the subscriptions view', () => {
+  const rows = result('Alice', 'vs_aaaaaaaaaaaaaaaaaaaaaa', ['Creator One', 'Creator Two']);
+
+  async function tearDownRig(readBoundMs?: number) {
+    const states: SubscriptionsViewState[] = [];
+    const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
+    const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, { serverTools: {} });
+    toClean.push({ app, bridge });
+    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
+    await bridge.connect(hostSide);
+    const pending: { resolve(value: ReturnType<typeof delivery>): void; reject(error: Error): void }[] = [];
+    bridge.oncalltool = () => new Promise((resolve, reject) => void pending.push({ resolve, reject }));
+    let closes = 0;
+    const close = app.close.bind(app);
+    app.close = () => (closes += 1, close());
+    const view = await connectSubscriptionsView({
+      app,
+      transport: viewSide,
+      show: (state) => states.push(state),
+      ...(readBoundMs === undefined ? {} : { readBoundMs }),
+    });
+    return { app, bridge, view, states, pending, closes: () => closes };
+  }
+
+  /** Shows rows, then leaves one host read in flight. */
+  async function withReadInFlight(readBoundMs?: number) {
+    const r = await tearDownRig(readBoundMs);
+    await r.bridge.sendToolResult(delivery(rows));
+    await expect.poll(() => r.states.at(-1)?.kind).toBe('subscriptions');
+    await r.bridge.sendToolInput({ arguments: {} });
+    await expect.poll(() => r.pending.length).toBe(1);
+    return r;
+  }
+
+  it('presents nothing when the in-flight read answers after teardown', async () => {
+    const r = await withReadInFlight();
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    r.pending[0]?.resolve(delivery(rows));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('presents nothing when the in-flight read is rejected after teardown', async () => {
+    const r = await withReadInFlight();
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    r.pending[0]?.reject(new Error('the host closed the call'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('presents nothing when the read bound passes after teardown', async () => {
+    const r = await withReadInFlight(40);
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('starts no read and shows nothing for retry or select after teardown', async () => {
+    const r = await withReadInFlight();
+    await r.bridge.teardownResource({});
+    const shown = r.states.length;
+
+    r.view.retry();
+    r.view.select('sub-0');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(r.pending.length).toBe(1);
+    expect(r.states.length).toBe(shown);
+  });
+
+  it('closes the connection once, when dispose runs after teardown, however often it is called', async () => {
+    const r = await withReadInFlight();
+    await r.bridge.teardownResource({});
+    expect(r.closes()).toBe(0);
+
+    r.view.dispose();
+    r.view.dispose();
+
+    expect(r.closes()).toBe(1);
+  });
+
+  it('leaves another view on its own App unaffected', async () => {
+    const torn = await withReadInFlight();
+    const other = await tearDownRig();
+
+    await torn.bridge.teardownResource({});
+    await other.bridge.sendToolResult(delivery(rows));
+
+    await expect.poll(() => other.states.at(-1)?.kind).toBe('subscriptions');
+  });
+});
