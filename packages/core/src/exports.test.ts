@@ -48,6 +48,22 @@ describe('@saga-a2ui/core exports', () => {
     expect(Object.keys(actions).sort()).toEqual(['Action', 'componentKind', 'createInstanceHost']);
   });
 
+  it('expose the renderer-neutral ActionButton contract, which refuses an action or a handler name', async () => {
+    const contract = await import('@saga-a2ui/core/actions/action-button-schema');
+    expect(Object.keys(contract)).toEqual(['ActionButtonApi']);
+    const { ActionButtonApi } = contract;
+    expect(ActionButtonApi.name).toBe('ActionButton');
+    expect(ActionButtonApi.schema.safeParse({ child: 'label' }).success).toBe(true);
+    expect(ActionButtonApi.schema.safeParse({ child: 'label', action: { event: { name: 'x' } } }).success).toBe(false);
+    expect(ActionButtonApi.schema.safeParse({ child: 'label', handler: 'x' }).success).toBe(false);
+
+    // It shares core's protocol dependencies and nothing renderer-shaped.
+    const { modules } = await bundledModules('@saga-a2ui/core/actions/action-button-schema');
+    const forbidden = /node_modules\/(lit|lit-html|lit-element|@lit|@lit-labs|react|react-dom|jsdom|happy-dom|@modelcontextprotocol|@a2ui\/lit|@a2ui\/react)\//;
+    expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
+    expect(modules.filter((id) => id.includes('/packages/lit/') || id.includes('/packages/react/') || id.includes('/packages/mcp/'))).toEqual([]);
+  });
+
   it('keep the action module free of any renderer, MCP package or DOM runtime', async () => {
     const { modules } = await bundledModules('@saga-a2ui/core/actions');
     expect(modules.some((id) => id.endsWith('/packages/core/src/actions/instance-host.ts'))).toBe(true); // the graph was really walked

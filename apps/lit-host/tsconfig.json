@@ -6,10 +6,11 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
+    "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "e2e", "vite.config.ts", "vite.view.config.ts", "vite.subscriptions-view.config.ts", "vite.answer-view.config.ts", "vite.playback-view.config.ts", "vite.host-fixture.config.ts", "vite.catalog-isolation.config.ts", "vite.action-consumer.config.ts", "playwright.config.ts"]
+  "include": ["src", "e2e", "vite.config.ts", "vite.view.config.ts", "vite.subscriptions-view.config.ts", "vite.answer-view.config.ts", "vite.playback-view.config.ts", "vite.host-fixture.config.ts", "vite.catalog-isolation.config.ts", "vite.action-consumer.config.ts", "vite.react-action-consumer.config.ts", "playwright.config.ts"]
 }
