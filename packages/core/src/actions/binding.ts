@@ -52,6 +52,9 @@ export function createBinding<Event>(
 
   const notify = (): void => {
     for (const listener of [...listeners]) {
+      // A callback may have unsubscribed this listener, or disposed the binding, which ended every
+      // subscription after its own final notification. A listener removed meanwhile gets nothing more.
+      if (!listeners.has(listener)) continue;
       try {
         const returned: unknown = listener();
         if (isThenable(returned)) discardOutcome(returned);
@@ -88,6 +91,9 @@ export function createBinding<Event>(
   const activate = (event: Event): void => {
     if (phase() !== 'idle') return;
     setPhase('running');
+    // A subscriber is application code and may have disposed the binding while being told. A
+    // disposed binding has detached and starts no work.
+    if (phase() !== 'running') return;
     let failure: { readonly error: unknown } | undefined;
     try {
       plan.invoke(event);

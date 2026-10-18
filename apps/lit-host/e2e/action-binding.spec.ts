@@ -249,6 +249,58 @@ test.describe('binding lifetime', () => {
     expect(await log(page)).toEqual([{ app: 'one', action: 'probe', componentId: 'save' }]);
   });
 
+  test('a subscriber that disposes the binding on running stops the handler, and every listener sees disposed once', async ({ page }) => {
+    const index = await indexOf(page, 'one', 'save');
+
+    const control = app(page, 'one').locator('saga-action-button').filter({ hasText: 'Save' });
+    const observed = await control.evaluate((host, i) => {
+      const entry = window.actionConsumer.bindings[i]!;
+      const seen: string[] = [];
+      entry.binding.subscribe(() => {
+        if (entry.binding.state.phase === 'running') entry.binding.dispose();
+      });
+      entry.binding.subscribe(() => seen.push(entry.binding.state.phase));
+      host.shadowRoot?.querySelector('button')?.click(); // one synchronous dispatch; nothing awaited
+      const disposedNotifications = window.actionConsumer.phases.filter(
+        (phase) => phase.includes(`|${entry.binding.id}|`) && phase.endsWith('|disposed'),
+      ).length;
+      return { seen, state: entry.binding.state.phase, disposedNotifications };
+    }, index);
+
+    expect(observed).toEqual({ seen: ['disposed'], state: 'disposed', disposedNotifications: 1 });
+    expect(await log(page)).toEqual([]);
+    await buttons(page, 'one', 'Save').click();
+    expect(await log(page)).toEqual([]);
+  });
+
+  test('in the gap between model replacement and renderer cleanup, the old handle cannot bind and nothing is discovered', async ({ page }) => {
+    const index = await indexOf(page, 'one', 'save');
+
+    const gap = await page.evaluate(
+      ([i, replacement]) => {
+        window.actionConsumer.bindings[i]!.binding.dispose();
+        const ingested = window.actionConsumer.send('one', replacement); // synchronous: the old model is gone, its element is not yet cleaned up
+        return {
+          ingested,
+          bindAgain: window.actionConsumer.bindAgain(i),
+          getById: window.actionConsumer.getById('one', 'save'),
+        };
+      },
+      [index, components([{ id: 'save', component: 'Row', children: ['save-label'] }])] as const,
+    );
+
+    expect(gap.ingested).toEqual({ ok: true });
+    expect(gap.bindAgain).toMatch(/stale/);
+    expect(gap.getById).toMatch(/No rendered instance/);
+
+    // The later fresh instance binds normally, and a press reaches only its own callable.
+    await send(page, 'one', components([{ id: 'save', component: 'ActionButton', child: 'save-label' }]));
+    await expect(buttons(page, 'one', 'Save')).toBeVisible();
+    await buttons(page, 'one', 'Save').click();
+    expect(await log(page)).toEqual([{ app: 'one', action: 'save' }]);
+    expect(await page.evaluate(() => window.actionConsumer.bindings.filter((b) => b.app === 'one' && b.componentId === 'save').length)).toBe(2);
+  });
+
   test('a replaced component retires its binding; its stale handle and a stale button event do nothing', async ({ page }) => {
     const index = await indexOf(page, 'one', 'save');
     const oldButton = await app(page, 'one')

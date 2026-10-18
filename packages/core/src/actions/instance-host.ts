@@ -45,7 +45,7 @@ export interface InstanceHandle<Events> {
   /**
    * Binds `action` to one event of this instance and installs its callable in that slot.
    * Throws when the event is not offered, when a live binding already holds the slot, when the
-   * handle is stale (its instance was retired or its setup ended), or when `action` was not built
+   * handle is stale (its instance was retired or is no longer live, or its setup ended), or when `action` was not built
    * by `Action`.
    */
   bindAction<Name extends keyof Events & string>(event: Name, action: ActionDefinition<Events[Name]>): ActionBinding;
@@ -164,9 +164,10 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
       dataPath: record.dataPath,
       read: (path) => (record.retired || !record.isLive() ? undefined : record.read(path)),
       bindAction<Name extends keyof Events & string>(event: Name, action: ActionDefinition<Events[Name]>) {
-        if (!registration.active || record.retired) {
+        // `isLive` is read fresh: the renderer may have dropped this instance's model before it retires the element.
+        if (!registration.active || record.retired || !record.isLive()) {
           throw new Error(
-            `The handle for '${record.componentId}' is stale: its instance was retired or its setup ended. ` +
+            `The handle for '${record.componentId}' is stale: its instance was retired or is no longer live, or its setup ended. ` +
               'Bind through a handle delivered for the current instance.',
           );
         }
@@ -234,7 +235,7 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
   }
 
   function matches(id: string, kind: ComponentKind<unknown>, record: InstanceRecord): boolean {
-    return !record.retired && record.componentId === id && record.kind === kind;
+    return !record.retired && record.componentId === id && record.kind === kind && record.isLive();
   }
 
   function viewFor(registration: Registration): InstanceView {

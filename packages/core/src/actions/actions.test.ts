@@ -499,6 +499,132 @@ describe('failures of an invocation', () => {
   });
 });
 
+describe('reentrant disposal during a state notification', () => {
+  it('does not run the handler when a subscriber disposes the binding on running, and notifies each listener once', () => {
+    const host = newHost();
+    let runs = 0;
+    const action = Action.local<InstanceEvent<string>>('a').run(() => void (runs += 1)).build();
+    const control = renderInstance(host, 'c');
+    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    binding.subscribe(() => {
+      if (binding.state.phase === 'running') binding.dispose();
+    });
+    const seen: string[] = [];
+    binding.subscribe(() => seen.push(binding.state.phase));
+
+    expect(control.press()).toBe('started');
+
+    expect(runs).toBe(0);
+    expect(binding.state.phase).toBe('disposed');
+    expect(seen).toEqual(['disposed']);
+    expect(control.press()).toBe('unbound');
+    expect(runs).toBe(0);
+  });
+
+  it('finishes with one final notification when a subscriber disposes on settling', () => {
+    const host = newHost();
+    const action = Action.local<InstanceEvent<string>>('a').run(() => undefined).build();
+    const control = renderInstance(host, 'c');
+    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    binding.subscribe(() => {
+      if (binding.state.phase === 'settling') binding.dispose();
+    });
+    const seen: string[] = [];
+    binding.subscribe(() => seen.push(binding.state.phase));
+
+    control.press();
+
+    expect(seen.filter((phase) => phase === 'disposed')).toEqual(['disposed']);
+    expect(seen.at(-1)).toBe('disposed');
+    expect(binding.state.phase).toBe('disposed');
+  });
+
+  it('does not call a listener that unsubscribed during the same notification', () => {
+    const host = newHost();
+    const action = Action.local<InstanceEvent<string>>('a').run(() => undefined).build();
+    const control = renderInstance(host, 'c');
+    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    let unsubscribeLater = (): void => undefined;
+    binding.subscribe(() => unsubscribeLater());
+    let laterCalls = 0;
+    unsubscribeLater = binding.subscribe(() => void (laterCalls += 1));
+
+    control.press();
+
+    expect(laterCalls).toBe(0);
+  });
+
+  it('keeps a sibling binding on another instance running when one binding disposes itself on running', () => {
+    const host = newHost();
+    const runs: string[] = [];
+    const action = Action.local<InstanceEvent<string>>('a')
+      .input((event) => event.componentId)
+      .run(({ params }) => void runs.push(params))
+      .build();
+    const first = renderInstance(host, 'one');
+    const second = renderInstance(host, 'two');
+    const bindingOne = bindOne(host, 'one', (handle) => handle.bindAction('activate', action));
+    bindOne(host, 'two', (handle) => handle.bindAction('activate', action));
+    bindingOne.subscribe(() => bindingOne.dispose());
+
+    first.press();
+    second.press();
+
+    expect(runs).toEqual(['two']);
+  });
+});
+
+describe('a handle during the model-replacement gap', () => {
+  it('refuses to bind through a handle whose instance is no longer live, before the renderer retired it', () => {
+    const host = newHost();
+    const old = renderInstance(host, 'c');
+    let handle: InstanceHandle<ControlEvents> | undefined;
+    host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
+
+    old.goStale();
+
+    expect(() => handle!.bindAction('activate', toggle())).toThrow(/stale/);
+    expect(old.press()).toBe('retired');
+  });
+
+  it('does not discover an instance that is no longer live, with getById or watchById', () => {
+    const host = newHost();
+    const old = renderInstance(host, 'c');
+    old.goStale();
+    const found: string[] = [];
+    let thrown: unknown;
+    host.register((view) => {
+      view.watchById('c', Control, (h) => found.push(h.id));
+      try {
+        view.getById('c', Control);
+      } catch (error) {
+        thrown = error;
+      }
+    });
+
+    expect(found).toEqual([]);
+    expect(String(thrown)).toMatch(/No rendered instance/);
+  });
+
+  it('does not announce a stale open instance to a registered watch, and a later live instance binds normally', () => {
+    const host = newHost();
+    const found: string[] = [];
+    host.register((view) => void view.watchById('c', Control, (h) => found.push(h.id)));
+    const old = renderInstance(host, 'c');
+    expect(found).toEqual(['c']);
+
+    old.goStale();
+    const fresh = renderInstance(host, 'c');
+    expect(found).toEqual(['c', 'c']);
+    let handle: InstanceHandle<ControlEvents> | undefined;
+    host.register((view) => void view.watchById('c', Control, (h) => (handle = h)));
+
+    expect(handle).toBeDefined();
+    expect(() => handle!.bindAction('activate', toggle())).not.toThrow();
+    expect(fresh.press()).toBe('started');
+  });
+});
+
 describe('the immutable builder', () => {
   it('treats a retained alias as a branch, so two definitions never see each other', () => {
     const host = newHost();
