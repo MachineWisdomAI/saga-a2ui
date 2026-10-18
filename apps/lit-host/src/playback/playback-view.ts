@@ -92,6 +92,11 @@ type Acquisition =
  * finds a different generation and is dropped before any media is mounted. Duplicate presses while
  * a request is pending or audio is playing are ignored.
  *
+ * Teardown: the host's teardown request stops the audio and retires the controller (`tornDown`):
+ * Play, Pause, Resume, the end event and every continuation of an earlier press then do nothing.
+ * It does not dispose the connection; the later `dispose()` still closes it once. A start that
+ * settles for a retired press releases the player only if no later press has taken it over.
+ *
  * Trust: the response is accepted only if it names the selected episode, the pinned sign-in and a
  * media URL for that same episode. The sign-in label is freshness only; the server authorizes every
  * Play and every media acquisition. A retry never reuses saved authorization: it is a new Play.
@@ -103,7 +108,14 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   let kind: PlaybackViewState['kind'] = 'no-selection';
   let generation = 0;
   let abort: AbortController | undefined;
+  // The host asked the view to tear down. This retires the view's own work and presentation but is
+  // not `disposed`: that flag makes `dispose()` return before it reaches the bridge, and the host's
+  // teardown does not close the connection, so the later `dispose()` must still close it once.
+  let tornDown = false;
   let disposed = false;
+  // The generation of the latest Play press, which owns the player's one resource. A start that
+  // settles for an earlier press may release the player only while no later press has taken it.
+  let latestPlay = 0;
   // The Pause or Resume the player has not yet confirmed. The shown state stays the one the user
   // last saw until the player reports what the audio actually did.
   let settlingCounter = 0;
@@ -111,9 +123,11 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   // The start the player has not yet confirmed, and whether the audio ended while it was waiting.
   let starting: { readonly generation: number; ended: boolean } | undefined;
 
+  const retired = () => disposed || tornDown;
+
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
-    if (!disposed) deps.show(state);
+    if (!retired()) deps.show(state);
   };
 
   /** Retires any pending request and stops the player; nothing audible or fetchable survives. */
@@ -131,7 +145,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   };
 
   player.onEnded(() => {
-    if (!selected) return;
+    if (!selected || retired()) return;
     if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') {
       settling = undefined; // a Pause or Resume still in flight must not replace the end
       present({ kind: 'ended', episode: selected });
@@ -146,12 +160,12 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
    * was retired or ended meanwhile. A player that cannot do it is a media failure.
    */
   function settle<T>(attempt: () => Promise<T>, outcome: (result: T, episode: OpenedEpisode) => PlaybackViewState): void {
-    if (settling !== undefined || !selected) return;
+    if (settling !== undefined || !selected || retired()) return;
     const episode = selected;
     settlingCounter += 1;
     const mine = settlingCounter;
     settling = mine;
-    const current = () => settling === mine && !disposed;
+    const current = () => settling === mine && !retired();
     (async () => attempt())().then(
       (result) => {
         if (!current()) return;
@@ -165,7 +179,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   }
 
   const onOpened = (result: ToolResult) => {
-    if (disposed) return;
+    if (retired()) return;
     const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
     if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
     if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) {
@@ -209,7 +223,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   };
 
   async function run(episode: OpenedEpisode, mine: number): Promise<void> {
-    const current = () => mine === generation && !disposed;
+    const current = () => mine === generation && !retired();
     if (!app.getHostCapabilities()?.serverTools) return present({ kind: 'unsupported', episode });
     const controller = new AbortController();
     abort = controller;
@@ -260,7 +274,11 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     starting = awaited;
     try {
       const started = await player.start(media.bytes);
-      if (!current()) return player.stop();
+      if (!current()) {
+        // Release what this press started, unless a later press has since taken the player over.
+        if (latestPlay === mine) player.stop();
+        return;
+      }
       if (awaited.ended) return present({ kind: 'ended', episode });
       if (started === 'blocked') return clearWith({ kind: 'gesture-needed', episode });
       present({ kind: 'playing', episode });
@@ -277,12 +295,15 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     transport: deps.transport,
     onToolResult: onOpened,
     // The host ends the connection right after it answers teardown, so audio must stop now.
-    onTeardown: retire,
+    onTeardown() {
+      tornDown = true;
+      retire();
+    },
   });
 
   return {
     play() {
-      if (disposed || !selected) return;
+      if (retired() || !selected) return;
       if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'resume-blocked' || kind === 'session-changed') return;
       const episode = selected;
       // Retire first: stopping releases the player's context, so preparing before it would
@@ -297,6 +318,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         return;
       }
       present({ kind: 'pending', episode });
+      latestPlay = generation;
       void run(episode, generation);
     },
     pause() {

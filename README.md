@@ -226,6 +226,27 @@ Limits worth knowing:
 
 Tests: `src/playback/media.test.ts` (revocation of an issued capability, sticky revocation, fault versus revocation, in-flight characterization, lifetime boundaries, every range case, `416`, `503`, cache and `Vary` headers, log capture), `src/playback/playback-view.test.ts` (redirect not followed, expiry versus media failure, retry as a new Play, no automatic loop, only the declared origin fetched), and `e2e/playback-view.spec.ts` (the same behavior in the built view: revoked mid-Play with keyboard focus kept and announced recovery, media-service outage, no self-retry, an undeclared origin receiving nothing, headers sent only to the declared origin, no media request after a denied Play, no capability in model-visible fields or the static resource).
 
+### View teardown and acquisition-scoped cleanup (STATE1, partial)
+
+This slice implements the teardown part of [Request and view lifetimes](blueprints/features/request_view_lifetimes.blueprint.md). It adds no dependency and changes no server code. It is **not complete**: the action-view label-loss policy and the actual-host observations remain open (below), so the issue stays open.
+
+What changed:
+
+- **Subscriptions view.** The controller registers `onTeardown`. Teardown retires the read in flight, stops its timer and drops the private rows and selection. A late answer, a late rejection or the read bound then presents nothing, and `retry()` and `select()` do nothing and start no read. Teardown is not disposal: the bridge connection stays open until `dispose()`, which closes it once. The correlated-recovery rule is unchanged (an unsolicited positive result cannot recover label loss; a correlated read started after the loss can).
+- **Playback view.** Teardown still releases the player and aborts the byte request, and now also retires the controller: Play, Pause and Resume, the player's end event and every asynchronous continuation of an earlier press present nothing, prepare no audio and send no request. This `tornDown` state is separate from `disposed`, which makes `dispose()` return before it reaches the bridge. Host teardown does not call the connection's `dispose()`, and a later `dispose()` closes it once.
+- **Late `start` cleanup.** A start that settles for a retired Play releases the player only while no later Play has taken it over; it never stops or otherwise touches a newer Play's audio. The release for the latest retired Play is kept, because a player that does not reject a pending start on `stop()` would otherwise leave audio running.
+
+Real-player ordering (Chromium, Web Audio player, `e2e/web-audio-player.spec.ts`): `stop()` rejects a start that is decoding or waiting for the audio clock, and a start made before the next `prepare()` is rejected by that `prepare()` and cannot end the newer start. The whole-player `AudioPlayer` seam stays: with a player that honors that contract, a stale start never resolves, so the controller's guard matters only for a player that does not. This is not a claim about any other player or about a named host, and it is not a lease wrapper; a per-lease owner belongs to the action-module migration.
+
+Left open, deliberately:
+
+- **Action-view label loss.** The approver has not chosen the policy, so none is encoded. Today an opener under a different label clears the selection, a grant under a different label keeps it, and a later opener under the old label returns the view to `ready` (candidate 2 in the Blueprint; not changed here). No test pins the revival through the old label.
+- **Same-label delayed opener.** The view takes the last opener delivered and has no request id to detect a delayed copy; the server still authorizes every request. No mandatory read or host correlation field is added.
+- **Actual hosts.** ChatGPT web and Claude web teardown order, view reuse, whether a late `toolresult` follows teardown and whether an aborted call is forwarded are unobserved. The synthetic fixtures here do not establish them.
+- **Content consent.** Unchanged. Replacement, error, invalidation, teardown and disposal already revoke or retire it (`src/content/image-consent.test.ts`, `e2e/description-strict.spec.ts`); Hide images cannot retract a request already sent.
+
+Tests: `src/mcp/subscriptions-view.test.ts` ("host teardown of the subscriptions view"), `src/playback/playback-view.test.ts` ("host teardown of the playback view", "late player-start cleanup is scoped to its own acquisition"), `e2e/playback-view.spec.ts` ("the built player after host teardown") and `e2e/web-audio-player.spec.ts`.
+
 ### Standard descriptions (POL1)
 
 Episode descriptions are read as Markdown under one trusted, immutable content policy chosen by the application. This section is Standard (POL1); Strict and the reader's Show images control follow in [POL2](#strict-descriptions-and-show-images-pol2). One new runtime dependency: `markdown-it` 15.0.2 (MIT; notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). No MCP-UI, CopilotKit, AG-UI or Ora package is used. A2UI's optional `@a2ui/markdown-it` peer stays uninstalled; SAGA uses `markdown-it` directly so it controls the token set.
