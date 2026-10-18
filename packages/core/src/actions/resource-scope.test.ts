@@ -280,6 +280,143 @@ describe('activation work, ownership of an existing token and acquisition after 
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
+  describe('when a throw inside the activation callback decides the outcome after a disposal', () => {
+    // The failure is decided before the cancellation noted inside the callback is applied. That
+    // cancellation must leave the cleanup the outcome started alone: it only keeps the invocation
+    // obsolete.
+    const hooks = ['with a failure hook', 'without a failure hook'] as const;
+
+    function disposingThrow(
+      log: string[],
+      release: (name: string, signal: AbortSignal) => void | Promise<void>,
+      options: { hook: (typeof hooks)[number]; final?: () => void | Promise<void> },
+      finalSignals: AbortSignal[] = [],
+    ) {
+      const holder: { dispose?: () => void } = {};
+      const activate = ({ scope }: { scope: { own(token: string, release: (token: string, c: { signal: AbortSignal }) => unknown): unknown } }): void => {
+        for (const name of ['older', 'newer']) {
+          scope.own(name, (token, { signal }) => {
+            log.push(token);
+            return release(token, signal);
+          });
+        }
+        holder.dispose?.();
+        throw new Error('activation failed after disposing');
+      };
+      const finalHook = async ({ outcome, obsolete, signal }: { outcome: Outcome<unknown>; obsolete: boolean; signal: AbortSignal }) => {
+        finalSignals.push(signal);
+        log.push(`finally:${outcome.status}:${String(obsolete)}`);
+        await options.final?.();
+      };
+      const draft = Action.local<Press>('dispose-then-throw-cleanup')
+        .atActivation(activate)
+        .run(() => undefined)
+        .limits({ hookMs: 100 });
+      const action =
+        options.hook === 'with a failure hook'
+          ? draft.onFailure(() => void log.push('failure')).onFinally(finalHook).build()
+          : draft.onFinally(finalHook).build();
+      const rigged = rig(action);
+      holder.dispose = () => rigged.binding.dispose();
+      return rigged;
+    }
+
+    it.each(hooks)('still resumes the release sweep and finalization when a release settles later, %s', async (hook) => {
+      const log: string[] = [];
+      const newer = gate<void>();
+      const { control } = disposingThrow(log, (name) => (name === 'newer' ? newer.promise : undefined), { hook });
+
+      try {
+        control.press();
+      } catch {
+        // Without a failure hook the activation's error reaches the event's own caller.
+      }
+      await settle();
+      // The newer release is in flight and the older one waits behind it.
+      expect(log).toEqual(['newer']);
+
+      newer.resolve();
+      await settle();
+
+      // The failure hook never presents for the obsolete invocation, with or without one configured.
+      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+    });
+
+    it.each(hooks)('keeps the budget of a release that never settles, so the sweep still advances, %s', async (hook) => {
+      const log: string[] = [];
+      const signals = new Map<string, AbortSignal>();
+      const { control } = disposingThrow(
+        log,
+        (name, signal) => {
+          signals.set(name, signal);
+          return name === 'newer' ? new Promise<void>(() => undefined) : undefined;
+        },
+        { hook },
+      );
+
+      try {
+        control.press();
+      } catch {
+        // See above.
+      }
+      await settle();
+      expect(log).toEqual(['newer']);
+      expect(signals.get('newer')?.aborted).toBe(false);
+
+      await elapse(99);
+      expect(log).toEqual(['newer']);
+      await elapse(1);
+
+      expect(signals.get('newer')?.aborted).toBe(true);
+      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+    });
+
+    it.each(hooks)('still reaches and waits for an asynchronous final hook, %s', async (hook) => {
+      const log: string[] = [];
+      const done = gate<void>();
+      const finalSignals: AbortSignal[] = [];
+      const { control } = disposingThrow(log, () => undefined, { hook, final: () => done.promise }, finalSignals);
+
+      try {
+        control.press();
+      } catch {
+        // See above.
+      }
+      await settle();
+      // Both tokens are released and the final hook is running and being waited for.
+      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+      expect(finalSignals[0]?.aborted).toBe(false);
+
+      await elapse(99);
+      expect(finalSignals[0]?.aborted).toBe(false);
+      done.resolve();
+      await settle();
+      await elapse(100);
+      // Settled normally: the budget no longer applies, so nothing aborts the finished hook.
+      expect(finalSignals[0]?.aborted).toBe(false);
+    });
+
+    it('bounds a final hook that never settles by its own hookMs budget', async () => {
+      const log: string[] = [];
+      const finalSignals: AbortSignal[] = [];
+      const { control } = disposingThrow(
+        log,
+        () => undefined,
+        { hook: 'with a failure hook', final: () => new Promise<void>(() => undefined) },
+        finalSignals,
+      );
+
+      control.press();
+      await settle();
+      expect(finalSignals[0]?.aborted).toBe(false);
+
+      await elapse(99);
+      expect(finalSignals[0]?.aborted).toBe(false);
+      await elapse(1);
+      expect(finalSignals[0]?.aborted).toBe(true);
+    });
+  });
+
   it('treats a disposal inside the activation callback as ending the scope at once, while the canceled hook still gets the value it returns', async () => {
     const owner = new PlayerOwner();
     const holder: { dispose?: () => void } = {};

@@ -356,7 +356,10 @@ export class Invocation<Event> {
       this.activation = returned;
     }
     // A cancellation noted inside the callback is decided now, after the activation value exists.
-    if (pending !== undefined) this.cancel(pending);
+    // If the callback threw, its failure is already the outcome and its cleanup may have started:
+    // the cancellation had already made the invocation obsolete, and it must not abort or abandon
+    // the step that belongs to that outcome.
+    if (pending !== undefined && this.outcome === undefined) this.cancel(pending);
     this.drain();
     return this.outcome === undefined;
   }
