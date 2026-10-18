@@ -5,9 +5,11 @@
 // Implemented so far: immutable local definitions (ACT1); in ACT4 their asynchronous execution:
 // `before` prerequisites with `proceed`/`refuse`, asynchronous handlers, the optional work
 // deadline and the required hook budget (`limits`), the four hooks, both busy policies, `observe`,
-// and the optional `subject` reader; and in ACT5 the invocation scope: `atActivation`, `own`,
-// `acquire`, `transfer`, and release of what the invocation still holds. Server actions (ACT6) and
-// `eventTurn` are later slices and are not declared.
+// and the optional `subject` reader; in ACT5 the invocation scope: `atActivation`, `own`,
+// `acquire`, `transfer`, and release of what the invocation still holds; and in ACT6 server
+// actions: `Action.server(label, transport)`, whose handler also receives `call`. The transport is
+// the application's seam, so no MCP package is imported here. `eventTurn` is a later slice and is
+// not declared.
 export { Action } from './definition.js';
 export type {
   ActionDefinition,
@@ -24,6 +26,15 @@ export type {
   Limits,
   SuccessContext,
 } from './definition.js';
+export type {
+  ServerCallOptions,
+  ServerCalls,
+  ServerLimits,
+  ServerReply,
+  ServerRequest,
+  ServerRequestOptions,
+  ServerTransport,
+} from './server.js';
 export type { Synchronous } from './thenable.js';
 export { InvocationEndedError } from './scope.js';
 export type { ActivationScope, Held, InvocationScope, Release, ReleaseContext } from './scope.js';

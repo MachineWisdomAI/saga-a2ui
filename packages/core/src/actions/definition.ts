@@ -10,6 +10,7 @@ import type {
 } from './outcome.js';
 import type { Prerequisite } from './prerequisite.js';
 import type { ActivationScope, InvocationScope } from './scope.js';
+import { checkTransport, type ServerCalls, type ServerLimits, type ServerReply, type ServerTransport } from './server.js';
 import type { Synchronous } from './thenable.js';
 
 /** What `atActivation` receives, in the event's own call stack. */
@@ -135,10 +136,17 @@ export interface ActionDefinition<Event> {
 }
 
 /**
- * The start of every definition. The order is fixed: `input` (optional), `atActivation` (optional),
- * any number of `before`, then `run`.
+ * What the handler of a server action also receives. A local action has none of it: its `Calls`
+ * is `unknown`, which adds nothing to the handler context.
  */
-export interface ActionDraft<Event> extends ActionDraftAfterInput<Event, undefined> {
+type IsServer<Calls> = Calls extends ServerCalls<ServerReply> ? true : false;
+
+/**
+ * The start of every definition. The order is fixed: `input` (optional), `atActivation` (optional),
+ * any number of `before`, then `run`. `Calls` is what `run` also receives: nothing for a local
+ * action, the server call for a server action.
+ */
+export interface ActionDraft<Event, Calls = unknown> extends ActionDraftAfterInput<Event, undefined, Calls> {
   /**
    * Copies what the handler needs out of the event, once, when it occurs. It runs synchronously
    * in the event's own call stack and must not perform effects. A thrown error, or a returned
@@ -147,10 +155,10 @@ export interface ActionDraft<Event> extends ActionDraftAfterInput<Event, undefin
   input<Params>(
     extract: (event: Event) => Params,
     ...synchronous: Synchronous<Params>
-  ): ActionDraftAfterInput<Event, Params>;
+  ): ActionDraftAfterInput<Event, Params, Calls>;
 }
 
-export interface ActionDraftAfterInput<Event, Params> extends ActionDraftChain<Event, Params, undefined> {
+export interface ActionDraftAfterInput<Event, Params, Calls = unknown> extends ActionDraftChain<Event, Params, undefined, unknown, Calls> {
   /**
    * Work that an API requires inside the event's own call stack, such as taking a lease before
    * anything is awaited. It runs synchronously after `input`, in the environment and event stack
@@ -163,10 +171,10 @@ export interface ActionDraftAfterInput<Event, Params> extends ActionDraftChain<E
   atActivation<Activation>(
     perform: (context: ActivationContext<Event>) => Activation,
     ...synchronous: Synchronous<Activation>
-  ): ActionDraftChain<Event, Params, Activation>;
+  ): ActionDraftChain<Event, Params, Activation, unknown, Calls>;
 }
 
-export interface ActionDraftChain<Event, Params, Activation, Provided = unknown> {
+export interface ActionDraftChain<Event, Params, Activation, Provided = unknown, Calls = unknown> {
   /**
    * A prerequisite: application work that must finish before the handler and may stop it. They
    * run strictly in the order written, each after the previous one proceeded. The compiler
@@ -174,44 +182,57 @@ export interface ActionDraftChain<Event, Params, Activation, Provided = unknown>
    */
   before<Provides extends object>(
     prerequisite: Prerequisite<Provides, Provided, Params>,
-  ): ActionDraftChain<Event, Params, Activation, Provided & Provides>;
+  ): ActionDraftChain<Event, Params, Activation, Provided & Provides, Calls>;
   /**
-   * The local work. It may return a value or a promise; a throw and a rejection are both
-   * `handler-error`. It receives the invocation signal and should pass it to cancellable work.
+   * The work. It may return a value or a promise; a throw and a rejection are both
+   * `handler-error`. It receives the invocation signal and should pass it to cancellable work. A
+   * server action's handler also receives `call`, which sends its request through the transport.
    */
   run<Result>(
-    handler: (context: HandlerContext<Params, Activation, Provided>) => Result | PromiseLike<Result>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result>;
+    handler: (context: HandlerContext<Params, Activation, Provided> & Calls) => Result | PromiseLike<Result>,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, never, Calls>;
 }
 
 type HookName = 'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally';
 type TailName = 'limits' | 'whenBusy' | 'observe' | HookName;
 
-/** Hooks wait for `limits`, which supplies the budget they need. */
-type Hidden<Used extends TailName> = 'limits' extends Used ? never : HookName;
+/**
+ * Hooks wait for `limits`, which supplies the budget they need. A server action also cannot
+ * `build` until it has them, because it needs a work deadline as well.
+ */
+type Hidden<Used extends TailName, Calls> = 'limits' extends Used
+  ? never
+  : HookName | (IsServer<Calls> extends true ? 'build' : never);
 
-interface TailMembers<Event, Params, Activation, Provided, Result, Used extends TailName> {
+interface TailMembers<Event, Params, Activation, Provided, Result, Used extends TailName, Calls> {
   /**
    * Required before any hook, and before a scope can own a token: `hookMs` bounds each release.
-   * `deadlineMs` is optional. Each finite and positive.
+   * `deadlineMs` is optional for a local action and required for a server action. Each finite and
+   * positive.
    */
-  limits(limits: Limits): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'limits'>;
+  limits(
+    limits: IsServer<Calls> extends true ? ServerLimits : Limits,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'limits', Calls>;
   /** `ignore` (the default) drops an activation while busy; `replace` cancels the running invocation. */
-  whenBusy(policy: BusyPolicy): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'whenBusy'>;
-  observe(observer: ActionObserver): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'observe'>;
+  whenBusy(
+    policy: BusyPolicy,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'whenBusy', Calls>;
+  observe(
+    observer: ActionObserver,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'observe', Calls>;
   /** Required client work that decides success. Its exception or overrun fails the invocation. */
   onSuccess(
     hook: (context: SuccessContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onSuccess'>;
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onSuccess', Calls>;
   onFailure(
     hook: (context: FailureContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFailure'>;
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFailure', Calls>;
   onCanceled(
     hook: (context: CanceledContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onCanceled'>;
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onCanceled', Calls>;
   onFinally(
     hook: (context: FinallyContext<Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFinally'>;
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFinally', Calls>;
   build(): ActionDefinition<Event>;
 }
 
@@ -223,7 +244,8 @@ export type ActionDraftWithHandler<
   Provided = unknown,
   Result = unknown,
   Used extends TailName = never,
-> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used>, Used | Hidden<Used>>;
+  Calls = unknown,
+> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used, Calls>, Used | Hidden<Used, Calls>>;
 
 // ---------------------------------------------------------------------------------------------
 // What the runtime reads. Internal: authors only see the definition.
@@ -248,6 +270,8 @@ export interface ActionPlan<Event> {
   readonly hooks: ErasedHooks;
   readonly busy: BusyPolicy;
   readonly observer: ActionObserver | undefined;
+  /** Present only for a server action: the application's way to reach its server. */
+  readonly transport: ServerTransport | undefined;
 }
 
 class BuiltAction<Event> implements ActionDefinition<Event> {
@@ -285,6 +309,7 @@ interface Declared {
   readonly hooks: ErasedHooks;
   readonly busy: BusyPolicy | undefined;
   readonly observer: ActionObserver | undefined;
+  readonly transport: ServerTransport | undefined;
 }
 
 // One class implements every step of the chain, and each method is declared to return only the
@@ -353,6 +378,10 @@ class Draft {
     if (this.declared.limits !== undefined) throw new Error(`Action '${this.label}': limits can be declared once.`);
     const given = (limits ?? {}) as { deadlineMs?: unknown; hookMs?: unknown };
     const hookMs = checkPositive(this.label, 'hookMs', given.hookMs);
+    // A server request is bounded by what is left of the work deadline, so a server action has one.
+    if (this.declared.transport !== undefined && given.deadlineMs === undefined) {
+      throw new TypeError(`Action '${this.label}': a server action needs limits({ deadlineMs, hookMs }), because each request is bounded by the work deadline.`);
+    }
     const bounds: Limits =
       given.deadlineMs === undefined
         ? { hookMs }
@@ -406,6 +435,9 @@ class Draft {
     if (hookKeys.some((key) => declared.hooks[key] !== undefined) && declared.limits === undefined) {
       throw new Error(`Action '${label}' has a hook but no limits.`);
     }
+    if (declared.transport !== undefined && declared.limits === undefined) {
+      throw new Error(`Action '${label}' is a server action and cannot be built without limits({ deadlineMs, hookMs }).`);
+    }
     return new BuiltAction<never>(label, {
       label,
       // Interop assertions, the only ones in this module. The typed interfaces above are what tie
@@ -420,26 +452,47 @@ class Draft {
       hooks: declared.hooks,
       busy: declared.busy ?? 'ignore',
       observer: declared.observer,
+      transport: declared.transport,
     });
   }
+}
+
+function startDraft(label: string, transport: ServerTransport | undefined): Draft {
+  if (typeof label !== 'string' || label === '') throw new TypeError('An action needs a non-empty label.');
+  return new Draft(label, {
+    extract: undefined,
+    activate: undefined,
+    prerequisites: Object.freeze([]),
+    handler: undefined,
+    limits: undefined,
+    hooks: Object.freeze({}),
+    busy: undefined,
+    observer: undefined,
+    transport,
+  });
 }
 
 /** Entry point of the fluent builder. */
 export const Action = {
   /** Starts a local action. `Event` is what the target component's adapter delivers. */
   local<Event>(label: string): ActionDraft<Event> {
-    if (typeof label !== 'string' || label === '') throw new TypeError('An action needs a non-empty label.');
     // Interop assertion: `Draft` implements every step of the typed chain, and each interface
     // exposes only the steps valid at that point.
-    return new Draft(label, {
-      extract: undefined,
-      activate: undefined,
-      prerequisites: Object.freeze([]),
-      handler: undefined,
-      limits: undefined,
-      hooks: Object.freeze({}),
-      busy: undefined,
-      observer: undefined,
-    }) as unknown as ActionDraft<Event>;
+    return startDraft(label, undefined) as unknown as ActionDraft<Event>;
+  },
+
+  /**
+   * Starts a server action: the same chain, plus `call` in the handler and a required work
+   * deadline. `transport` is the application's way to reach its server; the action module imports
+   * no MCP package, and the server's own handler is never referenced from here. A prerequisite is
+   * not authorization: the server stays authoritative for every request the handler sends.
+   * Pass `Reply` to keep the transport's own reply type.
+   */
+  server<Event, Reply extends ServerReply = ServerReply>(
+    label: string,
+    transport: ServerTransport<Reply>,
+  ): ActionDraft<Event, ServerCalls<Reply>> {
+    // Interop assertion, as for `local`.
+    return startDraft(label, checkTransport(label, transport)) as unknown as ActionDraft<Event, ServerCalls<Reply>>;
   },
 };
