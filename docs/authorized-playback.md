@@ -1,6 +1,31 @@
 # How authorized playback works
 
-PLAY1 ([#56](https://github.com/MachineWisdomAI/saga-a2ui/pull/56)) lets a signed-in synthetic subscriber press Play in the embedded Lit player and hear a protected episode. PLAY2 ([#58](https://github.com/MachineWisdomAI/saga-a2ui/pull/58)) adds expiry, revocation and delivery rules for the media itself. The server checks the account's entitlement on every Play and again on every media request, and only the player view that asked can fetch the audio. The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). Run commands, the wire mapping, the delivery rules and the full list of limits are in the README sections [Play an episode only after a fresh entitlement check (PLAY1)](../README.md#play-an-episode-only-after-a-fresh-entitlement-check-play1) and [Protected media expiry and delivery constraints (PLAY2)](../README.md#protected-media-expiry-and-delivery-constraints-play2).
+This guide follows [SAGA A2UI v0.1.0](https://github.com/MachineWisdomAI/saga-a2ui/tree/v0.1.0) (`dda384de`, 2026-10-18). The Lit demo lets a signed-in synthetic subscriber press Play to authorize and fetch a generated audio episode. The server checks entitlement on every Play and again on every media request. A capability is usable only with a proof from the requesting view's private key.
+
+The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). For setup and the complete delivery rules, see [PLAY1](../README.md#play-an-episode-only-after-a-fresh-entitlement-check-play1) and [PLAY2](../README.md#protected-media-expiry-and-delivery-constraints-play2).
+
+## Where playback fits in v0.1.0
+
+Here, v0.1.0 identifies the repository snapshot. Its workspace packages remain private and unversioned; this guide is not a registry installation recipe.
+
+The demo now consumes extracted SDK packages. The main A2UI view uses `@saga-a2ui/core` for decoding and `@saga-a2ui/lit` for rendering. Playback is a separate, authored Lit view: its controller and Web Audio player still belong to the application, while `@saga-a2ui/mcp/view` owns the bridge connection's lifetime.
+
+```text
+apps/lit-host/src/playback-main.ts           # composition root of the player iframe
+├── lit/play-control.ts                     # Play / Pause / Resume and status
+├── playback/playback-view.ts               # authorization, fetch and player lifecycle
+│   └── @saga-a2ui/mcp/view                  # connectToolResultView: results and teardown
+│       └── MCP Apps App + PostMessageTransport → host bridge
+└── playback/web-audio-player.ts             # browser audio context and playback
+
+apps/lit-host/src/mcp/listener.ts            # HTTP server outside the iframe
+├── /playback/mcp → playback/playback-server.ts
+└── /playback/media/{id} → playback/media-service.ts
+```
+
+The reusable action runtime also exists in v0.1.0: direct bindings, asynchronous local actions, resource scopes and server actions. **Play has not migrated to it.** This button still calls the playback controller directly; the `Action` / `TypedAction.server` examples in the README are separate consumers. Request bounds, session-label recovery and player resource ownership still need their application-specific decisions before that migration.
+
+The MCP integration uses `ext-apps` 2.0.3 and the split MCP SDK 2 packages (`client`, `core`, `server` 2.3.1; `node` 2.1.1). The listener uses `NodeStreamableHTTPServerTransport`; a handler reads verified identity from `ctx.http.authInfo` and request metadata from `ctx.mcpReq._meta`. Browser views use `App` and `PostMessageTransport`. These replace the old monolithic SDK imports without changing the capability/proof protocol below.
 
 ## One Play press
 
@@ -36,13 +61,17 @@ The media path answers any origin (`Access-Control-Allow-Origin: *`) because the
 
 ## Player view states
 
-![Player view states: an opener result leads to ready; Play moves to pending; pending leads to playing once the audio clock advances, to ended if the audio ended before the start was confirmed, to a retryable failure, or to unsupported or session-changed. Within loaded audio, playing, paused and resume-blocked move between each other, and any of them moves to ended when the audio ends. Ended and the retryable failures start a new Play.](../diagrams/authorized-playback-view-states.png)
+![Player view states: host teardown or disposal retires the controller from any active state; an opener result leads to ready; Play moves to pending; pending leads to playing once the audio clock advances, to ended if the audio ended before the start was confirmed, to a retryable failure, or to unsupported or session-changed. Within loaded audio, playing, paused and resume-blocked move between each other, and any of them moves to ended when the audio ends. Ended and the retryable failures start a new Play.](../diagrams/authorized-playback-view-states.png)
 
 [Editable Mermaid](../diagrams/authorized-playback-view-states.mmd) · [SVG](../diagrams/authorized-playback-view-states.svg)
 
 The view shows what the audio actually did. Pause shows `paused` only once the audio context has suspended, and Resume shows `playing` only once the audio clock advances again. A Resume that the browser withholds shows `resume-blocked` and keeps the position; the next press retries it without a new authorization. A Pause or Resume that the player cannot perform shows `media-failed`. A `403` from the media service, meaning expiry or revocation between the grant and the fetch, shows `expired`. Any other media failure (network, `5xx`, a redirect, undecodable bytes, a blocked origin) shows `media-failed`. If a short episode ends before the player confirms that it started, the view keeps that end and shows `ended` instead of the late "started" result.
 
-Each Play gets a generation number. A new press after a failure, a changed selection or sign-in, a denial, or disposal advances the generation, aborts the byte fetch and stops the player, so a late response to an earlier request cannot restore audio. Presses are ignored while a request is pending or audio is loaded. Every retry is a new Play with a fresh entitlement check; the view never reuses a capability. A new opener result resets the view to `ready`, or to `session-changed` if it belongs to a different sign-in.
+Each Play gets a generation number. Starting a new Play or clearing the current one advances it, aborts the byte fetch and stops the player. A late response from an earlier generation cannot restore audio. Presses are ignored while authorization is pending or audio is loaded. Every authorization retry is a new Play with a fresh entitlement check; the view never reuses a capability. Resume of already-loaded audio is different: it uses the existing decoded bytes. While the controller is active, a new opener result resets it to `ready`, or to `session-changed` if it belongs to a different sign-in.
+
+Host teardown is terminal for this controller. It aborts the media fetch, releases the player and prevents Play, Pause, Resume, end events and outstanding asynchronous work from presenting anything or starting another request. The diagram's **retired** node describes this internal lifetime; it is not a displayed player status. Teardown stops bridge delivery, but the later `dispose()` still closes the connection exactly once. The page also calls `dispose()` on `pagehide` if no teardown arrived.
+
+Cleanup belongs to the Play that started the work. If an old `player.start()` settles after retirement, it releases the player only if no newer Play has taken ownership; an old completion must never stop newer audio. These teardown and cleanup rules are implemented in v0.1.0. They do not settle the remaining session-label-loss/recovery policy or prove teardown behavior in an actual assistant host.
 
 ## The shared request gate
 
@@ -67,19 +96,22 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 
 | File | Role |
 | --- | --- |
+| [`playback-main.ts`](../apps/lit-host/src/playback-main.ts) | Composes the bridge, controller, controls and Web Audio player; disposes on page exit |
+| [`@saga-a2ui/mcp/view`](../packages/mcp/src/view/index.ts) | Registers listeners before connecting, forwards teardown, stops delivery and closes once on disposal |
 | [`playback/playback.ts`](../apps/lit-host/src/playback/playback.ts) | Contract shared by server and view: tool names, `_meta` keys, strict schemas, fixed sentences |
 | [`playback/playback-server.ts`](../apps/lit-host/src/playback/playback-server.ts) | `play_episode` and `get_playable_episode` |
 | [`playback/media-service.ts`](../apps/lit-host/src/playback/media-service.ts) | Issues capabilities and decides every media request, including the entitlement check |
 | [`playback/media-range.ts`](../apps/lit-host/src/playback/media-range.ts) | Reads a `Range` header after authorization; grants nothing |
 | [`playback/recipient-proof.ts`](../apps/lit-host/src/playback/recipient-proof.ts) | The view's key pair and per-request proof |
-| [`playback/playback-view.ts`](../apps/lit-host/src/playback/playback-view.ts) | View controller: request generations and states |
+| [`playback/playback-view.ts`](../apps/lit-host/src/playback/playback-view.ts) | View controller: request generations, terminal teardown and acquisition-scoped cleanup |
 | [`playback/web-audio-player.ts`](../apps/lit-host/src/playback/web-audio-player.ts) | Web Audio player: prepare, start, pause, resume |
 | [`lit/play-control.ts`](../apps/lit-host/src/lit/play-control.ts) | Play button and status line |
 | [`mcp/protected-request.ts`](../apps/lit-host/src/mcp/protected-request.ts), [`mcp/request-auth.ts`](../apps/lit-host/src/mcp/request-auth.ts) | Body classification and bearer authentication for the shared gate |
 
 ## Limits
 
-- Not yet tried on ChatGPT or Claude. Recipient binding needs the host to forward `_meta` on the view's proxied `tools/call` and to let the sandboxed iframe `fetch` the media origin with custom headers. The local host fixture shows that Play fails closed (`unsupported`, no protected fetch) when it does not.
+- [Bounded host observations on 2026-10-18](https://github.com/MachineWisdomAI/saga-a2ui/issues/12#issuecomment-6250638974) exercised the v0.1.0 playback implementation in ChatGPT web and Claude web, both in Edge. ChatGPT rendered the card immediately; Claude needed a display retry and failed to render it after reload. In both, an explicit Play completed entitlement checking and delivered private playback metadata without a tool/protocol error. Audio did not play: the fixture's media URL remained loopback and no media read reached it. This is evidence of authorization and metadata delivery, not successful audio, host teardown or final host acceptance.
+- Recipient binding needs the host to forward `_meta` on the view's proxied `tools/call`, and media delivery needs iframe `fetch` with custom headers to reach the declared origin. A local host fixture tests dropped request metadata: Play fails closed as `unsupported`, with no entitlement check or protected fetch.
 - The view controller does not check a media URL's origin itself. The resource's declared `connect-src` is what blocks an undeclared destination, so a host that ignores the resource's CSP would not block one.
 - The built player fetches the whole body and never sends `Range`. Range handling is tested at the service's HTTP edge through the real listener, not through the player.
 - No shared cache is simulated. Cache safety rests on the `private, no-store` and `Vary` headers.

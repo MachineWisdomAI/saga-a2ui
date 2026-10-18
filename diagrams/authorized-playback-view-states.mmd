@@ -15,3 +15,4 @@ graph TD
   Loaded -->|"Audio ends"| Ended["ended"]
   Pending -->|"Audio ended before<br/>start was confirmed"| Ended
   Ended -->|"Play again"| Pending
+  Any["Any active controller state"] -->|"Host teardown or dispose"| Retired["retired: no further work or presentation<br/>abort fetch and release player"]
