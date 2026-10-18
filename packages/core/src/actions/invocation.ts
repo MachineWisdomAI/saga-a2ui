@@ -423,8 +423,9 @@ export class Invocation<Event> {
     if (this.outcome !== undefined) return;
     const stage = this.stage;
     if (stage === 'completing') return;
-    this.controller.abort();
+    // The callback's permission ends first: abort listeners run synchronously inside `abort()`.
     this.abandonStep();
+    this.controller.abort();
     this.decide(
       stage === 'prerequisites'
         ? { status: 'failed', stage, failure: { kind: 'timeout' } }
@@ -448,6 +449,10 @@ export class Invocation<Event> {
       (step) => hook({ ...this.hookBase(step), params: this.params, provided: this.providedSnapshot(), result }),
       {
         onResult: (settled) => {
+          // Required success work may finish without any presentation write, so nothing else has
+          // checked the instance: a change nobody saw until now cancels before success is decided.
+          this.recheck();
+          if (this.outcome !== undefined) return;
           if (settled.ok) this.decide({ status: 'succeeded', result });
           else
             this.decide({

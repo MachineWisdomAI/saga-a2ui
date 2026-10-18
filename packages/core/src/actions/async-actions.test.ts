@@ -779,9 +779,12 @@ describe('decided outcomes are immutable', () => {
 });
 
 /** A control showing one row whose item identity is `id`, with the subject reader attached. */
-function rigRow(definition: unknown, initial: Record<string, unknown> = { id: 'a' }): Rig {
+function rigRow(definition: unknown, initial: Record<string, unknown> = { id: 'a' }, observable?: boolean): Rig {
   const host = newHost();
-  const control = renderInstance(host, 'row', { data: initial });
+  const control = renderInstance(host, 'row', {
+    data: initial,
+    ...(observable === undefined ? {} : { observable }),
+  });
   let binding: ActionBinding | undefined;
   host.register((view) => {
     view.watchById('row', Control, (handle) => {
@@ -955,6 +958,183 @@ describe('the busy policy', () => {
 
     expect(started).toEqual(['a', 'b']);
     expect(row.binding.state.phase).toBe('running');
+  });
+});
+
+describe('the success hook settles after the instance stopped being current', () => {
+  // No wake-up is delivered in these cases: the adapter saw nothing, and the settlement of the
+  // required success work is itself a checkpoint that reads the subject and liveness afresh.
+  function successRig(extra: { fail?: boolean } = {}) {
+    const hookGate = gate();
+    const outcomes: Outcome<unknown>[] = [];
+    const seen: string[] = [];
+    const action = Action.local<Press>('save')
+      .run(() => 42)
+      .limits({ hookMs: 1000 })
+      .onSuccess(async () => {
+        seen.push('success-hook');
+        await hookGate.promise;
+        if (extra.fail === true) throw new Error('write failed');
+      })
+      .onCanceled(({ cause, stage }) => void seen.push(`canceled:${stage}:${cause}`))
+      .onFinally(({ outcome }) => void outcomes.push(outcome))
+      .build();
+    return { hookGate, outcomes, seen, row: rigRow(action, { id: 'a' }, false) };
+  }
+
+  it('cancels with the result retained when the subject changed and nothing woke the runtime', async () => {
+    const { hookGate, outcomes, seen, row } = successRig();
+
+    row.control.press();
+    await settle();
+    expect(row.control.watching).toBe(0);
+    row.control.show({ id: 'b' });
+    hookGate.resolve();
+    await settle();
+
+    expect(outcomes).toEqual([{ status: 'canceled', cause: 'subject-changed', stage: 'completing', result: 42 }]);
+    expect(seen).toEqual(['success-hook', 'canceled:completing:subject-changed']);
+    expect(row.binding.state.phase).toBe('idle');
+  });
+
+  it('cancels instead of reporting a success-hook failure when the subject changed meanwhile', async () => {
+    const { hookGate, outcomes, row } = successRig({ fail: true });
+
+    row.control.press();
+    await settle();
+    row.control.show({ id: 'b' });
+    hookGate.resolve();
+    await settle();
+
+    expect(outcomes).toEqual([{ status: 'canceled', cause: 'subject-changed', stage: 'completing', result: 42 }]);
+  });
+
+  it('cancels with the result retained when the instance stopped being live and nothing woke the runtime', async () => {
+    const { hookGate, outcomes, row } = successRig();
+
+    row.control.press();
+    await settle();
+    row.control.goStale();
+    hookGate.resolve();
+    await settle();
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({ status: 'canceled', stage: 'completing', result: 42 });
+    expect(row.binding.state.phase).toBe('disposed');
+  });
+
+  it('still succeeds when the subject is unchanged', async () => {
+    const { hookGate, outcomes, seen, row } = successRig();
+
+    row.control.press();
+    await settle();
+    row.control.show({ id: 'a' });
+    hookGate.resolve();
+    await settle();
+
+    expect(outcomes).toEqual([{ status: 'succeeded', result: 42 }]);
+    expect(seen).toEqual(['success-hook']);
+  });
+
+  it('keeps an outcome that was already decided when the subject changes afterwards', async () => {
+    const outcomes: Outcome<unknown>[] = [];
+    const cleanup = gate();
+    const action = Action.local<Press>('save')
+      .run(() => 42)
+      .limits({ hookMs: 1000 })
+      .onFinally(({ outcome }) => {
+        outcomes.push(outcome);
+        return cleanup.promise;
+      })
+      .build();
+    const row = rigRow(action, { id: 'a' }, false);
+
+    row.control.press();
+    await settle();
+    row.control.show({ id: 'b' });
+    cleanup.resolve();
+    await settle();
+
+    expect(outcomes).toEqual([{ status: 'succeeded', result: 42 }]);
+  });
+});
+
+describe('the work deadline ends the work callback before it announces the abort', () => {
+  it('a handler abort listener already sees current() as false and cannot write', async () => {
+    const written: string[] = [];
+    const observed: boolean[] = [];
+    const decisions: Outcome<unknown>[] = [];
+    let failureCurrent: boolean | undefined;
+    const action = Action.local<Press>('abort-listener')
+      .run(({ signal, current }) => {
+        signal.addEventListener('abort', () => {
+          observed.push(current());
+          if (current()) written.push('presentation write');
+        });
+        return new Promise<never>(() => undefined);
+      })
+      .limits({ deadlineMs: 10, hookMs: 1000 })
+      .onFailure(({ current }) => void (failureCurrent = current()))
+      .onFinally(({ outcome }) => void decisions.push(outcome))
+      .build();
+    const { control, binding } = rig(action);
+
+    control.press();
+    await elapse(10);
+
+    expect(observed).toEqual([false]);
+    expect(written).toEqual([]);
+    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout' } }]);
+    expect(failureCurrent).toBe(true);
+    expect(binding.state.phase).toBe('idle');
+  });
+
+  it('a prerequisite abort listener already sees current() as false and cannot write', async () => {
+    const written: string[] = [];
+    const observed: boolean[] = [];
+    const decisions: Outcome<unknown>[] = [];
+    const action = Action.local<Press>('abort-listener')
+      .before(
+        prerequisite('slow', ({ signal, current }) => {
+          signal.addEventListener('abort', () => {
+            observed.push(current());
+            if (current()) written.push('presentation write');
+          });
+          return new Promise<never>(() => undefined);
+        }),
+      )
+      .run(() => 1)
+      .limits({ deadlineMs: 10, hookMs: 1000 })
+      .onFinally(({ outcome }) => void decisions.push(outcome))
+      .build();
+    const { control, binding } = rig(action);
+
+    control.press();
+    await elapse(10);
+
+    expect(observed).toEqual([false]);
+    expect(written).toEqual([]);
+    expect(decisions).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout' } }]);
+    expect(binding.state.phase).toBe('idle');
+  });
+
+  it('decides the timeout exactly once when the abort listener re-enters the runtime', async () => {
+    const decisions: Outcome<unknown>[] = [];
+    const action = Action.local<Press>('reentrant')
+      .run(({ signal, current }) => {
+        signal.addEventListener('abort', () => void current());
+        return new Promise<never>(() => undefined);
+      })
+      .limits({ deadlineMs: 10, hookMs: 1000 })
+      .onFinally(({ outcome }) => void decisions.push(outcome))
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await elapse(10);
+    await elapse(1000);
+
+    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout' } }]);
   });
 });
 
