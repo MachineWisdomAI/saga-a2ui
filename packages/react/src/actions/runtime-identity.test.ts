@@ -28,7 +28,8 @@ describe('runtime identity of the React action qualification', () => {
     expect(upstream.manifest).toMatchObject({ name: '@a2ui/react', version: '0.13.0' });
     expect(packageOf('react').manifest.version).toBe('19.3.1');
     expect(packageOf('react-dom/client').manifest.version).toBe('19.3.1');
-    expect(packageOf('jsdom').manifest.version).toBe('30.1.3');
+    // 28.1.0 is the newest jsdom whose engines accept the repository's pinned Node 22.12.0; 29 and 30 do not.
+    expect(packageOf('jsdom').manifest.version).toBe('28.1.0');
   });
 
   it('shares one @a2ui/web_core 0.13.0 copy between the renderer, core and this package, so surface and node values mean one thing', () => {
