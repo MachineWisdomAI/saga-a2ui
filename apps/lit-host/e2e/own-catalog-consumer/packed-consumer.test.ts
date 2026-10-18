@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const consumerSource = fileURLToPath(new URL('./consumer.ts', import.meta.url));
+const actionsConsumerSource = fileURLToPath(new URL('./consumer-actions.ts', import.meta.url));
 const OWN_DEPENDENCIES = ['@a2ui/lit', '@a2ui/web_core', 'lit'];
 const SDK_PACKAGES = ['core', 'lit'] as const;
 
@@ -66,6 +67,7 @@ describe('an own-catalog consumer built from the packed SDK packages', () => {
   const consumer = path.join(work, 'consumer');
   fs.mkdirSync(consumer);
   fs.copyFileSync(consumerSource, path.join(consumer, 'consumer.ts'));
+  fs.copyFileSync(actionsConsumerSource, path.join(consumer, 'consumer-actions.ts'));
   const installed = installPacked(consumer);
 
   it('declares no optional component, Markdown parser or delivery dependency', () => {
@@ -83,12 +85,13 @@ describe('an own-catalog consumer built from the packed SDK packages', () => {
     }
   });
 
-  it('builds a browser artifact from the installed packages alone, without server code or optional components', async () => {
+  /** Builds one consumer entry against the installed copies and reports the graph and code. */
+  async function buildConsumer(entry: string): Promise<{ modules: string[]; code: string }> {
     const declared = new Set<string>(OWN_DEPENDENCIES);
     for (const manifest of Object.values(installed.manifests)) {
       for (const name of Object.keys(manifest.dependencies ?? {})) if (!name.startsWith('@saga-a2ui/')) declared.add(name);
     }
-    for (const name of declared) link(name, consumer);
+    for (const name of declared) if (!fs.existsSync(path.join(consumer, 'node_modules', name))) link(name, consumer);
 
     const result = await build({
       configFile: false,
@@ -98,23 +101,46 @@ describe('an own-catalog consumer built from the packed SDK packages', () => {
         write: false,
         minify: false,
         target: 'es2022',
-        lib: { entry: path.join(consumer, 'consumer.ts'), formats: ['es'], fileName: 'consumer' },
+        lib: { entry: path.join(consumer, entry), formats: ['es'], fileName: 'consumer' },
       },
     });
     const outputs = (Array.isArray(result) ? result : [result]).flatMap((one) => ('output' in one ? one.output : []));
     const chunks = outputs.flatMap((output) => (output.type === 'chunk' ? [output] : []));
-    const modules = chunks.flatMap((chunk) => Object.keys(chunk.modules));
-    const code = chunks.map((chunk) => chunk.code).join('\n');
+    return { modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)), code: chunks.map((chunk) => chunk.code).join('\n') };
+  }
+
+  const noDeliveryOrOptionalCode = (modules: string[], code: string) => {
+    // No delivery, server, Markdown or optional-component code.
+    expect(modules.filter((id) => /node_modules\/(@modelcontextprotocol|markdown-it|@a2ui\/markdown-it)\//.test(id))).toEqual([]);
+    for (const marker of ['FaithfulCard', 'StreamableHTTP', 'node:http', 'process.env', 'html_block']) {
+      expect(code, marker).not.toContain(marker);
+    }
+  };
+
+  it('builds a browser artifact from the installed packages alone, without server code or optional components', async () => {
+    const { modules, code } = await buildConsumer('consumer.ts');
 
     // The installed copies were used, not the workspace sources.
     expect(modules.some((id) => id.includes('/consumer/node_modules/@saga-a2ui/lit/src/'))).toBe(true);
     expect(modules.some((id) => id.includes('/consumer/node_modules/@saga-a2ui/core/src/'))).toBe(true);
     expect(modules.filter((id) => id.startsWith(path.join(repoRoot, 'packages')))).toEqual([]);
 
-    // No delivery, server, Markdown or optional-component code.
-    expect(modules.filter((id) => /node_modules\/(@modelcontextprotocol|markdown-it|@a2ui\/markdown-it)\//.test(id))).toEqual([]);
-    for (const marker of ['FaithfulCard', 'StreamableHTTP', 'node:http', 'process.env', 'html_block']) {
+    noDeliveryOrOptionalCode(modules, code);
+    // An application that does not opt in to direct action attachment carries none of it.
+    expect(modules.filter((id) => /\/@saga-a2ui\/(core|lit)\/src\/actions\//.test(id))).toEqual([]);
+    for (const marker of ['saga-action-button', 'ActionButton', 'createInstanceHost']) {
       expect(code, marker).not.toContain(marker);
     }
+  }, 120_000);
+
+  it('builds an application that opts in to direct action attachment from the installed packages alone', async () => {
+    const { modules, code } = await buildConsumer('consumer-actions.ts');
+
+    expect(modules.some((id) => id.includes('/consumer/node_modules/@saga-a2ui/lit/src/actions/'))).toBe(true);
+    expect(modules.some((id) => id.includes('/consumer/node_modules/@saga-a2ui/core/src/actions/'))).toBe(true);
+    expect(modules.filter((id) => id.startsWith(path.join(repoRoot, 'packages')))).toEqual([]);
+
+    noDeliveryOrOptionalCode(modules, code);
+    expect(code).toContain('saga-action-button');
   }, 120_000);
 });
