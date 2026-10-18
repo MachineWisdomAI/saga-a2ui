@@ -13,3 +13,11 @@ export const brandings = {
 } as const satisfies Record<string, Branding>;
 
 export type BrandName = keyof typeof brandings;
+
+/** Sets the card's CSS custom properties (and the page surface) on the element that hosts it. */
+export function applyBranding(element: HTMLElement, branding: Branding): void {
+  element.style.setProperty('--app-surface', branding.surface);
+  element.style.setProperty('--saga-card-font-family', branding.fontFamily);
+  element.style.setProperty('--saga-card-accent-color', branding.accent);
+  element.style.setProperty('--saga-card-text-color', branding.text);
+}

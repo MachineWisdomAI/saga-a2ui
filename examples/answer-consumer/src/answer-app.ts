@@ -1,39 +1,14 @@
-import type { LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
-import { a2uiV0_9Decoder, createMessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement } from '@saga-a2ui/lit';
-import { faithfulCardEntry, provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
+import { provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
 import { css, html } from 'lit';
 import type { AnswerFunction } from './answer-function.js';
-import type { Branding } from './branding.js';
+import { answerData, answerFrameStyles, createAnswerSurfaceElement } from './answer-surface.js';
+import { applyBranding, type Branding } from './branding.js';
 
-// The application's composition: its own catalog (the one optional SAGA component), its own
-// chrome (brand, question form, status), and a typed answer function it calls itself. SAGA's card
-// shows the Markdown it is given; it never calls the answer function, never sees the question and
-// never decides what the status says.
-
-const CATALOG_ID = 'https://answers.example/catalogs/answer/v1';
-const SURFACE_ID = 'answer';
-
-const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [faithfulCardEntry]);
-
-const surface = [
-  { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: SURFACE_ID,
-      components: [
-        { id: 'root', component: 'FaithfulCard', contractVersion: { path: '/contractVersion' }, markdown: { path: '/markdown' } },
-      ],
-    },
-  },
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, value: { contractVersion: 1, markdown: '' } } },
-];
-
-const answerData = (markdown: string) => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, value: { contractVersion: 1, markdown } } },
-];
+// The standalone page's composition: the shared answer surface (answer-surface.ts), its own chrome
+// (brand, question form, status), and a typed answer function it calls itself. SAGA's card shows
+// the Markdown it is given; it never calls the answer function, never sees the question and never
+// decides what the status says. The page an MCP host mounts (answer-view.ts) has no form and no
+// answer function: the host delivers the answer.
 
 export interface AnswerAppDependencies {
   /** The application's backend call. Any implementation of the type can be composed in. */
@@ -44,29 +19,15 @@ export interface AnswerAppDependencies {
 }
 
 export function createAnswerAppElement(deps: AnswerAppDependencies) {
-  class AnswerApp extends createA2uiAppElement({
-    createSession: () => createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-    initialInput: surface,
-    surfaceId: SURFACE_ID,
-  }) {
-    static override styles = css`
-      :host {
-        display: block;
-        max-width: 42rem;
-        margin: 0 auto;
-        padding: 1rem;
-        box-sizing: border-box;
-        background: var(--app-surface);
-        color: var(--saga-card-text-color);
-        font-family: var(--saga-card-font-family);
-        line-height: 1.5;
-      }
-      h1 { margin-block: 0 1rem; color: var(--saga-card-accent-color); }
-      form { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block-end: 0.5rem; }
-      input { flex: 1 1 12rem; min-width: 0; font: inherit; padding: 0.35rem; }
-      button { font: inherit; padding: 0.35rem 0.75rem; }
-      [role='status'] { min-height: 1.5em; margin-block: 0.5rem; }
-    `;
+  class AnswerApp extends createAnswerSurfaceElement() {
+    static override styles = [
+      answerFrameStyles,
+      css`
+        form { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block-end: 0.5rem; }
+        input { flex: 1 1 12rem; min-width: 0; font: inherit; padding: 0.35rem; }
+        button { font: inherit; padding: 0.35rem 0.75rem; }
+      `,
+    ];
 
     #endContentView?: () => void;
     #status = 'Ask a question.';
@@ -74,11 +35,7 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
     #asked = 0;
 
     override connectedCallback() {
-      const { branding } = deps;
-      this.style.setProperty('--app-surface', branding.surface);
-      this.style.setProperty('--saga-card-font-family', branding.fontFamily);
-      this.style.setProperty('--saga-card-accent-color', branding.accent);
-      this.style.setProperty('--saga-card-text-color', branding.text);
+      applyBranding(this, deps.branding);
       this.#endContentView = provideContentView(this, deps.content);
       super.connectedCallback();
     }

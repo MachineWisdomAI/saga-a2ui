@@ -32,10 +32,12 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(packages).toEqual([
       '@a2ui/lit/v0_9',
       '@a2ui/web_core/v0_9',
+      '@modelcontextprotocol/ext-apps',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
       '@saga-a2ui/lit',
       '@saga-a2ui/lit/faithful-card',
+      '@saga-a2ui/mcp/view',
       'lit',
     ]);
     expect(fs.existsSync(path.join(answerConsumerSource, 'node_modules'))).toBe(false);
@@ -79,7 +81,26 @@ describe('the answer consumer built from the packed SDK packages', () => {
     for (const marker of ['StreamableHTTP', 'node:http', 'process.env']) expect(code, marker).not.toContain(marker);
   }, 120_000);
 
-  // The same application delivers its built page through MCP using the packed mcp package: the
+  it('builds the page an MCP host mounts from the same card and A2UI path plus the shared view connection, with no answer function', async () => {
+    const { modules, code } = await bundleConsumerEntry(consumer, 'src/mcp-main.ts');
+    const installed = (name: string) => modules.some((id) => id.includes(`/consumer/node_modules/${name}`));
+    // The shared connection and the bridge, and the same card and surface the standalone page uses.
+    expect(installed('@saga-a2ui/mcp/src/view/index.ts')).toBe(true);
+    expect(modules.some((id) => id.includes('/node_modules/@modelcontextprotocol/ext-apps/'))).toBe(true); // a linked third-party package
+    expect(installed('@saga-a2ui/lit/src/faithful-card/faithful-card-element.ts')).toBe(true);
+    expect(installed('@saga-a2ui/components/src/faithful-card/reader.ts')).toBe(true);
+    for (const own of ['mcp-main.ts', 'answer-view.ts', 'answer-surface.ts', 'content-view.ts']) {
+      expect(modules.some((id) => id.endsWith(`/consumer/src/${own}`)), own).toBe(true);
+    }
+    // Nothing from the workspace, no server code, and no form, standalone app or synthetic provider.
+    expect(modules.filter((id) => id.startsWith(path.join(repoRoot, 'packages')) || id.startsWith(path.join(repoRoot, 'apps')))).toEqual([]);
+    expect(modules.filter((id) => /\/@saga-a2ui\/mcp\/src\/(server|policy)\//.test(id))).toEqual([]);
+    expect(modules.filter((id) => /node_modules\/@modelcontextprotocol\/(server|node)\//.test(id))).toEqual([]);
+    expect(modules.filter((id) => /\/consumer\/src\/(answer-app|answer-function|main)\.ts$/.test(id))).toEqual([]);
+    for (const marker of ['StreamableHTTP', 'node:http', 'process.env', 'fixtureAnswers', 'Ask a question']) expect(code, marker).not.toContain(marker);
+  }, 120_000);
+
+  // The same application delivers its built MCP page through MCP using the packed mcp package: the
   // shared operation links each result to the page, and the page's identity comes from its bytes.
   describe('served over MCP from the installed mcp package', () => {
     interface Served {
@@ -90,10 +111,10 @@ describe('the answer consumer built from the packed SDK packages', () => {
     const prepared = (): Promise<Served> =>
       (preparing ??= (async () => {
         const out = path.join(work, 'page');
-        await buildConsumerApplication(consumer, out, [viteSingleFile()]);
+        await buildConsumerApplication(consumer, out, [viteSingleFile()], { page: 'mcp.html' });
         const { file } = await bundleConsumerServer(consumer, 'server/answer-server.ts');
         const loaded = (await import(pathToFileURL(file).href)) as Served;
-        return { bytes: fs.readFileSync(path.join(out, 'index.html')), createAnswerServer: loaded.createAnswerServer };
+        return { bytes: fs.readFileSync(path.join(out, 'mcp.html')), createAnswerServer: loaded.createAnswerServer };
       })());
     // Derived here from the requirement (SHA-256 of the served bytes), not by the package's own function.
     const identityOf = (bytes: Buffer | string): string => `ui://sha256/${createHash('sha256').update(bytes).digest('hex')}.html`;
@@ -147,6 +168,9 @@ describe('the answer consumer built from the packed SDK packages', () => {
       expect(served.uri).toBe(expected);
       expect(served.mimeType).toBe('text/html;profile=mcp-app');
       expect(Buffer.from(served.text, 'utf8').equals(bytes)).toBe(true);
+      // The served page is the one an MCP host can deliver results to, not the standalone form.
+      expect(served.text).toContain('<answer-view>');
+      expect(served.text).not.toContain('<answer-consumer>');
       expect(served._meta).toEqual({ ui: { csp: CLOSED_VIEW_CSP } });
     }, 120_000);
 

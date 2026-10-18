@@ -138,15 +138,30 @@ export async function bundleConsumerServer(consumer: string, entry: string): Pro
   return { file: path.join(outDir, 'server.mjs'), modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)) };
 }
 
-/** Builds the consumer's HTML application into `outDir`. Plugins come from the repository's own tooling. */
-export async function buildConsumerApplication(consumer: string, outDir: string, plugins: PluginOption[]): Promise<void> {
+/**
+ * Builds one of the consumer's HTML pages into `outDir`; the built file keeps the page's name
+ * (`index.html` unless `page` names another). Plugins come from the repository's own tooling. A
+ * consumer with several pages builds each in its own call, and `emptyOutDir: false` keeps what an
+ * earlier call wrote there.
+ */
+export async function buildConsumerApplication(
+  consumer: string,
+  outDir: string,
+  plugins: PluginOption[],
+  options: { readonly page?: string; readonly emptyOutDir?: boolean } = {},
+): Promise<void> {
   const config: InlineConfig = {
     configFile: false,
     root: consumer,
     base: './',
     logLevel: 'warn',
     plugins,
-    build: { outDir, emptyOutDir: true, target: 'es2022' },
+    build: {
+      outDir,
+      emptyOutDir: options.emptyOutDir ?? true,
+      target: 'es2022',
+      ...(options.page === undefined ? {} : { rollupOptions: { input: path.join(consumer, options.page) } }),
+    },
   };
   await build(config);
 }
