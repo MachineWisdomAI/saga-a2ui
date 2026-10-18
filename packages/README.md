@@ -22,7 +22,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ### GenUI renderers
 
-GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations. `lit/` is the only one implemented; its opt-in action control and setup (`ActionButton`, `createLitActions`) are the optional `@saga-a2ui/lit/actions` export, which the main `@saga-a2ui/lit` entry does not import. No `react/` or `lynx/` package exists: `apps/lynx-fixture` is a retained qualification fixture and a separate project outside the npm workspace, not that package (see the README's "Lynx action attachment qualification (ACT3)").
+GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations. `lit/` is the only full renderer package; its opt-in action control and setup (`ActionButton`, `createLitActions`) are the optional `@saga-a2ui/lit/actions` export, which the main `@saga-a2ui/lit` entry does not import. `react/` exists only as the ACT2 qualification of the shared action seam: its single optional `@saga-a2ui/react/actions` export (`ActionButton`, `ActionButtonEntry`, `InstanceHostProvider`, `useActionSetup`) is not React parity, which E15 owns. Both controls share the renderer-neutral contract at `@saga-a2ui/core/actions/action-button-schema`. No `lynx/` package exists: `apps/lynx-fixture` is a retained qualification fixture and a separate project outside the npm workspace, not that package (see the README's "Lynx action attachment qualification (ACT3)").
 
 ### Components
 
@@ -38,6 +38,6 @@ Dependency direction points toward renderer-independent contracts. Core must not
 
 Renderers keep independent maturity and independent dependency and peer declarations. A renderer used with an application's own catalog must not pull in the optional components, including `FaithfulCard`, a Markdown parser, or any renderer the application did not select.
 
-The workspace root is not published. `core/`, `lit/` and `mcp/` are implemented as private, unreleased workspace packages (no version, not installable from a registry); the other packages are not yet implemented. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
+The workspace root is not published. `core/`, `lit/`, `mcp/` and the `react/` qualification slice are implemented as private, unreleased workspace packages (no version, not installable from a registry); the other packages are not yet implemented. Keep server-only modules out of browser entry points. Use coordinated package versions initially, enrolling actual owned versions when introduced.
 
 The new-project CLI templates and the existing-backend recipes are not packages. They are described in [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md).
