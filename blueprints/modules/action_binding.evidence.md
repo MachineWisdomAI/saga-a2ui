@@ -2,19 +2,23 @@
 
 This companion belongs to the [action binding Blueprint](./action_binding.blueprint.md). It holds the complete type declarations that the Blueprint's examples are checked against, and a record of the renderer checks that other people ran earlier. The Blueprint is the review entry point and does not depend on this file for its design. Everything here is proposal-level and declaration-level evidence. None of it is a runtime, renderer or host result, and none of it approves or authorizes an implementation.
 
+**Terminology and historical receipts.** The editorial update uses “rendered component instance” and renames the illustrative `Occurrence*` declarations to `Instance*`, including the scratch module `occurrence.ts` to `instance.ts`. The approval and earlier checks below remain records of the original revision; their hashes identify the original snippets, not these renamed snippets. No type contract or runtime behavior changes. The terminology check below records the current declarations separately.
+
+**Terminology check.** After the rename, TypeScript 5.9.3 checked the current section A (`authoring.types.ts`, SHA-256 prefix `db268151d6eb67fa`) and section B (`renderer.types.ts`, `c3141ecc02fa9ae8`) using their printed commands: both exited 0 without diagnostics. Removing the directives still produced the intended 26 and 1 errors respectively. A comparison of every TypeScript block in the Blueprint and this companion against the pre-edit revision found only the terminology rename. The earlier renderer-package checks below were not rerun; their original compiler and package-version claims remain historical. This check establishes no runtime behavior.
+
 ## Contents
 
 - [A. Authoring declarations](#a-authoring-declarations): the declarations behind every authoring example, with the positive and negative type cases.
-- [B. Renderer declarations](#b-renderer-declarations): the Lit and React occurrence declarations and the Lynx control declarations, with the printed examples compiled against A.
+- [B. Renderer declarations](#b-renderer-declarations): the Lit and React instance declarations and the Lynx control declarations, with the printed examples compiled against A.
 - [C. Printed renderer blocks](#c-printed-renderer-blocks): what was checked against the published Lit, React and `web_core` packages.
 - [D. Lynx freshness and admission mechanism](#d-lynx-freshness-and-admission-mechanism): the code sketches and walkthrough behind the Lynx freshness summary.
 - [Reported renderer checks](#reported-renderer-checks): earlier Lit, React and Lynx checks that were reported by their authors, kept as history.
 
 ## A. Authoring declarations
 
-The file below declares the proposed interfaces and the caller examples in [Interfaces and behavior](./action_binding.blueprint.md#interfaces-and-behavior). It contains twenty-six negative directives (N1 to N25, with N11 appearing twice), the positive checks P1 to P8, the recorded static limit L1, and positive examples for the playback lease with its result-discriminated failure hook, the later-appearing occurrence with a `subject` reader and owned teardown, two different definitions (archive and star) attached to one data-bearing control kind, and a supertype action bound to two component kinds. Every declaration uses `declare`. There is no runtime implementation, and no framework was installed.
+The file below declares the proposed interfaces and the caller examples in [Interfaces and behavior](./action_binding.blueprint.md#interfaces-and-behavior). It contains twenty-six negative directives (N1 to N25, with N11 appearing twice), the positive checks P1 to P8, the recorded static limit L1, and positive examples for the playback lease with its result-discriminated failure hook, the later-appearing instance with a `subject` reader and owned teardown, two different definitions (archive and star) attached to one data-bearing control kind, and a supertype action bound to two component kinds. Every declaration uses `declare`. There is no runtime implementation, and no framework was installed.
 
-**Receipt.** The file, saved as `authoring.types.ts` (first 16 hex digits of its SHA-256: `64c1220b2b80a72d`), was checked with TypeScript 6.0.3 and TypeScript 5.9.3, the latter being the version reported for the SDK repository's installed toolchain. Each compiler used this command, with no project configuration and so without the SDK repository's `tsconfig`:
+**Historical receipt.** Before the terminology edit, the file, saved as `authoring.types.ts` (first 16 hex digits of its SHA-256: `64c1220b2b80a72d`), was checked with TypeScript 6.0.3 and TypeScript 5.9.3, the latter being the version reported for the SDK repository's installed toolchain. Each compiler used this command, with no project configuration and so without the SDK repository's `tsconfig`:
 
 ```text
 tsc --noEmit --strict --noUncheckedIndexedAccess --exactOptionalPropertyTypes \
@@ -43,7 +47,7 @@ Both compilers exited 0 with no diagnostics. Each negative case carries a `@ts-e
 
 The positive checks are a guard that returns nothing (P1), a prerequisite that needs less than is provided (P2), a synchronous prerequisite (P3), an always-throwing `atActivation` that returns `never` (P4), a union without a thenable (P5), two branches from one retained builder alias (P6), reading the stage of a failed outcome in `onFinally` (P7), and `current()` available to a handler and to a prerequisite (P8). L1 records that a promise returned through a declared `unknown` compiles, and that the runtime check on the returned value is what catches it.
 
-**Shape of the declarations.** `SurfaceView` declares only the general `getById` and `watchById` overloads. The overloads that return a `DataHandle` for a data-bearing kind are on `DataSurfaceView extends SurfaceView`, which repeats each general overload after its specialized one, and only the example's `view` is declared as `DataSurfaceView`. `DataHandle.readData` and `NoteActivation` are optional occurrence-data examples, and nothing is cast. The illustrative adapter seam `AdapterOccurrence` names its liveness reader `isLive`, calls its installation stamp `installationEpoch` so that it is not confused with a renderer's observed-key epoch, and declares the optional `watchScope` wake-up. The archive workflow is written once as `archiveNoteWith(noteIdOf)`, so that each renderer supplies only its own projection of the note identifier.
+**Shape of the declarations.** `SurfaceView` declares only the general `getById` and `watchById` overloads. The overloads that return a `DataHandle` for a data-bearing kind are on `DataSurfaceView extends SurfaceView`, which repeats each general overload after its specialized one, and only the example's `view` is declared as `DataSurfaceView`. `DataHandle.readData` and `NoteActivation` are optional instance-data examples, and nothing is cast. The illustrative adapter seam `AdapterInstance` names its liveness reader `isLive`, calls its installation stamp `installationEpoch` so that it is not confused with a renderer's observed-key epoch, and declares the optional `watchScope` wake-up. The archive workflow is written once as `archiveNoteWith(noteIdOf)`, so that each renderer supplies only its own projection of the note identifier.
 
 **Limits.** This is type-shape evidence only. The stand-ins for `CallToolResult` and `RequestOptions` approximate the pinned upstream types and do not import them. Compile success does not show runtime ordering, timing, cancellation behavior, per-callback eligibility behind `current()`, thenable checks or limit validation, which the Blueprint describes and does not implement, nor anything about a renderer or host.
 
@@ -177,7 +181,7 @@ export interface InvocationScope extends ActivationScope {
  * The freshness check supplied to one callback. Each callback (a prerequisite, the handler, a hook)
  * receives its own `current()`, which is distinct from `scope.active`. `scope.active` answers "has
  * this invocation's outcome been decided" and is false once a failure is decided. `current()` answers
- * "may THIS callback still change what this occurrence shows". It is true only while all of these hold:
+ * "may THIS callback still change what this instance shows". It is true only while all of these hold:
  *  - the runtime is still waiting for this callback. That eligibility ends permanently at the first of:
  *    a synchronous callback returning or throwing; the Promise returned by an asynchronous callback
  *    settling (merely returning a pending Promise does not end it); its budget expiring (the work
@@ -185,11 +189,11 @@ export interface InvocationScope extends ActivationScope {
  *    deadline or the budget making the runtime stop waiting for it. A callback started later has its
  *    own eligibility;
  *  - the binding is not disposed and the invocation is not replaced;
- *  - the adapter reports that the occurrence and installation are the live ones;
+ *  - the adapter reports that the instance and installation are the live ones;
  *  - the binding's subject reader, if one was given, still returns the value captured at activation.
  * Each call reads the adapter's liveness and the subject reader afresh. It is a cooperative check for
  * the moment before a synchronous commit; it cannot recall a write that has already started. The
- * adapter supplies occurrence liveness; the runtime owns callback eligibility.
+ * adapter supplies instance liveness; the runtime owns callback eligibility.
  */
 export interface Freshness {
   current(): boolean;
@@ -260,7 +264,7 @@ export interface ServerCalls {
  * `signal` aborts when the hook's `hookMs` budget runs out. For onSuccess and onFailure it also
  * aborts once the invocation is obsolete (binding disposed, replaced, or subject changed). For
  * onCanceled and onFinally it does not: those hooks exist to respond to that. A signal is a request
- * to stop, and a non-aborted signal does not show the occurrence is still the right one: after any
+ * to stop, and a non-aborted signal does not show the instance is still the right one: after any
  * await, this callback's own `current()` is the check that authorizes a synchronous presentation
  * write; it turns false for good once the runtime stops waiting for this callback.
  */
@@ -513,7 +517,7 @@ export interface BindingState {
   readonly phase: BindingPhase;
 }
 
-/** What `bindAction` returns: one component occurrence's connection to one definition. */
+/** What `bindAction` returns: one component instance's connection to one definition. */
 export interface ActionBinding {
   /** Opaque; equals `bindingId` in telemetry. It finds nothing: no member of this API maps an id to a binding. */
   readonly id: string;
@@ -530,12 +534,12 @@ export interface ActionBinding {
 
 /**
  * Optional, per binding. `subject` reads, through a supported application or renderer API and not
- * through a view object captured by an earlier render, the semantic item the occurrence currently
+ * through a view object captured by an earlier render, the semantic item the instance currently
  * shows (for a list row, a token that changes whenever the shown item changes). The runtime captures
  * it at activation and compares it with `Object.is` against a fresh read at every runtime decision
  * point and on each `current()` call. A reader that throws at activation ends the invocation as
  * 'invalid-input'; one that throws later counts as a change. Without `subject`, the invocation's
- * target is the occurrence alone.
+ * target is the instance alone.
  */
 export interface BindOptions {
   readonly subject?: () => unknown;
@@ -557,11 +561,11 @@ export interface ComponentKind<Events> {
 }
 
 export interface SurfaceView {
-  /** Throws when no occurrence, or more than one, has this id in the surface. */
+  /** Throws when no instance, or more than one, has this id in the surface. */
   getById<Events>(id: string, kind: ComponentKind<Events>): ComponentHandle<Events>;
   /**
-   * Setup-time discovery for occurrences that appear later or are recreated. Calls `onHandle` once per
-   * occurrence with that occurrence's handle. Unsubscribing stops discovery only: it disposes no binding
+   * Setup-time discovery for instances that appear later or are recreated. Calls `onHandle` once per
+   * instance with that instance's handle. Unsubscribing stops discovery only: it disposes no binding
    * and removes no installed callable. The index behind it is never consulted to route an activation.
    */
   watchById<Events>(id: string, kind: ComponentKind<Events>, onHandle: (handle: ComponentHandle<Events>) => void): () => void;
@@ -587,13 +591,13 @@ export declare const Button: ComponentKind<ButtonEvents>;
 export declare const TextField: ComponentKind<FieldEvents>;
 
 // A generic data-bearing control. This is one control kind, not one kind per action: archive, star and
-// open can all attach to it. Its event carries data copied from the exact occurrence when the adapter
-// admitted the event, and its handle can read what that same occurrence currently represents.
+// open can all attach to it. Its event carries data copied from the exact instance when the adapter
+// admitted the event, and its handle can read what that same instance currently represents.
 // Illustrative; each adapter supplies the real mechanism from its own data context.
 export interface NoteData {
   readonly noteId: string;
 }
-/** `noteId` is copied from this occurrence at activation. It is undefined while the row has no note. */
+/** `noteId` is copied from this instance at activation. It is undefined while the row has no note. */
 export interface NoteActivation extends ComponentEvent {
   readonly noteId: string | undefined;
 }
@@ -605,10 +609,10 @@ export interface DataBearingKind<Events, Data> extends ComponentKind<Events> {
   readonly [kindData]: Data;
 }
 /**
- * Bound to one exact occurrence. `readData` reads that occurrence's current data through the renderer's
+ * Bound to one exact instance. `readData` reads that instance's current data through the renderer's
  * supported data context on every call, never a closure over props resolved by an earlier render, and
- * never an ID lookup. After the occurrence is retired it returns undefined instead of reading a
- * replacement occurrence.
+ * never an ID lookup. After the instance is retired it returns undefined instead of reading a
+ * replacement instance.
  */
 export interface DataHandle<Events, Data> extends ComponentHandle<Events> {
   readData(): Data | undefined;
@@ -717,7 +721,7 @@ export const saveDraft = Action.local<ButtonActivation>('save-draft')
 
 // 3. Server action: the same prerequisite, a second one that needs it, a guard that provides nothing,
 //    and a handler that initiates the request. The server's own handler is not referenced from here.
-//    The workflow is written once. Its only renderer-specific part is how the pressed occurrence's note
+//    The workflow is written once. Its only renderer-specific part is how the pressed instance's note
 //    identifier is read from that renderer's event, so each renderer supplies that projection.
 export function requireNoteId(value: unknown): string {
   if (typeof value !== 'string' || value === '') throw new Error('this row shows no note');
@@ -771,10 +775,10 @@ export function archiveNoteWith<Event>(noteIdOf: (event: Event) => string) {
   .build();
 }
 
-// The data-bearing example: the adapter copied `noteId` from the exact occurrence that fired.
+// The data-bearing example: the adapter copied `noteId` from the exact instance that fired.
 export const archiveNote = archiveNoteWith(({ noteId }: NoteActivation) => requireNoteId(noteId));
 
-// The subject reader asks THIS handle for the note its occurrence shows now.
+// The subject reader asks THIS handle for the note its instance shows now.
 function archiveOn(handle: DataHandle<NoteEvents, NoteData>): ActionBinding {
   return handle.bindAction('activate', archiveNote, { subject: () => handle.readData()?.noteId });
 }
@@ -815,7 +819,7 @@ export const asyncObserved = Action.local<ButtonActivation>('async-observed')
   })
   .build();
 
-// Occurrences that appear later. Discovery only delivers handles; the owning setup also keeps and ends
+// Instances that appear later. Discovery only delivers handles; the owning setup also keeps and ends
 // every binding and state subscription that its callback created, even when the callback fails part way.
 const ownedRowBindings = new Set<() => void>();
 export const stopRowDiscovery = view.watchById('row-archive', NoteRow, (handle) => {
@@ -846,8 +850,8 @@ export function teardownRows(): void {
 // Adapter plumbing (internal; not an author API). Shown so the freshness contract has a named seam.
 // ---------------------------------------------------------------------------
 
-/** What an adapter gives the runtime for one occurrence. Illustrative. */
-export interface AdapterOccurrence {
+/** What an adapter gives the runtime for one instance. Illustrative. */
+export interface AdapterInstance {
   /**
    * Reads supported renderer state at call time: the node or context is not retired and the host or
    * model generation is the one this installation was attached under. Never a cached boolean.
@@ -1192,9 +1196,9 @@ void view.getById('details-toggle', Button).readData();
 
 ## B. Renderer declarations
 
-This file declares the proposed Lit and React occurrence types, the discovery view that supplies them, the occurrence host and its factory, and the Lynx control types. It then compiles the renderer examples printed in the Blueprint against A: `openReport`, the archive workflow with the Lit and React projection and with the Lynx projection, the two Lynx order actions with their different busy policies, and the Lynx setup that binds three occurrences of one control type. `OccurrenceView` extends the general `SurfaceView` and is the stronger view of the Lit and React registration. The Lynx declarations use neither `watchById` nor `OccurrenceView`. One `@ts-expect-error` shows that a general handle has no `read`, so the row example needs the stronger view.
+This file declares the proposed Lit and React instance types, the discovery view that supplies them, the instance host and its factory, and the Lynx control types. It then compiles the renderer examples printed in the Blueprint against A: `openReport`, the archive workflow with the Lit and React projection and with the Lynx projection, the two Lynx order actions with their different busy policies, and the Lynx setup that binds three instances of one control type. `InstanceView` extends the general `SurfaceView` and is the stronger view of the Lit and React registration. The Lynx declarations use neither `watchById` nor `InstanceView`. One `@ts-expect-error` shows that a general handle has no `read`, so the row example needs the stronger view.
 
-**Receipt.** Saved as `renderer.types.ts` (first 16 hex digits of its SHA-256: `4f2b0ec1fe7b8492`) next to `authoring.types.ts`, which it imports unmodified. TypeScript 6.0.3 and 5.9.3 each ran this command, which is A's command with the file name changed. Running A's command as printed checks only `authoring.types.ts`.
+**Historical receipt.** Before the terminology edit, saved as `renderer.types.ts` (first 16 hex digits of its SHA-256: `4f2b0ec1fe7b8492`) next to `authoring.types.ts`, which it imports unmodified. TypeScript 6.0.3 and 5.9.3 each ran this command, which is A's command with the file name changed. Running A's command as printed checks only `authoring.types.ts`.
 
 ```text
 tsc --noEmit --strict --noUncheckedIndexedAccess --exactOptionalPropertyTypes \
@@ -1204,7 +1208,7 @@ tsc --noEmit --strict --noUncheckedIndexedAccess --exactOptionalPropertyTypes \
 
 Both compilers exited 0 with no diagnostics. With the one directive removed, each reported exactly one error, TS2339 on `read` for the general handle. The Lynx control and the Lit and React host have signatures only. No body runs.
 
-**What this check cannot show.** The Lynx declarations say only that `itemKey` returns a reader, so the compiler cannot tell whether two calls on one occurrence are compatible. In the proposed Lynx slot an occurrence tracks one item key, `itemKey` starts that watch at once, and a second different key throws. The setup example below therefore calls `itemKey` only inside the branch that binds, and an unrecognized ID starts no watch. That follows from the proposed mechanism in [section D](#d-lynx-freshness-and-admission-mechanism). It is not something the declaration check establishes.
+**What this check cannot show.** The Lynx declarations say only that `itemKey` returns a reader, so the compiler cannot tell whether two calls on one instance are compatible. In the proposed Lynx slot an instance tracks one item key, `itemKey` starts that watch at once, and a second different key throws. The setup example below therefore calls `itemKey` only inside the branch that binds, and an unrecognized ID starts no watch. That follows from the proposed mechanism in [section D](#d-lynx-freshness-and-admission-mechanism). It is not something the declaration check establishes.
 
 ```ts
 // Declaration-level check of the renderer-facing declarations and examples printed in the Blueprint,
@@ -1221,28 +1225,28 @@ import {
   type SurfaceView,
 } from './authoring.types';
 
-// ---- Lit and React: occurrence data and the stronger view ----------------------------------------
-export interface OccurrenceEvent extends ComponentEvent {
+// ---- Lit and React: instance data and the stronger view ----------------------------------------
+export interface InstanceEvent extends ComponentEvent {
   readonly dataPath: string; // '/' outside any template
   readonly native: Event;
-  read(path: string): unknown; // this occurrence's data scope, now; answers only during delivery
+  read(path: string): unknown; // this instance's data scope, now; answers only during delivery
 }
-export interface OccurrenceHandle<Events> extends ComponentHandle<Events> {
+export interface InstanceHandle<Events> extends ComponentHandle<Events> {
   readonly dataPath: string;
-  read(path: string): unknown; // undefined once the occurrence is not live
+  read(path: string): unknown; // undefined once the instance is not live
 }
 export interface ActionButtonEvents {
-  readonly activate: OccurrenceEvent;
+  readonly activate: InstanceEvent;
 }
 export declare const ActionButton: ComponentKind<ActionButtonEvents>;
 
 // The stronger view that the Lit and React registration supplies. It stays assignable to SurfaceView.
-export interface OccurrenceView extends SurfaceView {
-  getById<Events>(id: string, kind: ComponentKind<Events>): OccurrenceHandle<Events>;
+export interface InstanceView extends SurfaceView {
+  getById<Events>(id: string, kind: ComponentKind<Events>): InstanceHandle<Events>;
   watchById<Events>(
     id: string,
     kind: ComponentKind<Events>,
-    onHandle: (handle: OccurrenceHandle<Events>) => void,
+    onHandle: (handle: InstanceHandle<Events>) => void,
   ): () => void;
 }
 
@@ -1267,41 +1271,41 @@ export interface OpenInfo {
   readonly read: (path: string) => unknown;
   readonly watchScope?: (revalidate: () => void) => () => void;
 }
-export interface OpenOccurrence {
+export interface OpenInstance {
   activate(event: string, native: Event): 'started' | 'unbound' | 'retired';
   readonly retire: () => void;
 }
-export interface OccurrenceHost {
-  register(setup: (view: OccurrenceView) => void): () => void;
-  open(info: OpenInfo): OpenOccurrence;
+export interface InstanceHost {
+  register(setup: (view: InstanceView) => void): () => void;
+  open(info: OpenInfo): OpenInstance;
   close(): void;
 }
-export declare function createOccurrenceHost(options: { onSetupError(error: unknown): void }): OccurrenceHost;
+export declare function createInstanceHost(options: { onSetupError(error: unknown): void }): InstanceHost;
 
-declare const occurrenceView: OccurrenceView;
+declare const instanceView: InstanceView;
 declare const reportPanel: { open(): void };
 
-export const openReport = Action.local<OccurrenceEvent>('open-report')
+export const openReport = Action.local<InstanceEvent>('open-report')
   .run(() => reportPanel.open())
   .build();
 
 // The archive workflow from the authoring section, with this renderer's projection of the note identifier.
-export const archiveNoteFromRow = archiveNoteWith((event: OccurrenceEvent) => requireNoteId(event.read('id')));
+export const archiveNoteFromRow = archiveNoteWith((event: InstanceEvent) => requireNoteId(event.read('id')));
 
-occurrenceView.watchById('open-report', ActionButton, (handle) => {
+instanceView.watchById('open-report', ActionButton, (handle) => {
   handle.bindAction('activate', openReport);
 });
-occurrenceView.watchById('row-archive', ActionButton, (handle) => {
+instanceView.watchById('row-archive', ActionButton, (handle) => {
   handle.bindAction('activate', archiveNoteFromRow, { subject: () => handle.read('id') });
 });
 
-// An action written for the general view also works against the occurrence view.
+// An action written for the general view also works against the instance view.
 export function attachGeneral(view: SurfaceView): void {
   view.watchById('open-report', ActionButton, (handle) => {
     handle.bindAction('activate', openReport);
   });
 }
-attachGeneral(occurrenceView);
+attachGeneral(instanceView);
 
 // A general handle has no reader, so the row example needs the stronger view.
 export function attachRowToGeneralView(view: SurfaceView): void {
@@ -1320,14 +1324,14 @@ export interface ControlActivation extends ComponentEvent {
 export interface ControlEvents {
   readonly activate: ControlActivation;
 }
-export interface LynxOccurrenceHandle extends ComponentHandle<ControlEvents> {
+export interface LynxInstanceHandle extends ComponentHandle<ControlEvents> {
   readonly sourceComponentId: string;
   read(prop: string): unknown; // live, background only
   itemKey(prop: string): () => unknown; // a subject reader, background only
 }
 export interface ActionControlOptions {
   readonly name: string;
-  setup(handle: LynxOccurrenceHandle): void;
+  setup(handle: LynxInstanceHandle): void;
   onSetupError(error: unknown): void;
   readonly disableWhileBusy?: boolean;
 }
@@ -1367,7 +1371,7 @@ export const actionButton = createActionControl({
   name: 'ActionButton',
   setup(handle) {
     'background only';
-    // An occurrence tracks one item key, and `itemKey` starts that watch at once. Each branch therefore
+    // An instance tracks one item key, and `itemKey` starts that watch at once. Each branch therefore
     // asks only for its own key, and an unrecognized ID starts no watch.
     switch (handle.sourceComponentId) {
       case 'submit-order':
@@ -1390,26 +1394,26 @@ export const actionButton = createActionControl({
 
 ## C. Printed renderer blocks
 
-The Lit schema module and element, the React boundary, entry, provider and setup hook, and the React application sketch were extracted from the Blueprint text unchanged and compiled in a scratch project. The project holds these files in `src/`:
+Before the terminology edit, the Lit schema module and element, the React boundary, entry, provider and setup hook, and the React application sketch were extracted from the Blueprint text unchanged and compiled in a scratch project. The recipe below uses the current illustrative names; the historical project used `occurrence.ts` and `Occurrence*` instead of `instance.ts` and `Instance*`. Its file layout is:
 
 | File | Content |
 | --- | --- |
 | `authoring.types.ts` | Section A, unchanged |
-| `occurrence.ts` | Section B (`renderer.types.ts`), standing in for the `./occurrence` module that the Lit and React blocks import |
+| `instance.ts` | Section B (`renderer.types.ts`), standing in for the `./instance` module that the Lit and React blocks import |
 | `action-button-schema.ts` | The Blueprint's schema block |
 | `lit.ts` | The Blueprint's Lit element block |
 | `react.tsx` | The Blueprint's React boundary, entry, provider and setup-hook block |
 | `app.tsx` | The wrapper below, then the Blueprint's React application sketch unchanged |
 
-The application sketch prints no imports and calls an application-supplied `reportSetupProblem`. The wrapper supplies the ordinary imports of `ActionDefinition`, `OccurrenceEvent`, `OccurrenceView`, `SurfaceModel`, `ReactCatalogComponent` and `A2uiSurface`, and declares `reportSetupProblem`:
+The application sketch prints no imports and calls an application-supplied `reportSetupProblem`. The wrapper supplies the ordinary imports of `ActionDefinition`, `InstanceEvent`, `InstanceView`, `SurfaceModel`, `ReactCatalogComponent` and `A2uiSurface`, and declares `reportSetupProblem`:
 
 ```tsx
 import { useCallback } from 'react';
 import type { SurfaceModel } from '@a2ui/web_core/v0_9';
 import type { ReactCatalogComponent } from '@a2ui/react/v0_9';
 import type { ActionDefinition } from './authoring.types';
-import { ActionButton, type OccurrenceEvent, type OccurrenceView } from './occurrence';
-import { OccurrenceHostProvider, useActionSetup } from './react';
+import { ActionButton, type InstanceEvent, type InstanceView } from './instance';
+import { InstanceHostProvider, useActionSetup } from './react';
 import { A2uiSurface } from '@a2ui/react/v0_9';
 declare function reportSetupProblem(error: unknown): void;
 ```
@@ -1431,7 +1435,7 @@ The project's `tsconfig.json` maps SAGA's Zod export to the `zod` package throug
 }
 ```
 
-The command, run from the project root, was `tsc -p tsconfig.json` with TypeScript 5.9.3. It ran twice, once in a project whose `@a2ui/lit`, `@a2ui/web_core` and `@a2ui/react` are all at 0.13.0 and once with all three at 0.14.0. Both projects also install `lit` 3.3.3, `react` and `react-dom` 19.3.1, `@types/react` 19.3.0 and `zod` 3.25.76. Copying only the Blueprint's excerpts does not reproduce the check: the renderer declarations as `occurrence.ts`, the wrapper and this configuration are all needed. Removing the wrapper's `reportSetupProblem` declaration makes the compiler report that it cannot find the name, so the wrapper is part of what was checked.
+The command, run from the project root, was `tsc -p tsconfig.json` with TypeScript 5.9.3. It ran twice, once in a project whose `@a2ui/lit`, `@a2ui/web_core` and `@a2ui/react` are all at 0.13.0 and once with all three at 0.14.0. Both projects also install `lit` 3.3.3, `react` and `react-dom` 19.3.1, `@types/react` 19.3.0 and `zod` 3.25.76. Copying only the Blueprint's excerpts does not reproduce the check: the renderer declarations as `instance.ts`, the wrapper and this configuration are all needed. Removing the wrapper's `reportSetupProblem` declaration makes the compiler report that it cannot find the name, so the wrapper is part of what was checked.
 
 | Check | Result |
 | --- | --- |
@@ -1444,23 +1448,23 @@ The Lit app-element amendment in the Blueprint is illustrative and was not compi
 
 This section holds the detail behind the Lynx freshness summary in the [Blueprint](./action_binding.blueprint.md#lynx-lynx-jsgenui-070): the code sketches for the live reader, the observed-key epoch, the source-following subscription and tap admission, the walkthrough of each interval, and the table of situations. It is a proposed mechanism with pinned source citations. It was compiled only in an earlier, reported form (see [Reported renderer checks](#reported-renderer-checks)), and the sketches below are excerpts, not the checked files. Source fact numbers refer to the numbered list in the Blueprint's Lynx section.
 
-**Freshness: which item an occurrence shows.** A logical instance can present a different application item without remounting. After a reorder or a same-position replacement, the processor can produce the same `row:0` ID, the same `/orders/0` path and the same resource for item B that it produced for item A (source fact 8), and the `List` branches key by child ID, by `item.key` or by index, so an instance may also follow an item to a new path. A binding that depended only on surface, component ID and data path would leave A's pending invocation attached to a component now displaying B. That is a lifetime-correctness problem, not only a labeling one. Hiding a stale snapshot during render would be presentation and not cancellation, and it would not protect an application hook that completes before the commit effect has run. What the runtime does when it finds a changed key is the common [outcome rule](./action_binding.blueprint.md#outcome-decision-and-obsolescence): with a subject reader, an undecided invocation is canceled with `subject-changed` and the binding stays installed, and an already-decided outcome is kept. This subsection covers only what the adapter supplies. It has four parts.
+**Freshness: which item an instance shows.** A logical instance can present a different application item without remounting. After a reorder or a same-position replacement, the processor can produce the same `row:0` ID, the same `/orders/0` path and the same resource for item B that it produced for item A (source fact 8), and the `List` branches key by child ID, by `item.key` or by index, so an instance may also follow an item to a new path. A binding that depended only on surface, component ID and data path would leave A's pending invocation attached to a component now displaying B. That is a lifetime-correctness problem, not only a labeling one. Hiding a stale snapshot during render would be presentation and not cancellation, and it would not protect an application hook that completes before the commit effect has run. What the runtime does when it finds a changed key is the common [outcome rule](./action_binding.blueprint.md#outcome-decision-and-obsolescence): with a subject reader, an undecided invocation is canceled with `subject-changed` and the binding stays installed, and an already-decided outcome is kept. This subsection covers only what the adapter supplies. It has four parts.
 
 | Question | Mechanism | Runs |
 | --- | --- | --- |
 | Is the running invocation still about the item the data model holds now? | The subject reader, a fresh read of the data model, called by the runtime at its checkpoints and by `current()` in hooks | Background |
 | Can the adapter tell the runtime sooner than its next checkpoint? | A subscription to the key's signal that counts observed changes and calls `recheck()` | Background |
-| Is this tap from a render that still matches the occurrence? | A token captured in render and compared in `activate` | Render (pure), then background |
+| Is this tap from a render that still matches the instance? | A token captured in render and compared in `activate` | Render (pure), then background |
 | Does the subscription follow the key's actual source? | `reconcile`, run when the key is first tracked, from the commit effect `sync` (which records the committed data context path), and from the component resource's subscription. It compares signal identity, not a path string | Background |
 
-*Where current state comes from.* The subject reader does not read the render's props, which can be one render old. It reads the authoritative state through public types: the raw component the surface holds now (`surface.components.get(id)`), its plain `{ path }` binding resolved against the occurrence's data context path, and the signal for that path in `surface.store`. This is the resolution the built-in resolver itself performs (source fact 3), and by source fact 7 the processor writes the signal store before it publishes component updates, so from the processor's effect onward a read sees the new item before any component re-renders. A literal value is read as itself. A binding that is a function call or any other shape, and an empty resolved path, is unreadable: the live reader returns `undefined`, and the change from a readable key to `undefined` counts as a change. Four limits apply, and each is a stated dependency and not a proven property.
+*Where current state comes from.* The subject reader does not read the render's props, which can be one render old. It reads the authoritative state through public types: the raw component the surface holds now (`surface.components.get(id)`), its plain `{ path }` binding resolved against the instance's data context path, and the signal for that path in `surface.store`. This is the resolution the built-in resolver itself performs (source fact 3), and by source fact 7 the processor writes the signal store before it publishes component updates, so from the processor's effect onward a read sees the new item before any component re-renders. A literal value is read as itself. A binding that is a function call or any other shape, and an empty resolved path, is unreadable: the live reader returns `undefined`, and the change from a readable key to `undefined` counts as a change. Four limits apply, and each is a stated dependency and not a proven property.
 
 - `absolutePath` copies the three-line rule of the renderer's `resolveBindingPath`, which is not exported. It is a version-sensitive copy, and a planned runtime case compares it with the resolved prop.
 - `getSignal` creates an empty signal when the path is absent, so a read has the observable side effect of registering a path with no value, which the store tolerates by design.
 - The data context path comes from the last committed render. A processor-expanded clone's map entry also carries its path, but a `List` template row's path exists only in the `List`'s own render, so the reader uses the committed path in every case to keep one rule. When an item moves to a new path, the reader reads the old path until `sync` runs, sees another item there and reports a change. That cancels conservatively, and `sync` then moves the subscription to the new path.
 - Signals are documented as reactive on the background thread. The `@lynx-js/react-signals` README (version 0.0.6, a dependency of GenUI 0.7.0) says the ReactLynx build keeps them reactive on the background thread and uses static values in main-thread first-screen rendering. Every read and subscription here is background code. Whether `peek()` and `subscribe` behave as in Node on a Lynx background runtime is unverified.
 
-*The subject reader and the observed-key epoch.* `handle.itemKey('orderId')` returns the reader the application passes as `subject`. It returns the key joined with an adapter-owned counter, `"<epoch>:<key>"`, or `undefined` when the occurrence is retired or the key is unreadable. A key alone cannot distinguish an A, B, A that nobody observed, because the two A keys are equal under `Object.is`. The adapter supplies the narrower thing it can: the observed-key epoch increases whenever its subscription to the key's signal observes a different value.
+*The subject reader and the observed-key epoch.* `handle.itemKey('orderId')` returns the reader the application passes as `subject`. It returns the key joined with an adapter-owned counter, `"<epoch>:<key>"`, or `undefined` when the instance is retired or the key is unreadable. A key alone cannot distinguish an A, B, A that nobody observed, because the two A keys are equal under `Object.is`. The adapter supplies the narrower thing it can: the observed-key epoch increases whenever its subscription to the key's signal observes a different value.
 
 ```ts
 private onKey(value: unknown): void {
@@ -1473,7 +1477,7 @@ private onKey(value: unknown): void {
 }
 ```
 
-The signal subscription calls back with each distinct stored value, so an observed A, B, A produces two increments and changes the token even though both keys are `A`. A change that never became visible to the subscription, such as B set and reverted inside one batched update, is not a state anybody could have observed, and this narrower policy does not claim to detect it. An application that needs more joins a revision or version field into the key and binds that. The commit effect keeps no count of its own: the epoch moves only on a value a subscription delivers. When the effect or the resource moves the subscription to another signal, that signal's first value is compared with the last value seen, so the epoch steps only if the displayed key differs. A second counting source could cancel the invocation of the item that is now correctly displayed. This subscription is the adapter's own occurrence observation and may stay active while the binding is idle, because it maintains the tap-admission epoch. It is separate from the runtime's optional, invocation-owned wake-up, and an invocation settling must not erase its identity history. The runtime then compares as described under [the seam](./action_binding.blueprint.md#the-runtime-and-adapter-seam), after first revalidating the old invocation whenever a new tap meets a busy binding.
+The signal subscription calls back with each distinct stored value, so an observed A, B, A produces two increments and changes the token even though both keys are `A`. A change that never became visible to the subscription, such as B set and reverted inside one batched update, is not a state anybody could have observed, and this narrower policy does not claim to detect it. An application that needs more joins a revision or version field into the key and binds that. The commit effect keeps no count of its own: the epoch moves only on a value a subscription delivers. When the effect or the resource moves the subscription to another signal, that signal's first value is compared with the last value seen, so the epoch steps only if the displayed key differs. A second counting source could cancel the invocation of the item that is now correctly displayed. This subscription is the adapter's own instance observation and may stay active while the binding is idle, because it maintains the tap-admission epoch. It is separate from the runtime's optional, invocation-owned wake-up, and an invocation settling must not erase its identity history. The runtime then compares as described under [the seam](./action_binding.blueprint.md#the-runtime-and-adapter-seam), after first revalidating the old invocation whenever a new tap meets a busy binding.
 
 On timing: in the reported Node checks with the real `SignalStore`, the subscription fires synchronously inside the update, so an invocation is canceled at the data change, before any render or commit effect, and its `onSuccess` write is skipped. A second check removes the adapter's notification and shows that the runtime's own reader still cancels at its next checkpoint. These establish the logic and the Node signal behavior. They do not establish that a Lynx background runtime delivers the subscription callback synchronously, per change, or in an order that precedes React's re-render. If delivery is coalesced or late, the design degrades in a known direction: the reader still catches a changed key at the next checkpoint and `current()` still turns false, and only an unobserved return to the same key goes undetected.
 
@@ -1501,13 +1505,13 @@ activate(token: TapToken): Activation {
 
 The installation check refuses a closure from a previous mount of the same slot. The epoch check refuses a closure from before any observed identity change, including A, B, A. The binding check refuses a closure captured under a binding that has since been disposed and replaced on the same mounted handle, even when the item and the mount are unchanged, by comparing direct references with no registry. The live key comparison does not depend on the subscription: it compares the key the render showed with the data now, so a tap on an old A is refused while the data says B even if no notification arrived. The token comes from `tapToken(snapshot, props)`, which reads only the published snapshot and the render's props, so it is intended to be pure and safe on both runtimes, and its purity is not yet pinned by a build check.
 
-The admission policy for other inputs is *current data*. When a tap is admitted, `input` reads the occurrence's properties from the data model at that moment, not from the render that registered the handler, and copies what it needs before any asynchronous work. If the price shown was 5 and the data now says 6 with the same item key, the action receives 6. The alternative, admitting only a tap whose every captured input is still current, would refuse taps for harmless changes and would need every input captured at render. An application for which the shown value is part of the contract binds a revision into the key.
+The admission policy for other inputs is *current data*. When a tap is admitted, `input` reads the instance's properties from the data model at that moment, not from the render that registered the handler, and copies what it needs before any asynchronous work. If the price shown was 5 and the data now says 6 with the same item key, the action receives 6. The alternative, admitting only a tap whose every captured input is still current, would refuse taps for harmless changes and would need every input captured at render. An application for which the shown value is part of the contract binds a revision into the key.
 
 What each situation does, for a binding that supplies a subject reader:
 
 | Condition | Result |
 | --- | --- |
-| Data changes to B while A's `onSuccess` is running, before any render or commit effect | The adapter's subscription or the runtime's next checkpoint finds B. `current()` is false, the success write is skipped, the invocation ends as `canceled(completing)` with cause `subject-changed`, and the binding stays installed. In the shared contract `current()` also becomes false when that particular callback's permission ends, for example by timeout, even if the binding and subject are unchanged. The common runtime owns that rule, and this adapter supplies only occurrence liveness and the subject reader |
+| Data changes to B while A's `onSuccess` is running, before any render or commit effect | The adapter's subscription or the runtime's next checkpoint finds B. `current()` is false, the success write is skipped, the invocation ends as `canceled(completing)` with cause `subject-changed`, and the binding stays installed. In the shared contract `current()` also becomes false when that particular callback's permission ends, for example by timeout, even if the binding and subject are unchanged. The common runtime owns that rule, and this adapter supplies only instance liveness and the subject reader |
 | Array reorder `[A, B]` to `[B, A]`, instances keep their IDs | Each instance sees a different key, so each undecided invocation is canceled and the instance continues for its new item. A's pending state does not follow A to its new row |
 | Same-position replacement of A with C | An undecided invocation is canceled with `subject-changed`, and the same binding serves C |
 | Keyed `List` branch where A keeps its key and moves to a new path | The commit effect moves the subscription. If the new path holds A, there is no new change. In the interval the old path may show another item, which cancels conservatively |
@@ -1519,7 +1523,7 @@ What each situation does, for a binding that supplies a subject reader:
 | Rows scroll out of view and back in a `<list>` | No change: the logical instance, its effects and its binding continue |
 | Unmount | `close` retires the installation, stops the subscription and disposes the binding. Later closures are refused and later completions are dropped |
 
-After a reorder, A's request may still be running on the server while row 0 shows B. Local cancellation does not prove the server stopped, so the application's server must tolerate a repeated request where that matters, or the application should hold reorders while an action is pending. Application state keyed by business item, such as a pending flag for order A shared across rows, is an ordinary application choice and is not a routing table. The binding's own pending state is not carried across rows, because the cancellation semantics belong to one occurrence.
+After a reorder, A's request may still be running on the server while row 0 shows B. Local cancellation does not prove the server stopped, so the application's server must tolerate a repeated request where that matters, or the application should hold reorders while an action is pending. Application state keyed by business item, such as a pending flag for order A shared across rows, is an ordinary application choice and is not a routing table. The binding's own pending state is not carried across rows, because the cancellation semantics belong to one instance.
 
 ## Reported renderer checks
 
@@ -1527,7 +1531,7 @@ These checks were run by other people earlier, against sources and configuration
 
 ### Earlier Lit and React checks
 
-An earlier independent review compiled the Lit occurrence host and element against the published Lit and `web_core` 0.13.0 packages with the workspace's own Zod and the common authoring types, using a configuration that extended the SDK repository's Lit `tsconfig`, which differs from the standalone command in A. An earlier author-run check compiled the same Lit and React sketches against 0.13.0 and against 0.14.0, and confirmed that `DataContext.surface` is optional in the 0.13.0 declarations, which is why the element's `#open` returns early without it. A Node probe against `@a2ui/web_core` 0.13.0, with no renderer, observed that `DataModel.subscribe` calls its listener synchronously inside `set`, that a descendant change and an ancestor replacement both notify a listener on `/rows/0` and an unrelated path does not, that a relative path read through a context scoped to `/rows/0` resolves against that path, that two separate `set` calls A to B to A were each observed, and that `DataModel.dispose` ended notifications. That is Node behavior of the package. It says nothing about when a Lit element's queued microtask runs relative to a click.
+An earlier independent review compiled the Lit instance host and element against the published Lit and `web_core` 0.13.0 packages with the workspace's own Zod and the common authoring types, using a configuration that extended the SDK repository's Lit `tsconfig`, which differs from the standalone command in A. An earlier author-run check compiled the same Lit and React sketches against 0.13.0 and against 0.14.0, and confirmed that `DataContext.surface` is optional in the 0.13.0 declarations, which is why the element's `#open` returns early without it. A Node probe against `@a2ui/web_core` 0.13.0, with no renderer, observed that `DataModel.subscribe` calls its listener synchronously inside `set`, that a descendant change and an ancestor replacement both notify a listener on `/rows/0` and an unrelated path does not, that a relative path read through a context scoped to `/rows/0` resolves against that path, that two separate `set` calls A to B to A were each observed, and that `DataModel.dispose` ended notifications. That is Node behavior of the package. It says nothing about when a Lit element's queued microtask runs relative to a click.
 
 ### Lynx checks
 
