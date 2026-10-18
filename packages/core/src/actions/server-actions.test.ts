@@ -642,3 +642,94 @@ describe('what the types allow and refuse for a server action', () => {
     void refusedByTheCompiler;
   });
 });
+
+// The cumulative contract joins here: a server action uses the ACT4 hooks and budgets and the ACT5
+// resource scope exactly as a local one does. These cases check the join, not each rule again.
+describe('a server action with the earlier slices’ contract', () => {
+  it('releases a lease taken in the event turn after the outcome hook, on success and on a timeout, and transfers it only on request', async () => {
+    const { transport, requests } = controlledTransport();
+    const ends: string[] = [];
+    const kept: number[] = [];
+    let lease = 0;
+    const play = Action.server<Press>('play', transport)
+      .atActivation(({ scope }) => scope.own(++lease, (token) => void ends.push(`end:${token}`)))
+      .run(async ({ activation, call }) => {
+        await call('start', {});
+        activation.transfer((token) => void kept.push(token));
+        return activation.token;
+      })
+      .limits({ deadlineMs: 500, hookMs: 100 })
+      .onCanceled(({ activation }) => void ends.push(`canceled:${activation.token}`))
+      .build();
+    const { control } = rig(play);
+
+    control.press(); // 1: succeeds, and the handler hands the lease to its owner
+    await settle();
+    requests[0]?.answer.resolve(ok);
+    await settle();
+    expect(kept).toEqual([1]);
+    expect(ends).toEqual([]); // transferred: the scope does not release it
+
+    control.press(); // 2: the work deadline passes with the request outstanding
+    await elapse(500);
+    expect(ends).toEqual(['end:2']);
+    requests[1]?.answer.resolve(ok); // a late reply cannot transfer or release anything
+    await settle();
+    expect(kept).toEqual([1]);
+    expect(ends).toEqual(['end:2']);
+  });
+
+  it('releases the lease of a canceled request exactly once, and cancellation reaches the canceled hook with the lease', async () => {
+    const { transport, requests } = controlledTransport();
+    const events: string[] = [];
+    const archive = Action.server<Press>('archive', transport)
+      .atActivation(({ scope }) => scope.own('lease-1', (token) => void events.push(`release:${token}`)))
+      .run(({ call }) => call('x', {}))
+      .limits({ deadlineMs: 500, hookMs: 100 })
+      .onCanceled(({ activation, stage }) => void events.push(`canceled:${stage}:${activation.token}`))
+      .onFinally(({ outcome }) => void events.push(`finally:${outcome.status}`))
+      .build();
+    const { control, binding } = rig(archive);
+
+    control.press();
+    await settle();
+    binding.dispose();
+    await settle();
+    requests[0]?.answer.resolve(ok);
+    await settle();
+
+    expect(events).toEqual(['canceled:running:lease-1', 'release:lease-1', 'finally:canceled']);
+  });
+
+  it('stops waiting for a success hook, a release or a final hook that never settles, each after hookMs', async () => {
+    const { transport, requests } = controlledTransport();
+    const never = new Promise<void>(() => undefined);
+    const states: string[] = [];
+    const outcomes: Outcome<Reply>[] = [];
+    const archive = Action.server<Press>('archive', transport)
+      .atActivation(({ scope }) => scope.own('lease', () => never))
+      .run(({ call }) => call('x', {}))
+      .limits({ deadlineMs: 1_000, hookMs: 100 })
+      .onSuccess(() => never)
+      .onFailure(() => never)
+      .onFinally(({ outcome, cleanupErrors }) => {
+        outcomes.push(outcome);
+        states.push(cleanupErrors.map((error) => `${error.step}:${error.reason}`).join(','));
+        return never;
+      })
+      .build();
+    const { control, binding } = rig(archive);
+
+    control.press();
+    await settle();
+    requests[0]?.answer.resolve(ok);
+    await elapse(100); // onSuccess overruns its budget
+    expect(binding.state.phase).toBe('settling');
+    await elapse(100); // onFailure
+    await elapse(100); // the release
+    await elapse(100); // onFinally
+    expect(binding.state.phase).toBe('idle');
+    expect(outcomes).toMatchObject([{ status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result: ok } }]);
+    expect(states).toEqual(['onFailure:budget-exceeded,release:budget-exceeded']);
+  });
+});
