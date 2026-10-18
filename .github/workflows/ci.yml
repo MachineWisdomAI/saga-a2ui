@@ -18,5 +18,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The Lynx fixture is its own project with its own lockfile, outside the SDK workspace (see README).
+      - run: npm ci --prefix apps/lynx-fixture
       - run: npx playwright install --with-deps chromium
       - run: npm run verify

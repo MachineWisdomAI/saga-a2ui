@@ -80,6 +80,20 @@ export interface OpenInstance<Events> {
    * longer live. `started` means the callable received the event; a binding that is busy drops it.
    */
   activate<Name extends keyof Events & string>(event: Name, native: NativeOf<Events[Name]>): 'started' | 'unbound' | 'retired';
+  /**
+   * The binding now attached to one event of this instance, by identity: `undefined` while
+   * nothing is attached, and never a disposed binding. An adapter that captures it with what it
+   * renders can later tell, by reference, that the callable `activate` would reach is no longer
+   * the one that render showed. A rebind on the same handle is a different reference.
+   */
+  attached<Name extends keyof Events & string>(event: Name): ActionBinding | undefined;
+  /**
+   * Calls `listener` synchronously after this instance gains or loses an attached binding, and
+   * once when it retires, with the change already visible through `attached`. A listener that
+   * throws affects neither the bind nor the other listeners. Returns the unsubscribe function;
+   * a retired instance never calls a listener again.
+   */
+  subscribe(listener: () => void): () => void;
   /** Idempotent. Disposes every binding on this instance and makes its handles stale. */
   retire(): void;
 }
@@ -112,6 +126,7 @@ interface InstanceRecord {
   readonly isLive: () => boolean;
   readonly read: (path: string) => unknown;
   readonly slots: Map<string, Slot>;
+  readonly listeners: Set<() => void>;
   retired: boolean;
 }
 
@@ -142,12 +157,36 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
     }
   };
 
+  /** Tells the adapter that this instance's attachment changed. A listener cannot affect the host. */
+  function announce(record: InstanceRecord): void {
+    for (const listener of [...record.listeners]) {
+      // A listener removed by an earlier one in this same pass gets nothing more.
+      if (!record.listeners.has(listener)) continue;
+      try {
+        listener();
+      } catch {
+        // The adapter's listener is not the host's concern.
+      }
+    }
+  }
+
   function retire(record: InstanceRecord): void {
     if (record.retired) return;
     record.retired = true;
     instances.delete(record);
+    // Disposing detaches each slot, which announces; the retirement itself announces once below.
+    // Mute those, so a subscriber sees one change with the instance already empty and retired.
+    const listeners = [...record.listeners];
+    record.listeners.clear();
     for (const slot of [...record.slots.values()]) slot.binding.dispose();
     record.slots.clear();
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch {
+        // See `announce`.
+      }
+    }
   }
 
   function end(registration: Registration): void {
@@ -182,9 +221,11 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
         }
         const installation = {};
         const detach = (): void => {
-          if (record.slots.get(event)?.installation === installation) record.slots.delete(event);
+          const detached = record.slots.get(event)?.installation === installation;
+          if (detached) record.slots.delete(event);
           registration.bindings.delete(binding);
           for (const scope of registration.callbackScopes) scope.delete(binding);
+          if (detached) announce(record);
         };
         // Throws for a definition `Action` did not build, before anything is installed.
         const { binding, activate } = createBinding(action, detach);
@@ -215,6 +256,7 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
         });
         registration.bindings.add(binding);
         registration.callbackScopes.at(-1)?.add(binding);
+        announce(record);
         return binding;
       },
     };
@@ -295,6 +337,7 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
         isLive: info.isLive,
         read: info.read,
         slots: new Map(),
+        listeners: new Set(),
         retired: closed,
       };
       if (!closed) {
@@ -313,6 +356,14 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
           if (slot === undefined) return 'unbound';
           slot.deliver(native);
           return 'started';
+        },
+        attached: (event) => record.slots.get(event)?.binding,
+        subscribe(listener) {
+          if (record.retired) return () => undefined;
+          record.listeners.add(listener);
+          return () => {
+            record.listeners.delete(listener);
+          };
         },
         retire: () => retire(record),
       };
