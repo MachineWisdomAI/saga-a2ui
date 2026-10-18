@@ -14,7 +14,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ### Core
 
-`core/` (implemented, private) holds renderer-independent interfaces, value objects and processing. It owns the A2UI wire-version protocols, including A2UI decoding, and keeps parsing and message cases under `src/protocols/a2ui/<version>/`, not in generic utilities or renderer adapters.
+`core/` (implemented, private) holds renderer-independent interfaces, value objects and processing. It owns the A2UI wire-version protocols, including A2UI decoding, and keeps parsing and message cases under `src/protocols/a2ui/<version>/`, not in generic utilities or renderer adapters. The shared behavior of the [action binding](../blueprints/modules/action_binding.blueprint.md) module lives in its own subtree, `src/actions/`, exported as `@saga-a2ui/core/actions`. It is provisional and implements only the ACT1 subset (see the README's "Direct action attachment (ACT1)"); it imports no renderer, DOM implementation, MCP runtime or third-party module.
 
 ### Delivery
 
@@ -22,7 +22,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ### GenUI renderers
 
-GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations.
+GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations. `lit/` is the only one implemented; its opt-in action control and setup (`ActionButton`, `createLitActions`) are the optional `@saga-a2ui/lit/actions` export, which the main `@saga-a2ui/lit` entry does not import.
 
 ### Components
 
