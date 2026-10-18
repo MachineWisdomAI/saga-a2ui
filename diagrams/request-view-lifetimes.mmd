@@ -1,0 +1,46 @@
+graph TD
+  D["Definition (application code)<br/>no pending flag, timer or resource"]
+  B["Binding: one definition on one<br/>rendered instance"]
+  E["User event on the instance"]
+  P["Activation prefix: input, atActivation<br/>binding running, no timer"]
+  Q["Prerequisites in order (sync or async), then<br/>handler. Work deadline starts after the prefix"]
+  L["Local async work<br/>(optional, inside the handler)"]
+  S["Server request (optional, through call)<br/>own lifetime, see server figure"]
+  SH["Required onSuccess, own hookMs<br/>error or timeout can decide failed"]
+  H["Outcome decided once"]
+  FH["After the decision: outcome hook, releases of<br/>untransferred scope tokens, onFinally if configured<br/>each under its own hookMs, then settled"]
+  C["Presenting callback, still active:<br/>await, then its own current()"]
+  F{"current() true?"}
+  W["Synchronous presentation write"]
+  X["Skip the write<br/>outcome stays as decided"]
+  R["Resource held by a token<br/>in the invocation's scope"]
+  O["Application resource owner<br/>e.g. player lease"]
+  OT["Application policy: owner's own<br/>teardown ends a retained lease"]
+  T["Selection change, label loss<br/>or ActionBinding.dispose()"]
+  HT["Host teardown: onTeardown"]
+  HC["Host closes the connection<br/>after the answer"]
+  K["Later idempotent connection.dispose()<br/>separate from host closure"]
+  D -->|attached to| B
+  E --> B
+  B -->|admitted| P
+  P --> Q
+  Q -.-> L
+  Q -.->|call: signal and time left| S
+  Q -->|handler returned| SH
+  Q -->|throw, deadline or cancel| H
+  SH --> H
+  H --> FH
+  SH -.->|may present| C
+  FH -.->|may present| C
+  C --> F
+  F -->|yes| W
+  F -->|no| X
+  Q -->|acquires| R
+  R -->|explicit handoff by the application| O
+  R -.->|not handed off: released in cleanup| FH
+  T -->|cancels an undecided invocation| Q
+  HT -->|disposes each binding| T
+  HT -->|owner's own teardown| OT
+  OT --> O
+  HT -.->|answers the host, no view-side close| HC
+  HC -.-> K

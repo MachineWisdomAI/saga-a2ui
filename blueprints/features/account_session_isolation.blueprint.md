@@ -11,13 +11,13 @@ date_added: 2026-10-15
 
 Rejected on 2026-10-16. This proposal is not approved for implementation. No demonstrated real-host workflow or current consumer requires its proposed generic machinery for switching accounts within a live view. Whether a host retains the iframe across an account change remains unverified; the review did not establish content injection or an authorization bypass.
 
-Existing authentication, authorization and request isolation remain required, as do ordinary selection, cancellation and cleanup obligations. No replacement design is approved.
+Existing authentication, authorization and request isolation remain required, as do ordinary selection, cancellation and cleanup obligations. The approved [request and view lifetimes](request_view_lifetimes.blueprint.md) successor covers ordinary lifecycle correctness without adopting this rejected generic machinery.
 
 ## Status
 
 - Design: rejected on 2026-10-16; the decision concerns [`ff0f4da45c40cf2581d7f3198a2fceb04aba593b`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/blueprints/features/account_session_isolation.blueprint.md). The original proposal and diagram remain below.
 - Implementation: no implementation of this rejected contract is claimed. Existing authentication and ordinary lifecycle safeguards have their own requirements.
-- Proposed successor: [Request and view lifetimes at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md), [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), draft. No approved replacement exists; this proposal remains rejected.
+- Approved successor: [Request and view lifetimes at `7836c80345cec2aeb474d2eb026a1b9455819ef2`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7836c80345cec2aeb474d2eb026a1b9455819ef2/blueprints/features/request_view_lifetimes.blueprint.md), approved by the human owner on 2026-10-17 in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69). It replaces this proposal only with the narrower ordinary-lifetime scope. This proposal remains rejected; its earlier proposed successor at [`d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md) remains a historical draft record.
 
 ## Rejected proposal retained for reference
 
