@@ -90,6 +90,89 @@ export interface ActionConsumer {
    */
   readonly pendingSessions: ((answer: 'signed-in' | 'signed-out') => void)[];
   readonly pendingRows: { app: string; noteId: string; release: () => void }[];
+  /** Scenario `resource` only: the application's own owner of a single shared player. */
+  readonly player: PlayerOwner;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Scenario `resource` (ACT5): the application-owned token fixture. One shared player, one lease
+// per acquisition. `end(lease)` is token-scoped and idempotent, `begin()` supersedes the previous
+// lease, and `endCurrent()` is the owner's own teardown, which SAGA never calls. The test decides
+// when a start answers, so it chooses the order in which things settle.
+// ---------------------------------------------------------------------------------------------
+
+export interface Lease {
+  readonly id: number;
+}
+
+export class PlayerOwner {
+  private count = 0;
+  private current: Lease | undefined;
+  private readonly calls: string[] = [];
+  private readonly audible = new Set<number>();
+  private readonly kept = new Set<number>();
+  private readonly ended = new Set<number>();
+  /** Each pending `start`; the test answers it. */
+  readonly pendingStarts: ((answer: 'started' | 'blocked') => void)[] = [];
+  /** Each pending acquisition of a lease after the event turn; the test lets it arrive. */
+  readonly pendingAcquires: (() => void)[] = [];
+  /** Each handler held after it transferred, before it returns its answer to the runtime. */
+  readonly pendingAnswers: (() => void)[] = [];
+  /** Makes the next handler wait after the transfer, so a cancellation can arrive before its answer is observed. */
+  holdAfterTransfer = false;
+  /** Makes the next success presentation throw. */
+  failNextPresentation = false;
+
+  begin(): Lease {
+    const lease = { id: ++this.count };
+    if (this.current !== undefined) this.audible.delete(this.current.id);
+    this.current = lease;
+    this.calls.push(`begin:${lease.id}`);
+    return lease;
+  }
+
+  start(lease: Lease): Promise<'started' | 'blocked'> {
+    this.calls.push(`start:${lease.id}`);
+    if (this.current !== lease) return Promise.reject(new Error(`lease ${lease.id} was superseded`));
+    return new Promise((resolve) => {
+      this.pendingStarts.push((answer) => {
+        // A lease that ended meanwhile never starts: the owner tests the exact acquisition.
+        if (answer === 'started' && this.current === lease && !this.ended.has(lease.id)) this.audible.add(lease.id);
+        resolve(answer);
+      });
+    });
+  }
+
+  keep(lease: Lease): void {
+    this.calls.push(`keep:${lease.id}`);
+    this.kept.add(lease.id);
+  }
+
+  end(lease: Lease): void {
+    this.calls.push(`end:${lease.id}`);
+    this.ended.add(lease.id);
+    if (this.current === lease) {
+      this.audible.delete(lease.id);
+      this.kept.delete(lease.id);
+    }
+  }
+
+  /** The owner's own teardown. */
+  endCurrent(): void {
+    this.calls.push('endCurrent');
+    if (this.current !== undefined) this.end(this.current);
+  }
+
+  /** Another part of the application takes the single player. Returns the new lease's id. */
+  takeOver(): number {
+    const lease = this.begin();
+    this.audible.add(lease.id);
+    return lease.id;
+  }
+
+  snapshot(): { calls: string[]; audible: number[]; kept: number[] } {
+    return { calls: [...this.calls], audible: [...this.audible], kept: [...this.kept] };
+  }
 }
 
 declare global {
@@ -112,6 +195,7 @@ const consumer: ActionConsumer = {
   failSetupFor: undefined,
   pendingSessions: [],
   pendingRows: [],
+  player: new PlayerOwner(),
   stopDiscovery: (app) => (stoppers[app] ?? []).forEach((stop) => stop()),
   send: (app, input) => {
     const element = document.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>(`[data-app="${app}"]`);
@@ -374,6 +458,111 @@ function asyncAttachFor(app: string) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Scenario `resource` (ACT5): a Play-style action that takes a lease in the event's own call
+// stack, starts after an asynchronous wait, and hands a started lease to its owner; and a Lookup
+// action that acquires a lease after the event turn. The Play definition follows the Blueprint's
+// chosen policy, narrowing the returned result before it presents or recovers.
+// ---------------------------------------------------------------------------------------------
+
+const resourceLayout = (surfaceId: string) => [
+  { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId,
+      components: [
+        { id: 'root', component: 'Column', children: ['play', 'lookup'] },
+        { id: 'play', component: 'ActionButton', child: 'play-label' },
+        { id: 'play-label', component: 'Text', text: 'Play' },
+        { id: 'lookup', component: 'ActionButton', child: 'lookup-label' },
+        { id: 'lookup-label', component: 'Text', text: 'Lookup' },
+      ],
+    },
+  },
+];
+
+const makePlay = (app: string) => {
+  const { player } = consumer;
+  return Action.local<ActionButtonActivation>('play')
+    .atActivation(({ scope }) => scope.own(player.begin(), (lease) => player.end(lease)))
+    .run(async ({ activation }) => {
+      const started = await player.start(activation.token);
+      // Not started: the scope still owns the lease and gives it back. Started: hand it to the owner, no await between.
+      if (started === 'blocked') return { state: 'gesture-needed' } as const;
+      if (!activation.transfer((lease) => player.keep(lease))) return { state: 'gesture-needed' } as const;
+      if (player.holdAfterTransfer) {
+        player.holdAfterTransfer = false;
+        await new Promise<void>((resolve) => player.pendingAnswers.push(resolve));
+      }
+      return { state: 'playing', lease: activation.token } as const;
+    })
+    .limits({ deadlineMs: 5000, hookMs: 1000 })
+    .onSuccess(({ result }) => {
+      if (player.failNextPresentation) {
+        player.failNextPresentation = false;
+        throw new Error('the view update failed');
+      }
+      present(app, 'message', result.state === 'playing' ? 'playing' : 'gesture needed');
+    })
+    .onCanceled(({ activation, stage }) => {
+      // Every stage carries the token: end exactly this lease, whether or not it was transferred.
+      player.end(activation.token);
+      consumer.log.push({ app, action: 'play-canceled', stage, lease: activation.token.id });
+    })
+    .onFailure((context) => {
+      if (context.stage === 'running') {
+        const { failure } = context;
+        if (failure.kind === 'success-hook-error' || failure.kind === 'success-hook-timeout') {
+          // Chosen policy: only a result that records a started, transferred lease stays owner-held.
+          if (failure.result.state === 'playing') return present(app, 'message', 'playing, but the view failed');
+        }
+        player.end(context.activation.token);
+      } else if (context.stage === 'prerequisites') {
+        player.end(context.activation.token);
+      }
+      present(app, 'message', 'failed');
+    })
+    .build();
+};
+
+const makeLookup = (app: string) => {
+  const { player } = consumer;
+  return Action.local<ActionButtonActivation>('lookup')
+    .run(async ({ scope }) => {
+      // The event turn is over: the lease arrives whenever the test lets it.
+      const held = await scope.acquire(
+        () => new Promise<Lease>((resolve) => player.pendingAcquires.push(() => resolve(player.begin()))),
+        (lease) => player.end(lease),
+      );
+      consumer.log.push({ app, action: 'lookup-held', lease: held.token.id });
+      return held.token.id;
+    })
+    .limits({ deadlineMs: 5000, hookMs: 1000 })
+    .onSuccess(({ result }) => present(app, 'message', `looked up with lease ${result}`))
+    .build();
+};
+
+function resourceAttachFor(app: string) {
+  const play = makePlay(app);
+  const lookup = makeLookup(app);
+  return (view: InstanceView): void => {
+    consumer.attachCalls[app] = (consumer.attachCalls[app] ?? 0) + 1;
+    consumer.views[app] = view;
+    view.watchById('play', ActionButton, (handle) => {
+      const binding = handle.bindAction('activate', play);
+      binding.subscribe(() => present(app, 'phase', binding.state.phase));
+      trace(app, handle, binding);
+    });
+    view.watchById('lookup', ActionButton, (handle) => trace(app, handle, handle.bindAction('activate', lookup)));
+  };
+}
+
+const layoutFor = (surfaceId: string) =>
+  scenario === 'resource' ? resourceLayout(surfaceId) : scenario === 'async' ? asyncLayout(surfaceId) : layout(surfaceId);
+const attachForScenario = (app: string) =>
+  scenario === 'resource' ? resourceAttachFor(app) : scenario === 'async' ? asyncAttachFor(app) : attachFor(app);
+
 function defineApp(app: string): void {
   customElements.define(
     `${app}-app`,
@@ -388,10 +577,10 @@ function defineApp(app: string): void {
         });
         return session;
       },
-      initialInput: scenario === 'async' ? asyncLayout(SURFACE_ID) : layout(SURFACE_ID),
+      initialInput: layoutFor(SURFACE_ID),
       surfaceId: SURFACE_ID,
       actions: createLitActions({
-        attach: scenario === 'async' ? asyncAttachFor(app) : attachFor(app),
+        attach: attachForScenario(app),
         onSetupError: (error) => consumer.setupErrors.push(String(error)),
       }),
     }),
@@ -404,7 +593,7 @@ defineApp('two');
 
 for (const app of ['one', 'two']) {
   const section = document.querySelector(`#${app}`);
-  if (scenario === 'async') {
+  if (scenario === 'async' || scenario === 'resource') {
     for (const kind of ['phase', 'message']) {
       const line = document.createElement('p');
       line.dataset[kind] = app;

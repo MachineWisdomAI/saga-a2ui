@@ -1,6 +1,9 @@
+import { vi } from 'vitest';
 import {
   componentKind,
   createInstanceHost,
+  type ActionBinding,
+  type BindOptions,
   type InstanceEvent,
   type InstanceHost,
   type OpenInstance,
@@ -84,4 +87,57 @@ export function renderInstance(
 
 export function newHost(onSetupError: (error: unknown) => void = () => undefined): InstanceHost {
   return createInstanceHost({ onSetupError });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared by the action suites: a gated promise, the controlled clock, and a one-control rig.
+// ---------------------------------------------------------------------------------------------
+
+export interface Gate<T> {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+  reject(error: unknown): void;
+}
+/** A promise the test settles, so the order in which things settle is never an accident of scheduling. */
+export function gate<T = void>(): Gate<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onValue, onError) => {
+    resolve = onValue;
+    reject = onError;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Lets promise callbacks run without moving the clock. */
+export const settle = (): Promise<unknown> => vi.advanceTimersByTimeAsync(0);
+export const elapse = (ms: number): Promise<unknown> => vi.advanceTimersByTimeAsync(ms);
+
+export interface Rig {
+  readonly control: FakeInstance;
+  readonly binding: ActionBinding;
+  readonly phases: string[];
+}
+
+/** One control bound to `definition` through the public handle, with the binding's phases recorded. */
+export function rig(
+  definition: unknown,
+  options: { id?: string; data?: Record<string, unknown>; bind?: BindOptions; observable?: boolean } = {},
+): Rig {
+  const host = newHost();
+  const control = renderInstance(host, options.id ?? 'c', {
+    ...(options.data === undefined ? {} : { data: options.data }),
+    ...(options.observable === undefined ? {} : { observable: options.observable }),
+  });
+  let binding: ActionBinding | undefined;
+  host.register((view) => {
+    view.watchById(options.id ?? 'c', Control, (handle) => {
+      binding = handle.bindAction('activate', definition as never, options.bind);
+    });
+  });
+  if (binding === undefined) throw new Error('nothing was bound');
+  const phases: string[] = [];
+  const bound = binding;
+  bound.subscribe(() => phases.push(bound.state.phase));
+  return { control, binding, phases };
 }
