@@ -5,12 +5,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    "./actions": "./src/actions/index.ts",
     "./protocols/a2ui/v0_9": "./src/protocols/a2ui/v0_9/index.ts",
     "./protocols/a2ui/zod3": "./src/protocols/a2ui/zod3.ts"
   },
   "files": [
     "src",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "!src/**/*.test-support.ts"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
