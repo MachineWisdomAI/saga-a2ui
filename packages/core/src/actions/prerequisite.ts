@@ -1,4 +1,5 @@
 import type { Freshness, NoValues } from './outcome.js';
+import type { InvocationScope } from './scope.js';
 
 // A prerequisite is reusable application work that must finish before a handler runs, and it may
 // stop the handler. It is not authorization: whether it reads state, refreshes a token or asks a
@@ -12,6 +13,8 @@ export interface PrerequisiteContext<Needs, Input> extends Freshness {
   readonly params: Input;
   /** Aborts on cancellation or when the work deadline expires. */
   readonly signal: AbortSignal;
+  /** Owns what this invocation acquires and releases it when the invocation ends. */
+  readonly scope: InvocationScope;
 }
 
 export type Proceed<Provides> = { readonly kind: 'proceed'; readonly provides: Provides };

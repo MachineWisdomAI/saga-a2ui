@@ -45,7 +45,15 @@ describe('@saga-a2ui/core exports', () => {
   });
 
   it('expose exactly the supported names for actions', () => {
-    expect(Object.keys(actions).sort()).toEqual(['Action', 'componentKind', 'createInstanceHost', 'prerequisite', 'proceed', 'refuse']);
+    expect(Object.keys(actions).sort()).toEqual([
+      'Action',
+      'InvocationEndedError',
+      'componentKind',
+      'createInstanceHost',
+      'prerequisite',
+      'proceed',
+      'refuse',
+    ]);
   });
 
   it('expose the renderer-neutral ActionButton contract, which refuses an action or a handler name', async () => {

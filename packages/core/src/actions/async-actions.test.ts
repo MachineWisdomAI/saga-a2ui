@@ -13,60 +13,13 @@ import {
   type Outcome,
   type PrerequisiteContext,
 } from './index.js';
-import { Control, newHost, renderInstance, type ControlEvents, type FakeInstance } from './fake-adapter.test-support.js';
+import { Control, elapse, gate, newHost, renderInstance, rig, settle, type ControlEvents, type FakeInstance, type Rig } from './fake-adapter.test-support.js';
 
 // Everything here goes through the public builder and the binding a handle returns, with the
 // renderer-free adapter and a controlled clock. Promises are gated by the test, so the order in
 // which things settle is the test's choice and never an accident of scheduling.
 
 type Press = InstanceEvent<string>;
-
-interface Gate<T> {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(error: unknown): void;
-}
-function gate<T = void>(): Gate<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((onValue, onError) => {
-    resolve = onValue;
-    reject = onError;
-  });
-  return { promise, resolve, reject };
-}
-
-/** Lets promise callbacks run without moving the clock. */
-const settle = (): Promise<unknown> => vi.advanceTimersByTimeAsync(0);
-const elapse = (ms: number): Promise<unknown> => vi.advanceTimersByTimeAsync(ms);
-
-interface Rig {
-  readonly control: FakeInstance;
-  readonly binding: ActionBinding;
-  readonly phases: string[];
-}
-
-function rig(
-  definition: unknown,
-  options: { id?: string; data?: Record<string, unknown>; bind?: BindOptions; observable?: boolean } = {},
-): Rig {
-  const host = newHost();
-  const control = renderInstance(host, options.id ?? 'c', {
-    ...(options.data === undefined ? {} : { data: options.data }),
-    ...(options.observable === undefined ? {} : { observable: options.observable }),
-  });
-  let binding: ActionBinding | undefined;
-  host.register((view) => {
-    view.watchById(options.id ?? 'c', Control, (handle) => {
-      binding = handle.bindAction('activate', definition as never, options.bind);
-    });
-  });
-  if (binding === undefined) throw new Error('nothing was bound');
-  const phases: string[] = [];
-  const bound = binding;
-  bound.subscribe(() => phases.push(bound.state.phase));
-  return { control, binding, phases };
-}
 
 beforeEach(() => {
   vi.useFakeTimers();

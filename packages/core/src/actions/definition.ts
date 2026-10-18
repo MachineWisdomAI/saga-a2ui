@@ -9,26 +9,28 @@ import type {
   RunningFailure,
 } from './outcome.js';
 import type { Prerequisite } from './prerequisite.js';
+import type { ActivationScope, InvocationScope } from './scope.js';
+import type { Synchronous } from './thenable.js';
 
-/**
- * Guard for a callback that must finish in the call that made it. Used as a rest parameter, it
- * asks for an extra argument nothing can supply when the callback's inferred return type has any
- * thenable constituent, so an `async` callback or `Promise<T> | undefined` does not compile. A
- * callback that always throws returns `never` and stays valid. The types cannot see a promise
- * hidden behind a declared `unknown` or `void`, so the runtime checks the returned value too.
- */
-export type Synchronous<Returned> = [Extract<Returned, PromiseLike<unknown>>] extends [never]
-  ? []
-  : [returnedAThenable: never];
+/** What `atActivation` receives, in the event's own call stack. */
+export interface ActivationContext<Event> {
+  readonly event: Event;
+  /** Only the synchronous part of the scope: `acquire` awaits, and nothing here may. */
+  readonly scope: ActivationScope;
+}
 
 /** What the handler receives for one activation. */
-export interface HandlerContext<Params, Provided = unknown> extends Freshness {
+export interface HandlerContext<Params, Activation, Provided = unknown> extends Freshness {
   /** What `input` copied out of the event, or `undefined` for an action without `input`. */
   readonly params: Params;
+  /** What `atActivation` returned, or `undefined` for an action without it. */
+  readonly activation: Activation;
   /** The values the prerequisites provided, in the order they were written. */
   readonly provided: Provided;
   /** Aborts on cancellation or when the work deadline expires. */
   readonly signal: AbortSignal;
+  /** Owns what this invocation acquires and releases it when the invocation ends. */
+  readonly scope: InvocationScope;
 }
 
 /**
@@ -43,32 +45,55 @@ interface HookContext extends Freshness {
   readonly signal: AbortSignal;
 }
 
-export interface SuccessContext<Params, Provided, Result> extends HookContext {
+// Every hook that can follow the activation prefix carries `activation`, so a hook can end exactly
+// the resource this invocation took, whatever stage the outcome was decided in. A failure of the
+// prefix itself has none: `atActivation` did not return one.
+
+export interface SuccessContext<Params, Activation, Provided, Result> extends HookContext {
   readonly params: Params;
+  readonly activation: Activation;
   readonly provided: Provided;
   readonly result: Result;
 }
 
-export type FailureContext<Params, Provided, Result> = HookContext &
+export type FailureContext<Params, Activation, Provided, Result> = HookContext &
   (
     | { readonly stage: 'input'; readonly failure: InputFailure }
-    | { readonly stage: 'prerequisites'; readonly failure: PrerequisiteFailure; readonly params: Params }
+    | {
+        readonly stage: 'prerequisites';
+        readonly failure: PrerequisiteFailure;
+        readonly params: Params;
+        readonly activation: Activation;
+      }
     | {
         readonly stage: 'running';
         readonly failure: RunningFailure<Result>;
         readonly params: Params;
+        readonly activation: Activation;
         readonly provided: Provided;
       }
   );
 
-export type CanceledContext<Params, Provided, Result> = HookContext &
+export type CanceledContext<Params, Activation, Provided, Result> = HookContext &
   (
-    | { readonly stage: 'prerequisites'; readonly cause: CancelCause; readonly params: Params }
-    | { readonly stage: 'running'; readonly cause: CancelCause; readonly params: Params; readonly provided: Provided }
+    | {
+        readonly stage: 'prerequisites';
+        readonly cause: CancelCause;
+        readonly params: Params;
+        readonly activation: Activation;
+      }
+    | {
+        readonly stage: 'running';
+        readonly cause: CancelCause;
+        readonly params: Params;
+        readonly activation: Activation;
+        readonly provided: Provided;
+      }
     | {
         readonly stage: 'completing';
         readonly cause: CancelCause;
         readonly params: Params;
+        readonly activation: Activation;
         readonly provided: Provided;
         readonly result: Result;
       }
@@ -109,7 +134,10 @@ export interface ActionDefinition<Event> {
   readonly accepts?: (event: Event) => void;
 }
 
-/** The start of every definition: `input` is optional, then any number of `before`, then `run`. */
+/**
+ * The start of every definition. The order is fixed: `input` (optional), `atActivation` (optional),
+ * any number of `before`, then `run`.
+ */
 export interface ActionDraft<Event> extends ActionDraftAfterInput<Event, undefined> {
   /**
    * Copies what the handler needs out of the event, once, when it occurs. It runs synchronously
@@ -122,7 +150,23 @@ export interface ActionDraft<Event> extends ActionDraftAfterInput<Event, undefin
   ): ActionDraftAfterInput<Event, Params>;
 }
 
-export interface ActionDraftAfterInput<Event, Params, Provided = unknown> {
+export interface ActionDraftAfterInput<Event, Params> extends ActionDraftChain<Event, Params, undefined> {
+  /**
+   * Work that an API requires inside the event's own call stack, such as taking a lease before
+   * anything is awaited. It runs synchronously after `input`, in the environment and event stack
+   * the adapter delivers the event in, and what it returns reaches the handler and every hook as
+   * `activation`. Its scope can `own` a token the callback already holds and has no `acquire`,
+   * because an acquisition awaits. A thrown error, or a promise the types could not see, ends the
+   * invocation as `activation-error`; tokens it already took into the scope are still released.
+   * `before` promises nothing about activation: it is prerequisite work.
+   */
+  atActivation<Activation>(
+    perform: (context: ActivationContext<Event>) => Activation,
+    ...synchronous: Synchronous<Activation>
+  ): ActionDraftChain<Event, Params, Activation>;
+}
+
+export interface ActionDraftChain<Event, Params, Activation, Provided = unknown> {
   /**
    * A prerequisite: application work that must finish before the handler and may stop it. They
    * run strictly in the order written, each after the previous one proceeded. The compiler
@@ -130,14 +174,14 @@ export interface ActionDraftAfterInput<Event, Params, Provided = unknown> {
    */
   before<Provides extends object>(
     prerequisite: Prerequisite<Provides, Provided, Params>,
-  ): ActionDraftAfterInput<Event, Params, Provided & Provides>;
+  ): ActionDraftChain<Event, Params, Activation, Provided & Provides>;
   /**
    * The local work. It may return a value or a promise; a throw and a rejection are both
    * `handler-error`. It receives the invocation signal and should pass it to cancellable work.
    */
   run<Result>(
-    handler: (context: HandlerContext<Params, Provided>) => Result | PromiseLike<Result>,
-  ): ActionDraftWithHandler<Event, Params, Provided, Result>;
+    handler: (context: HandlerContext<Params, Activation, Provided>) => Result | PromiseLike<Result>,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result>;
 }
 
 type HookName = 'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally';
@@ -146,25 +190,28 @@ type TailName = 'limits' | 'whenBusy' | 'observe' | HookName;
 /** Hooks wait for `limits`, which supplies the budget they need. */
 type Hidden<Used extends TailName> = 'limits' extends Used ? never : HookName;
 
-interface TailMembers<Event, Params, Provided, Result, Used extends TailName> {
-  /** Required before any hook. `deadlineMs` is optional; `hookMs` is required. Each finite and positive. */
-  limits(limits: Limits): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'limits'>;
+interface TailMembers<Event, Params, Activation, Provided, Result, Used extends TailName> {
+  /**
+   * Required before any hook, and before a scope can own a token: `hookMs` bounds each release.
+   * `deadlineMs` is optional. Each finite and positive.
+   */
+  limits(limits: Limits): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'limits'>;
   /** `ignore` (the default) drops an activation while busy; `replace` cancels the running invocation. */
-  whenBusy(policy: BusyPolicy): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'whenBusy'>;
-  observe(observer: ActionObserver): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'observe'>;
+  whenBusy(policy: BusyPolicy): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'whenBusy'>;
+  observe(observer: ActionObserver): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'observe'>;
   /** Required client work that decides success. Its exception or overrun fails the invocation. */
   onSuccess(
-    hook: (context: SuccessContext<Params, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'onSuccess'>;
+    hook: (context: SuccessContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onSuccess'>;
   onFailure(
-    hook: (context: FailureContext<Params, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'onFailure'>;
+    hook: (context: FailureContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFailure'>;
   onCanceled(
-    hook: (context: CanceledContext<Params, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'onCanceled'>;
+    hook: (context: CanceledContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onCanceled'>;
   onFinally(
     hook: (context: FinallyContext<Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Provided, Result, Used | 'onFinally'>;
+  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFinally'>;
   build(): ActionDefinition<Event>;
 }
 
@@ -172,10 +219,11 @@ interface TailMembers<Event, Params, Provided, Result, Used extends TailName> {
 export type ActionDraftWithHandler<
   Event,
   Params = unknown,
+  Activation = unknown,
   Provided = unknown,
   Result = unknown,
   Used extends TailName = never,
-> = Omit<TailMembers<Event, Params, Provided, Result, Used>, Used | Hidden<Used>>;
+> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used>, Used | Hidden<Used>>;
 
 // ---------------------------------------------------------------------------------------------
 // What the runtime reads. Internal: authors only see the definition.
@@ -183,9 +231,9 @@ export type ActionDraftWithHandler<
 
 /** Hooks with their types erased: the builder's types are what tie them to a result. */
 export interface ErasedHooks {
-  readonly onSuccess?: (context: SuccessContext<unknown, unknown, unknown>) => unknown;
-  readonly onFailure?: (context: FailureContext<unknown, unknown, unknown>) => unknown;
-  readonly onCanceled?: (context: CanceledContext<unknown, unknown, unknown>) => unknown;
+  readonly onSuccess?: (context: SuccessContext<unknown, unknown, unknown, unknown>) => unknown;
+  readonly onFailure?: (context: FailureContext<unknown, unknown, unknown, unknown>) => unknown;
+  readonly onCanceled?: (context: CanceledContext<unknown, unknown, unknown, unknown>) => unknown;
   readonly onFinally?: (context: FinallyContext<unknown>) => unknown;
 }
 
@@ -193,8 +241,9 @@ export interface ErasedHooks {
 export interface ActionPlan<Event> {
   readonly label: string;
   readonly extract: ((event: Event) => unknown) | undefined;
+  readonly activate: ((context: ActivationContext<Event>) => unknown) | undefined;
   readonly prerequisites: readonly Prerequisite<object, unknown, unknown>[];
-  readonly handler: (context: HandlerContext<unknown, unknown>) => unknown;
+  readonly handler: (context: HandlerContext<unknown, unknown, unknown>) => unknown;
   readonly limits: Limits | undefined;
   readonly hooks: ErasedHooks;
   readonly busy: BusyPolicy;
@@ -229,6 +278,7 @@ const hookKeys: readonly HookKey[] = ['onSuccess', 'onFailure', 'onCanceled', 'o
 /** Everything a chain has declared so far. Never mutated: every step makes a new one. */
 interface Declared {
   readonly extract: ((event: never) => unknown) | undefined;
+  readonly activate: ((context: never) => unknown) | undefined;
   readonly prerequisites: readonly Prerequisite<object, unknown, unknown>[];
   readonly handler: ((context: never) => unknown) | undefined;
   readonly limits: Limits | undefined;
@@ -260,11 +310,25 @@ class Draft {
 
   input(extract: unknown): Draft {
     const { declared } = this;
-    if (declared.extract !== undefined || declared.prerequisites.length > 0 || declared.handler !== undefined) {
-      throw new Error(`Action '${this.label}': input can be declared once, and only before before and run.`);
+    if (
+      declared.extract !== undefined ||
+      declared.activate !== undefined ||
+      declared.prerequisites.length > 0 ||
+      declared.handler !== undefined
+    ) {
+      throw new Error(`Action '${this.label}': input can be declared once, and only before atActivation, before and run.`);
     }
     if (typeof extract !== 'function') throw new TypeError(`Action '${this.label}': input needs a function.`);
     return this.next({ extract: extract as Declared['extract'] });
+  }
+
+  atActivation(perform: unknown): Draft {
+    const { declared } = this;
+    if (declared.activate !== undefined || declared.prerequisites.length > 0 || declared.handler !== undefined) {
+      throw new Error(`Action '${this.label}': atActivation can be declared once, and only before before and run.`);
+    }
+    if (typeof perform !== 'function') throw new TypeError(`Action '${this.label}': atActivation needs a function.`);
+    return this.next({ activate: perform as Declared['activate'] });
   }
 
   before(candidate: unknown): Draft {
@@ -349,6 +413,7 @@ class Draft {
       // relationship so the runtime handles any definition, and the runtime supplies exactly the
       // values those types promised.
       extract: declared.extract as ActionPlan<never>['extract'],
+      activate: declared.activate as ActionPlan<never>['activate'],
       prerequisites: declared.prerequisites,
       handler: handler as ActionPlan<never>['handler'],
       limits: declared.limits,
@@ -368,6 +433,7 @@ export const Action = {
     // exposes only the steps valid at that point.
     return new Draft(label, {
       extract: undefined,
+      activate: undefined,
       prerequisites: Object.freeze([]),
       handler: undefined,
       limits: undefined,

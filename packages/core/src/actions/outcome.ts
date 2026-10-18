@@ -7,9 +7,12 @@ export type CancelCause = 'replaced' | 'disposed' | 'subject-changed';
 
 /**
  * Failures during the synchronous activation prefix. Nothing was awaited and no prerequisite or
- * handler has run. Only `invalid-input` exists in this slice: `atActivation` is a later one.
+ * handler has run. `atActivation` may already have performed its own effects: a token it took
+ * into the scope before it failed is still released.
  */
-export type InputFailure = { readonly kind: 'invalid-input'; readonly error: unknown };
+export type InputFailure =
+  | { readonly kind: 'invalid-input'; readonly error: unknown }
+  | { readonly kind: 'activation-error'; readonly error: unknown };
 
 /** Failures while prerequisites run. The handler has not started and `provided` is incomplete. */
 export type PrerequisiteFailure =
@@ -28,8 +31,8 @@ export type RunningFailure<Result> =
   | { readonly kind: 'success-hook-error'; readonly error: unknown; readonly result: Result }
   | { readonly kind: 'success-hook-timeout'; readonly result: Result };
 
-/** Steps after the outcome is decided. Resource release and adoption arrive with the scope (ACT5). */
-export type CleanupStep = 'onFailure' | 'onCanceled' | 'onFinally';
+/** Steps after the outcome is decided. 'adopt' is a transfer callback that returned a thenable. */
+export type CleanupStep = 'onFailure' | 'onCanceled' | 'onFinally' | 'release' | 'adopt';
 
 /** A diagnostic about cleanup. It never changes the primary outcome. */
 export type CleanupError =

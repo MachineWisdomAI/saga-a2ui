@@ -762,14 +762,12 @@ describe('what the types refuse', () => {
         handle.bindAction('hover', toggle());
         // @ts-expect-error this definition needs an event the control does not deliver
         handle.bindAction('activate', needsNumber);
-        // @ts-expect-error the handler context has no invocation scope: resource ownership is a later slice
-        Action.local<InstanceEvent<string>>('ctx').run(({ scope }) => scope);
         // @ts-expect-error a local handler has no `call`: server actions are a later slice
         Action.local<InstanceEvent<string>>('ctx').run(({ call }) => call);
         // @ts-expect-error server actions are a later slice and are not declared
         Action.server;
-        // @ts-expect-error `atActivation` is a later slice and is not declared
-        Action.local<InstanceEvent<string>>('later').atActivation;
+        // @ts-expect-error `eventTurn` is a later slice and is not declared
+        void Action.local<InstanceEvent<string>>('later').run(() => undefined).build().eventTurn;
         // @ts-expect-error bindAction takes the subject reader and nothing else
         handle.bindAction('activate', toggle(), { resource: 1 });
       });
