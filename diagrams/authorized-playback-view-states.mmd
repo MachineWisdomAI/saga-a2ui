@@ -1,0 +1,17 @@
+graph TD
+  O["Opener result"] --> Ready["ready"]
+  Ready -->|"Play"| Pending["pending: Checking access"]
+  Ready -->|"No Web Audio"| Stop["unsupported or session-changed<br/>no button"]
+  Pending -->|"Host cannot carry the key,<br/>or sign-in changed"| Stop
+  Pending -->|"Refused or failed"| Retry["denied, sign-in-required, expired,<br/>unavailable, media-failed, gesture-needed<br/>button starts a new Play"]
+  Retry --> Pending
+  Pending -->|"Audio clock advanced"| Playing
+  subgraph Loaded["Audio loaded"]
+    Playing["playing"] -->|"Pause, once suspended"| Paused["paused"]
+    Paused -->|"Resume, once the clock advances"| Playing
+    Paused -->|"Browser withholds audio"| Blocked["resume-blocked"]
+    Blocked -->|"Resume again"| Playing
+  end
+  Loaded -->|"Audio ends"| Ended["ended"]
+  Pending -->|"Audio ended before<br/>start was confirmed"| Ended
+  Ended -->|"Play again"| Pending

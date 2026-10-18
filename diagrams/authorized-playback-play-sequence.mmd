@@ -1,0 +1,22 @@
+sequenceDiagram
+    actor U as User
+    participant V as Player view (sandboxed iframe)
+    participant H as Host
+    participant L as MCP endpoint /playback/mcp
+    participant P as play_episode handler
+    participant M as Media service
+    U->>V: Press Play
+    Note over V: player.prepare() runs inside the click.<br/>Then the view creates an ES256 key pair.
+    V->>H: callServerTool play_episode<br/>arguments: episodeId<br/>_meta: public key only
+    H->>L: POST tools/call with bearer token
+    Note over L: Body size, bearer token, playback:play scope,<br/>then tool name and argument bounds
+    L->>P: episodeId + verified account
+    Note over P: Usable public key in _meta?<br/>Account entitled to this episode now?
+    P->>M: issue(account, episode, key thumbprint)
+    M-->>P: capability, expires in 60 s
+    P-->>V: Result via host<br/>content: "Playback authorized."<br/>_meta: mediaUrl, capability, expiresAt
+    Note over V: Accept only the selected episode,<br/>the pinned sign-in and its media path
+    V->>M: GET /playback/media/episodeId<br/>capability + newly signed proof
+    Note over M: Capability, proof and current<br/>entitlement checked again
+    M-->>V: 200 audio bytes, 403 refused, or 503 try again
+    Note over V: Decode and start.<br/>Show Playing once the audio clock advances.
