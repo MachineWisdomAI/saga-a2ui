@@ -2,7 +2,6 @@ import { A2uiSurface, type LitComponentApi } from '@a2ui/lit/v0_9';
 import type { Subscription, SurfaceModel } from '@a2ui/web_core/v0_9';
 import type { IngestResult, MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { LitElement, html, nothing } from 'lit';
-import { state } from 'lit/decorators.js';
 import { createRef, ref } from 'lit/directives/ref.js';
 
 export type A2uiSession = MessageSession<LitComponentApi>;
@@ -69,9 +68,17 @@ void A2uiSurface;
  */
 export function createA2uiAppElement(deps: A2uiAppDependencies) {
   class A2uiApp extends LitElement {
-    @state() private surface?: SurfaceModel<LitComponentApi>;
-    @state() private failure?: string;
-    @state() private presentationFailure?: string;
+    // Reactive state is declared with `static properties` and `declare`, not with decorators: this
+    // package ships TypeScript source that each application compiles with its own settings, and
+    // decorator syntax is only valid under the settings the workspace happens to use.
+    static override properties = {
+      surface: { state: true },
+      failure: { state: true },
+      presentationFailure: { state: true },
+    };
+    private declare surface?: SurfaceModel<LitComponentApi>;
+    private declare failure?: string;
+    private declare presentationFailure?: string;
 
     private session?: A2uiSession;
     private subscriptions: Subscription[] = [];

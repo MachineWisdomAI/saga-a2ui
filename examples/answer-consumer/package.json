@@ -1,0 +1,15 @@
+{
+  "name": "saga-answer-consumer-example",
+  "private": true,
+  "description": "A synthetic answer application that uses SAGA's optional FaithfulCard through public package exports only. It is not part of the npm workspace: scripts/build-answer-consumer.ts installs the packed SDK packages into a clean copy of it and builds that.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@a2ui/lit": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "@saga-a2ui/components": "*",
+    "@saga-a2ui/core": "*",
+    "@saga-a2ui/lit": "*",
+    "lit": "^3.3.3"
+  }
+}

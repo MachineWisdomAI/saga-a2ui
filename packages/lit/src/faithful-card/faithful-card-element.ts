@@ -9,7 +9,6 @@ import type {
   TableCell,
 } from '@saga-a2ui/components/faithful-card';
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from 'lit';
-import { property, state } from 'lit/decorators.js';
 import { blockedFragment } from './blocked-fragment.js';
 import { requestContentView, type ContentView } from './content-view.js';
 import type { LinkOpenOutcome } from './host-links.js';
@@ -73,7 +72,7 @@ const STYLE = html`<style>
   saga-faithful-card-content pre code { background: none; }
   saga-faithful-card-content hr { border: 0; border-top: 1px solid var(--saga-card-border-color, #999); }
   saga-faithful-card-content .table-scroll { max-width: 100%; overflow-x: auto; margin-block: 0.5em; }
-  saga-faithful-card-content table { border-collapse: collapse; }
+  saga-faithful-card-content table { border-collapse: collapse; overflow-wrap: normal; }
   saga-faithful-card-content th, saga-faithful-card-content td { border: 1px solid var(--saga-card-border-color, #999); padding: 0.25em 0.5em; text-align: start; }
   saga-faithful-card-content [data-align="left"] { text-align: left; }
   saga-faithful-card-content [data-align="center"] { text-align: center; }
@@ -89,18 +88,42 @@ const STYLE = html`<style>
  * shows an explicit failure, with nothing of any earlier content, when they are refused.
  */
 export class FaithfulCardContentElement extends LitElement {
-  /** The contract version of the content, as supplied. Validated by the view's reader. */
-  @property({ attribute: false }) contractVersion: unknown = undefined;
-  /** The Markdown to show, exactly as supplied. Validated by the view's reader. */
-  @property({ attribute: false }) markdown: unknown = undefined;
+  // Reactive properties are declared with `static properties` and `declare`, and set in the
+  // constructor, not with decorators and field initializers: this package ships TypeScript source
+  // that each application compiles with its own settings, and those constructs are only correct
+  // under the settings the workspace happens to use.
+  static override properties = {
+    contractVersion: { attribute: false },
+    markdown: { attribute: false },
+    linkOutcomes: { state: true },
+    failedImages: { state: true },
+    sourceRevealed: { state: true },
+    consent: { state: true },
+    consentEnded: { state: true },
+  };
 
-  @state() private linkOutcomes: ReadonlyMap<number, LinkOpenOutcome> = new Map();
-  @state() private failedImages: ReadonlySet<number> = new Set();
-  @state() private sourceRevealed = false;
+  /** The contract version of the content, as supplied. Validated by the view's reader. */
+  declare contractVersion: unknown;
+  /** The Markdown to show, exactly as supplied. Validated by the view's reader. */
+  declare markdown: unknown;
+
+  private declare linkOutcomes: ReadonlyMap<number, LinkOpenOutcome>;
+  private declare failedImages: ReadonlySet<number>;
+  private declare sourceRevealed: boolean;
   /** The reader's current consent to load images. Absent until Show images, and after any revocation. */
-  @state() private consent?: ImageConsent;
+  private declare consent?: ImageConsent;
   /** True once the view has retired image consent for good (host teardown). No control can grant after it. */
-  @state() private consentEnded = false;
+  private declare consentEnded: boolean;
+
+  constructor() {
+    super();
+    this.contractVersion = undefined;
+    this.markdown = undefined;
+    this.linkOutcomes = new Map();
+    this.failedImages = new Set();
+    this.sourceRevealed = false;
+    this.consentEnded = false;
+  }
 
   private view?: ContentView;
   private interpreted?: Interpretation;
@@ -122,6 +145,13 @@ export class FaithfulCardContentElement extends LitElement {
       this.retireImages();
       this.consentEnded = this.view?.consent.retired === true;
     });
+    // A reconnected card starts fresh, like new content: the policy's own presentation, no link
+    // results from before, and a render against the view it has now. Disconnecting rendered it
+    // without one, and nothing else would ask for another render.
+    this.generation += 1;
+    this.linkOutcomes = new Map();
+    this.sourceRevealed = this.view?.policy.blockedPresentation === 'inert-text';
+    this.requestUpdate();
   }
 
   override disconnectedCallback(): void {
@@ -271,22 +301,25 @@ export class FaithfulCardContentElement extends LitElement {
     if (grant.live) this.consent = grant; // a retired view hands out only dead grants
   }
 
-  private block(node: BlockNode, r: Rendering): TemplateResult {
+  private block(node: BlockNode, r: Rendering, inContainer = false): TemplateResult {
+    // A quote or list item sets the direction its own marker or rule follows from its text, and its
+    // paragraphs inherit it: automatic direction ignores any descendant that sets its own.
+    const dir = inContainer ? nothing : 'auto';
     switch (node.kind) {
       case 'paragraph':
-        return html`<p dir="auto">${this.inlines(node.children, r)}</p>`;
+        return html`<p dir=${dir}>${this.inlines(node.children, r)}</p>`;
       case 'heading': {
         // The surrounding page owns the top levels; card headings start at h3.
         const content = this.inlines(node.children, r);
-        if (node.level === 1) return html`<h3 dir="auto">${content}</h3>`;
-        if (node.level === 2) return html`<h4 dir="auto">${content}</h4>`;
-        if (node.level === 3) return html`<h5 dir="auto">${content}</h5>`;
-        return html`<h6 dir="auto">${content}</h6>`;
+        if (node.level === 1) return html`<h3 dir=${dir}>${content}</h3>`;
+        if (node.level === 2) return html`<h4 dir=${dir}>${content}</h4>`;
+        if (node.level === 3) return html`<h5 dir=${dir}>${content}</h5>`;
+        return html`<h6 dir=${dir}>${content}</h6>`;
       }
       case 'quote':
-        return html`<blockquote dir="auto">${node.children.map((child) => this.block(child, r))}</blockquote>`;
+        return html`<blockquote dir="auto">${node.children.map((child) => this.block(child, r, true))}</blockquote>`;
       case 'list': {
-        const items = node.items.map((item) => html`<li dir="auto">${item.map((child) => this.block(child, r))}</li>`);
+        const items = node.items.map((item) => html`<li dir="auto">${item.map((child) => this.block(child, r, true))}</li>`);
         return node.ordered ? html`<ol start=${node.start}>${items}</ol>` : html`<ul>${items}</ul>`;
       }
       case 'table':
@@ -304,7 +337,7 @@ export class FaithfulCardContentElement extends LitElement {
               source: () => html`${node.text}`,
               block: true,
             })
-          : html`<p class="source-block" dir="auto">${node.text}</p>`;
+          : html`<p class="source-block" dir=${dir}>${node.text}</p>`;
       case 'rule':
         return html`<hr />`;
     }

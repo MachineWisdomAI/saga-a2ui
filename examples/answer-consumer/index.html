@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The restrictions the content policy in src/main.ts derives for the host images.example.com
+      (`createContentPolicy({ level: 'standard', imageHosts: ['images.example.com'] }).resource.contentSecurityPolicy`).
+      Images load only while this value is exactly what the policy derives; otherwise they stay inert.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://images.example.com; font-src 'none'; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Answers</title>
+    <style>
+      body { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <answer-consumer></answer-consumer>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
