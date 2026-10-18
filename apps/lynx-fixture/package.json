@@ -1,0 +1,23 @@
+{
+  "name": "@saga-a2ui/lynx-fixture-app",
+  "private": true,
+  "description": "ReactLynx qualification fixture for ACT1's shared action runtime (ACT3). A separate project with its own lockfile, outside the SDK npm workspace. Not a supported adapter.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "rspeedy build && tsx scripts/build-host.ts",
+    "typecheck": "tsc --noEmit",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "@lynx-js/genui": "0.7.0",
+    "@lynx-js/react": "0.128.0",
+    "@lynx-js/lynx-ui": "3.140.0"
+  },
+  "devDependencies": {
+    "@lynx-js/react-rsbuild-plugin": "0.21.0",
+    "@lynx-js/rspeedy": "0.18.2",
+    "@lynx-js/types": "4.3.0",
+    "@lynx-js/web-core": "0.26.4"
+  }
+}

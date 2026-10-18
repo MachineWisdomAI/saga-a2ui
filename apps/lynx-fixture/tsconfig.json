@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@lynx-js/react",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["@lynx-js/types", "node"]
+  },
+  "include": ["src", "e2e", "scripts", "lynx.config.ts", "playwright.config.ts"]
+}

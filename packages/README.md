@@ -22,7 +22,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ### GenUI renderers
 
-GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations. `lit/` is the only one implemented; its opt-in action control and setup (`ActionButton`, `createLitActions`) are the optional `@saga-a2ui/lit/actions` export, which the main `@saga-a2ui/lit` entry does not import.
+GenUI here means SAGA's graphical A2UI rendering, in which an application's handlers and catalogs supply the interface. It does not require a model to generate it. `lit/`, `react/` and `lynx/` are the renderer adapters and hold their optional component implementations. `lit/` is the only one implemented; its opt-in action control and setup (`ActionButton`, `createLitActions`) are the optional `@saga-a2ui/lit/actions` export, which the main `@saga-a2ui/lit` entry does not import. No `react/` or `lynx/` package exists: `apps/lynx-fixture` is a retained qualification fixture and a separate project outside the npm workspace, not that package (see the README's "Lynx action attachment qualification (ACT3)").
 
 ### Components
 

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lynx action fixture (Web)</title>
+    <link rel="stylesheet" href="/static/css/client.css" />
+    <script type="module" src="/static/js/client.js"></script>
+    <style>
+      body { margin: 0; }
+      lynx-view { display: block; width: 360px; height: 640px; }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      // The page owns the probe records and the commands. It holds no reference into the
+      // background thread: observations arrive as JSON strings through a native module and
+      // commands leave as global events.
+      const params = new URLSearchParams(location.search);
+      window.sagaRecords = [];
+      const view = document.createElement('lynx-view');
+      view.setAttribute('url', params.get('bundle') ?? '/main.web.bundle');
+      view.onNativeModulesCall = (name, data, moduleName) => {
+        if (moduleName === 'bridge' && name === 'saga:record') {
+          window.sagaRecords.push({ ...JSON.parse(data), receivedAt: Date.now() });
+        }
+        return undefined;
+      };
+      window.sagaView = view;
+      window.sagaSend = (command) => view.sendGlobalEvent('saga:cmd', [command]);
+      window.sagaErrors = [];
+      // Native removal: when an element with a given ID leaves the lynx-view's shadow tree. Recorded
+      // by the page, which sees the DOM; the background thread cannot.
+      window.sagaRemovals = [];
+      window.sagaWatchRemoval = () => {
+        const root = view.shadowRoot;
+        if (!root || window.sagaRemovalObserver) return;
+        window.sagaRemovalObserver = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.removedNodes) {
+              if (!(node instanceof Element)) continue;
+              const ids = [node.id, ...Array.from(node.querySelectorAll('[id]')).map((child) => child.id)].filter(Boolean);
+              for (const id of ids) window.sagaRemovals.push({ id, at: Date.now() });
+            }
+          }
+        });
+        window.sagaRemovalObserver.observe(root, { childList: true, subtree: true });
+      };
+      view.addEventListener('error', (event) => window.sagaErrors.push(String(event?.detail?.error ?? event?.detail ?? 'error')));
+      document.body.append(view);
+    </script>
+  </body>
+</html>

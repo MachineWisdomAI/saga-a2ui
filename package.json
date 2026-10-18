@@ -5,10 +5,10 @@
   "description": "SAGA A2UI SDK workspace",
   "scripts": {
     "start": "npm run start -w @saga-a2ui/lit-host-app",
-    "build": "npm run build -w @saga-a2ui/lit-host-app",
+    "build": "npm run build -w @saga-a2ui/lit-host-app && npm run build --prefix apps/lynx-fixture",
     "serve:mcp": "npm run serve:mcp -w @saga-a2ui/lit-host-app",
-    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-host-app",
-    "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app",
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-host-app && npm run typecheck --prefix apps/lynx-fixture",
+    "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app && npm run test:browser --prefix apps/lynx-fixture",
     "test:headless": "vitest run",
     "candidate:identity": "tsx scripts/candidate-identity.ts",
     "verify": "tsx scripts/verify.ts"
@@ -22,7 +22,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/lit-host"
   ],
   "repository": {
     "type": "git",
