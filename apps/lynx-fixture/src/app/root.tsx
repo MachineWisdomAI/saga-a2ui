@@ -48,7 +48,7 @@ const catalogs = [actionButton, Button, Column, List, Text] as unknown as readon
 // way to put the control's render path on the main thread: it must construct an inert slot,
 // capture no token and open nothing, and the background effect opens it afterwards.
 const FIRST_SCREEN_SURFACE = { surfaceId: 'first-screen', components: new Map(), resources: new Map(), store: new SignalStore() } as unknown as Surface;
-const FirstScreenControl = actionButton.component;
+const FirstScreenControl = actionButton.firstScreenProbe;
 
 export function Root() {
   countOnMainThread('roots');

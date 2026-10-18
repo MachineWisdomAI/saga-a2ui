@@ -97,23 +97,57 @@ test.describe('direct attachment', () => {
     );
   });
 
-  // OPEN SEAM FINDING. The design requires a tap closure captured before a dispose to be refused as
-  // stale once a second binding is attached, by comparing direct binding references. ACT1's
-  // `OpenInstance` never exposes the attached binding to the adapter, so the adapter cannot capture
-  // it in a token or tell that one was replaced. The closure runs the replacement definition. This
-  // test pins what the seam does today so a repair of the seam turns it red on purpose.
-  test('an old queued tap after dispose and rebind reaches the replacement binding (open seam finding)', async ({ page }) => {
+  // The approved tap-admission contract: a closure queued before a dispose belongs to the binding
+  // attached when its render ran. It is refused as unbound while nothing is attached and as stale
+  // once a replacement is attached, and it never starts the replacement. A render after the rebind
+  // carries the replacement, and its tap delivers. ACT1's `OpenInstance.attached` and `subscribe`
+  // give the adapter the binding by reference.
+  test('an old queued tap is unbound after dispose and stale after rebind, never reaching the replacement; a fresh tap delivers to it', async ({ page }) => {
     const fixture = await openOrders(page);
     await fixture.send('capture-tap', { label: 'submit-order@/', name: 'before-replacement' });
 
     await fixture.send('dispose', { label: 'submit-order@/' });
-    // During the unbound interval the same closure is refused.
     expect(await fixture.send('fire-captured', { name: 'before-replacement' })).toEqual({ outcome: 'unbound' });
     await fixture.send('rebind', { label: 'submit-order@/', definition: 'cancel-order' });
 
-    expect(await fixture.send('fire-captured', { name: 'before-replacement' })).toEqual({ outcome: 'delivered' });
+    expect(await fixture.send('fire-captured', { name: 'before-replacement' })).toEqual({ outcome: 'stale' });
+    await fixture.stillInvocations(0);
+    expect(refusals(await fixture.records()).map((record) => record['outcome'])).toEqual(['unbound', 'stale']);
+
+    // The republished snapshot reaches the next render; until it commits, the current closure is
+    // still the old one and is refused, so the poll cannot start anything early.
+    await expect
+      .poll(async () => (await fixture.send<{ outcome: string }>('fire-current', { label: 'submit-order@/' })).outcome, { timeout: 10_000 })
+      .toBe('delivered');
     const invocations = await fixture.untilInvocations(1);
     expect(invocations[0]?.['definition']).toBe('cancel-order');
+
+    // The old closure stays stale after the fresh one has run, and a real tap reaches the replacement.
+    expect(await fixture.send('fire-captured', { name: 'before-replacement' })).toEqual({ outcome: 'stale' });
+    await fixture.tap('submit-order');
+    expect((await fixture.untilInvocations(2)).map((record) => record['definition'])).toEqual(['cancel-order', 'cancel-order']);
+  });
+
+  test('a closure captured while a binding was attached stays stale across two rebinds, and only the newest render delivers', async ({ page }) => {
+    const fixture = await openOrders(page);
+    await fixture.send('capture-tap', { label: 'submit-order@/', name: 'first' });
+    await fixture.send('dispose', { label: 'submit-order@/' });
+    await fixture.send('rebind', { label: 'submit-order@/', definition: 'cancel-order' });
+    await expect
+      .poll(async () => (await fixture.send<{ outcome: string }>('fire-current', { label: 'submit-order@/' })).outcome, { timeout: 10_000 })
+      .toBe('delivered');
+    await fixture.send('capture-tap', { label: 'submit-order@/', name: 'second' });
+    await fixture.send('dispose', { label: 'submit-order@/' });
+    await fixture.send('rebind', { label: 'submit-order@/', definition: 'submit-order' });
+
+    expect(await fixture.send('fire-captured', { name: 'first' })).toEqual({ outcome: 'stale' });
+    expect(await fixture.send('fire-captured', { name: 'second' })).toEqual({ outcome: 'stale' });
+    await fixture.untilInvocations(1);
+    await fixture.stillInvocations(1);
+    await expect
+      .poll(async () => (await fixture.send<{ outcome: string }>('fire-current', { label: 'submit-order@/' })).outcome, { timeout: 10_000 })
+      .toBe('delivered');
+    expect((await fixture.untilInvocations(2)).map((record) => record['definition'])).toEqual(['cancel-order', 'submit-order']);
   });
 
   test('setup that binds and then throws leaves the instance unbound and does not disturb others', async ({ page }) => {

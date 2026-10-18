@@ -1,4 +1,4 @@
-import type { ComponentKind, InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
+import type { ActionBinding, ComponentKind, InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
 import { ItemWatch, readLive, type Where, type WatchEvent } from './item-key.js';
 import { countOnMainThread } from '../trace.js';
 import type { ActionButtonEvents, LynxTap } from './kind.js';
@@ -17,12 +17,16 @@ export interface SlotSnapshot {
   readonly installation: Installation | undefined;
   readonly keyProp: string | undefined;
   readonly epoch: number;
+  /** The binding ACT1 has attached to the tap event, by reference; `undefined` while none is. */
+  readonly binding: ActionBinding | undefined;
 }
 
 /** What one render showed. A queued `bindtap` closure carries it and is checked against the slot. */
 export interface TapToken {
   readonly installation: Installation;
   readonly epoch: number;
+  /** The binding that was attached when this render ran. It is compared by reference at the tap. */
+  readonly binding: ActionBinding | undefined;
   readonly shownKey: unknown;
 }
 
@@ -59,10 +63,11 @@ export class InstanceSlot {
 
   #installation: Installation | undefined;
   #opened: OpenInstance<ActionButtonEvents> | undefined;
+  #unsubscribeOpened: (() => void) | undefined;
   #where: OpenWhere | undefined;
   #keyProp: string | undefined;
   #watch: ItemWatch | undefined;
-  #snapshot: SlotSnapshot = Object.freeze({ installation: undefined, keyProp: undefined, epoch: 0 });
+  #snapshot: SlotSnapshot = Object.freeze({ installation: undefined, keyProp: undefined, epoch: 0, binding: undefined });
   readonly #listeners = new Set<() => void>();
 
   constructor(private readonly config: SlotConfig) {
@@ -111,6 +116,10 @@ export class InstanceSlot {
       isLive: () => installation.live,
       read: (prop) => (installation.live && this.#where !== undefined ? readLive(this.#where, prop) : undefined),
     });
+    // Setup has already run inside `host.open`, so what it bound is published below. From here a
+    // dispose or a rebind on the handle publishes a new snapshot, and the next render's token
+    // carries the new binding.
+    this.#unsubscribeOpened = this.#opened?.subscribe(() => this.#publish());
     this.#publish();
     this.config.probe(this, { type: 'opened', where });
   }
@@ -129,6 +138,8 @@ export class InstanceSlot {
     const installation = this.#installation;
     if (installation === undefined) return;
     installation.live = false;
+    this.#unsubscribeOpened?.();
+    this.#unsubscribeOpened = undefined;
     this.#opened?.retire();
     this.#opened = undefined;
     this.#watch?.stop();
@@ -150,6 +161,7 @@ export class InstanceSlot {
     return {
       installation: snapshot.installation,
       epoch: snapshot.epoch,
+      binding: snapshot.binding,
       shownKey: snapshot.keyProp === undefined ? undefined : shown[snapshot.keyProp],
     };
   }
@@ -157,7 +169,9 @@ export class InstanceSlot {
   /**
    * Admits one tap, then hands it to the callable ACT1 installed for this instance. The checks
    * run in order and a refusal is silent to the renderer: the closure is from a mount, an
-   * observed identity change or an item that no longer matches the instance.
+   * observed identity change, a binding that is no longer the attached one, or an item that no
+   * longer matches the instance. No binding attached is `unbound`; a different one than the
+   * render showed is `stale`, so a closure queued before a dispose never reaches a replacement.
    */
   activate(token: TapToken, native: LynxTap): Activation {
     const installation = this.#installation;
@@ -165,11 +179,14 @@ export class InstanceSlot {
       return this.#refuse('stale');
     }
     if (token.epoch !== (this.#watch?.epoch ?? 0)) return this.#refuse('stale');
+    const opened = this.#opened;
+    if (opened === undefined) return this.#refuse('retired');
+    const attached = opened.attached('activate');
+    if (attached === undefined) return this.#refuse('unbound');
+    if (token.binding !== attached) return this.#refuse('stale');
     if (this.#keyProp !== undefined && this.#where !== undefined && readLive(this.#where, this.#keyProp) !== token.shownKey) {
       return this.#refuse('stale');
     }
-    const opened = this.#opened;
-    if (opened === undefined) return this.#refuse('retired');
     try {
       const outcome = opened.activate('activate', native);
       if (outcome === 'started') return 'delivered';
@@ -196,6 +213,7 @@ export class InstanceSlot {
       installation: this.#installation,
       keyProp: this.#keyProp,
       epoch: this.#watch?.epoch ?? 0,
+      binding: this.#opened?.attached('activate'),
     });
     for (const listener of [...this.#listeners]) listener();
   }

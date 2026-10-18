@@ -355,6 +355,87 @@ describe('instance lifetime', () => {
   });
 });
 
+describe('the binding an instance exposes to its adapter', () => {
+  it('names the attached binding by identity, and nothing once it is disposed or before any bind', () => {
+    const host = newHost();
+    const control = renderInstance(host, 'c');
+    expect(control.instance.attached('activate')).toBeUndefined();
+
+    const first = bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()));
+    expect(control.instance.attached('activate')).toBe(first);
+    expect(control.instance.attached('change')).toBeUndefined();
+
+    first.dispose();
+    expect(control.instance.attached('activate')).toBeUndefined();
+  });
+
+  it('follows a dispose and rebind on the same handle: the second binding is a different reference', () => {
+    const host = newHost();
+    const control = renderInstance(host, 'c');
+    let handle: InstanceHandle<ControlEvents> | undefined;
+    host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
+    const first = handle!.bindAction('activate', toggle());
+    first.dispose();
+    const second = handle!.bindAction('activate', toggle());
+
+    expect(control.instance.attached('activate')).toBe(second);
+    expect(second).not.toBe(first);
+  });
+
+  it('tells a subscriber about each attach, detach and retirement, in that order, and stops after unsubscribing', () => {
+    const host = newHost();
+    const control = renderInstance(host, 'c');
+    const seen: Array<string | undefined> = [];
+    const unsubscribe = control.instance.subscribe(() => seen.push(control.instance.attached('activate')?.id));
+    let handle: InstanceHandle<ControlEvents> | undefined;
+    host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
+
+    const first = handle!.bindAction('activate', toggle());
+    first.dispose();
+    const second = handle!.bindAction('activate', toggle());
+    unsubscribe();
+    second.dispose();
+
+    expect(seen).toEqual([first.id, undefined, second.id]);
+  });
+
+  it('notifies once for a retirement that disposes a binding, with the slot already empty', () => {
+    const host = newHost();
+    const control = renderInstance(host, 'c');
+    bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()));
+    const seen: Array<string | undefined> = [];
+    control.instance.subscribe(() => seen.push(control.instance.attached('activate')?.id));
+
+    control.destroy();
+    control.destroy();
+
+    expect(seen).toEqual([undefined]);
+    expect(control.instance.subscribe(() => seen.push('late'))).toBeTypeOf('function');
+    expect(seen).toEqual([undefined]);
+  });
+
+  it('does not let a throwing or removed subscriber affect the bind or the other subscribers', () => {
+    const host = newHost();
+    const control = renderInstance(host, 'c');
+    const calls: string[] = [];
+    control.instance.subscribe(() => {
+      calls.push('throws');
+      throw new Error('subscriber');
+    });
+    let removed: (() => void) | undefined;
+    control.instance.subscribe(() => {
+      calls.push('removes-next');
+      removed?.();
+    });
+    removed = control.instance.subscribe(() => calls.push('removed'));
+    control.instance.subscribe(() => calls.push('last'));
+
+    expect(() => bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()))).not.toThrow();
+
+    expect(calls).toEqual(['throws', 'removes-next', 'last']);
+  });
+});
+
 describe('setup ownership', () => {
   it('a setup that throws ends its registration, disposes what it bound, and propagates', () => {
     const host = newHost();

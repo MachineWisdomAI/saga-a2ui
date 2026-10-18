@@ -7,15 +7,20 @@ import { ordersLayout } from './messages.js';
 // Worker and the main thread in a same-origin iframe realm of the `<lynx-view>`.
 
 test.describe('bundle partition', () => {
-  const template = readTemplate(builtBundle);
+  // Read when a test runs, never while Playwright imports this file: test discovery must not
+  // depend on a generated bundle, so a fresh checkout can list its tests before `npm run build`.
+  let cached: ReturnType<typeof readTemplate> | undefined;
+  const loadTemplate = (): ReturnType<typeof readTemplate> => (cached ??= readTemplate(builtBundle));
 
   test('the template has one background chunk and one main-thread chunk', () => {
+    const template = loadTemplate();
     expect(Object.keys(template.background)).toEqual(['/app-service.js']);
     expect(Object.keys(template.mainThread)).toEqual(['root']);
     expect(template.configuration['cardType']).toBe('react');
   });
 
   test("a 'background only' function body is removed from the main-thread chunk; ordinary module code is in both", () => {
+    const template = loadTemplate();
     // Removed by the compiler from the main-thread layer.
     expect({
       setupBodyInBackground: contains(template.background, 'SAGA_MARKER_SETUP_BODY'),

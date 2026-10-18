@@ -1,7 +1,7 @@
-import { NodeRenderer, type CatalogComponent, type ComponentInstance, type GenericComponentProps } from '@lynx-js/genui/a2ui';
+import { NodeRenderer, useChecks, type CatalogComponent, type CheckLike, type ComponentInstance, type GenericComponentProps } from '@lynx-js/genui/a2ui';
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from '@lynx-js/react';
 import type { InstanceHost } from '@saga-a2ui/core/actions';
-import { InstanceSlot, type Activation, type OpenWhere, type SlotConfig } from './instance-slot.js';
+import { InstanceSlot, type Activation, type OpenWhere, type SlotConfig, type TapToken } from './instance-slot.js';
 import { ACTION_BUTTON_NAME, ActionButton, SOURCE_ID_PROP, type LynxTap } from './kind.js';
 
 /** The presentation's action host. One `<A2UI>` mount, one host; a new session is a new host. */
@@ -15,6 +15,26 @@ export interface ActionControlOptions {
   readonly onMount?: (slot: InstanceSlot) => void;
 }
 
+/** What the slot machinery gives a render: the committed tap closure and the pieces to draw. */
+interface SlotView {
+  readonly token: TapToken | undefined;
+  readonly onTap: (event: LynxTap) => Activation | 'no-token';
+  readonly componentId: string;
+  readonly child: ComponentInstance | undefined;
+}
+
+export interface ActionControl {
+  readonly name: string;
+  readonly component: CatalogComponent;
+  /**
+   * The same slot machinery without the checks gate, for the one place a control has to render
+   * outside `<A2UI>`: the empty first screen, which `<A2UI>` draws before its context exists.
+   * `useChecks` needs that context, so the full control cannot be placed there. A test probe,
+   * not a second control: it shares `useSlotView` with the control and nothing else.
+   */
+  readonly firstScreenProbe: CatalogComponent;
+}
+
 /**
  * One generic catalog component for every instance of the kind. It is created once, at module
  * scope: React remounts instances when the component function identity changes, and that would
@@ -24,8 +44,8 @@ export interface ActionControlOptions {
  * inert slot, never opens it. Binding and subscription happen in effects, on the background
  * thread only.
  */
-export function createActionControl(options: ActionControlOptions): { readonly name: string; readonly component: CatalogComponent } {
-  function ActionControlView(props: GenericComponentProps) {
+export function createActionControl(options: ActionControlOptions): ActionControl {
+  function useSlotView(props: GenericComponentProps): SlotView {
     const host = useContext(ActionHostContext);
     const [slot] = useState(
       () =>
@@ -72,13 +92,44 @@ export function createActionControl(options: ActionControlOptions): { readonly n
     const child = childId === undefined ? undefined : props.surface.components.get(childId);
     const childWithContext: ComponentInstance | undefined =
       child !== undefined && props.dataContextPath !== undefined ? { ...child, dataContextPath: props.dataContextPath } : child;
+    return { token, onTap, componentId, child: childWithContext };
+  }
+
+  function ActionControlView(props: GenericComponentProps) {
+    const { token, onTap, componentId, child } = useSlotView(props);
+
+    // The supported checks seam, the one the published `Button` uses: GenUI evaluates the rule
+    // list reactively and this adapter implements no expression interpreter of its own. Like
+    // `Button`, the control is interactive only when `isValid` and every check pass, and it shows
+    // the first failure's message. Checks gate the interface; they authorize nothing.
+    const checked = useChecks({
+      checks: Array.isArray(props['checks']) ? (props['checks'] as CheckLike[]) : undefined,
+      componentId,
+      surface: props.surface,
+      dataContextPath: props.dataContextPath,
+    });
+    const enabled = props['isValid'] !== false && checked.ok;
 
     return (
-      <view id={componentId} bindtap={token === undefined || props['isValid'] === false ? undefined : onTap}>
-        {childWithContext === undefined ? null : <NodeRenderer component={childWithContext} surface={props.surface} />}
-      </view>
+      <>
+        <view id={componentId} bindtap={token === undefined || !enabled ? undefined : onTap}>
+          {child === undefined ? null : <NodeRenderer component={child} surface={props.surface} />}
+        </view>
+        {!checked.ok && checked.firstFailureMessage ? <text id={`${componentId}-error`}>{checked.firstFailureMessage}</text> : null}
+      </>
     );
   }
   ActionControlView.displayName = ACTION_BUTTON_NAME;
-  return { name: ACTION_BUTTON_NAME, component: ActionControlView as CatalogComponent };
+
+  function FirstScreenProbe(props: GenericComponentProps) {
+    const { token, onTap, componentId } = useSlotView(props);
+    return <view id={componentId} bindtap={token === undefined ? undefined : onTap} />;
+  }
+  FirstScreenProbe.displayName = `${ACTION_BUTTON_NAME}FirstScreenProbe`;
+
+  return {
+    name: ACTION_BUTTON_NAME,
+    component: ActionControlView as CatalogComponent,
+    firstScreenProbe: FirstScreenProbe as CatalogComponent,
+  };
 }

@@ -146,7 +146,7 @@ export function installHarness(holder: SessionHolder): Driver {
       const slot = slotOf(command['label']);
       const snapshot = slot.getSnapshot();
       if (snapshot.installation === undefined) throw new Error('not open');
-      return { outcome: slot.activate({ installation: snapshot.installation, epoch: snapshot.epoch, shownKey: command['shownKey'] }, { type: 'tap' }) };
+      return { outcome: slot.activate({ installation: snapshot.installation, epoch: snapshot.epoch, binding: snapshot.binding, shownKey: command['shownKey'] }, { type: 'tap' }) };
     },
     'set-store'(command) {
       // Writes the signal store directly, inside one batch, the way a processor update does.
