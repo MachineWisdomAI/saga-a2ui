@@ -52,6 +52,38 @@ describe('the answer dialect: tables', () => {
     ]);
   });
 
+  it('resolves a reference link or image in an extra cell against the document, as in a normal cell', () => {
+    const definitions = '\n\n[ref]: https://example.com/source\n[pic]: https://images.example.com/p.png';
+    const [table] = parsed(`| A |\n|---|\n| one | [source][ref] ![chart][pic] |${definitions}`).blocks;
+    const extra = table?.kind === 'table' ? table.rows[0]?.[1] : undefined;
+    expect(extra?.children).toEqual([
+      { kind: 'link', destination: 'https://example.com/source', children: [text('source')] },
+      text(' '),
+      { kind: 'image', source: 'https://images.example.com/p.png', alt: 'chart' },
+    ]);
+    expect(fragmentsOf(parsed(`| A |\n|---|\n| one | [source][ref] ![chart][pic] |${definitions}`))).toEqual({
+      links: 1,
+      images: ['https://images.example.com/p.png'],
+      rawHtml: 0,
+    });
+  });
+
+  it.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['a lone CR', '\r'],
+  ])('keeps the extra cells of a row whatever the line ending (%s), and the supplied source unchanged', (_name, eol) => {
+    const source = ['| A |', '|---|', '| one | EXTRA | [s][ref] |', '', '[ref]: https://example.com/s'].join(eol);
+    const document = parsed(source);
+    const table = document.blocks[0];
+    expect(table?.kind === 'table' && table.rows[0]?.map((one) => one.children)).toEqual([
+      [text('one')],
+      [text('EXTRA')],
+      [{ kind: 'link', destination: 'https://example.com/s', children: [text('s')] }],
+    ]);
+    expect(document.source).toBe(source);
+  });
+
   it('keeps the extra cells of a row inside a quote and reads an escaped pipe as part of its cell', () => {
     const quoted = parsed('> | a |\n> |---|\n> | x \\| y | z |').blocks[0];
     const table = quoted?.kind === 'quote' ? quoted.children[0] : undefined;

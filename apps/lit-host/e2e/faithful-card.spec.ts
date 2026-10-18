@@ -216,7 +216,7 @@ test.describe('Standard and Strict effects, observed', () => {
     await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
     expect(await linkCalls(page, 'a')).toEqual([LINK]);
     await expect(card(page, 'a').getByTestId('md-image')).toHaveCount(1);
-    expect(imageRequests()).toEqual([IMAGE]);
+    await expect.poll(imageRequests).toEqual([IMAGE]);
   });
 
   test('Strict keeps links inert and requests no image until the reader consents', async ({ page }) => {
@@ -233,7 +233,7 @@ test.describe('Standard and Strict effects, observed', () => {
     await view.getByRole('button', { name: 'Show images' }).click();
     await expect(view.getByTestId('md-image')).toHaveCount(1);
     await expect(view.getByTestId('images-status')).toHaveText('Images shown.');
-    expect(imageRequests()).toEqual([IMAGE]);
+    await expect.poll(imageRequests).toEqual([IMAGE]);
     expect(await linkCalls(page, 'a')).toEqual([]);
     await view.getByRole('button', { name: 'Hide images' }).click();
     await expect(view.getByTestId('md-image')).toHaveCount(0);
@@ -263,12 +263,12 @@ test.describe('Standard and Strict effects, observed', () => {
     await expect(standard.getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
     expect(await linkCalls(page, 'standard')).toEqual([LINK]);
     expect(await linkCalls(page, 'strict')).toEqual([]);
-    expect(imageRequests()).toEqual([IMAGE]);
+    await expect.poll(imageRequests).toEqual([IMAGE]);
 
     // Consent belongs to the Strict card; Standard neither needs nor inherits it.
     await strict.getByRole('button', { name: 'Show images' }).click();
     await expect(strict.getByTestId('md-image')).toHaveCount(1);
-    expect(imageRequests()).toEqual([IMAGE, IMAGE_B]);
+    await expect.poll(imageRequests).toEqual([IMAGE, IMAGE_B]);
 
     // Replacing the Standard card's content leaves the Strict card's image and consent alone.
     await set(page, 'standard', `Replaced ![new](${IMAGE_C}) [other](${LINK}?x=1)`);
@@ -318,6 +318,78 @@ test.describe('Standard and Strict effects, observed', () => {
     await expect(card(page, 'a').getByRole('button', { name: 'Show images' })).toBeDisabled();
     await expect(card(page, 'a').getByTestId('images-unavailable')).toHaveAttribute('data-reason', 'view-ended');
     await expect(card(page, 'b').getByTestId('md-image')).toHaveCount(1);
+  });
+});
+
+test.describe('a link control belongs to the card revision it was rendered for', () => {
+  const OLD_LINK = 'https://docs.example.com/old';
+  const linkButton = (page: Page, id: string) => card(page, id).getByRole('button', { name: /old link/ });
+
+  test('a retained button asks the host for nothing after the content is replaced, and the new content is untouched', async ({ page }) => {
+    await mount(page, 'a', { level: 'standard', markdown: `[old link](${OLD_LINK})` });
+    const retained = await linkButton(page, 'a').elementHandle();
+    await set(page, 'a', 'New answer');
+    await expect(card(page, 'a').getByTestId('card-content')).toHaveText('New answer');
+    await retained?.evaluate((button) => (button as HTMLElement).click());
+    // The click has been dispatched and handled synchronously; allow the (absent) async work to settle.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    expect(await linkCalls(page, 'a')).toEqual([]);
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveCount(0);
+  });
+
+  test('a button clicked in the same task that replaces the content asks the host for nothing', async ({ page }) => {
+    await mount(page, 'a', { level: 'standard', markdown: `[old link](${OLD_LINK})` });
+    await expect(linkButton(page, 'a')).toBeVisible();
+    await page.evaluate(() => {
+      const handle = window.cards?.a;
+      const button = handle?.element.querySelector<HTMLElement>('[data-testid="md-link"]');
+      handle?.set('New answer');
+      button?.click(); // the card has not re-rendered yet
+    });
+    await expect(card(page, 'a').getByTestId('card-content')).toHaveText('New answer');
+    expect(await linkCalls(page, 'a')).toEqual([]);
+  });
+
+  test('a retained button of a removed card asks the host for nothing, and a re-added card starts clean', async ({ page }) => {
+    await mount(page, 'a', { level: 'standard', markdown: `[old link](${OLD_LINK})` });
+    const retained = await linkButton(page, 'a').elementHandle();
+    await page.evaluate(() => window.cards?.a?.remove());
+    await expect(card(page, 'a')).toHaveCount(0);
+    await retained?.evaluate((button) => (button as HTMLElement).click());
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    expect(await linkCalls(page, 'a')).toEqual([]);
+    await page.evaluate(() => window.cards?.a?.reattach());
+    await expect(linkButton(page, 'a')).toBeVisible();
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
+    expect(await linkCalls(page, 'a')).toEqual([]);
+  });
+
+  test('a current link still works, and a delayed answer is shown only to the content that asked', async ({ page }) => {
+    await mount(page, 'a', { level: 'standard', links: 'pending', markdown: `[old link](${OLD_LINK})` });
+    // A current link: the host is asked once and its (delayed) answer is announced.
+    await linkButton(page, 'a').click();
+    await expect.poll(() => linkCalls(page, 'a')).toEqual([OLD_LINK]);
+    await page.evaluate(() => window.cards?.a?.settle('opened'));
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+
+    // A delayed answer to a link of replaced content is dropped: the same-position link of the new content shows nothing.
+    await set(page, 'a', `[old link](${OLD_LINK}) again`);
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
+    await linkButton(page, 'a').click();
+    await expect.poll(async () => (await linkCalls(page, 'a')).length).toBe(2);
+    await set(page, 'a', `[old link](${OLD_LINK}) replaced`);
+    await expect(card(page, 'a').getByTestId('card-content')).toContainText('replaced');
+    await page.evaluate(() => window.cards?.a?.settle('opened'));
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
+
+    // A delayed answer that arrives after the card was removed is dropped, too.
+    await linkButton(page, 'a').click();
+    await expect.poll(async () => (await linkCalls(page, 'a')).length).toBe(3);
+    await page.evaluate(() => window.cards?.a?.remove());
+    await page.evaluate(() => window.cards?.a?.settle('opened'));
+    await page.evaluate(() => window.cards?.a?.reattach());
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
   });
 });
 

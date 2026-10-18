@@ -135,7 +135,7 @@ test('Standard: the shipped Content-Security-Policy lets the one listed host loa
   await open(page);
   await ask(page, 'images');
   await expect(card(page).getByTestId('md-image')).toHaveCount(1);
-  expect(requests.filter((url) => url.endsWith('.png'))).toEqual([IMAGE]);
+  await expect.poll(() => requests.filter((url) => url.endsWith('.png'))).toEqual([IMAGE]);
 
   const link = card(page).getByRole('button', { name: /the guide/ });
   await expect(link).toContainText('(docs.example.com)');
@@ -143,7 +143,7 @@ test('Standard: the shipped Content-Security-Policy lets the one listed host loa
   await link.click();
   expect(await (await popup).evaluate(() => 'popped')).toBe('popped');
   await expect(card(page).getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
-  expect(requests).toContain(GUIDE);
+  await expect.poll(() => requests).toContain(GUIDE);
 });
 
 test('Strict: links stay inert and no image is requested until the reader chooses Show images', async ({ page }) => {
@@ -156,7 +156,7 @@ test('Strict: links stay inert and no image is requested until the reader choose
 
   await page.getByRole('button', { name: 'Show images' }).click();
   await expect(card(page).getByTestId('md-image')).toHaveCount(1);
-  expect(requests.filter((url) => url.endsWith('.png'))).toEqual([IMAGE]);
+  await expect.poll(() => requests.filter((url) => url.endsWith('.png'))).toEqual([IMAGE]);
   expect(requests).not.toContain(GUIDE);
 
   // A new answer needs fresh consent.

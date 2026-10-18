@@ -30,8 +30,8 @@ export interface CardOptions {
   readonly imageHosts?: readonly string[];
   /** Whether the document demonstrably carries the policy's image restrictions. */
   readonly enforcement?: ImageEnforcement;
-  /** How this card's host answers a request to open a link. */
-  readonly links?: 'opened' | 'denied' | 'unavailable';
+  /** How this card's host answers a request to open a link; 'pending' holds each answer until the page calls `settle`. */
+  readonly links?: 'opened' | 'denied' | 'unavailable' | 'pending';
   readonly markdown?: string;
 }
 
@@ -40,6 +40,8 @@ interface CardHandle {
   readonly view: ContentView;
   /** Every URL this card's host callback received. */
   readonly linkCalls: string[];
+  /** Answers every link request held by a 'pending' host. */
+  settle(outcome: LinkOpenOutcome): void;
   /** Replaces the card's content, as an application does when a new answer arrives. */
   set(markdown: unknown, contractVersion?: unknown): void;
   /** Removes the card from the page. */
@@ -63,7 +65,7 @@ declare global {
   }
 }
 
-function viewFor(options: CardOptions, linkCalls: string[]): ContentView {
+function viewFor(options: CardOptions, linkCalls: string[], held: Array<(outcome: LinkOpenOutcome) => void> = []): ContentView {
   const policy = createContentPolicy({
     level: options.level ?? 'standard',
     imageHosts: options.imageHosts ?? [],
@@ -74,14 +76,15 @@ function viewFor(options: CardOptions, linkCalls: string[]): ContentView {
   });
   if (!policy.ok) throw new Error(policy.failure.message);
   if (!reader.ok) throw new Error(reader.failure.message);
-  const outcome: LinkOpenOutcome = options.links ?? 'opened';
+  const links = options.links ?? 'opened';
   return {
     reader: reader.reader,
     policy: policy.policy,
     hostLinks: {
       open: (url) => {
         linkCalls.push(url);
-        return Promise.resolve(outcome);
+        if (links !== 'pending') return Promise.resolve<LinkOpenOutcome>(links);
+        return new Promise<LinkOpenOutcome>((resolve) => held.push(resolve));
       },
     },
     imageEnforcement: options.enforcement ?? 'established',
@@ -101,7 +104,8 @@ window.mountCard = (id, options = {}) => {
   host.dataset.cardId = id;
   host.setAttribute('aria-label', `Card ${id}`);
   const linkCalls: string[] = [];
-  const view = viewFor(options, linkCalls);
+  const held: Array<(outcome: LinkOpenOutcome) => void> = [];
+  const view = viewFor(options, linkCalls, held);
   // The view answers the cards inside its host. The host is the view's owner: it ends the view on removal.
   let endView = provideContentView(host, view);
   const element = document.createElement('saga-faithful-card-content') as FaithfulCardContentElement;
@@ -113,6 +117,9 @@ window.mountCard = (id, options = {}) => {
     element,
     view,
     linkCalls,
+    settle(outcome) {
+      for (const resolve of held.splice(0)) resolve(outcome);
+    },
     set(markdown, contractVersion = 1) {
       element.contractVersion = contractVersion;
       element.markdown = markdown;

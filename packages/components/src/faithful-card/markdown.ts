@@ -223,12 +223,32 @@ function cellsOfLine(line: string): string[] {
 }
 
 /**
+ * What recovering a table row's dropped cells needs from the parse that produced the tokens: the
+ * parser, the document environment that parse filled in (link reference definitions among it), and
+ * the source lines as the parser itself numbers them.
+ */
+interface Recovery {
+  readonly parser: Parser;
+  readonly env: Record<string, unknown>;
+  readonly sourceLines: readonly string[];
+}
+
+/**
+ * The source split into the lines the parser's token line numbers refer to. The parser first
+ * normalizes every line ending (CRLF, a lone CR and LF alike) to LF and replaces NUL, so the same
+ * is done here; the supplied string itself is never changed.
+ */
+function normalizedLines(source: string): string[] {
+  return source.replace(/\r\n?|\n/g, '\n').replace(/\0/g, '\uFFFD').split('\n');
+}
+
+/**
  * Reads one table. The parser's table rule keeps only as many cells in a body row as the header
  * has and drops the rest, which would lose text without any signal. The source line of each body
  * row is therefore split again, and the cells the parser dropped are read with the same inline
  * rules and kept after it, so every cell written is shown, in order.
  */
-function readTable(reader: TokenReader, parser: Parser, sourceLines: readonly string[]): BlockNode {
+function readTable(reader: TokenReader, recovery: Recovery): BlockNode {
   const header: TableCell[] = [];
   const rows: TableCell[][] = [];
   let row: TableCell[] | undefined;
@@ -256,7 +276,7 @@ function readTable(reader: TokenReader, parser: Parser, sourceLines: readonly st
       case 'tr_close':
         if (row !== undefined) {
           if (inHeader) header.push(...row);
-          else rows.push(withDroppedCells(row, rowLine, parser, sourceLines));
+          else rows.push(withDroppedCells(row, rowLine, recovery));
         }
         row = undefined;
         break;
@@ -265,18 +285,19 @@ function readTable(reader: TokenReader, parser: Parser, sourceLines: readonly st
   return { kind: 'table', header, rows };
 }
 
-function withDroppedCells(row: TableCell[], line: number | undefined, parser: Parser, sourceLines: readonly string[]): TableCell[] {
+function withDroppedCells(row: TableCell[], line: number | undefined, recovery: Recovery): TableCell[] {
+  const { parser, env, sourceLines } = recovery;
   const written = line === undefined ? [] : cellsOfLine(sourceLines[line] ?? '');
   const dropped = written.slice(row.length);
   if (dropped.length === 0) return row;
   const extra = dropped.map((text): TableCell => {
-    const [inline] = parser.parseInline(text, {});
+    const [inline] = parser.parseInline(text, env);
     return { children: inlineChildren(inline) };
   });
   return [...row, ...extra];
 }
 
-function readBlocks(reader: TokenReader, parser: Parser, sourceLines: readonly string[], closeType?: string): BlockNode[] {
+function readBlocks(reader: TokenReader, recovery: Recovery, closeType?: string): BlockNode[] {
   const blocks: BlockNode[] = [];
   for (let token = reader.next(); token !== undefined; token = reader.next()) {
     if (token.type === closeType) break;
@@ -293,14 +314,14 @@ function readBlocks(reader: TokenReader, parser: Parser, sourceLines: readonly s
         break;
       }
       case 'blockquote_open':
-        blocks.push({ kind: 'quote', children: readBlocks(reader, parser, sourceLines, 'blockquote_close') });
+        blocks.push({ kind: 'quote', children: readBlocks(reader, recovery, 'blockquote_close') });
         break;
       case 'bullet_list_open':
       case 'ordered_list_open': {
         const closing = token.type === 'bullet_list_open' ? 'bullet_list_close' : 'ordered_list_close';
         const items: BlockNode[][] = [];
         for (let item = reader.next(); item !== undefined && item.type !== closing; item = reader.next()) {
-          if (item.type === 'list_item_open') items.push(readBlocks(reader, parser, sourceLines, 'list_item_close'));
+          if (item.type === 'list_item_open') items.push(readBlocks(reader, recovery, 'list_item_close'));
         }
         blocks.push({
           kind: 'list',
@@ -311,7 +332,7 @@ function readBlocks(reader: TokenReader, parser: Parser, sourceLines: readonly s
         break;
       }
       case 'table_open':
-        blocks.push(readTable(reader, parser, sourceLines));
+        blocks.push(readTable(reader, recovery));
         break;
       case 'fence':
       case 'code_block':
@@ -388,8 +409,9 @@ export function parseMarkdown(source: string, settings: MarkdownSettings): Parse
     return { ok: false, failure: { kind: 'too-long', limit: settings.maxLength, length: source.length } };
   }
   const parser = parsers[settings.dialect];
-  const tokens = parser.parse(source, {});
+  const env: Record<string, unknown> = {};
+  const tokens = parser.parse(source, env);
   if (reachesNestingCeiling(tokens)) return { ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } };
-  const blocks = readBlocks(new TokenReader(tokens), parser, source.split('\n'));
+  const blocks = readBlocks(new TokenReader(tokens), { parser, env, sourceLines: normalizedLines(source) });
   return { ok: true, parsed: deepFreeze({ source, blocks }) };
 }

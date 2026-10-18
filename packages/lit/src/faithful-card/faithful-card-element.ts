@@ -43,7 +43,20 @@ interface Rendering {
   /** Whether blocked fragments are shown as source text rather than placeholders. */
   readonly revealed: boolean;
   readonly images: ImageContext;
+  /** The content revision this render shows; every control it renders is bound to it (see `current`). */
+  readonly revision: Revision;
   readonly counters: { link: number; image: number; table: number };
+}
+
+/**
+ * Identifies the rendered card revision a control belongs to: the element's lifetime counter (it
+ * advances on new content, disconnection and reconnection) and the supplied values themselves, so a
+ * control that outlives its render is recognisable even before the next update has run.
+ */
+interface Revision {
+  readonly generation: number;
+  readonly contractVersion: unknown;
+  readonly markdown: unknown;
 }
 
 /** The supplied values read once by one reader: the card, or why it was refused. */
@@ -226,6 +239,7 @@ export class FaithfulCardContentElement extends LitElement {
       strict: view.policy.level === 'strict',
       revealed: this.sourceRevealed,
       images: this.imageContext(view),
+      revision: this.revisionNow(),
       counters: { link: 0, image: 0, table: 0 },
     };
     return html`${STYLE}
@@ -242,10 +256,12 @@ export class FaithfulCardContentElement extends LitElement {
     const unavailableReason = !granted && !offer.available ? offer.reason : undefined;
     const ended = !granted && this.consentEnded;
     // The controls belong to the content revision they were rendered for; see `current`.
-    const revision = this.generation;
+    const revision = this.revisionNow();
     return html`<div class="content-controls" data-testid="card-controls">
       ${blockable
-        ? html`<button type="button" data-testid="source-toggle" @click=${() => (this.sourceRevealed = !this.sourceRevealed)}>
+        ? html`<button type="button" data-testid="source-toggle" @click=${() => {
+              if (this.current(view, revision)) this.sourceRevealed = !this.sourceRevealed;
+            }}>
             ${this.sourceRevealed ? 'Hide source' : 'Reveal source'}
           </button>`
         : nothing}
@@ -286,8 +302,17 @@ export class FaithfulCardContentElement extends LitElement {
    * changed, or after the element was disconnected, is stale and must do nothing: consent is for
    * the content the reader was shown, not whatever is current when it fires.
    */
-  private current(view: ContentView, revision: number): boolean {
-    return this.view === view && this.generation === revision;
+  private current(view: ContentView, revision: Revision): boolean {
+    return (
+      this.view === view &&
+      this.generation === revision.generation &&
+      this.contractVersion === revision.contractVersion &&
+      this.markdown === revision.markdown
+    );
+  }
+
+  private revisionNow(): Revision {
+    return { generation: this.generation, contractVersion: this.contractVersion, markdown: this.markdown };
   }
 
   /** Records consent for the current content. Callers have already checked the control is current. */
@@ -435,7 +460,7 @@ export class FaithfulCardContentElement extends LitElement {
         type="button"
         class="link-button"
         data-testid="md-link"
-        @click=${() => void this.activate(ordinal, r.view, decision.url)}
+        @click=${() => void this.activate(ordinal, r.view, r.revision, decision.url)}
       >
         ${label} <span class="link-host" data-testid="md-link-host">(${decision.hostname})</span></button
       ><span role="status" data-testid="md-link-status" data-outcome=${outcome ?? nothing}
@@ -450,10 +475,15 @@ export class FaithfulCardContentElement extends LitElement {
       : html`${LINK_FEEDBACK[outcome]} Destination: ${url}`;
   }
 
-  private async activate(ordinal: number, view: ContentView, url: string): Promise<void> {
-    const generation = this.generation;
+  /**
+   * Asks the host to open a link, but only for the card revision the button was rendered for: a
+   * button kept after the content changed or the card was removed asks nothing, and an answer that
+   * arrives after that is not shown.
+   */
+  private async activate(ordinal: number, view: ContentView, revision: Revision, url: string): Promise<void> {
+    if (!this.current(view, revision)) return;
     const outcome = await view.hostLinks.open(url);
-    if (generation !== this.generation) return;
+    if (!this.current(view, revision)) return;
     this.linkOutcomes = new Map(this.linkOutcomes).set(ordinal, outcome);
   }
 
