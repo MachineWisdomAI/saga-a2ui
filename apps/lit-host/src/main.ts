@@ -1,4 +1,4 @@
-import { NO_HOST_LINKS } from './content/host-links.js';
+import { NO_HOST_LINKS } from '@saga-a2ui/lit/faithful-card';
 import { a2uiV0_9Decoder, createMessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { registerLitElements, sagaCatalog } from './lit/integration.js';

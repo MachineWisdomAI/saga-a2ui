@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '../apps/lit-host/src/content/policy.js';
+import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';
 import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';

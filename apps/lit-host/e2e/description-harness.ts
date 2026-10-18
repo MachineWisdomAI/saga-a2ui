@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { expect, type Frame, type FrameLocator, type Page } from '@playwright/test';
-import { createContentPolicy, type ContentPolicy } from '../src/content/policy.js';
+import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
 import type { HostedResource } from './host-fixture/host.js';

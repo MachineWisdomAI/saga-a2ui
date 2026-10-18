@@ -2,7 +2,7 @@ import { request as httpRequest } from 'node:http';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createContentPolicy } from '../content/policy.js';
+import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { EPISODE_TOOL_NAME, EPISODE_VIEW_URI } from './episode.js';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import type { EpisodeRecord } from './server.js';

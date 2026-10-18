@@ -3,11 +3,11 @@ import { Catalog } from '@a2ui/web_core/v0_9';
 import { defineElements } from '@saga-a2ui/lit';
 import { html, nothing } from 'lit';
 import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
-import { SagaDescriptionElement } from './description.js';
+import { FaithfulCardContentElement } from '@saga-a2ui/lit/faithful-card';
 
 // Lit implementation of the panel contract. The title is a Lit text binding. The description is
-// handed to `saga-description`, which interprets it as restricted Markdown under the enclosing
-// view's trusted content policy; supplied strings are never parsed as markup.
+// handed to the optional FaithfulCard element, which interprets it as restricted Markdown under the
+// enclosing view's trusted reader and content policy; supplied strings are never parsed as markup.
 export class SagaPanelElement extends A2uiLitElement<typeof SagaPanelApi> {
   protected readonly api = SagaPanelApi;
 
@@ -19,7 +19,7 @@ export class SagaPanelElement extends A2uiLitElement<typeof SagaPanelApi> {
     return html`<section data-testid="panel">
       <h2 data-testid="panel-title">${title}</h2>
       ${description
-        ? html`<div data-testid="panel-description"><saga-description .source=${description}></saga-description></div>`
+        ? html`<div data-testid="panel-description"><saga-faithful-card-content .contractVersion=${1} .markdown=${description}></saga-faithful-card-content></div>`
         : nothing}
     </section>`;
   }
@@ -35,9 +35,9 @@ const SagaPanel: LitComponentApi = {
 export const sagaCatalog = new Catalog<LitComponentApi>(SAGA_CATALOG_ID, 'v0.9', [SagaPanel]);
 
 /**
- * Explicit setup: defines the catalog's custom element and the description element it uses.
+ * Explicit setup: defines the catalog's custom element and the card element it uses.
  * Call once at startup; repeating it is harmless. Nothing registers at import time.
  */
 export function registerLitElements(): void {
-  defineElements([SagaPanel, { tagName: 'saga-description', element: SagaDescriptionElement }]);
+  defineElements([SagaPanel, { tagName: 'saga-faithful-card-content', element: FaithfulCardContentElement }]);
 }

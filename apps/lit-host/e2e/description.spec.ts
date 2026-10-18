@@ -18,7 +18,7 @@ test.describe('ordinary and hostile descriptions', () => {
   test('keeps text, formatting and order, and leaves the supplied string unchanged', async ({ page }) => {
     const description = ['First paragraph with *emphasis*.', '', '> A quotation.', '', '- one', '- two', '', 'Last **strong** line.'].join('\n');
     const { view } = await open(page, { description });
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     await expect(content.locator('p').first()).toHaveText('First paragraph with emphasis.');
     await expect(content.locator('em')).toHaveText('emphasis');
     await expect(content.locator('blockquote')).toHaveText('A quotation.');
@@ -34,7 +34,7 @@ test.describe('ordinary and hostile descriptions', () => {
       '<script>window.__pwned = 1</script><img src="https://images.example.com/x.png" onerror="window.__pwned = 2"> ' +
       '<b>bold</b> ~~struck~~ [js](javascript:window.__pwned=3)';
     const { view, frame, requests } = await open(page, { description, imageHosts: [IMAGE_HOST] });
-    const content = view.getByTestId('description-content');
+    const content = view.getByTestId('card-content');
     await expect(content).toContainText('<script>window.__pwned = 1</script>');
     await expect(content).toContainText('<b>bold</b>');
     await expect(content).toContainText('~~struck~~');
@@ -46,16 +46,16 @@ test.describe('ordinary and hostile descriptions', () => {
 
   test('an over-long description is refused explicitly, without truncation', async ({ page }) => {
     const { view, frame } = await open(page, { description: 'short' });
-    await expect(view.getByTestId('description-content')).toHaveText('short');
+    await expect(view.getByTestId('card-content')).toHaveText('short');
     await frame.evaluate(() =>
       window.sagaSend?.({
         version: 'v0.9',
         updateDataModel: { surfaceId: 'fixture', path: '/description', value: 'a'.repeat(2001) },
       }),
     );
-    await expect(view.getByTestId('description-limit')).toContainText('too long');
-    await expect(view.getByTestId('description-limit')).toContainText('2001');
-    await expect(view.getByTestId('description-content')).toHaveCount(0);
+    await expect(view.getByTestId('card-failure')).toContainText('too long');
+    await expect(view.getByTestId('card-failure')).toContainText('2001');
+    await expect(view.getByTestId('card-content')).toHaveCount(0);
   });
 
   test('a description nested past the limit is refused explicitly, and one just inside keeps its text', async ({ page }) => {
@@ -70,11 +70,11 @@ test.describe('ordinary and hostile descriptions', () => {
         value,
       );
     await send('> '.repeat(19) + 'visible-word');
-    await expect(view.getByTestId('description-content')).toContainText('visible-word');
+    await expect(view.getByTestId('card-content')).toContainText('visible-word');
     await send('> '.repeat(20) + 'visible-word');
-    await expect(view.getByTestId('description-limit')).toHaveAttribute('data-reason', 'too-nested');
-    await expect(view.getByTestId('description-limit')).toContainText('nested too deeply');
-    await expect(view.getByTestId('description-content')).toHaveCount(0);
+    await expect(view.getByTestId('card-failure')).toHaveAttribute('data-reason', 'too-nested');
+    await expect(view.getByTestId('card-failure')).toContainText('nested too deeply');
+    await expect(view.getByTestId('card-content')).toHaveCount(0);
   });
 });
 

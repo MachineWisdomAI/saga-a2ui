@@ -1,6 +1,6 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createContentPolicy } from '../content/policy.js';
+import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
 import { PLAYBACK_RESULT_META, RECIPIENT_KEY_META } from './playback.js';
 import {

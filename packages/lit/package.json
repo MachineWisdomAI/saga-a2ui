@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./actions": "./src/actions/index.ts"
+    "./actions": "./src/actions/index.ts",
+    "./faithful-card": "./src/faithful-card/index.ts"
   },
   "files": [
     "src",
@@ -21,7 +22,16 @@
     "@saga-a2ui/core": "*",
     "lit": "^3.3.3"
   },
+  "peerDependencies": {
+    "@saga-a2ui/components": "*"
+  },
+  "peerDependenciesMeta": {
+    "@saga-a2ui/components": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@saga-a2ui/components": "*",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   }

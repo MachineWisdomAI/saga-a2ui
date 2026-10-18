@@ -1,4 +1,4 @@
-import { createContentPolicy, type ContentPolicy, type CreatePolicyResult } from './policy.js';
+import { createContentPolicy, type ContentPolicy, type CreatePolicyResult } from '@saga-a2ui/components/faithful-card';
 
 // How a policy travels inside a resource document. The server writes it into the HTML it serves
 // and the view rebuilds the same policy from it, validating again. Both sides use this module so

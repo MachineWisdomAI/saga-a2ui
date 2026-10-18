@@ -1,7 +1,7 @@
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { createA2uiAppElement, defineElements, ElementConflictError } from '@saga-a2ui/lit';
 import { answerCardData, answerSurface, ANSWER_SURFACE_ID } from '../../src/answer-card/presentation.js';
-import { NO_HOST_LINKS } from '../../src/content/host-links.js';
+import { NO_HOST_LINKS } from '@saga-a2ui/lit/faithful-card';
 import { AnswerCardElement, answerCatalog, registerAnswerElements } from '../../src/lit/answer-card.js';
 import { contentViewFromDocument } from '../../src/lit/content-view.js';
 import { registerLitElements, SagaPanelElement, sagaCatalog } from '../../src/lit/integration.js';

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerPublicOperation, type OperationOutcome } from '@saga-a2ui/mcp/server';
-import type { ContentPolicy } from '../content/policy.js';
+import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from './content-resource.js';
 import {
   EPISODE_TOOL_NAME,

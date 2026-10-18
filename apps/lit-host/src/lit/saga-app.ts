@@ -1,7 +1,7 @@
 import { createA2uiAppElement, type A2uiAppDependencies } from '@saga-a2ui/lit';
 import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { html } from 'lit';
-import { CONTENT_VIEW_REQUEST, ContentViewRequest, type ContentView } from './content-view.js';
+import { provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
 
 declare global {
   interface Window {
@@ -28,20 +28,19 @@ export function createSagaAppElement(deps: SagaAppDependencies) {
   class SagaApp extends createA2uiAppElement(deps) {
     private readonly send = (input: unknown): IngestResult => this.ingest(input);
 
-    // Answers descriptions inside this view with this view's own content settings.
-    private readonly answerContentRequest = (event: Event) => {
-      if (event instanceof ContentViewRequest) event.provide(deps.content);
-    };
+    // Answers cards inside this view with this view's own content settings.
+    private endContentView?: () => void;
 
     connectedCallback() {
-      this.addEventListener(CONTENT_VIEW_REQUEST, this.answerContentRequest);
+      this.endContentView = provideContentView(this, deps.content);
       super.connectedCallback();
       window.sagaSend = this.send;
     }
 
     disconnectedCallback() {
       super.disconnectedCallback();
-      this.removeEventListener(CONTENT_VIEW_REQUEST, this.answerContentRequest);
+      this.endContentView?.();
+      this.endContentView = undefined;
       if (window.sagaSend === this.send) delete window.sagaSend;
     }
 
