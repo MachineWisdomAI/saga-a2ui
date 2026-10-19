@@ -8,16 +8,22 @@ export interface ResourceCsp {
   readonly resourceDomains: readonly string[];
 }
 
+// The fixture models a host that lets a view show images and fonts from `data:` and `blob:`
+// sources, which fetch nothing from the network, and extends both with the resource's declared
+// domains. The view's own document policy narrows this further (its Strict mode omits `blob:`);
+// a document must satisfy the host's policy and its own.
+const EMBEDDED_SCHEMES = 'data: blob:';
+
 export function contentSecurityPolicy(csp: ResourceCsp): string {
   const resources = csp.resourceDomains.join(' ');
   return [
     "default-src 'none'",
     `script-src 'unsafe-inline' ${resources}`.trim(), // the view is one inline script
     `style-src 'unsafe-inline' ${resources}`.trim(),
-    `img-src ${resources || "'none'"}`,
+    `img-src ${EMBEDDED_SCHEMES} ${resources}`.trim(),
     // MCP Apps `resourceDomains` is one broad permission: it covers images, scripts,
     // stylesheets, fonts and media alike. Narrowing it is the resource document's job.
-    `font-src ${resources || "'none'"}`,
+    `font-src ${EMBEDDED_SCHEMES} ${resources}`.trim(),
     `media-src ${resources || "'none'"}`,
     `connect-src ${csp.connectDomains.join(' ') || "'none'"}`,
     "base-uri 'none'",

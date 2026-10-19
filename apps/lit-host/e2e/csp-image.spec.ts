@@ -114,16 +114,16 @@ test.describe('host fixture image policy', () => {
     );
   }
 
-  test('an empty image allowlist emits an explicit img-src none directive', async ({ page }) => {
+  test('an empty image allowlist emits the embedded baseline and no network origin', async ({ page }) => {
     const frame = await mount(page, []);
     const policy = await policyOf(frame);
     expect(policy).toContain("default-src 'none'");
     expect(policy).toContain("connect-src 'none'");
-    // An empty resource list must produce an explicit `img-src 'none'`, not a bare `img-src`.
-    expect(policy).toContain("img-src 'none'");
+    // An empty resource list must produce an explicit baseline, not a bare `img-src`.
+    expect(policy).toContain('img-src data: blob:;');
   });
 
-  test('an empty image allowlist blocks a reachable image', async ({ page }) => {
+  test('an empty image allowlist blocks a reachable network image', async ({ page }) => {
     const frame = await mount(page, []);
     // The server answers, so only the CSP can be stopping the view from loading it.
     const reachable = await fetch(allowed.imageUrl);
@@ -142,7 +142,7 @@ test.describe('host fixture image policy', () => {
   test('a populated allowlist loads its named origin and blocks another', async ({ page }) => {
     const frame = await mount(page, [allowed.origin]);
     const policy = await policyOf(frame);
-    expect(policy).toContain(`img-src ${allowed.origin}`);
+    expect(policy).toContain(`img-src data: blob: ${allowed.origin}`);
 
     const permitted = await loadImage(frame, allowed.imageUrl);
     expect(permitted.loaded).toBe(true);

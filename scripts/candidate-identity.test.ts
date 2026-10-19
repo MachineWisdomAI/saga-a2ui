@@ -14,10 +14,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONTENT_POLICY, createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
-import { EPISODE_VIEW_URI } from '../apps/lit-host/src/mcp/episode.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';
 import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
-import { createServerBudgets } from '@saga-a2ui/mcp/server';
+import { createServerBudgets, viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { createEpisodeServer } from '../apps/lit-host/src/mcp/server.js';
 import { fileURLToPath } from 'node:url';
 
@@ -78,7 +77,7 @@ describe('candidate identity', () => {
   });
 
   // MAP1 must identify the candidate the host sees. The episode view is transformed by the content
-  // policy (embedded restrictions, and a different URI per image-origin set), so the report is
+  // policy (embedded restrictions, and a URI derived from the served bytes), so the report is
   // compared with what the server actually serves, not with the raw build.
   describe('the served episode resource', () => {
     const viewHtml = '<!doctype html><html><head><title>Episode</title></head><body><saga-app></saga-app></body></html>';
@@ -100,7 +99,7 @@ describe('candidate identity', () => {
       await client.connect(clientSide);
       try {
         const listed = await client.listResources();
-        const episode = listed.resources.find((resource) => resource.uri.startsWith('ui://saga-a2ui/episode-view'));
+        const episode = listed.resources.find((resource) => resource.uri.startsWith('ui://sha256/'));
         if (episode === undefined) throw new Error('The server lists no episode view.');
         const read = await client.readResource({ uri: episode.uri });
         const content = read.contents[0];
@@ -136,7 +135,8 @@ describe('candidate identity', () => {
         if (!created.ok) throw new Error('The policy is valid.');
         const identity = episodeResourceIdentity(root, created.policy) as { uri: string; bytes: number; sha256: string };
         const actual = await served(created.policy);
-        expect(actual.uri).not.toBe('ui://saga-a2ui/episode-view.html');
+        expect(actual.uri).toBe(viewUriForHtml(actual.bytes));
+        expect(actual.uri).not.toBe((await served(DEFAULT_CONTENT_POLICY)).uri);
         expect(identity.uri).toBe(actual.uri);
         expect(identity.bytes).toBe(actual.bytes.length);
         expect(identity.sha256).toBe(sha256Hex(actual.bytes));
@@ -157,7 +157,7 @@ describe('candidate identity', () => {
         fs.copyFileSync(path.join(repoRoot, 'package-lock.json'), path.join(root, 'package-lock.json'));
         const resources = (candidateIdentity(root) as { resources: { uri: string; sha256: string }[] }).resources;
         expect(resources.map((resource) => resource.uri)).toEqual([
-          EPISODE_VIEW_URI,
+          viewUriForHtml(contentResource(viewHtml, DEFAULT_CONTENT_POLICY).html),
           SUBSCRIPTIONS_VIEW_URI,
           PLAYBACK_VIEW_URI,
         ]);
@@ -174,6 +174,17 @@ describe('candidate identity', () => {
       ]);
       expect(() => policyFromArgs(['--image-host', 'images.example.com;bogus'])).toThrow(/Invalid content policy/);
       expect(() => policyFromArgs(['--image-host'])).toThrow(/requires a value/);
+    });
+
+    it('builds the font origins from --font-origin and rejects an invalid origin instead of falling back', () => {
+      expect(policyFromArgs([]).fontOrigins).toEqual([]);
+      expect(policyFromArgs(['--font-origin', 'https://fonts.example.com:8443', '--font-origin', 'https://a.example.com']).fontOrigins).toEqual([
+        'https://a.example.com',
+        'https://fonts.example.com:8443',
+      ]);
+      expect(() => policyFromArgs(['--font-origin', 'https://*.example.com'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--font-origin', 'http://fonts.example.com'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--font-origin'])).toThrow(/requires a value/);
     });
 
     it('builds a Strict policy from --level and --blocked-presentation, and rejects invalid values', () => {

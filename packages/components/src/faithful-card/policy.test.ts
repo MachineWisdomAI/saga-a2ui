@@ -21,6 +21,7 @@ describe('creating a content policy', () => {
     expect(created.policy.level).toBe('standard');
     expect(created.policy.imageHosts).toEqual([]);
     expect(created.policy.resource.imageOrigins).toEqual([]);
+    expect(created.policy.fontOrigins).toEqual([]);
   });
 
   it('accepts exact lowercase hosts and returns them sorted without duplicates', () => {
@@ -95,7 +96,7 @@ describe('creating a content policy', () => {
         'base-uri',
         'form-action',
       ]);
-      expect(policy.resource.contentSecurityPolicy).toContain(`img-src https://${host};`);
+      expect(policy.resource.contentSecurityPolicy).toContain(`img-src data: blob: https://${host};`);
       expect(policy.decideImage(`https://${host}/a.png`, ESTABLISHED).allowed).toBe(true);
     },
   );
@@ -221,22 +222,23 @@ describe('derived resource restrictions', () => {
     const { resource } = policyWith(['images.example.com', 'cdn.example.org']);
     expect(resource.imageOrigins).toEqual(['https://cdn.example.org', 'https://images.example.com']);
     expect(directive(resource.contentSecurityPolicy, 'img-src')).toBe(
-      'img-src https://cdn.example.org https://images.example.com',
+      'img-src data: blob: https://cdn.example.org https://images.example.com',
     );
   });
 
-  it('blocks images outright under the empty allowlist', () => {
+  it('allows no network image under the empty allowlist, only the embedded baseline', () => {
     const { resource } = policyWith();
-    expect(directive(resource.contentSecurityPolicy, 'img-src')).toBe("img-src 'none'");
+    expect(directive(resource.contentSecurityPolicy, 'img-src')).toBe('img-src data: blob:');
   });
 
-  it('grants no host to scripts, styles, fonts, media, connections, frames or objects', () => {
+  it('grants no image host to scripts, styles, fonts, media, connections, frames or objects', () => {
     const { resource } = policyWith(['images.example.com']);
     const policy = resource.contentSecurityPolicy;
     expect(directive(policy, 'default-src')).toBe("default-src 'none'");
     expect(directive(policy, 'script-src')).toBe("script-src 'unsafe-inline'");
     expect(directive(policy, 'style-src')).toBe("style-src 'unsafe-inline'");
-    for (const name of ['font-src', 'media-src', 'connect-src', 'frame-src', 'object-src']) {
+    expect(directive(policy, 'font-src')).toBe('font-src data: blob:');
+    for (const name of ['media-src', 'connect-src', 'frame-src', 'object-src']) {
       expect(directive(policy, name)).toBe(`${name} 'none'`);
     }
     const others = policy.split(';').filter((part) => !part.trim().startsWith('img-src'));
