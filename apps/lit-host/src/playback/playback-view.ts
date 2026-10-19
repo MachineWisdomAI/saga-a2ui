@@ -1,6 +1,21 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/client';
-import { startBoundedTimer } from '@saga-a2ui/mcp/policy';
+import type { CallToolResult, Transport } from '@modelcontextprotocol/client';
+import {
+  Action,
+  ActionError,
+  componentKind,
+  prerequisite,
+  proceed,
+  refuse,
+  type ActionBinding,
+  type ActionDefinition,
+  type ErrorCategory,
+  type Held,
+  type InstanceEvent,
+  type InstanceHandle,
+  type InstanceView,
+  type ServerTransport,
+} from '@saga-a2ui/core/actions';
 import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
@@ -8,7 +23,6 @@ import {
   OpenedEpisodeSchema,
   HOST_CALL_SAFEGUARD_MS,
   PLAY_TOOL_NAME,
-  PLAYBACK_ATTEMPT_LIMIT_MS,
   PLAYBACK_DENIED_TEXT,
   PLAYBACK_RESULT_META,
   PLAYBACK_UNSUPPORTED_TEXT,
@@ -17,7 +31,8 @@ import {
   type OpenedEpisode,
   type ViewPlayback,
 } from './playback.js';
-import { createRecipientKey, signMediaProof } from './recipient-proof.js';
+import { createPlayerOwner, type PlaybackLease } from './player-owner.js';
+import { createRecipientKey, signMediaProof, type RecipientKey } from './recipient-proof.js';
 
 /** The one foreground player. A seam so the controller is exercised without audio hardware. */
 export interface AudioPlayer {
@@ -67,12 +82,29 @@ export type PlaybackViewState =
       readonly episode?: OpenedEpisode;
       /**
        * `unknown` when the Play request may have reached the server and nothing says what it did
-       * (a rejected or expired host call, a generic tool error, or an unusable grant): a capability
-       * may have been issued. The view then invites no retry; a new opener starts a fresh attempt.
-       * Absent when nothing was sent, or when a known result came back.
+       * (a rejected or expired host call, a generic tool error, an unusable grant, or the work
+       * deadline passing after the request was sent): a capability may have been issued. The view
+       * then invites no retry; a new opener starts a fresh attempt. Absent when nothing was sent,
+       * or when a known result came back.
        */
       readonly requestOutcome?: 'unknown';
     };
+
+/** The component ID the application's setup looks the rendered Play control up by. */
+export const PLAY_CONTROL_ID = 'saga-play-control';
+
+/**
+ * The events the rendered Play control offers. Each is the user's own press on the control's
+ * button, delivered by the control itself to the action bound to it; nothing routes by name.
+ */
+export interface PlayControlEvents {
+  readonly play: InstanceEvent<unknown>;
+  readonly pause: InstanceEvent<unknown>;
+  readonly resume: InstanceEvent<unknown>;
+}
+
+/** The directly imported token application setup passes to `watchById`. */
+export const PlayControl = componentKind<PlayControlEvents>('PlayControl');
 
 export interface PlaybackViewDependencies {
   readonly app: App;
@@ -80,26 +112,16 @@ export interface PlaybackViewDependencies {
   readonly player: AudioPlayer;
   /** Presents a state. Each call replaces everything shown before it. */
   readonly show: (state: PlaybackViewState) => void;
-  /**
-   * The longest one Play attempt may stay pending, from the press to audio advancing. Must be a
-   * finite positive number. Defaults to `PLAYBACK_ATTEMPT_LIMIT_MS`; progress never extends it.
-   */
-  readonly attemptLimitMs?: number;
-}
-
-/** The view was configured with an unusable bound. Raised before anything is requested. */
-export class PlaybackConfigurationError extends Error {
-  constructor(problem: string) {
-    super(`The playback view is not configured: ${problem}.`);
-    this.name = 'PlaybackConfigurationError';
-  }
 }
 
 export interface PlaybackViewConnection extends ToolResultViewConnection {
-  /** The user's Play activation. Must be called synchronously from the user's event. */
-  play(): void;
-  pause(): void;
-  resume(): void;
+  /**
+   * Application setup for the rendered Play control. Pass it to `InstanceHost.register`: it binds
+   * the Play, Pause and Resume actions directly to the exact control instance the host delivers.
+   * Their limits are the host's (`createInstanceHost({ limits })`), so the work deadline and the
+   * hook budget are the shared runtime's, resolved per setting like any other action's.
+   */
+  readonly attach: (view: InstanceView) => void;
 }
 
 /** Outcome of acquiring one episode's bytes, kept apart from the server's completed Play response. */
@@ -116,184 +138,153 @@ type PlayAnswer =
   | { readonly kind: 'unclassified' }
   | { readonly kind: 'grant'; readonly grant: ViewPlayback };
 
+/** How far one Play got, which decides what the view may say about the server's part in it. */
+type Reached = 'nothing-sent' | 'request-sent' | 'grant-known';
+
+/** Why a Play handler stopped, as the application's own typed cause. It carries no capability. */
+type PlayFailureKind = 'denied' | 'unsupported' | 'label-lost' | 'unknown-effect' | 'expired' | 'media-failed';
+
+const failureCategory: Readonly<Record<PlayFailureKind, ErrorCategory>> = {
+  denied: 'permission-denied',
+  unsupported: 'application',
+  'label-lost': 'application',
+  'unknown-effect': 'unknown',
+  expired: 'application',
+  'media-failed': 'unavailable',
+};
+
+class PlayFailure extends ActionError {
+  constructor(
+    readonly failure: PlayFailureKind,
+    cause?: unknown,
+  ) {
+    super(failureCategory[failure], `Play stopped: ${failure}.`, cause === undefined ? undefined : { cause });
+    this.name = 'PlayFailure';
+  }
+}
+
+/** A press the controller does not take (nothing selected, already pending or playing, retired). */
+class PressIgnored extends Error {
+  constructor() {
+    super('This press is not available in the current state.');
+    this.name = 'PressIgnored';
+  }
+}
+
+/** What Play's handler and hooks share for one invocation, returned from the synchronous prefix. */
+interface PlayActivation {
+  readonly lease: PlaybackLease;
+  readonly held: Held<PlaybackLease>;
+  /** Written by the handler as it goes; read by the failure hook. Never leaves the invocation. */
+  reached: Reached;
+}
+
+/** What a resolved Play handler returned. A failure is thrown, not returned. */
+type PlayResult =
+  | { readonly kind: 'playing'; readonly lease: PlaybackLease }
+  | { readonly kind: 'gesture-needed' }
+  /** The handler found itself obsolete; the runtime has decided or will decide cancellation. */
+  | { readonly kind: 'abandoned' };
+
+const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set(['pending', 'playing', 'paused', 'resume-blocked']);
+
 /**
  * Presents one episode with a Play control and owns the one foreground player.
  *
- * Request discipline: a Play press starts one request, identified by a generation number. Anything
- * that retires the request (a new press after a failure, a changed selection or sign-in, a denial,
- * disposal) advances the generation, aborts the byte fetch and stops the player, so a late success
- * finds a different generation and is dropped before any media is mounted. Duplicate presses while
- * a request is pending or audio is playing are ignored.
+ * Play is one server action built with `Action.server` and bound directly to the rendered control
+ * (the playback mapping "one action work interval"): a single invocation spans every pending stage.
+ * The synchronous prefix (`input`, `atActivation`) selects the item, takes a lease from the player
+ * owner and unlocks audio inside the user's event. The host-capability check and key creation are
+ * prerequisites; the handler makes the host call, validates the grant, signs the proof, acquires
+ * the body, decodes and starts the player, and on a confirmed start transfers the lease to the
+ * owner with nothing awaited between. The work deadline therefore bounds key creation through the
+ * start, progress cannot extend it, and the success hook (presenting `playing`) is under the hook
+ * budget. Pause and Resume are local actions that call the player inside the activation.
  *
- * Teardown: the host's teardown request stops the audio and retires the controller (`tornDown`):
- * Play, Pause, Resume, the end event and every continuation of an earlier press then do nothing.
- * It does not dispose the connection; the later `dispose()` still closes it once. A start that
- * settles for a retired press releases the player only if no later press has taken it over.
+ * Request discipline: duplicate presses while a Play is pending are ignored by the binding's busy
+ * policy; a press while audio is playing or paused is not taken. A changed selection is a changed
+ * subject, which cancels an undecided invocation at its next checkpoint, and the owner ends the
+ * audio at once. Cancellation never claims the server stopped.
  *
- * Time: one attempt bound (`attemptLimitMs`) starts at the press, before the key is created, and
- * covers every client stage after it. It is cleared by any outcome and by retirement, never by a
- * successful start (the audio keeps playing), and nothing that happens inside the attempt renews
- * it. On expiry the attempt is retired like any other end: its signal aborts, the player stops, and
- * the view says `unavailable`, inviting no retry when a request may already have reached the server
- * with an unknown effect. The host call also gets the attempt's signal and a timeout no wider than
- * what the attempt has left.
+ * Teardown: the host's teardown request disposes the bindings and stops the audio, then retires the
+ * controller (`tornDown`): every continuation of an earlier press does nothing. It does not dispose
+ * the connection; the later `dispose()` still closes it once.
  *
  * Label loss: an opener or a grant under a label other than the pinned one ends this view for good.
- * The selection is cleared, the player stops, and `session-changed` stays: every later opener (the
- * old label, the new one or an unreadable one) is ignored, and Play, Pause and Resume do nothing.
- * Recovery is a new view or a reload, which pins its own label. The loss is detected only when a
- * result carries a different label; a delayed opener under the same label cannot be told apart.
+ * The selection is cleared, the bindings are disposed, the player stops, and `session-changed`
+ * stays: every later opener is ignored. Recovery is a new view or a reload, which pins its own label.
  *
  * Trust: the response is accepted only if it names the selected episode, the pinned sign-in and a
  * media URL for that same episode. The sign-in label is freshness only; the server authorizes every
- * Play and every media acquisition. A retry never reuses saved authorization: it is a new Play.
+ * Play and every media acquisition. A retry never reuses saved authorization: it makes a new Play.
  */
 export async function connectPlaybackView(deps: PlaybackViewDependencies): Promise<PlaybackViewConnection> {
-  const { app, player } = deps;
-  const attemptLimitMs: unknown = deps.attemptLimitMs ?? PLAYBACK_ATTEMPT_LIMIT_MS;
-  if (typeof attemptLimitMs !== 'number' || !Number.isFinite(attemptLimitMs) || attemptLimitMs <= 0) {
-    throw new PlaybackConfigurationError('attemptLimitMs must be a finite positive number');
-  }
+  const { app } = deps;
+  const owner = createPlayerOwner(deps.player);
   let selected: OpenedEpisode | undefined;
   let pinnedSession: string | undefined;
   let kind: PlaybackViewState['kind'] = 'no-selection';
-  let generation = 0;
-  let abort: AbortController | undefined;
   // The host asked the view to tear down. This retires the view's own work and presentation but is
   // not `disposed`: that flag makes `dispose()` return before it reaches the bridge, and the host's
   // teardown does not close the connection, so the later `dispose()` must still close it once.
   let tornDown = false;
   let disposed = false;
-  // The pinned label was lost through an opener or a grant. Unlike the per-request generation, this
-  // is permanent for the view: nothing clears it, so no later result can reactivate the controller.
+  // The pinned label was lost through an opener or a grant. Permanent for the view: nothing clears
+  // it, so no later result can reactivate the controller.
   let labelLost = false;
-  // The generation of the latest Play press, which owns the player's one resource. A start that
-  // settles for an earlier press may release the player only while no later press has taken it.
-  let latestPlay = 0;
-  // The Pause or Resume the player has not yet confirmed. The shown state stays the one the user
-  // last saw until the player reports what the audio actually did.
-  let settlingCounter = 0;
-  let settling: number | undefined;
-  // The start the player has not yet confirmed, and whether the audio ended while it was waiting.
-  let starting: { readonly generation: number; ended: boolean } | undefined;
+  const bindings = new Set<ActionBinding>();
 
-  // The one timer and deadline of the attempt in flight. Both are cleared together.
-  let cancelAttemptTimer: (() => void) | undefined;
-  let attemptDeadline = 0;
-  // How far the attempt got, which decides what the view may say about the server's part in it.
-  // `grant-known` is reached only by a classified answer (a precise early refusal or a valid grant);
-  // a resolved call that is a generic error or an unusable grant stays `request-sent`.
-  let reached: 'nothing-sent' | 'request-sent' | 'grant-known' = 'nothing-sent';
+  // `dispose()` has begun. Set before the bindings end so a canceled Play presents nothing while the
+  // view is closing; `disposed` itself stays last because it makes a second `dispose()` return early.
+  let closing = false;
+  // The identity of the current selection as a press's subject. A new object on every opener, valid
+  // or not, so an opener that retires the presentation also ends an undecided Play for the old
+  // selection even when it leaves the selected item itself unchanged (a malformed opener).
+  let selection: object = {};
 
-  const retired = () => disposed || tornDown || labelLost;
-
-  const disarmAttempt = () => {
-    cancelAttemptTimer?.();
-    cancelAttemptTimer = undefined;
-  };
+  const retired = () => disposed || closing || tornDown || labelLost;
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
-    // Any outcome other than pending ends the attempt's clock. Playing is an outcome: the audio
-    // continues, only the bound on getting there is over.
-    if (state.kind !== 'pending') disarmAttempt();
     if (!retired()) deps.show(state);
   };
 
-  /** Retires any pending request and stops the player; nothing audible or fetchable survives. */
-  const retire = () => {
-    disarmAttempt();
-    generation += 1;
-    settling = undefined;
-    abort?.abort();
-    abort = undefined;
-    player.stop();
+  const disposeBindings = () => {
+    for (const binding of [...bindings]) binding.dispose();
+    bindings.clear();
   };
 
+  /** Stops the audio and presents `state`. The owner's whole-player stop is the application's own call. */
   const clearWith = (state: PlaybackViewState) => {
-    retire();
+    owner.teardown();
     present(state);
   };
 
   /**
-   * Starts the attempt's clock for the press that was just made. The deadline is absolute: nothing
-   * done later in the attempt moves it. If the attempt is still the current one and still pending
-   * when it passes, it ends like any other failure, and what the view may say depends on how far the
-   * attempt got: a request that may have reached the server has an unknown outcome.
-   */
-  const armAttempt = (mine: number, episode: OpenedEpisode) => {
-    disarmAttempt();
-    attemptDeadline = performance.now() + attemptLimitMs;
-    // Segmented, so an accepted limit above the native timer's maximum is not cut to about a millisecond.
-    cancelAttemptTimer = startBoundedTimer(attemptLimitMs, () => {
-      cancelAttemptTimer = undefined;
-      if (mine !== generation || retired() || kind !== 'pending') return;
-      expireAttempt(episode);
-    });
-  };
-
-  const expireAttempt = (episode: OpenedEpisode) =>
-    clearWith(reached === 'request-sent' ? { kind: 'unavailable', episode, requestOutcome: 'unknown' } : { kind: 'unavailable', episode });
-
-  /**
-   * Whether the attempt's deadline has passed and it was ended here. A timer is not the only witness:
-   * work that blocked the thread, or a continuation delivered before the timer, reaches the next stage
-   * after the deadline with the timer still waiting. Every continuation asks this before it goes on.
-   */
-  const attemptOver = (mine: number, episode: OpenedEpisode): boolean => {
-    if (mine !== generation || retired() || kind !== 'pending' || performance.now() < attemptDeadline) return false;
-    expireAttempt(episode);
-    return true;
-  };
-
-  /**
-   * Ends the view after the pinned label was lost: clears the selection, stops the player and shows
-   * `session-changed`. The flag is set last and never cleared, so every later input is inert.
+   * Ends the view after the pinned label was lost: clears the selection, ends the bindings and the
+   * audio, and shows `session-changed`. The flag is set last and never cleared.
    */
   const loseLabel = () => {
     selected = undefined;
-    retire();
+    selection = {};
+    disposeBindings();
+    owner.teardown();
     labelLost = true;
     kind = 'session-changed';
     if (!disposed && !tornDown) deps.show({ kind: 'session-changed' });
   };
 
-  player.onEnded(() => {
-    if (!selected || retired()) return;
-    if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') {
-      settling = undefined; // a Pause or Resume still in flight must not replace the end
-      present({ kind: 'ended', episode: selected });
-    } else if (kind === 'pending' && starting?.generation === generation) {
-      starting.ended = true; // the start has not been confirmed yet: remember it for that moment
-    }
+  owner.onEnded((lease) => {
+    if (!selected || retired() || !owner.isCurrent(lease)) return;
+    // While a Play is still starting, the owner remembers the end and the invocation reports it.
+    if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') present({ kind: 'ended', episode: selected });
   });
-
-  /**
-   * Runs one Pause or Resume and presents what the player reports. The player is called inside the
-   * user's activation; the shown state changes only when it answers, and not at all if the audio
-   * was retired or ended meanwhile. A player that cannot do it is a media failure.
-   */
-  function settle<T>(attempt: () => Promise<T>, outcome: (result: T, episode: OpenedEpisode) => PlaybackViewState): void {
-    if (settling !== undefined || !selected || retired()) return;
-    const episode = selected;
-    settlingCounter += 1;
-    const mine = settlingCounter;
-    settling = mine;
-    const current = () => settling === mine && !retired();
-    (async () => attempt())().then(
-      (result) => {
-        if (!current()) return;
-        settling = undefined;
-        present(outcome(result, episode));
-      },
-      () => {
-        if (current()) clearWith({ kind: 'media-failed', episode });
-      },
-    );
-  }
 
   const onOpened = (result: ToolResult) => {
     if (retired()) return;
+    // Every opener retires the presentation, so an undecided Play for the earlier presentation is
+    // stale at its next checkpoint whether or not the opener names a different item.
+    selection = {};
     const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
     if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
     if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) return loseLabel();
@@ -302,12 +293,18 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     clearWith({ kind: 'ready', episode: opened.data });
   };
 
-  /** Fetches the protected bytes with the capability and a fresh proof from the bound key. */
-  async function acquire(view: ViewPlayback, key: Awaited<ReturnType<typeof createRecipientKey>>, signal: AbortSignal): Promise<Acquisition> {
+  /**
+   * Fetches the protected bytes with the capability and a fresh proof from the bound key. `current`
+   * is the invocation's own checkpoint: it also reads the work deadline's clock, so a proof that
+   * finished after the bound (its continuation delivered before the deadline timer) sends nothing.
+   */
+  async function acquire(view: ViewPlayback, key: RecipientKey, signal: AbortSignal, current: () => boolean): Promise<Acquisition> {
     try {
+      if (!current() || signal.aborted) return { kind: 'failed' };
       const proof = await signMediaProof(key, { capability: view.capability, url: view.mediaUrl });
-      // Past the bound (the timer may not have been delivered yet): no request leaves the view now.
-      if (signal.aborted || performance.now() >= attemptDeadline) return { kind: 'failed' };
+      // The work deadline may have passed, or the Play been retired, while the proof was signed: no
+      // request carrying the capability and the proof leaves the view now.
+      if (!current() || signal.aborted) return { kind: 'failed' };
       const response = await fetch(view.mediaUrl, {
         headers: { [CAPABILITY_HEADER]: view.capability, [PROOF_HEADER]: proof },
         cache: 'no-store',
@@ -356,87 +353,217 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     return acceptable(granted.data, episode) ? { kind: 'grant', grant: granted.data } : { kind: 'unclassified' };
   };
 
-  async function run(episode: OpenedEpisode, mine: number): Promise<void> {
-    const current = () => mine === generation && !retired();
-    if (!app.getHostCapabilities()?.serverTools) return present({ kind: 'unsupported', episode });
-    const controller = new AbortController();
-    abort = controller;
-
-    let key;
-    try {
-      key = await createRecipientKey();
-    } catch {
-      if (current()) present({ kind: 'unsupported', episode });
-      return;
-    }
-    if (!current() || attemptOver(mine, episode)) return;
-
-    let result: ToolResult;
-    reached = 'request-sent';
-    try {
-      result = await app.callServerTool(
+  // The application's seam to its server: the MCP Apps bridge itself. Progress from the host never
+  // extends the deadline, and the request carries its `_meta` beside (never inside) its arguments.
+  const transport: ServerTransport<CallToolResult> = {
+    callServerTool: (request, options) =>
+      app.callServerTool(
         {
-          name: PLAY_TOOL_NAME,
-          arguments: { episodeId: episode.episodeId },
-          _meta: { [RECIPIENT_KEY_META]: key.publicJwk },
+          name: request.name,
+          ...(request.arguments === undefined ? {} : { arguments: { ...request.arguments } }),
+          ...(request._meta === undefined ? {} : { _meta: { ...request._meta } }),
         },
-        {
-          signal: controller.signal,
-          // No wider than what the attempt has left or the transport's own safeguard, and progress
-          // from the host never extends it (the App's default would).
-          timeout: Math.max(1, Math.min(attemptDeadline - performance.now(), HOST_CALL_SAFEGUARD_MS)),
-          resetTimeoutOnProgress: false,
-        },
-      );
-    } catch {
-      // A rejection, a timeout and an abort look the same from here: the host may or may not have
-      // forwarded the call, so this does not say the credential was refused, and the outcome of the
-      // request is unknown.
-      if (current()) clearWith({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
-      return;
-    }
-    if (!current()) return; // retired while waiting: a late success must not restore anything
+        { ...options, resetTimeoutOnProgress: false },
+      ),
+  };
 
-    // Classify the answer before anything decides expiry or recovery. A transport that resolved says
-    // nothing about the server's effect: only a precise early refusal or a valid grant for this
-    // episode and sign-in establishes a known result. Any other answer leaves the request's effect
-    // unknown (`reached` stays 'request-sent'), whether the bound has passed or not.
-    const answer = classifyAnswer(result, episode);
-    if (answer.kind !== 'unclassified') reached = 'grant-known';
-    if (attemptOver(mine, episode)) return; // answered, but after the bound: the result is dropped
+  /** Selects the item a press acts on, or ignores the press. Runs in the event, before any effect. */
+  const pressable = (allowed: (current: PlaybackViewState['kind']) => boolean): { readonly episode: OpenedEpisode } => {
+    if (retired() || !selected || !allowed(kind)) throw new PressIgnored();
+    return { episode: selected };
+  };
 
-    if (answer.kind === 'unclassified') return clearWith({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
-    if (answer.kind === 'denied') return clearWith({ kind: 'denied', episode });
-    if (answer.kind === 'unsupported') return clearWith({ kind: 'unsupported', episode });
-    if (answer.kind === 'label-lost') return loseLabel();
+  // Prerequisites: a failure of either is a prerequisite-stage failure, and the host call never starts.
+  const hostForwardsServerTools = prerequisite('host-server-tools', () =>
+    app.getHostCapabilities()?.serverTools ? proceed() : refuse('the host cannot proxy server tools'),
+  );
+  const recipientKey = prerequisite('recipient-key', async () => proceed({ key: await createRecipientKey() }));
 
-    const media = await acquire(answer.grant, key, controller.signal);
-    if (!current() || attemptOver(mine, episode)) return;
-    if (media.kind === 'refused') return clearWith({ kind: 'expired', episode });
-    if (media.kind === 'failed') return clearWith({ kind: 'media-failed', episode });
+  /** Presents what a Play that returned its result established. */
+  const presentResult = (result: PlayResult, episode: OpenedEpisode): void => {
+    if (result.kind === 'gesture-needed') return present({ kind: 'gesture-needed', episode });
+    // Audio that is short enough can end before the player confirms it started. That end belongs
+    // to this lease, so it wins over the late `started` result.
+    if (result.kind === 'playing') present({ kind: owner.hasEnded(result.lease) ? 'ended' : 'playing', episode });
+  };
 
-    // Audio that is short enough can end before the player confirms it started. That end belongs to
-    // this request, so it is remembered here and wins over the late `started` result.
-    const awaited = { generation: mine, ended: false };
-    starting = awaited;
-    try {
-      const started = await player.start(media.bytes);
-      if (!current()) {
-        // Release what this press started, unless a later press has since taken the player over.
-        if (latestPlay === mine) player.stop();
-        return;
+  const play: ActionDefinition<PlayControlEvents['play']> = Action.server<PlayControlEvents['play'], CallToolResult>('play', transport)
+    .input(() => pressable((current) => !STATES_THAT_BLOCK_PLAY.has(current)))
+    .atActivation(({ scope }): PlayActivation => {
+      // Inside the user's activation: end the previous audio, unlock this press's, and own the lease.
+      // A browser with no Web Audio cannot play at all, so `begin` throws and nothing protected is requested.
+      const lease = owner.begin();
+      const held = scope.own(lease, (token) => owner.end(token));
+      if (selected) present({ kind: 'pending', episode: selected });
+      return { lease, held, reached: 'nothing-sent' };
+    })
+    .before(hostForwardsServerTools)
+    .before(recipientKey)
+    .run(async ({ call, signal, current, params, provided, activation }): Promise<PlayResult> => {
+      const { episode } = params;
+      const { key } = provided;
+      const abandoned: PlayResult = { kind: 'abandoned' };
+
+      activation.reached = 'request-sent';
+      let result: ToolResult;
+      try {
+        result = await call(
+          PLAY_TOOL_NAME,
+          { episodeId: episode.episodeId },
+          { timeoutMs: HOST_CALL_SAFEGUARD_MS, meta: { [RECIPIENT_KEY_META]: key.publicJwk } },
+        );
+      } catch (error) {
+        // A rejection, a timeout and an abort look the same from here: the host may or may not have
+        // forwarded the call, so this does not say the credential was refused.
+        throw new PlayFailure('unknown-effect', error);
       }
-      if (attemptOver(mine, episode)) return; // started after the bound: ending the attempt stops the player
-      if (awaited.ended) return present({ kind: 'ended', episode });
-      if (started === 'blocked') return clearWith({ kind: 'gesture-needed', episode });
-      present({ kind: 'playing', episode });
-    } catch {
-      // The bytes arrived; the browser could not play them. That is not a server denial.
-      if (current()) clearWith({ kind: 'media-failed', episode });
-    } finally {
-      if (starting === awaited) starting = undefined;
-    }
+      // Classify before anything decides recovery, and before asking whether this press is still
+      // wanted: only a precise early refusal or a valid grant for this episode and sign-in
+      // establishes a known result, even for an answer that came back too late to be used.
+      const answer = classifyAnswer(result, episode);
+      if (answer.kind !== 'unclassified') activation.reached = 'grant-known';
+      if (!current()) return abandoned; // retired while waiting: a late success must not restore anything
+      if (answer.kind === 'unclassified') throw new PlayFailure('unknown-effect');
+      if (answer.kind === 'denied') throw new PlayFailure('denied');
+      if (answer.kind === 'unsupported') throw new PlayFailure('unsupported');
+      if (answer.kind === 'label-lost') throw new PlayFailure('label-lost');
+
+      const media = await acquire(answer.grant, key, signal, current);
+      if (!current()) return abandoned;
+      if (media.kind === 'refused') throw new PlayFailure('expired');
+      if (media.kind === 'failed') throw new PlayFailure('media-failed');
+
+      let started: 'started' | 'blocked';
+      try {
+        started = await owner.start(activation.lease, media.bytes);
+      } catch (error) {
+        // The bytes arrived; the browser could not play them. That is not a server denial.
+        if (!current()) return abandoned;
+        throw new PlayFailure('media-failed', error);
+      }
+      if (!current()) return abandoned; // the scope releases this press's lease
+      // A browser that withheld audio needs a new gesture. Nothing plays, so nothing is handed over.
+      if (started === 'blocked') return { kind: 'gesture-needed' };
+      // Synchronous hand-off: the owner holds the lease from here, and nothing was awaited since the start.
+      if (!activation.held.transfer((lease) => owner.retain(lease))) return abandoned;
+      return { kind: 'playing', lease: activation.lease };
+    })
+    .onSuccess(({ result, params, current }) => {
+      if (!current()) return;
+      presentResult(result, params.episode);
+    })
+    .onCanceled((context) => {
+      // A changed subject was a new opener, which presented its own state; a label loss, teardown
+      // or disposal retired the view and presents nothing. What is left is this Play's own control
+      // being retired (unmounted or replaced) while the view still shows it pending: with nothing
+      // else to move it on, pending would stay for good and refuse every later press.
+      if (context.cause !== 'disposed' || retired() || kind !== 'pending' || selected !== context.params.episode) return;
+      const { episode } = context.params;
+      // Audio that already started under this press belongs to the owner and is reported as such.
+      if (context.stage === 'completing') return presentResult(context.result, episode);
+      // Say only what the progress supports. A request that may have reached the server has an
+      // unknown effect, so no retry is invited; a new opener starts a fresh attempt. A grant whose
+      // bytes were never fetched is a known result and offers a fresh Play, never the old capability.
+      switch (context.activation.reached) {
+        case 'nothing-sent':
+          return present({ kind: 'ready', episode });
+        case 'request-sent':
+          return present({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
+        case 'grant-known':
+          return present({ kind: 'unavailable', episode });
+      }
+    })
+    .onFailure((context) => {
+      if (!context.current()) return;
+      if (context.stage === 'input') {
+        // A press the controller did not take changes nothing; a prefix that could not unlock audio
+        // means nothing protected was requested.
+        if (context.failure.kind === 'invalid-input') return;
+        return present({ kind: 'unsupported', ...(selected ? { episode: selected } : {}) });
+      }
+      const { episode } = context.params;
+      if (context.stage === 'prerequisites') {
+        // The protected play request was not sent. A refusal or a failed key is "this host cannot",
+        // and a deadline that passed here is not an unknown remote effect.
+        return present(context.failure.kind === 'timeout' ? { kind: 'unavailable', episode } : { kind: 'unsupported', episode });
+      }
+      const { failure } = context;
+      // The handler returned and the required success work failed: the audio keeps playing.
+      if (failure.kind === 'success-hook-error' || failure.kind === 'success-hook-timeout') return;
+      const unknownEffect = { kind: 'unavailable', episode, requestOutcome: 'unknown' } as const;
+      if (failure.kind === 'timeout') {
+        // Past the work deadline: a request that may have reached the server has an unknown effect.
+        return present(context.activation.reached === 'request-sent' ? unknownEffect : { kind: 'unavailable', episode });
+      }
+      if (failure.error instanceof PlayFailure) {
+        switch (failure.error.failure) {
+          case 'denied':
+            return present({ kind: 'denied', episode });
+          case 'unsupported':
+            return present({ kind: 'unsupported', episode });
+          case 'expired':
+            return present({ kind: 'expired', episode });
+          case 'media-failed':
+            return present({ kind: 'media-failed', episode });
+          case 'label-lost':
+            return loseLabel();
+          case 'unknown-effect':
+            return present(unknownEffect);
+        }
+      }
+      // Any other failure of the handler: say only what the progress made supports.
+      present(context.activation.reached === 'request-sent' ? unknownEffect : { kind: 'unavailable', episode });
+    })
+    .build();
+
+  /**
+   * Pause and Resume: local actions that call the player inside the user's activation and present
+   * what the player reports once it answers. The shown state changes only for the lease the player
+   * still holds and while the view still shows the state the press started from.
+   */
+  function playerStep<T>(
+    label: string,
+    allowed: readonly PlaybackViewState['kind'][],
+    step: (lease: PlaybackLease) => Promise<T>,
+    outcome: (result: T) => 'playing' | 'paused' | 'resume-blocked',
+  ): ActionDefinition<PlayControlEvents['play']> {
+    const stillRelevant = (lease: PlaybackLease) => owner.isCurrent(lease) && allowed.includes(kind);
+    return Action.local<PlayControlEvents['play']>(label)
+      .input(() => pressable((current) => allowed.includes(current)))
+      .atActivation(() => {
+        const lease = owner.current();
+        if (!lease) throw new PressIgnored();
+        // The player call happens here, in the event's own call stack, because the browser can
+        // require a gesture. The wrapper keeps the returned promise out of the prefix's return type.
+        const pending = step(lease);
+        pending.catch(() => undefined); // the handler awaits it; no unhandled rejection if it never gets to
+        return { lease, pending };
+      })
+      .run(({ activation }) => activation.pending)
+      .onSuccess(({ result, params, activation, current }) => {
+        if (current() && stillRelevant(activation.lease)) present({ kind: outcome(result), episode: params.episode });
+      })
+      .onFailure((context) => {
+        if (context.stage === 'input' || !context.current() || !stillRelevant(context.activation.lease)) return;
+        // A player that cannot do it is a media failure, not a server denial.
+        owner.end(context.activation.lease);
+        present({ kind: 'media-failed', episode: context.params.episode });
+      })
+      .build();
   }
+
+  const pause = playerStep(
+    'pause',
+    ['playing'],
+    (lease) => owner.pause(lease),
+    () => 'paused',
+  );
+  const resume = playerStep(
+    'resume',
+    ['paused', 'resume-blocked'],
+    (lease) => owner.resume(lease),
+    (resumed) => (resumed === 'resumed' ? 'playing' : 'resume-blocked'),
+  );
 
   const connection = await connectToolResultView({
     app,
@@ -445,49 +572,30 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     // The host ends the connection right after it answers teardown, so audio must stop now.
     onTeardown() {
       tornDown = true;
-      retire();
+      disposeBindings();
+      owner.teardown();
     },
   });
 
+  const attach = (view: InstanceView): void => {
+    view.watchById(PLAY_CONTROL_ID, PlayControl, (handle: InstanceHandle<PlayControlEvents>) => {
+      if (retired()) return;
+      // The selection is the subject of every press: a new opener changes it, which cancels an
+      // undecided invocation at its next checkpoint instead of letting it finish for the old item.
+      const options = { subject: () => selection };
+      bindings.add(handle.bindAction('play', play, options));
+      bindings.add(handle.bindAction('pause', pause, options));
+      bindings.add(handle.bindAction('resume', resume, options));
+    });
+  };
+
   return {
-    play() {
-      if (retired() || !selected) return;
-      if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') return;
-      const episode = selected;
-      // Retire first: stopping releases the player's context, so preparing before it would
-      // destroy the context this press just unlocked.
-      retire();
-      // Still inside the user's activation: unlock audio now, before any asynchronous authorization.
-      // A browser with no Web Audio cannot play at all, so nothing protected is requested for it.
-      try {
-        player.prepare();
-      } catch {
-        present({ kind: 'unsupported', episode });
-        return;
-      }
-      present({ kind: 'pending', episode });
-      latestPlay = generation;
-      reached = 'nothing-sent';
-      armAttempt(generation, episode);
-      void run(episode, generation);
-    },
-    pause() {
-      if (kind !== 'playing') return;
-      settle(
-        () => player.pause(),
-        (_, episode) => ({ kind: 'paused', episode }),
-      );
-    },
-    resume() {
-      if (kind !== 'paused' && kind !== 'resume-blocked') return;
-      settle(
-        () => player.resume(),
-        (resumed, episode) => ({ kind: resumed === 'resumed' ? 'playing' : 'resume-blocked', episode }),
-      );
-    },
+    attach,
     dispose() {
       if (disposed) return;
-      retire();
+      closing = true;
+      disposeBindings();
+      owner.teardown();
       disposed = true;
       connection.dispose();
     },

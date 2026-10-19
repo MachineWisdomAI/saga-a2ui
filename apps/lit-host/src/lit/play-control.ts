@@ -1,8 +1,10 @@
+import type { InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
 import { LitElement, css, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
-import type { PlaybackViewState } from '../playback/playback-view.js';
+import { PLAY_CONTROL_ID, PlayControl, type PlayControlEvents, type PlaybackViewState } from '../playback/playback-view.js';
 
-export type PlayControlAction = 'saga-play' | 'saga-pause' | 'saga-resume';
+/** The event of this control a press delivers: the name of the action slot it feeds. */
+export type PlayControlAction = keyof PlayControlEvents;
 
 interface Presentation {
   readonly status: string;
@@ -18,31 +20,31 @@ function presentationFor(state: PlaybackViewState): Presentation {
     case 'no-selection':
       return { status: 'Waiting for an episode…' };
     case 'ready':
-      return { status: `Ready to play ${title}.`, button: { label: 'Play', action: 'saga-play' } };
+      return { status: `Ready to play ${title}.`, button: { label: 'Play', action: 'play' } };
     case 'pending':
-      return { status: 'Checking access…', button: { label: 'Play', action: 'saga-play' }, busy: true };
+      return { status: 'Checking access…', button: { label: 'Play', action: 'play' }, busy: true };
     case 'playing':
-      return { status: `Playing ${title}.`, button: { label: 'Pause', action: 'saga-pause' } };
+      return { status: `Playing ${title}.`, button: { label: 'Pause', action: 'pause' } };
     case 'paused':
-      return { status: 'Paused.', button: { label: 'Resume', action: 'saga-resume' } };
+      return { status: 'Paused.', button: { label: 'Resume', action: 'resume' } };
     case 'resume-blocked':
       // The audio is still paused where it stopped; another press, not a new authorization, retries.
       return {
         status: 'Your browser needs another press to continue the audio.',
-        button: { label: 'Resume', action: 'saga-resume' },
+        button: { label: 'Resume', action: 'resume' },
       };
     case 'ended':
-      return { status: 'Finished playing.', button: { label: 'Play again', action: 'saga-play' } };
+      return { status: 'Finished playing.', button: { label: 'Play again', action: 'play' } };
     case 'denied':
       // Signing in again does not grant a subscription, so this offers a retry, not a sign-in.
       return {
         status: 'Playback denied: this account does not have access to this episode.',
-        button: { label: 'Try again', action: 'saga-play' },
+        button: { label: 'Try again', action: 'play' },
       };
     case 'expired':
       return {
         status: 'Playback access expired. Press Play to ask for access again.',
-        button: { label: 'Play', action: 'saga-play' },
+        button: { label: 'Play', action: 'play' },
       };
     case 'unsupported':
       return { status: 'Playback is not supported here.' };
@@ -52,13 +54,13 @@ function presentationFor(state: PlaybackViewState): Presentation {
       if (state.requestOutcome === 'unknown') {
         return { status: 'Playback could not be confirmed. Open this episode again to try playing it.' };
       }
-      return { status: 'Playback is unavailable right now.', button: { label: 'Try again', action: 'saga-play' } };
+      return { status: 'Playback is unavailable right now.', button: { label: 'Try again', action: 'play' } };
     case 'media-failed':
-      return { status: 'The audio could not be played.', button: { label: 'Try again', action: 'saga-play' } };
+      return { status: 'The audio could not be played.', button: { label: 'Try again', action: 'play' } };
     case 'gesture-needed':
       return {
         status: 'Your browser needs another press to start the audio.',
-        button: { label: 'Play', action: 'saga-play' },
+        button: { label: 'Play', action: 'play' },
       };
     case 'session-changed':
       return { status: 'Your session changed. Open a new view or reload to continue.' };
@@ -68,8 +70,10 @@ function presentationFor(state: PlaybackViewState): Presentation {
 /**
  * The Play control: one button and one status line for the controller's current state.
  *
- * Presentation only. It never decides whether playback is allowed; it reports the user's press as
- * an event and shows whatever state it is given.
+ * Presentation only. It never decides whether playback is allowed; it hands the user's press, still
+ * inside the click event, to whatever action the application bound to this exact rendered instance,
+ * and shows whatever state it is given. It opens one instance on the host it is given and retires it
+ * when it leaves the document; the application's setup finds it by `PLAY_CONTROL_ID` and binds to it.
  *
  * Accessibility: the button stays in place and focusable while a request is pending (it is marked
  * `aria-disabled` and `aria-busy` rather than removed or `disabled`), so a keyboard user is not
@@ -121,6 +125,48 @@ export class PlayControlElement extends LitElement {
   @property({ attribute: false }) state: PlaybackViewState = { kind: 'no-selection' };
 
   private buttonHadFocus = false;
+  #host: InstanceHost | undefined;
+  #instance: OpenInstance<PlayControlEvents> | undefined;
+
+  /** The action host this control opens its instance on. Set once, before or after it connects. */
+  get host(): InstanceHost | undefined {
+    return this.#host;
+  }
+  set host(value: InstanceHost | undefined) {
+    if (value === this.#host) return;
+    this.#retire();
+    this.#host = value;
+    this.#open();
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#open();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#retire();
+  }
+
+  #open(): void {
+    const host = this.#host;
+    if (!host || this.#instance || !this.isConnected) return;
+    this.#instance = host.open<PlayControlEvents>({
+      kind: PlayControl,
+      componentId: PLAY_CONTROL_ID,
+      dataPath: '/',
+      events: ['play', 'pause', 'resume'],
+      // A fresh pull on every call: the control left the document, or was given another host.
+      isLive: () => this.isConnected && this.#host === host,
+      read: () => undefined, // the control shows no data scope of its own
+    });
+  }
+
+  #retire(): void {
+    this.#instance?.retire();
+    this.#instance = undefined;
+  }
 
   protected override willUpdate(): void {
     const button = this.renderRoot.querySelector('button');
@@ -133,9 +179,10 @@ export class PlayControlElement extends LitElement {
     }
   }
 
-  private press(action: PlayControlAction, busy: boolean | undefined): void {
-    if (busy) return; // a pending request ignores the press; the controller also suppresses it
-    this.dispatchEvent(new CustomEvent(action, { bubbles: true, composed: true }));
+  private press(action: PlayControlAction, busy: boolean | undefined, event: Event): void {
+    if (busy) return; // a pending request ignores the press; the bound action's busy policy also does
+    // Synchronous, inside the click: the bound action's activation prefix runs in this call stack.
+    this.#instance?.activate(action, event);
   }
 
   protected override render() {
@@ -147,7 +194,7 @@ export class PlayControlElement extends LitElement {
             data-testid="play-button"
             aria-disabled=${shown.busy ? 'true' : 'false'}
             aria-busy=${shown.busy ? 'true' : 'false'}
-            @click=${() => this.press(shown.button?.action ?? 'saga-play', shown.busy)}
+            @click=${(event: Event) => this.press(shown.button?.action ?? 'play', shown.busy, event)}
           >
             ${shown.button.label}
           </button>`

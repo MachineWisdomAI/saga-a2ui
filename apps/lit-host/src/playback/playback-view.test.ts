@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PublicEpisode } from '../mcp/episode.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
 import { MEDIA_BYTES, startPlaybackHarness, startRecorder, type PlaybackHarness } from './playback-fixture.js';
+import { createInstanceHost, type InstanceHost, type Limits, type OpenInstance } from '@saga-a2ui/core/actions';
 import {
   connectPlaybackView,
-  PlaybackConfigurationError,
+  PLAY_CONTROL_ID,
+  PlayControl,
   type AudioPlayer,
-  type PlaybackViewConnection,
+  type PlayControlEvents,
   type PlaybackViewState,
 } from './playback-view.js';
 
@@ -128,12 +130,46 @@ function fakePlayer(): FakePlayer {
   return player;
 }
 
+/**
+ * What the user can press on the rendered control. Each press is delivered, synchronously, to the
+ * action the controller bound to this exact instance, the way the control's click handler does.
+ */
+interface ControlPresses {
+  play(): void;
+  pause(): void;
+  resume(): void;
+  dispose(): void;
+}
+
+/** The rendered Play control as the test sees it: an instance on the host, with its own liveness. */
+function renderControl(host: InstanceHost): { readonly instance: OpenInstance<PlayControlEvents>; destroy(): void } {
+  let live = true;
+  const instance = host.open<PlayControlEvents>({
+    kind: PlayControl,
+    componentId: PLAY_CONTROL_ID,
+    dataPath: '/',
+    events: ['play', 'pause', 'resume'],
+    isLive: () => live,
+    read: () => undefined,
+  });
+  return {
+    instance,
+    destroy() {
+      live = false;
+      instance.retire();
+    },
+  };
+}
+
 interface Rig {
   readonly app: App;
   readonly harness: PlaybackHarness;
   readonly player: FakePlayer;
   readonly states: PlaybackViewState[];
-  readonly view: PlaybackViewConnection;
+  readonly view: ControlPresses;
+  /** The action host the controls are bound on, with the limits the rig was given. */
+  readonly actions: InstanceHost;
+  readonly control: OpenInstance<PlayControlEvents>;
   readonly bridge: AppBridge;
   /** Every proxied tools/call the host forwarded, with the credential used. */
   readonly forwarded: CallToolRequest['params'][];
@@ -149,7 +185,8 @@ interface Rig {
   deliver(episode: PublicEpisode): Promise<void>;
 }
 
-const cleanup: { app: App; bridge: AppBridge; harness: PlaybackHarness }[] = [];
+const cleanup: { app: App; bridge: AppBridge; harness: PlaybackHarness; actions: InstanceHost }[] = [];
+const setupErrors: unknown[] = [];
 
 async function rig(options: {
   token?: string;
@@ -162,8 +199,10 @@ async function rig(options: {
   tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
   /** Replaces the whole Play answer the host resolves with, after the server handled the call. */
   rewriteAnswer?: (result: CallToolResult) => CallToolResult;
-  /** The controller's bound on one Play attempt. Defaults to the reference value. */
-  attemptLimitMs?: number;
+  /** The shared runtime's limits for every action on the host (work deadline, hook budget). Defaults to the SDK's. */
+  limits?: Limits;
+  /** Makes presenting a state fail, as a presenter that throws would. */
+  showThrowsFor?: PlaybackViewState['kind'];
   /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
   harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
 } = {}): Promise<Rig> {
@@ -209,20 +248,34 @@ async function rig(options: {
   };
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
-  const view = await connectPlaybackView({
+  const connection = await connectPlaybackView({
     app,
     transport: viewSide,
     player,
-    show: (state) => states.push(state),
-    ...(options.attemptLimitMs === undefined ? {} : { attemptLimitMs: options.attemptLimitMs }),
+    show: (state) => {
+      states.push(state);
+      if (state.kind === options.showThrowsFor) throw new Error('the presenter failed');
+    },
   });
-  cleanup.push({ app, bridge, harness });
+  const actions = createInstanceHost({ onSetupError: (error) => void setupErrors.push(error), ...(options.limits ? { limits: options.limits } : {}) });
+  actions.register(connection.attach);
+  const { instance: control } = renderControl(actions);
+  const press = (action: 'play' | 'pause' | 'resume') => void control.activate(action, new Event('click'));
+  const view: ControlPresses = {
+    play: () => press('play'),
+    pause: () => press('pause'),
+    resume: () => press('resume'),
+    dispose: () => connection.dispose(),
+  };
+  cleanup.push({ app, bridge, harness, actions });
   return {
     app,
     harness,
     player,
     states,
     view,
+    actions,
+    control,
     bridge,
     forwarded,
     hostSignals,
@@ -262,7 +315,8 @@ async function rig(options: {
 }
 
 afterEach(async () => {
-  for (const { app, bridge, harness } of cleanup.splice(0)) {
+  for (const { app, bridge, harness, actions } of cleanup.splice(0)) {
+    actions.close();
     await app.close().catch(() => undefined);
     await bridge.close().catch(() => undefined);
     await harness.listener.close();
@@ -1259,14 +1313,14 @@ describe('final loss of the pinned sign-in label', () => {
 describe('the bound on one Play attempt', () => {
   const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  it('refuses an unusable bound before anything is requested', async () => {
+  it('takes its bound from the action host, which refuses an unusable one where it is supplied, before anything is requested', () => {
     for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '30000' as unknown as number]) {
-      await expect(rig({ attemptLimitMs: bad })).rejects.toThrow(PlaybackConfigurationError);
+      expect(() => createInstanceHost({ onSetupError: () => undefined, limits: { deadlineMs: bad } })).toThrow(TypeError);
     }
   });
 
   it('gives the host call the attempt’s signal and a timeout no wider than the attempt has left', async () => {
-    const r = await rig({ attemptLimitMs: 5_000 });
+    const r = await rig({ limits: { deadlineMs: 5_000 } });
     await r.select(EP1);
     const call = vi.spyOn(r.app, 'callServerTool');
 
@@ -1281,7 +1335,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('ends a stalled host call as unavailable with an unknown outcome, aborts it, and invites no retry', async () => {
-    const r = await rig({ attemptLimitMs: 150 });
+    const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
     const held = r.holdNextToolCall();
 
@@ -1301,7 +1355,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('allows a new press after an expiry that proves nothing was sent', async () => {
-    const r = await rig({ attemptLimitMs: 150 });
+    const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
     // Key creation never finishes, so the Play request is never sent.
     vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
@@ -1317,7 +1371,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('ends a stalled proof signature after the grant is known, with no media request', async () => {
-    const r = await rig({ attemptLimitMs: 200 });
+    const r = await rig({ limits: { deadlineMs: 200 } });
     await r.select(EP1);
     vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(() => new Promise(() => undefined));
 
@@ -1331,7 +1385,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('ends a stalled media body, aborts the request, and drops the late bytes', async () => {
-    const r = await rig({ attemptLimitMs: 250 });
+    const r = await rig({ limits: { deadlineMs: 250 } });
     await r.select(EP1);
     const read = r.harness.playback.holdNextRead();
 
@@ -1348,7 +1402,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('ends a decode or start that never settles, stops the player, and ignores the late start', async () => {
-    const r = await rig({ attemptLimitMs: 250 });
+    const r = await rig({ limits: { deadlineMs: 250 } });
     await r.select(EP1);
     const decoding = r.player.holdNextStart({ survivesStop: true }); // a player that ignores abort
 
@@ -1365,7 +1419,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('keeps successful playback going past the bound: the clock ends with the outcome, not the audio', async () => {
-    const r = await rig({ attemptLimitMs: 200 });
+    const r = await rig({ limits: { deadlineMs: 200 } });
     await r.select(EP1);
 
     r.view.play();
@@ -1379,7 +1433,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('starts a fresh bound for a later attempt instead of inheriting what an earlier one used', async () => {
-    const r = await rig({ attemptLimitMs: 400 });
+    const r = await rig({ limits: { deadlineMs: 400 } });
     await r.select(EP1);
     const held = r.holdNextToolCall();
     r.view.play();
@@ -1397,7 +1451,7 @@ describe('the bound on one Play attempt', () => {
   });
 
   it('does not let a lost label, a teardown or a dispose leave the clock running', async () => {
-    const r = await rig({ attemptLimitMs: 150 });
+    const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
     const held = r.holdNextToolCall();
     r.view.play();
@@ -1420,7 +1474,7 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
   };
 
   it('keeps an accepted limit above the native timer maximum instead of expiring it at once', async () => {
-    const r = await rig({ attemptLimitMs: 3_000_000_000 });
+    const r = await rig({ limits: { deadlineMs: 3_000_000_000 } });
     await r.select(EP1);
     const held = r.holdNextToolCall();
 
@@ -1433,7 +1487,7 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
   });
 
   it('refuses a proof that finished after the bound: no media request, no start', async () => {
-    const r = await rig({ attemptLimitMs: 100 });
+    const r = await rig({ limits: { deadlineMs: 100 } });
     await r.select(EP1);
     const sign = crypto.subtle.sign.bind(crypto.subtle);
     vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
@@ -1451,7 +1505,7 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
   });
 
   it('ends an attempt whose player start came back after the bound, and stops the player', async () => {
-    const r = await rig({ attemptLimitMs: 150 });
+    const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
     vi.spyOn(r.player, 'start').mockImplementationOnce(() => {
       blockFor(200);
@@ -1532,7 +1586,7 @@ describe('a resolved Play result that does not establish its effect', () => {
 
   it('keeps a generic error that arrives after the bound, before its timer, unknown rather than safe to retry', async () => {
     const r = await rig({
-      attemptLimitMs: 100,
+      limits: { deadlineMs: 100 },
       rewriteAnswer: (result) => {
         // The thread is blocked past the absolute bound: the continuation runs before the attempt's timer.
         const until = performance.now() + 150;
@@ -1558,7 +1612,7 @@ describe('a resolved Play result that does not establish its effect', () => {
       }
     };
     const malformed = await rig({
-      attemptLimitMs: 100,
+      limits: { deadlineMs: 100 },
       rewriteAnswer: (result) => {
         block();
         return { content: result.content };
@@ -1571,7 +1625,7 @@ describe('a resolved Play result that does not establish its effect', () => {
 
     // A valid, matching grant is a known result even when late: nothing is revived and no media is requested.
     const late = await rig({
-      attemptLimitMs: 100,
+      limits: { deadlineMs: 100 },
       rewriteAnswer: (result) => {
         block();
         return result;
@@ -1612,5 +1666,279 @@ describe('a resolved Play result that does not establish its effect', () => {
     expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
     const [first, second] = r.forwarded.filter((call) => call.name === 'play_episode');
     expect(second?._meta).not.toBe(first?._meta);
+  });
+});
+
+// Play is one server action bound to the exact rendered control: one work interval spans every
+// pending stage, from creating the recipient key through starting the player. The binding's own
+// phase is the pending presentation's source, and the application keeps the rest as its own state.
+describe('Play as one action on the rendered control', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const playBinding = (r: Rig) => r.control.attached('play');
+
+  it('is pending exactly while the binding runs, and the binding is idle again once audio plays', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    expect(playBinding(r)?.state.phase).toBe('idle');
+    const decoding = r.player.holdNextStart();
+
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    expect(r.last()?.kind).toBe('pending');
+    expect(playBinding(r)?.state.phase).toBe('running');
+
+    decoding.release('started');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    await expect.poll(() => playBinding(r)?.state.phase).toBe('idle');
+  });
+
+  it('keeps Play unavailable while audio plays as application state, not as binding busy state', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    await expect.poll(() => playBinding(r)?.state.phase).toBe('idle');
+    const plays = () => r.forwarded.filter((call) => call.name === 'play_episode').length;
+
+    r.view.play();
+    await settle(60);
+
+    expect(plays()).toBe(1);
+    expect(r.player.calls.filter((call) => call === 'prepare')).toHaveLength(1);
+    expect(r.last()?.kind).toBe('playing');
+  });
+
+  it('creates a fresh recipient key for every Play and never puts one in the arguments', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.player.endPlayback();
+    await expect.poll(() => r.last()?.kind).toBe('ended');
+
+    r.view.play();
+    await expect.poll(() => r.states.filter((state) => state.kind === 'playing')).toHaveLength(2);
+
+    const keys = r.forwarded.map((call) => (call._meta?.['saga-a2ui/recipient-key'] as { x: string } | undefined)?.x);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBeDefined();
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(r.forwarded.map((call) => call.arguments)).toEqual([{ episodeId: 'ep-1' }, { episodeId: 'ep-1' }]);
+  });
+
+  it('ends a stalled key creation at the work deadline: the host call never starts and nothing is unknown', async () => {
+    const r = await rig({ limits: { deadlineMs: 150 } });
+    await r.select(EP1);
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(r.last()).not.toHaveProperty('requestOutcome');
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+    expect(playBinding(r)?.state.phase).toBe('idle');
+  });
+
+  it('shows unsupported when the recipient key cannot be created, without sending the protected request', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(new Error('no WebCrypto'));
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('unsupported');
+
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(r.player.calls).toContain('stop'); // the lease taken for this press is given back
+  });
+
+  it('cancels an undecided Play when the selection changes and the user presses again, aborting its host call', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const call = vi.spyOn(r.app, 'callServerTool');
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => call.mock.calls.length).toBe(1);
+    const firstSignal = call.mock.calls[0]?.[1]?.signal;
+    expect(firstSignal?.aborted).toBe(false);
+
+    await r.select(EP2);
+    r.view.play(); // the binding notices the changed subject and starts the new Play at once
+    await expect.poll(() => r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    held.release();
+    await settle(60);
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.harness.playback.mediaReads).toEqual(['ep-2']);
+  });
+
+  it('keeps the audio playing when presenting playing fails: the handler already returned its result', async () => {
+    const r = await rig({ showThrowsFor: 'playing' });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.player.started.length).toBe(1);
+    await settle(80);
+
+    expect(r.player.calls.at(-1)).toBe('start'); // nothing stopped the audio after it started
+    expect(playBinding(r)?.state.phase).toBe('idle');
+  });
+
+  it('ends the bindings with the view: a lost label, a teardown and a disposal each leave nothing to press', async () => {
+    const lost = await rig({ entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1'], [DEV_ACCOUNTS.bob]: ['ep-1'] } });
+    await lost.select(EP1);
+    lost.useToken(DEV_TOKENS.bob);
+    await lost.deliver(EP1);
+    await expect.poll(() => lost.last()?.kind).toBe('session-changed');
+    expect(lost.control.attached('play')).toBeUndefined();
+    expect(lost.control.attached('pause')).toBeUndefined();
+    expect(lost.control.attached('resume')).toBeUndefined();
+
+    const torn = await rig();
+    await torn.select(EP1);
+    expect(torn.control.attached('play')).toBeDefined();
+    await torn.bridge.teardownResource({});
+    expect(torn.control.attached('play')).toBeUndefined();
+
+    const disposed = await rig();
+    await disposed.select(EP1);
+    disposed.view.dispose();
+    expect(disposed.control.attached('resume')).toBeUndefined();
+    expect(disposed.control.activate('play', new Event('click'))).toBe('unbound');
+  });
+});
+
+// Review repair for PR 133: the three behaviours the migration to one action must keep. Each test
+// drives the public rig and checks what was dispatched, not only what the server recorded.
+describe('a Play that is retired keeps its protected fetch unsent and its presentation accurate', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const blockFor = (ms: number) => {
+    const until = performance.now() + ms;
+    while (performance.now() < until) {
+      // Synchronous work that overruns the bound.
+    }
+  };
+  const playRequests = (r: Rig) => r.forwarded.filter((call) => call.name === 'play_episode').length;
+  const mediaDispatches = (fetchSpy: { mock: { calls: unknown[][] } }) =>
+    fetchSpy.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/media/'));
+
+  it('dispatches no protected fetch when the proof finished after the work deadline, even before the timer ran', async () => {
+    const r = await rig({ limits: { deadlineMs: 100 } });
+    await r.select(EP1);
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
+      const signature = await sign(...args);
+      blockFor(150);
+      return signature;
+    });
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    // The capability and the proof never left the view: not "the server saw nothing", but no dispatch.
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('dispatches no protected fetch when the Play was retired while its proof was being signed', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
+      const signature = await sign(...args);
+      r.control.retire(); // the control leaves while the proof is being signed
+      return signature;
+    });
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+    await settle(60);
+
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('does not leave Play pending when its control is retired and replaced: the effect is unknown, and a deliberate press still plays', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+
+    r.control.retire();
+    const replacement = renderControl(r.actions);
+    held.release(); // the old request is answered after its control is gone
+    await settle(80);
+
+    // Honest about what is unknown, offering no blind retry, and never fetching for the old press.
+    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown', episode: { episodeId: 'ep-1' } });
+    expect(r.harness.playback.mediaReads).toEqual([]);
+
+    // The replacement control is not stuck behind a stale pending state.
+    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(playRequests(r)).toBe(2);
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+
+  it('returns to ready when its control is retired before any request was sent', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+    r.view.play();
+    expect(r.last()?.kind).toBe('pending');
+
+    r.control.retire();
+    const replacement = renderControl(r.actions);
+
+    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-1' } });
+    expect(playRequests(r)).toBe(0);
+    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(r.player.calls).toContain('stop'); // the lease taken for the retired press was given back
+  });
+
+  it('presents nothing from a Play canceled by the view’s own disposal', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+    const before = r.states.length;
+
+    r.view.dispose();
+    held.release();
+    await settle(60);
+
+    expect(r.states).toHaveLength(before);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('retires a Play in flight when a malformed opener clears the presentation, keeping a deliberate retry', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    await r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+    held.release(); // the old, valid grant arrives after the opener retired the presentation
+    await settle(80);
+
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' } });
+    expect(r.player.calls).not.toContain('start');
+
+    // The unchanged selection stays pressable: a deliberate new Play asks the server afresh.
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(playRequests(r)).toBe(2);
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
   });
 });
