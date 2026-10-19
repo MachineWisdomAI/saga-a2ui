@@ -13,7 +13,7 @@ import {
 } from './packed-consumer.js';
 
 // Builds the browser pages of apps/lit-host (the representative application, its MCP views and the
-// synthetic action consumer) the way an application outside this repository would receive SAGA
+// synthetic action consumer, and the test pages that show the optional FaithfulCard) the way an application outside this repository would receive SAGA
 // (VIEW2). The core, Lit, optional components and MCP packages are packed, unpacked into a clean
 // directory outside the repository as installed dependencies, a copy of the application is built
 // there with its own Vite configurations, and nothing in the workspace is on the resolution path
@@ -55,9 +55,11 @@ export const INSTALLED_PAGE_CONFIGS = [
   'vite.host-fixture.config.ts',
   'vite.catalog-isolation.config.ts',
   'vite.action-consumer.config.ts',
+  'vite.faithful-card.config.ts',
+  'vite.card-workflow.config.ts',
 ] as const;
 
-const COPIED_ENTRIES = ['src', 'e2e/action-consumer', 'e2e/archive-fixture', 'e2e/catalog-isolation', 'e2e/host-fixture', 'tsconfig.json', ...INSTALLED_PAGE_CONFIGS];
+const COPIED_ENTRIES = ['src', 'e2e/action-consumer', 'e2e/archive-fixture', 'e2e/card-workflow', 'e2e/catalog-isolation', 'e2e/faithful-card', 'e2e/host-fixture', 'tsconfig.json', ...INSTALLED_PAGE_CONFIGS];
 
 export interface PreparedLitHost {
   readonly consumer: string;
