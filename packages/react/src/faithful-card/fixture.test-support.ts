@@ -4,7 +4,10 @@ import { basicCatalog, ColumnApi, TextApi } from '@a2ui/web_core/v0_9/basic_cata
 import {
   createContentPolicy,
   createFaithfulCardReader,
+  createImageConsentScope,
   type HostLinks,
+  type ImageConsentScope,
+  type ImageEnforcement,
   type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
 import { a2uiV0_9Decoder, createMessageSession, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
@@ -99,6 +102,8 @@ export interface TrustedOptions {
   readonly imageHosts?: readonly string[];
   readonly dialect?: 'commonmark' | 'commonmark-tables-strikethrough';
   readonly maxLength?: number;
+  /** Whether the document demonstrably carries the policy's image restrictions. Default: established. */
+  readonly enforcement?: ImageEnforcement;
   /** What the host answers when asked to open a link. A function is called for each request. */
   readonly answer?: LinkOpenOutcome | 'pending' | 'reject' | ((url: string) => Promise<LinkOpenOutcome>);
 }
@@ -109,6 +114,8 @@ export interface Trusted {
   readonly requests: string[];
   /** Answers for each request made while the host's answer was `pending`, in order. */
   readonly pending: Array<(outcome: LinkOpenOutcome) => void>;
+  /** The view's consent scope, which the application owns: tests revoke and retire it as an application does. */
+  readonly consent: ImageConsentScope;
 }
 
 /** Trusted settings as an application builds them once. */
@@ -133,7 +140,13 @@ export function trusted(options: TrustedOptions = {}): Trusted {
       return Promise.resolve(answer);
     },
   };
-  return { view: { reader: reader.reader, policy: policy.policy, hostLinks }, requests, pending };
+  const consent = createImageConsentScope();
+  return {
+    view: { reader: reader.reader, policy: policy.policy, hostLinks, imageEnforcement: options.enforcement ?? 'established', consent },
+    consent,
+    requests,
+    pending,
+  };
 }
 
 /** A surface under a provider, as an application mounts it. */

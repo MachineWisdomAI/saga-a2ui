@@ -299,21 +299,91 @@ describe('Strict links, markup and source', () => {
 describe('image references', () => {
   const markdown = 'Before ![a chart](https://images.example.com/chart.png) after.';
 
-  it('stay inert text in Standard even for an allowed host: no image element is ever created', () => {
+  it('load in Standard from an exactly listed HTTPS host, with no consent, in their original position', () => {
     const { view } = show(markdown, { imageHosts: ['images.example.com'] });
-    expect(view.container.querySelector('img, picture, source, [src]')).toBeNull();
-    expect(one(view, 'md-image-blocked').textContent).toBe('[Image not loaded: a chart]');
-    expect(text(view)).toContain('Before');
-    expect(text(view)).toContain('after.');
+    const image = one(view, 'md-image');
+    expect(image.getAttribute('src')).toBe('https://images.example.com/chart.png');
+    expect(image.getAttribute('alt')).toBe('a chart');
+    expect(image.getAttribute('referrerpolicy')).toBe('no-referrer');
+    expect(image.getAttribute('loading')).toBe('lazy');
+    expect(byTestId(view, 'md-image-blocked')).toEqual([]);
+    expect(byTestId(view, 'card-controls')).toEqual([]);
+    expect(one(view, 'card-content').textContent).toBe('Before  after.');
   });
 
-  it('stay inert behind a placeholder in Strict, and revealing the source loads nothing', () => {
-    const { view } = show(markdown, { level: 'strict', imageHosts: ['images.example.com'] });
+  it.each([
+    ['a host that is not listed', 'https://other.example.com/x.png', 'host-not-allowed'],
+    ['a subdomain of a listed host', 'https://cdn.images.example.com/x.png', 'host-not-allowed'],
+    ['a different port', 'https://images.example.com:8443/x.png', 'host-not-allowed'],
+    ['an http address', 'http://images.example.com/x.png', 'not-https'],
+    ['an address with credentials', 'https://user:pass@images.example.com/x.png', 'credentials'],
+    ['a relative address', '/x.png', 'malformed'],
+    ['a data reference', 'data:image/png;base64,iVBORw0KGgo=', 'not-https'],
+    ['a blob reference', 'blob:https://images.example.com/0f8fad5b-d9cb-469f-a165-70867728950e', 'not-https'],
+  ])('stay inert text in Standard for %s', (_name, source, reason) => {
+    const { view } = show(`Before ![chart](${source}) after.`, { imageHosts: ['images.example.com'] });
+    expect(view.container.querySelector('img, picture, source, [src]')).toBeNull();
+    const placeholder = one(view, 'md-image-blocked');
+    expect(placeholder.textContent).toBe('[Image not loaded: chart]');
+    expect(placeholder.getAttribute('data-reason')).toBe(reason);
+  });
+
+  it('stay inert in Standard when the document does not demonstrably carry the policy restrictions', () => {
+    const { view } = show(markdown, { imageHosts: ['images.example.com'], enforcement: 'unestablished' });
+    expect(view.container.querySelector('img, [src]')).toBeNull();
+    expect(one(view, 'md-image-blocked').getAttribute('data-reason')).toBe('enforcement-unestablished');
+  });
+
+  it('stay inert behind a placeholder in Strict until the reader consents, and revealing the source loads nothing', () => {
+    const { host, view } = show(markdown, { level: 'strict', imageHosts: ['images.example.com'] });
     expect(one(view, 'md-image-blocked').textContent).toBe('[Image blocked: a chart]');
-    expect(byTestId(view, 'images-toggle')).toEqual([]);
+    expect(one(view, 'md-image-blocked').getAttribute('data-reason')).toBe('consent-required');
+    expect(one(view, 'images-toggle').textContent).toBe('Show images');
     click(view, one(view, 'source-toggle'));
     expect(one(view, 'md-image-blocked').textContent).toBe('![a chart](https://images.example.com/chart.png)');
     expect(view.container.querySelector('img, picture, source, [src]')).toBeNull();
+    // Looking at the source is not consent, and it asks nothing of the host.
+    expect(one(view, 'images-toggle').textContent).toBe('Show images');
+    expect(host.requests).toEqual([]);
+  });
+
+  it('are shown in Strict after Show images and removed again by Hide images', () => {
+    const { view } = show(markdown, { level: 'strict', imageHosts: ['images.example.com'] });
+    click(view, one(view, 'images-toggle'));
+    const image = one(view, 'md-image');
+    expect(image.getAttribute('src')).toBe('https://images.example.com/chart.png');
+    expect(image.getAttribute('loading')).toBe('eager');
+    expect(one(view, 'images-toggle').textContent).toBe('Hide images');
+    expect(one(view, 'images-status').textContent).toBe('Images shown.');
+    click(view, one(view, 'images-toggle'));
+    expect(view.container.querySelector('img, [src]')).toBeNull();
+    expect(one(view, 'md-image-blocked').getAttribute('data-reason')).toBe('consent-required');
+    expect(one(view, 'images-toggle').textContent).toBe('Show images');
+    expect(one(view, 'images-status').textContent).toBe('');
+  });
+
+  it('never become an element for a data or blob reference in Strict, even after Show images', () => {
+    const { view } = show(
+      '![a](https://images.example.com/a.png) ![d](data:image/png;base64,iVBORw0KGgo=) ![b](blob:https://images.example.com/x)',
+      { level: 'strict', imageHosts: ['images.example.com'] },
+    );
+    click(view, one(view, 'images-toggle'));
+    expect([...view.container.querySelectorAll('img')].map((image) => image.getAttribute('src'))).toEqual(['https://images.example.com/a.png']);
+    expect(byTestId(view, 'md-image-blocked').map((fragment) => fragment.getAttribute('data-reason'))).toEqual(['not-https', 'not-https']);
+  });
+
+  it('offer no Show images when no image could ever load, and say why', () => {
+    for (const options of [
+      { level: 'strict', imageHosts: [] },
+      { level: 'strict', imageHosts: ['images.example.com'], enforcement: 'unestablished' },
+    ] as const) {
+      const { view } = show(markdown, options);
+      expect(one(view, 'images-toggle').hasAttribute('disabled')).toBe(true);
+      expect(one(view, 'images-unavailable').getAttribute('data-reason')).toBe('none-qualify');
+      click(view, one(view, 'images-toggle'));
+      expect(view.container.querySelector('img, [src]')).toBeNull();
+      mounted?.unmount();
+    }
   });
 
   it('describe an image with no alternative text readably', () => {

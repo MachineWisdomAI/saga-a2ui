@@ -20,16 +20,50 @@ function Failure(props: { readonly reason: string; readonly message: string }): 
   );
 }
 
-/** Strict only. The one control changes visibility only: revealed source stays inert text. */
-function Controls(props: { readonly card: InterpretedCard; readonly lifecycle: CardLifecycle }): ReactElement | null {
-  const { fragments } = props.card;
+/**
+ * Strict only. Reveal/Hide source changes visibility only: revealed source stays inert text. Show/Hide
+ * images grants or gives back this card's consent to load the images the policy permits; it makes no
+ * server call and runs no action, and it cannot widen what the policy permits.
+ */
+function Controls(props: { readonly view: FaithfulCardView; readonly card: InterpretedCard; readonly lifecycle: CardLifecycle }): ReactElement | null {
+  const { view, card, lifecycle } = props;
+  const { fragments } = card;
   const blockable = fragments.links + fragments.images.length + fragments.rawHtml > 0;
   if (!blockable) return null;
+  const granted = lifecycle.images.consent === 'granted';
+  const offer = view.policy.offerImages(fragments.images, view.imageEnforcement);
+  const unavailableReason = !granted && !offer.available ? offer.reason : undefined;
+  const ended = !granted && lifecycle.imagesEnded;
   return (
     <div className="saga-card-controls" data-testid="card-controls">
-      <button type="button" data-testid="source-toggle" onClick={() => props.lifecycle.toggleSource()}>
-        {props.lifecycle.sourceRevealed ? 'Hide source' : 'Reveal source'}
+      <button type="button" data-testid="source-toggle" onClick={() => lifecycle.toggleSource()}>
+        {lifecycle.sourceRevealed ? 'Hide source' : 'Reveal source'}
       </button>
+      {fragments.images.length === 0 ? null : (
+        <>
+          <button
+            type="button"
+            data-testid="images-toggle"
+            disabled={unavailableReason !== undefined || ended}
+            onClick={() => (granted ? lifecycle.hideImages() : lifecycle.showImages(fragments.images))}
+          >
+            {granted ? 'Hide images' : 'Show images'}
+          </button>
+          <span role="status" data-testid="images-status">
+            {granted ? 'Images shown.' : null}
+          </span>
+          {ended ? (
+            <span data-testid="images-unavailable" data-reason="view-ended">
+              Images can no longer be shown: this view has ended.
+            </span>
+          ) : null}
+          {unavailableReason === undefined ? null : (
+            <span data-testid="images-unavailable" data-reason={unavailableReason}>
+              Images in this content cannot be shown: none is permitted by the content policy or this host.
+            </span>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -60,10 +94,14 @@ export function CardContent(props: FaithfulCardProps & { readonly isLive?: () =>
     revealed: lifecycle.sourceRevealed,
     linkOutcomes: lifecycle.linkOutcomes,
     openLink: (ordinal, url) => lifecycle.openLink(view.hostLinks, ordinal, url),
+    images: lifecycle.images,
+    imageStillPermitted: (source) => lifecycle.imageStillPermitted(source),
+    failedImages: lifecycle.failedImages,
+    imageFailed: (ordinal) => lifecycle.imageFailed(ordinal),
   };
   return (
     <div className="saga-card" data-testid="card-root">
-      {strict ? <Controls card={interpretation.card} lifecycle={lifecycle} /> : null}
+      {strict ? <Controls view={view} card={interpretation.card} lifecycle={lifecycle} /> : null}
       <div className="saga-card-content" data-testid="card-content">
         <Blocks nodes={interpretation.card.blocks} rendering={rendering} />
       </div>

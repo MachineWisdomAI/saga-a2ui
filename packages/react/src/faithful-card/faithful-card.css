@@ -20,7 +20,7 @@
  *   .saga-card                   the card, and the alert shown when content is refused
  *   .saga-card-content           the interpreted content
  *   .saga-card-failure           the alert for refused content or a missing provider
- *   .saga-card-controls          the Strict control row (Reveal source / Hide source)
+ *   .saga-card-controls          the Strict control row (Reveal source / Hide source, Show images / Hide images)
  *   .saga-card-link              a link the host may open (a button, so it can never navigate by itself)
  *   .saga-card-link-host         the parsed hostname shown inside that button
  *   .saga-card-link-status       the readable answer after a link request
@@ -30,6 +30,7 @@
  *   .saga-card-source            a block of source text (raw markup, or a revealed blocked block)
  *   .saga-card-placeholder       an image reference that is not loaded
  *   .saga-card-table-scroll      the keyboard-focusable region a table scrolls in
+ * An image the policy permits is a plain `img` inside the card, sized to the card.
  */
 .saga-card {
   display: block;
@@ -55,6 +56,11 @@
 .saga-card .saga-card-link-host {
   font-size: 0.85em;
   color: var(--saga-card-muted-color, inherit);
+}
+
+.saga-card img {
+  max-inline-size: 100%;
+  height: auto;
 }
 
 .saga-card blockquote {

@@ -1,5 +1,6 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import { PlayControlElement, type PlayControlAction } from './lit/play-control.js';
+import { createInstanceHost } from '@saga-a2ui/core/actions';
+import { PlayControlElement } from './lit/play-control.js';
 import { connectPlaybackView, type PlaybackViewState } from './playback/playback-view.js';
 import { createWebAudioPlayer } from './playback/web-audio-player.js';
 
@@ -23,14 +24,22 @@ const connection = await connectPlaybackView({
   },
 });
 
-// Each listener calls the controller synchronously from the user's event, which is what lets the
+// The action host keeps the shared runtime's defaults: 30,000 ms of work for a press (key creation
+// through the start of audio) and 5,000 ms for each hook or cleanup step. Setup binds Play, Pause
+// and Resume directly to the control's own instance once the control opens it on the host. The
+// control calls the bound action synchronously from the user's click, which is what lets the
 // player unlock audio inside the activation before authorization finishes.
-const actions: Record<PlayControlAction, () => void> = {
-  'saga-play': () => connection.play(),
-  'saga-pause': () => connection.pause(),
-  'saga-resume': () => connection.resume(),
-};
-for (const [name, run] of Object.entries(actions)) control.addEventListener(name, run);
+const actions = createInstanceHost({
+  onSetupError() {
+    // The error text stays out of the page; the control simply stays unbound.
+    console.error('The playback controls could not be attached.');
+  },
+});
+actions.register(connection.attach);
+control.host = actions;
 
 // Release the player even if the host never sends a teardown request.
-window.addEventListener('pagehide', () => connection.dispose());
+window.addEventListener('pagehide', () => {
+  connection.dispose();
+  actions.close();
+});

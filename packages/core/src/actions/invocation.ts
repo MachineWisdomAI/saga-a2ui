@@ -13,7 +13,7 @@ import { categorize } from './category.js';
 import { startTimer, type LimitTimer, type ResolvedLimits } from './limits.js';
 import { readAnswer, type Prerequisite } from './prerequisite.js';
 import { InvocationResources } from './scope.js';
-import { requestTimeout, type ServerCalls, type ServerTransport } from './server.js';
+import { requestMeta, requestTimeout, type ServerCalls, type ServerTransport } from './server.js';
 import { discardOutcome, isThenable } from './thenable.js';
 
 // One activation that was admitted, from the user's event to its settlement. The runtime owns every
@@ -243,6 +243,8 @@ export class Invocation<Event> {
   /** The callback's own `current()`. Calling it is a checkpoint, but only while the callback is eligible. */
   private currentFor(step: Step): boolean {
     if (!step.eligible) return false;
+    this.expireIfOverdue();
+    if (!step.eligible) return false;
     this.recheck();
     return step.eligible && !this.obsoleteFlag && this.staleCause() === undefined;
   }
@@ -428,7 +430,10 @@ export class Invocation<Event> {
   }
 
   private afterPrerequisite(current: Prerequisite<object, unknown, unknown>, index: number, settled: Settled): void {
-    // A change nobody saw until now cancels the invocation before this answer counts.
+    // A deadline that passed unnoticed ends the wait before this answer counts, and so does a change
+    // nobody saw until now.
+    this.expireIfOverdue();
+    if (this.outcome !== undefined) return;
     this.recheck();
     if (this.outcome !== undefined) return;
     const failure = (failed: PrerequisiteFailure): void => {
@@ -466,6 +471,8 @@ export class Invocation<Event> {
       {
         kind: 'handler',
         onResult: (settled) => {
+          this.expireIfOverdue();
+          if (this.outcome !== undefined) return;
           this.clearDeadline();
           // The handler's answer is observed here. A change nobody saw until now cancels the
           // invocation before the answer counts: the decision is the point after which nothing is delivered.
@@ -509,7 +516,7 @@ export class Invocation<Event> {
     const { label } = this.plan;
     return async (name, args, options) => {
       // Reading the options first makes a malformed request fail the same way at any time.
-      const asked = (options as { timeoutMs?: unknown } | undefined)?.timeoutMs;
+      const { timeoutMs: asked, meta: suppliedMeta } = (options ?? {}) as { timeoutMs?: unknown; meta?: unknown };
       if (typeof name !== 'string' || name === '') throw new TypeError(`Action '${label}': a server call needs a tool name.`);
       this.recheck();
       const remainingMs = this.limits.deadlineMs - (Date.now() - this.workStartedAt);
@@ -517,7 +524,11 @@ export class Invocation<Event> {
         throw new Error(`Action '${label}': the invocation stopped waiting for this handler, so the request was not sent.`);
       }
       const timeout = requestTimeout(label, remainingMs, asked);
-      return transport.callServerTool({ name, arguments: args }, { signal: this.controller.signal, timeout });
+      const meta = requestMeta(label, suppliedMeta);
+      return transport.callServerTool(
+        { name, arguments: args, ...(meta === undefined ? {} : { _meta: meta }) },
+        { signal: this.controller.signal, timeout },
+      );
     };
   }
 
@@ -531,6 +542,17 @@ export class Invocation<Event> {
   private clearDeadline(): void {
     this.deadlineTimer?.cancel();
     this.deadlineTimer = undefined;
+  }
+
+  /**
+   * The work deadline's timer is the guarantee that the wait ends, but a timer is delivered only
+   * when the event loop turns. A callback that held the thread past the bound has its continuation
+   * delivered first, so every checkpoint also reads the clock: a bound that has passed ends the wait
+   * here, exactly as its timer would have, and the late answer counts for nothing.
+   */
+  private expireIfOverdue(): void {
+    if (this.deadlineTimer === undefined || this.outcome !== undefined) return;
+    if (Date.now() - this.workStartedAt >= this.limits.deadlineMs) this.onDeadline();
   }
 
   private onDeadline(): void {
