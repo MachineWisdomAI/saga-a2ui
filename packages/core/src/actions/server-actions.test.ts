@@ -196,6 +196,72 @@ describe('a server action', () => {
     expect(failures.every((error) => error instanceof TypeError)).toBe(true);
   });
 
+  it('carries request metadata beside the arguments, per call, without putting it in the arguments', async () => {
+    const { transport, requests } = controlledTransport();
+    const key = { kty: 'EC', x: 'x-1' };
+    const archive = Action.server<Press>('archive', transport)
+      .run(async ({ call }) => {
+        const first = call('with_meta', { id: 'n-1' }, { meta: { 'vendor/key': key } });
+        const second = call('without_meta', { id: 'n-2' });
+        return Promise.all([first, second]);
+      })
+      .limits({ deadlineMs: 1_000, hookMs: 100 })
+      .build();
+    rig(archive).control.press();
+    await settle();
+
+    expect(requests.map((sent) => sent.request)).toEqual([
+      { name: 'with_meta', arguments: { id: 'n-1' }, _meta: { 'vendor/key': key } },
+      { name: 'without_meta', arguments: { id: 'n-2' } },
+    ]);
+    // Metadata is request metadata only: no option of the transport carries it.
+    expect(Object.keys(requests[0]?.options ?? {}).sort()).toEqual(['signal', 'timeout']);
+    expect('_meta' in (requests[1]?.request ?? {})).toBe(false);
+    for (const sent of requests) sent.answer.resolve(ok);
+    await settle();
+  });
+
+  it('copies the metadata when the call is made, so a later change by the caller reaches nothing', async () => {
+    const { transport, requests } = controlledTransport();
+    const shared: Record<string, unknown> = { 'vendor/key': 'first' };
+    const archive = Action.server<Press>('archive', transport)
+      .run(({ call }) => {
+        const sent = call('copy', {}, { meta: shared });
+        shared['vendor/key'] = 'changed';
+        shared['vendor/extra'] = true;
+        return sent;
+      })
+      .limits({ deadlineMs: 1_000, hookMs: 100 })
+      .build();
+    rig(archive).control.press();
+    await settle();
+
+    expect(requests[0]?.request._meta).toEqual({ 'vendor/key': 'first' });
+    expect(Object.isFrozen(requests[0]?.request._meta)).toBe(true);
+    requests[0]?.answer.resolve(ok);
+    await settle();
+  });
+
+  it('refuses metadata that is not a plain object, and sends nothing', async () => {
+    const { transport, requests } = controlledTransport();
+    const failures: unknown[] = [];
+    const archive = Action.server<Press>('archive', transport)
+      .run(async ({ call }) => {
+        for (const bad of [null, 'key', 5, ['key'], () => undefined]) {
+          await call('bad', {}, { meta: bad as unknown as Record<string, unknown> }).catch((error: unknown) => failures.push(error));
+        }
+        return ok;
+      })
+      .limits({ deadlineMs: 1_000, hookMs: 100 })
+      .build();
+    rig(archive).control.press();
+    await settle();
+
+    expect(requests).toHaveLength(0);
+    expect(failures).toHaveLength(5);
+    expect(failures.every((error) => error instanceof TypeError)).toBe(true);
+  });
+
   it('gives a local handler no server-call capability', async () => {
     let context: object | undefined;
     const local = Action.local<Press>('local')

@@ -4,10 +4,16 @@
 // whose `callServerTool(params, options)` accepts these request and option shapes and returns a
 // `CallToolResult`; the application's own tests qualify that against the pinned package types.
 
-/** What the action asks the server to do: a tool name and its arguments. */
+/**
+ * What the action asks the server to do: a tool name and its arguments, and optionally request
+ * metadata. `_meta` is the protocol's own place for data that is about the request and not its
+ * business input (a recipient's public key, for instance): it travels beside `arguments`, never
+ * inside them, and it exists only on the one request that was given it.
+ */
 export interface ServerRequest {
   readonly name: string;
   readonly arguments?: Readonly<Record<string, unknown>>;
+  readonly _meta?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -37,10 +43,16 @@ export interface ServerTransport<Reply extends ServerReply = ServerReply> {
   callServerTool(request: ServerRequest, options?: ServerRequestOptions): Promise<Reply>;
 }
 
-/** What a handler may ask for beyond the arguments: a shorter wait. It can never be longer. */
+/** What a handler may ask for beyond the arguments: a shorter wait, and request metadata. */
 export interface ServerCallOptions {
-  /** Finite and positive. The request waits for the smaller of this and the time left on the work deadline. */
+  /** Finite and positive. The request waits for the smaller of this and the time left on the work deadline. It can never be longer. */
   readonly timeoutMs?: number;
+  /**
+   * Request metadata for this one call, sent as the request's `_meta` and never as part of its
+   * arguments. A plain object, copied and frozen when the call is made, so a later change by the
+   * caller reaches nothing and no call shares another's. The runtime adds none of its own.
+   */
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 /** Added to the handler context of a server action, and only of a server action. */
@@ -49,7 +61,8 @@ export interface ServerCalls<Reply extends ServerReply = ServerReply> {
    * Sends one request through the transport and returns the transport's reply unchanged. The
    * request carries the invocation's signal and a timeout that is the time left on the resolved
    * work deadline (the action's override, the instance configuration or the default), or less. A call after the invocation stopped waiting for the handler, or after the
-   * work deadline, rejects without sending anything. The timeout covers one call, not the whole
+   * work deadline, rejects without sending anything. `options.meta`, when given, becomes the
+   * request's `_meta` (see `ServerCallOptions`). The timeout covers one call, not the whole
    * invocation, and aborting the signal ends the client's wait: it does not show that the host
    * forwarded the cancellation or that the server stopped.
    */
@@ -71,4 +84,16 @@ export function requestTimeout(label: string, remainingMs: number, supplied: unk
     throw new TypeError(`Action '${label}': timeoutMs must be a finite number greater than zero.`);
   }
   return supplied === undefined ? remainingMs : Math.min(remainingMs, supplied);
+}
+
+/** The request metadata a handler supplied, copied and frozen, or why there is none. */
+export function requestMeta(label: string, supplied: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (supplied === undefined) return undefined;
+  const plain =
+    typeof supplied === 'object' &&
+    supplied !== null &&
+    !Array.isArray(supplied) &&
+    (Object.getPrototypeOf(supplied) === Object.prototype || Object.getPrototypeOf(supplied) === null);
+  if (!plain) throw new TypeError(`Action '${label}': meta must be a plain object.`);
+  return Object.freeze({ ...(supplied as Record<string, unknown>) });
 }

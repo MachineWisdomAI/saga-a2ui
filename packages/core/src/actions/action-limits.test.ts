@@ -167,6 +167,76 @@ describe('an action declared without any limit', () => {
     expect(late).toEqual(['finished:false']); // the late result revived nothing
   });
 
+  // A synchronous section that overruns the bound holds the event loop, so the promise continuation
+  // that follows is delivered before the deadline's timer. The clock still says the bound has passed.
+  it('does not deliver a handler result that came back after the work deadline but before its timer', async () => {
+    const outcomes: Outcome<unknown>[] = [];
+    const shown: string[] = [];
+    const finish = gate<string>();
+    const action = Action.local<Press>('overdue')
+      .run(() => finish.promise)
+      .onSuccess(() => void shown.push('success'))
+      .onFinally(({ outcome }) => void outcomes.push(outcome))
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await settle();
+    vi.setSystemTime(Date.now() + 30_001); // the thread was held past the bound; no timer has fired
+    finish.resolve('late');
+    await settle();
+
+    expect(shown).toEqual([]);
+    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+  });
+
+  it('answers current() false once the work deadline has passed by the clock, before its timer is delivered', async () => {
+    const seen: boolean[] = [];
+    const proceedNow = gate<void>();
+    const action = Action.local<Press>('overdue-current')
+      .run(async ({ current }) => {
+        seen.push(current());
+        await proceedNow.promise;
+        seen.push(current());
+      })
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await settle();
+    vi.setSystemTime(Date.now() + 30_001);
+    proceedNow.resolve();
+    await settle();
+
+    expect(seen).toEqual([true, false]);
+  });
+
+  it('does not let a prerequisite that came back after the work deadline but before its timer start the handler', async () => {
+    const outcomes: Outcome<unknown>[] = [];
+    const ran: string[] = [];
+    const slow = gate<void>();
+    const action = Action.local<Press>('overdue-prerequisite')
+      .before(
+        prerequisite('slow', async () => {
+          await slow.promise;
+          return proceed();
+        }),
+      )
+      .run(() => void ran.push('handler'))
+      .onFinally(({ outcome }) => void outcomes.push(outcome))
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await settle();
+    vi.setSystemTime(Date.now() + 30_001);
+    slow.resolve();
+    await settle();
+
+    expect(ran).toEqual([]);
+    expect(outcomes).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
+  });
+
   it('counts the work deadline from the end of the activation prefix, not from the first wait', async () => {
     const outcomes: Outcome<unknown>[] = [];
     const action = Action.local<Press>('blocked-then-async')
