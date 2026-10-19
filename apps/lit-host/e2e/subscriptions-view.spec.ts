@@ -5,6 +5,7 @@ import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
 import { SUBSCRIPTIONS_TOOL_NAME, SUBSCRIPTIONS_VIEW_URI, SIGN_IN_REQUIRED_TEXT } from '../src/mcp/subscriptions.js';
 import { BACKEND_FAILURE_MESSAGE, FAILURE_CANARY } from '../src/mcp/subscriptions-failure-fixture.js';
+import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: real listener with real bearer credentials -> real tools/call and resources/read ->
@@ -13,7 +14,7 @@ import type { HostedResource } from './host-fixture/host.js';
 let listener: EpisodeListener;
 
 test.beforeAll(async () => {
-  const viewHtml = await readFile(new URL('../dist/subscriptions-view/subscriptions.html', import.meta.url), 'utf8');
+  const viewHtml = await readFile(builtUrl('subscriptions-view/subscriptions.html'), 'utf8');
   listener = await startEpisodeListener({
     viewHtml,
     catalog: { find: () => undefined },
@@ -202,11 +203,11 @@ test('credentials that cannot sign a user in are refused over HTTP with challeng
 test('a subscriber recovers from empty, failed and cleared wire results', async ({ page }) => {
   let mode: 'list' | 'empty' | 'throw' | 'bad' = 'list';
   const local = await startEpisodeListener({
-    viewHtml: await readFile(new URL('../dist/subscriptions-view/subscriptions.html', import.meta.url), 'utf8'),
+    viewHtml: await readFile(builtUrl('subscriptions-view/subscriptions.html'), 'utf8'),
     catalog: { find: () => undefined },
     port: 0,
     subscriptions: {
-      viewHtml: await readFile(new URL('../dist/subscriptions-view/subscriptions.html', import.meta.url), 'utf8'),
+      viewHtml: await readFile(builtUrl('subscriptions-view/subscriptions.html'), 'utf8'),
       verifier: createDevelopmentVerifier(),
       backend: {
         listSubscriptions: async (accountId) => {
