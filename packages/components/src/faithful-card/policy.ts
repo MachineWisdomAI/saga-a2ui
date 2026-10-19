@@ -187,8 +187,8 @@ const FONT_ORIGIN = /^https:\/\/[^/?#\\@\s:]+(?::\d+)?\/?$/i;
 /**
  * Returns the normalized origin (lowercase ASCII host, the port only when it is not the default)
  * of a valid trusted font origin, or `undefined`. The host must meet the same DNS-character rule
- * as an image host, which also keeps CSP delimiters, wildcards and IP literals out of the derived
- * `font-src`.
+ * as an image host, which keeps CSP delimiters, wildcards and bracketed IPv6 literals out of the
+ * derived `font-src`; a canonical dotted IPv4 address is an exact host and is accepted.
  */
 function normalizeFontOrigin(candidate: unknown): string | undefined {
   if (typeof candidate !== 'string' || !FONT_ORIGIN.test(candidate)) return undefined;
