@@ -73,6 +73,10 @@ const STYLE = html`<style>
     text-decoration: underline; cursor: pointer; }
   saga-faithful-card-content .link-host { font-size: 0.85em; color: var(--saga-card-muted-color, inherit); }
   saga-faithful-card-content img { max-width: 100%; height: auto; }
+  /* A list item pads on the side its own text starts from, so a right-to-left item inside a left-to-right list
+     keeps its marker inside the card instead of outside the page edge. */
+  saga-faithful-card-content ul, saga-faithful-card-content ol { padding-inline: 0; }
+  saga-faithful-card-content li { margin-inline-start: 2.5em; }
   saga-faithful-card-content blockquote { margin-inline: 1em; padding-inline-start: 0.75em;
     border-inline-start: 3px solid var(--saga-card-accent-color, var(--saga-card-border-color, #999)); }
   saga-faithful-card-content pre { max-width: 100%; overflow-x: auto; padding: 0.5em; background: var(--saga-card-code-background, rgba(127, 127, 127, 0.15)); }
@@ -86,7 +90,7 @@ const STYLE = html`<style>
   saga-faithful-card-content [data-align="center"] { text-align: center; }
   saga-faithful-card-content [data-align="right"] { text-align: right; }
   saga-faithful-card-content .source-block { white-space: pre-wrap; overflow-wrap: anywhere; }
-  saga-faithful-card-content [data-presentation="placeholder"] { font-style: italic; }
+  saga-faithful-card-content [data-annotation]:not([data-annotation="link-host"]) { font-style: italic; }
   saga-faithful-card-content .content-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em; margin-block: 0.5em; }
 </style>`;
 
@@ -445,7 +449,7 @@ export class FaithfulCardContentElement extends LitElement {
         data-testid="md-link"
         @click=${() => void this.activate(ordinal, r.view, r.revision, decision.url)}
       >
-        ${label} <span class="link-host" data-testid="md-link-host">(${decision.hostname})</span></button
+        ${label} <span class="link-host" data-testid="md-link-host" data-annotation="link-host">(${decision.hostname})</span></button
       ><span role="status" data-testid="md-link-status" data-outcome=${outcome ?? nothing}
         >${outcome === undefined ? nothing : this.feedback(outcome, decision.url)}</span
       >`;
@@ -499,6 +503,6 @@ export class FaithfulCardContentElement extends LitElement {
         source: () => html`![${node.alt}](${node.source})`,
       });
     }
-    return html`<span data-testid="md-image-blocked" data-reason=${reason}>[Image not loaded: ${alt}]</span>`;
+    return html`<span data-testid="md-image-blocked" data-reason=${reason} data-annotation="image-not-loaded">[Image not loaded: ${alt}]</span>`;
   }
 }

@@ -20,6 +20,11 @@ import { createArchiveLab, wording, type ArchiveLab } from '../archive-fixture/l
 // separate owners: the card only shows Markdown under the view's trusted settings; the control's
 // only way to act is the definition the application bound to its own rendered instance. The page
 // uses only the public exports of the SDK packages and is never part of an app or view bundle.
+//
+// The page's first instance (`window.cardWorkflow`, Strict, in #one) is the CARD1 composition. CARD2
+// adds `window.cardInstances.add`, which mounts further instances in the same document: each has its
+// own element, view (trusted policy, host callback, consent scope), Archive environment and binding,
+// so interleaved instances can be observed without sharing anything but the catalog.
 
 const CATALOG_ID = 'https://saga-a2ui.local/catalogs/card-workflow/v1';
 const SURFACE_ID = 'episodes';
@@ -47,55 +52,25 @@ export interface CardWorkflow {
   send(input: unknown): IngestResult;
 }
 
+/** The trusted policy one instance gives its cards. */
+export interface InstanceOptions {
+  readonly level: 'standard' | 'strict';
+  readonly imageHosts: readonly string[];
+}
+
+export interface CardInstances {
+  /** Mounts another instance, `<section id="inst-NAME">` holding its own `<episodes-app-NAME>`. */
+  add(name: string, options: InstanceOptions): CardWorkflow;
+  /** The instance added under `name`, or the page's first instance for "one". */
+  get(name: string): CardWorkflow | undefined;
+}
+
 declare global {
   interface Window {
     cardWorkflow: CardWorkflow;
+    cardInstances: CardInstances;
   }
 }
-
-const linkCalls: string[] = [];
-const reader = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000 });
-const policy = createContentPolicy({ level: 'strict', imageHosts: [IMAGE_HOST] });
-if (!reader.ok) throw new Error(reader.failure.message);
-if (!policy.ok) throw new Error(policy.failure.message);
-const view: ContentView = {
-  reader: reader.reader,
-  policy: policy.policy,
-  hostLinks: {
-    open: (url) => {
-      linkCalls.push(url);
-      return Promise.resolve<LinkOpenOutcome>('opened');
-    },
-  },
-  imageEnforcement: 'established',
-  consent: createImageConsentScope(),
-};
-
-const { lab, environment } = createArchiveLab((noteId, message) => {
-  const key = noteId ?? 'input';
-  let line = document.querySelector(`[data-note="${key}"]`);
-  if (!line) {
-    line = document.createElement('p');
-    line.setAttribute('data-note', key);
-    document.querySelector('#one')?.append(line);
-  }
-  line.textContent = wording(message);
-});
-const archive = archiveNoteWith((event: ActionButtonActivation) => requireNoteId(event.read('id')), environment);
-
-const workflow: CardWorkflow = {
-  archive: lab,
-  linkCalls,
-  upstream: [],
-  setup: { attached: 0, errors: [] },
-  view,
-  send: (input) => {
-    const element = document.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>('episodes-app');
-    if (!element) throw new Error('the app is not mounted');
-    return element.ingest(input);
-  },
-};
-window.cardWorkflow = workflow;
 
 /** The surface: one list; each row repeats the same component ids with its own data scope. */
 const surface = [
@@ -136,34 +111,98 @@ const surface = [
 defineElements(components);
 registerFaithfulCard();
 
-class EpisodesApp extends createA2uiAppElement({
-  createSession: () => {
-    const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
-    session.onSurfaceCreated((created) => created.onAction.subscribe((action) => void workflow.upstream.push(action)));
-    return session;
-  },
-  initialInput: surface,
-  surfaceId: SURFACE_ID,
-  actions: createLitActions({
-    attach: (actions) => {
-      workflow.setup.attached += 1;
-      actions.watchById('row-archive', ActionButton, (handle) => {
-        handle.bindAction('activate', archive, { subject: () => handle.read('id') });
-      });
+/** Builds one instance: its element definition, view, Archive environment and binding, mounted in `container`. */
+function createInstance(tag: string, container: HTMLElement, options: InstanceOptions): CardWorkflow {
+  const linkCalls: string[] = [];
+  const reader = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000 });
+  const policy = createContentPolicy({ level: options.level, imageHosts: options.imageHosts });
+  if (!reader.ok) throw new Error(reader.failure.message);
+  if (!policy.ok) throw new Error(policy.failure.message);
+  const view: ContentView = {
+    reader: reader.reader,
+    policy: policy.policy,
+    hostLinks: {
+      open: (url) => {
+        linkCalls.push(url);
+        return Promise.resolve<LinkOpenOutcome>('opened');
+      },
     },
-    onSetupError: (error) => workflow.setup.errors.push(String(error)),
-  }),
-}) {
-  #endView?: () => void;
-  override connectedCallback() {
-    this.#endView = provideContentView(this, view);
-    super.connectedCallback();
+    imageEnforcement: 'established',
+    consent: createImageConsentScope(),
+  };
+
+  const { lab, environment } = createArchiveLab((noteId, message) => {
+    const key = noteId ?? 'input';
+    let line = container.querySelector(`[data-note="${key}"]`);
+    if (!line) {
+      line = document.createElement('p');
+      line.setAttribute('data-note', key);
+      container.append(line);
+    }
+    line.textContent = wording(message);
+  });
+  const archive = archiveNoteWith((event: ActionButtonActivation) => requireNoteId(event.read('id')), environment);
+
+  const workflow: CardWorkflow = {
+    archive: lab,
+    linkCalls,
+    upstream: [],
+    setup: { attached: 0, errors: [] },
+    view,
+    send: (input) => {
+      const element = container.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>(tag);
+      if (!element) throw new Error('the app is not mounted');
+      return element.ingest(input);
+    },
+  };
+
+  class EpisodesApp extends createA2uiAppElement({
+    createSession: () => {
+      const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
+      session.onSurfaceCreated((created) => created.onAction.subscribe((action) => void workflow.upstream.push(action)));
+      return session;
+    },
+    initialInput: surface,
+    surfaceId: SURFACE_ID,
+    actions: createLitActions({
+      attach: (actions) => {
+        workflow.setup.attached += 1;
+        actions.watchById('row-archive', ActionButton, (handle) => {
+          handle.bindAction('activate', archive, { subject: () => handle.read('id') });
+        });
+      },
+      onSetupError: (error) => workflow.setup.errors.push(String(error)),
+    }),
+  }) {
+    #endView?: () => void;
+    override connectedCallback() {
+      this.#endView = provideContentView(this, view);
+      super.connectedCallback();
+    }
+    override disconnectedCallback() {
+      super.disconnectedCallback();
+      this.#endView?.();
+      this.#endView = undefined;
+    }
   }
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    this.#endView?.();
-    this.#endView = undefined;
-  }
+  customElements.define(tag, EpisodesApp);
+  container.prepend(document.createElement(tag));
+  return workflow;
 }
-customElements.define('episodes-app', EpisodesApp);
-document.querySelector('#one')?.prepend(document.createElement('episodes-app'));
+
+const first = document.querySelector<HTMLElement>('#one');
+if (!first) throw new Error('the fixture page has no #one');
+window.cardWorkflow = createInstance('episodes-app', first, { level: 'strict', imageHosts: [IMAGE_HOST] });
+
+const added = new Map<string, CardWorkflow>();
+window.cardInstances = {
+  add(name, options) {
+    const section = document.createElement('section');
+    section.id = `inst-${name}`;
+    document.body.append(section);
+    const workflow = createInstance(`episodes-app-${name}`, section, options);
+    added.set(name, workflow);
+    return workflow;
+  },
+  get: (name) => (name === 'one' ? window.cardWorkflow : added.get(name)),
+};
