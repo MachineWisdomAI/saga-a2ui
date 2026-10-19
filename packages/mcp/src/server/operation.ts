@@ -202,6 +202,12 @@ function assertConfigured(declaration: UncheckedDeclaration, requireIdentity: bo
   if (problems.length > 0) throw new OperationConfigurationError(isText(declaration.name) ? String(declaration.name) : '(unnamed)', problems);
 }
 
+const isThenable = (value: unknown): boolean => typeof value === 'object' && value !== null && isFunction((value as { then?: unknown }).then);
+
+/** A projection callback's answer, checked as the untrusted value it is. `data` is validated separately against the output contract. */
+const isProjection = (value: unknown): value is Projection =>
+  typeof value === 'object' && value !== null && typeof (value as { text?: unknown }).text === 'string';
+
 const SDK_DEFAULTS = createServerBudgets();
 
 const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
@@ -251,6 +257,9 @@ async function execute<Found>(
         if (outcome.kind === 'refused') return failure(outcome.text);
         const projection = project(outcome.record);
         throwIfEnded(scope);
+        // The callback is application code: a projection that is not the declared shape is a contract
+        // break like invalid data, not a thrown fault and never something the SDK serializes.
+        if (!isProjection(projection)) return failure(declaration.failures.invalidOutput);
         const parsed = declaration.output.safeParse(projection.data);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
         return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
@@ -354,8 +363,16 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
       let identity: Identity | undefined;
       try {
         identity = operation.identity(ctx.http?.authInfo);
-      } catch {
+      } catch (error) {
         // The resolver is application code; whatever it threw may name the identity provider.
+        lifetime.record({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error });
+        return failure(operation.failures.unavailable);
+      }
+      if (isThenable(identity)) {
+        // The resolver is synchronous. A promise would reach the handler as the principal; its own
+        // rejection, if any, is not ours to surface.
+        void Promise.resolve(identity).catch(() => undefined);
+        lifetime.record({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error: new Error('The identity resolver returned a promise.') });
         return failure(operation.failures.unavailable);
       }
       if (identity === undefined) return failure(operation.failures.signInRequired);
