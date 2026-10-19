@@ -1,7 +1,8 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import type { AuthInfo, CallToolResult, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
-import { DEFAULT_OPERATION_BOUND_MS, type ViewCsp } from '../policy/index.js';
+import type { ViewCsp } from '../policy/index.js';
+import { createServerBudgets, valueOrThrow, type BoundedScope, type RequestLifetime } from './lifetime.js';
 
 // Declared MCP operations. The application owns the listener, authentication, domain
 // authorization and every backend effect; it hands this module an operation declaration and an
@@ -10,9 +11,12 @@ import { DEFAULT_OPERATION_BOUND_MS, type ViewCsp } from '../policy/index.js';
 // projection against the declared output contract, and returns a safe failure for everything
 // else. Upstream tool registration stays here: there is no SAGA registry of operations.
 //
-// Unreleased preparation slice (CORE1): `OperationRequest` carries what the existing browse code
-// already used (the request's cancellation signal) plus progress reporting. The complete
-// deadline, callback and transport contract is CORE3's.
+// Time: the complete handler, projection included, runs as one `handler` operation inside the
+// request's lifetime (see `lifetime.ts`). Its limit is the declaration's `boundMs`, else the
+// route/SDK-instance operation limit (3,000 ms by default), and it never outlasts what the request
+// has left. Work the handler starts through `OperationRequest.within` shares that one aggregate
+// budget. Unreleased preparation slice (CORE1): the full SSE/progress and delayed-completion
+// matrix remains CORE3's.
 
 /** The view the host mounts for an operation's result. The application builds it from its built bundle. */
 export interface OperationView {
@@ -45,10 +49,24 @@ export interface ProgressUpdate {
   readonly message?: string;
 }
 
+/** Stages a handler can name for work nested inside its own budget. */
+export type NestedStage = 'authorization' | 'storage' | 'dependency';
+
 /** What a handler may observe and do for the one request it serves. */
 export interface OperationRequest {
-  /** Aborts when the caller cancels or disconnects. The application cleans up work it cannot interrupt. */
+  /**
+   * Aborts when the caller cancels or disconnects, when the handler's budget or the request's
+   * deadline expires, and once the operation has finished. The application cleans up work it cannot
+   * interrupt; a result that arrives after any of these is dropped.
+   */
   readonly signal: AbortSignal;
+  /**
+   * Runs one dependency call (an authorization lookup, a storage read) inside this handler's
+   * aggregate budget. The call gets a signal to stop on, waits no longer than `limitMs` or what the
+   * handler has left, and cannot renew either. Rejects with a `StageFailure` carrying the typed
+   * cause when it does not finish; a handler may catch that and keep a known result.
+   */
+  within<T>(stage: NestedStage, work: (signal: AbortSignal) => T | PromiseLike<T>, options?: { readonly limitMs?: number }): Promise<T>;
   /**
    * Reports progress to a caller that asked for it. Reports after the operation has finished or
    * been retired are dropped quietly, so a late callback cannot reach the caller.
@@ -84,8 +102,19 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
   /** Runtime contract for the structured result. Strict contracts keep private fields out. */
   readonly output: Output;
   readonly view: OperationView;
-  /** Finite wait for the handler. Defaults to `DEFAULT_OPERATION_BOUND_MS`. */
+  /**
+   * This operation's own limit for its complete handler and projection: the per-operation override
+   * of the operation limit. Omitted, the route's or SDK instance's operation limit applies, else
+   * 3,000 ms. It is not a second timer: it resolves unambiguously with those settings and can
+   * never extend the request.
+   */
   readonly boundMs?: number;
+}
+
+/** Where an operation finds the request it serves. Absent, it runs under the SDK defaults. */
+export interface OperationContext {
+  /** The lifetime the adapter started at admission, passed through the per-request server factory. */
+  readonly lifetime: RequestLifetime;
 }
 
 /** An explicitly public operation: the caller needs no credential and no identity exists. */
@@ -168,46 +197,22 @@ function assertConfigured(declaration: UncheckedDeclaration, requireIdentity: bo
     needs(isFunction(declaration.identity), 'identity resolver');
     needs(isText(failures?.signInRequired), 'failures.signInRequired');
   }
-  const bound = declaration.boundMs;
-  if (bound !== undefined && !(Number.isFinite(bound) && bound > 0)) problems.push('boundMs must be a finite positive number');
+  const bound: unknown = declaration.boundMs;
+  if (bound !== undefined && !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)) problems.push('boundMs must be a finite positive number');
   if (problems.length > 0) throw new OperationConfigurationError(isText(declaration.name) ? String(declaration.name) : '(unnamed)', problems);
 }
 
+const SDK_DEFAULTS = createServerBudgets();
+
 const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
 
-const RETIRED = Symbol('retired-operation');
-
-/**
- * Waits for one handler only until the bound or the request's abort signal. A settlement that loses
- * that race is ignored, so it cannot become the result. A rejection retires the call the same way.
- */
-function withinBound<T>(operation: Promise<T>, boundMs: number, signal: AbortSignal): Promise<T | typeof RETIRED> {
-  if (signal.aborted) return Promise.resolve(RETIRED);
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: T | typeof RETIRED) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
-      resolve(signal.aborted ? RETIRED : value);
-    };
-    const onAbort = () => finish(RETIRED);
-    const timer = setTimeout(onAbort, boundMs);
-    signal.addEventListener('abort', onAbort, { once: true });
-    operation.then(
-      (value) => finish(value),
-      () => finish(RETIRED),
-    );
-  });
-}
-
-function requestFor(ctx: ServerContext, live: { open: boolean }): OperationRequest {
+function requestFor(ctx: ServerContext, live: { open: boolean }, scope: BoundedScope): OperationRequest {
   const progressToken = ctx.mcpReq._meta?.progressToken;
   return {
-    signal: ctx.mcpReq.signal,
+    signal: scope.signal,
+    within: (stage, work, options) => scope.run(stage, (nested) => work(nested.signal), options).then(valueOrThrow),
     async reportProgress(update) {
-      if (!live.open || progressToken === undefined || ctx.mcpReq.signal.aborted) return;
+      if (!live.open || progressToken === undefined || scope.signal.aborted) return;
       const { progress, total, message } = update;
       await ctx.mcpReq
         .notify({ method: 'notifications/progress', params: { progressToken, progress, total, message } })
@@ -218,34 +223,55 @@ function requestFor(ctx: ServerContext, live: { open: boolean }): OperationReque
 
 /**
  * Runs the steps every operation shares, after its access mode has settled who the caller is.
- * `run` is the access mode's own part: it calls the handler and supplies the projection.
+ * `run` is the access mode's own part: it calls the handler and supplies the projection. The handler
+ * and the projection are one bounded operation, so a slow mapping cannot outlast the budget either.
+ * Whatever ends that operation without a result (expiry, cancellation, a dependency failure) leaves
+ * its typed cause on the request lifetime and the caller sees only the declared unavailable text.
  */
 async function execute<Found>(
   declaration: Pick<Declaration<z.ZodObject, z.ZodObject>, 'output' | 'boundMs'> & { readonly failures: OperationFailures },
   ctx: ServerContext,
+  lifetime: RequestLifetime,
   run: (request: OperationRequest) => {
     readonly handling: Promise<OperationOutcome<Found>>;
     readonly project: (record: Found) => Projection;
   },
 ): Promise<CallToolResult> {
   const live = { open: true };
-  const { signal } = ctx.mcpReq;
   try {
-    const { handling, project } = run(requestFor(ctx, live));
-    const outcome = await withinBound(handling, declaration.boundMs ?? DEFAULT_OPERATION_BOUND_MS, signal);
-    if (outcome === RETIRED || signal.aborted) return failure(declaration.failures.unavailable);
-    if (outcome.kind === 'absent') return failure(declaration.failures.absent);
-    if (outcome.kind === 'refused') return failure(outcome.text);
-    const projection = project(outcome.record);
-    const parsed = declaration.output.safeParse(projection.data);
-    if (!parsed.success) return failure(declaration.failures.invalidOutput);
-    if (signal.aborted) return failure(declaration.failures.unavailable);
-    return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
-  } catch {
-    // A projection that throws is a fault of the application's mapping; say nothing about it.
+    const bounded = await lifetime.run(
+      'handler',
+      async (scope): Promise<CallToolResult> => {
+        const { handling, project } = run(requestFor(ctx, live, scope));
+        const outcome = await handling;
+        if (outcome.kind === 'absent') return failure(declaration.failures.absent);
+        if (outcome.kind === 'refused') return failure(outcome.text);
+        const projection = project(outcome.record);
+        const parsed = declaration.output.safeParse(projection.data);
+        if (!parsed.success) return failure(declaration.failures.invalidOutput);
+        return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
+      },
+      { limitMs: declaration.boundMs ?? lifetime.operationMs, upstream: ctx.mcpReq.signal },
+    );
+    if (bounded.ok) return bounded.value;
+    lifetime.record(bounded.cause);
     return failure(declaration.failures.unavailable);
   } finally {
     live.open = false;
+  }
+}
+
+/**
+ * Starts a lifetime for the call when the adapter supplied none, and finishes it with the call, so
+ * an operation registered without an adapter is still bounded by the SDK defaults.
+ */
+async function withLifetime(context: OperationContext | undefined, call: (lifetime: RequestLifetime) => Promise<CallToolResult>): Promise<CallToolResult> {
+  if (context) return call(context.lifetime);
+  const own = SDK_DEFAULTS.startRequest();
+  try {
+    return await call(own);
+  } finally {
+    own.finish();
   }
 }
 
@@ -293,38 +319,47 @@ function register(
 export function registerPublicOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found>(
   server: McpServer,
   operation: PublicOperation<Input, Output, Found>,
+  context?: OperationContext,
 ): void {
   assertConfigured(operation, false);
   register(server, operation, (args, ctx) =>
-    execute(operation, ctx, (request) => ({
-      handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, request)),
-      project: (record: Found) => operation.project(record),
-    })),
+    withLifetime(context, (lifetime) =>
+      execute(operation, ctx, lifetime, (request) => ({
+        handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, request)),
+        project: (record: Found) => operation.project(record),
+      })),
+    ),
   );
 }
 
 /**
  * Declares an operation that acts for a verified identity. Registration fails, with the missing
  * requirement named, unless the identity resolver, sign-in failure text, projection and view
- * are all configured. With no acceptable identity the handler never runs.
+ * are all configured. With no acceptable identity the handler never runs, and neither does it for a
+ * call that was cancelled or whose request already ended before the handler could start.
  */
 export function registerProtectedOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found, Identity>(
   server: McpServer,
   operation: ProtectedOperation<Input, Output, Found, Identity>,
+  context?: OperationContext,
 ): void {
   assertConfigured(operation, true);
-  register(server, operation, async (args, ctx) => {
-    let identity: Identity | undefined;
-    try {
-      identity = operation.identity(ctx.http?.authInfo);
-    } catch {
-      // The resolver is application code; whatever it threw may name the identity provider.
-      return failure(operation.failures.unavailable);
-    }
-    if (identity === undefined) return failure(operation.failures.signInRequired);
-    return execute(operation, ctx, (request) => ({
-      handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, identity, request)),
-      project: (record: Found) => operation.project(record, identity),
-    }));
-  });
+  register(server, operation, (args, ctx) =>
+    withLifetime(context, async (lifetime) => {
+      if (ctx.mcpReq.signal.aborted || lifetime.signal.aborted) return failure(operation.failures.unavailable);
+      let identity: Identity | undefined;
+      try {
+        identity = operation.identity(ctx.http?.authInfo);
+      } catch {
+        // The resolver is application code; whatever it threw may name the identity provider.
+        return failure(operation.failures.unavailable);
+      }
+      if (identity === undefined) return failure(operation.failures.signInRequired);
+      const principal = identity;
+      return execute(operation, ctx, lifetime, (request) => ({
+        handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, principal, request)),
+        project: (record: Found) => operation.project(record, principal),
+      }));
+    }),
+  );
 }

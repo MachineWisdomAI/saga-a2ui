@@ -45,13 +45,17 @@ const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 describe('package subpath exports', () => {
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
+      'BudgetConfigurationError',
       'OperationConfigurationError',
+      'StageFailure',
+      'createServerBudgets',
       'registerProtectedOperation',
       'registerPublicOperation',
+      'valueOrThrow',
       'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
-    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_BOUND_MS']);
+    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS']);
   });
 
   it('keep the server export free of any renderer, view or application code', async () => {
