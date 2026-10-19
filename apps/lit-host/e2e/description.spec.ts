@@ -325,7 +325,7 @@ test.describe('policy and resource identity', () => {
 
     const { frame } = await open(page, { description: 'x', imageHosts: [IMAGE_HOST] });
     const embedded = await frame.evaluate(() => document.getElementById('saga-content-policy')?.textContent);
-    expect(JSON.parse(embedded ?? 'null')).toEqual({ level: 'standard', imageHosts: [IMAGE_HOST] });
+    expect(JSON.parse(embedded ?? 'null')).toEqual({ level: 'standard', imageHosts: [IMAGE_HOST], fontOrigins: [] });
   });
 
   test('an invalid embedded policy fails before anything is mounted', async ({ page }) => {

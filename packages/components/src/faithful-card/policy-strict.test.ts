@@ -47,6 +47,7 @@ describe('creating a Strict policy', () => {
     expect(policy.configuration).toEqual({
       level: 'strict',
       imageHosts: ['images.example.com'],
+      fontOrigins: [],
       blockedPresentation: 'inert-text',
     });
     const rebuilt = createContentPolicy(policy.configuration);
@@ -54,12 +55,17 @@ describe('creating a Strict policy', () => {
     expect(standard({ imageHosts: ['images.example.com'] }).configuration).toEqual({
       level: 'standard',
       imageHosts: ['images.example.com'],
+      fontOrigins: [],
     });
   });
 
-  it('derives the same resource restrictions as Standard for the same hosts', () => {
+  it('declares the same origins as Standard for the same hosts and differs only by the missing blob: baseline', () => {
     const hosts = ['images.example.com'];
-    expect(strict({ imageHosts: hosts }).resource).toEqual(standard({ imageHosts: hosts }).resource);
+    const { contentSecurityPolicy: strictPolicy, ...strictRest } = strict({ imageHosts: hosts }).resource;
+    const { contentSecurityPolicy: standardPolicy, ...standardRest } = standard({ imageHosts: hosts }).resource;
+    expect(strictRest).toEqual(standardRest);
+    expect(strictPolicy).not.toContain('blob:');
+    expect(strictPolicy).toBe(standardPolicy.replaceAll(' blob:', ''));
   });
 
   it('is immutable once created', () => {

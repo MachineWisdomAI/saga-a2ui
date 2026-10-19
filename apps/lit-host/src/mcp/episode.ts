@@ -4,7 +4,6 @@ import { z } from 'zod';
 // bundle can use it without pulling in any server code.
 
 export const EPISODE_TOOL_NAME = 'get_episode';
-export const EPISODE_VIEW_URI = 'ui://saga-a2ui/episode-view.html';
 
 /** Caller input: a short slug. Anything else is rejected before the catalog is consulted. */
 export const EpisodeRequestSchema = z.object({

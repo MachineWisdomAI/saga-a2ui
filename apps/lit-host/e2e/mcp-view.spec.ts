@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
-import { EPISODE_TOOL_NAME, EPISODE_VIEW_URI } from '../src/mcp/episode.js';
+import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
 import type { HostedResource } from './host-fixture/host.js';
 
@@ -33,8 +33,17 @@ test.afterAll(async () => {
   await listener.close();
 });
 
+/** The URI the server registered for the view, as a host learns it from the tool. */
+async function registeredViewUri(): Promise<string> {
+  const { tools } = await client.listTools();
+  const uri = (tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
+    ?.resourceUri;
+  if (uri === undefined) throw new Error('The tool links no view resource.');
+  return uri;
+}
+
 async function readView(): Promise<HostedResource> {
-  const { contents } = await client.readResource({ uri: EPISODE_VIEW_URI });
+  const { contents } = await client.readResource({ uri: await registeredViewUri() });
   const [content] = contents;
   if (!content || !('text' in content)) throw new Error('resources/read returned no text');
   const ui = (content._meta as { ui: { csp: HostedResource['csp'] } }).ui;
@@ -78,9 +87,9 @@ test('changing the server result changes the visible title', async ({ page }) =>
 
 test('the resource is linked from the tool and served with an empty-allowlist CSP', async ({ page }) => {
   const { tools } = await client.listTools();
-  expect(tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta).toMatchObject({
-    ui: { resourceUri: EPISODE_VIEW_URI },
-  });
+  const uri = await registeredViewUri();
+  expect(tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta).toMatchObject({ ui: { resourceUri: uri } });
+  expect(uri).toMatch(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/);
 
   const resource = await readView();
   expect(resource.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });

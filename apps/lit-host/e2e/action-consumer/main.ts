@@ -1,5 +1,5 @@
 import { basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog, createFunctionImplementation, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import { Catalog, createFunctionImplementation, type Subscription, type SurfaceModel } from '@a2ui/web_core/v0_9';
 import {
   Action,
   prerequisite,
@@ -13,7 +13,7 @@ import {
 } from '@saga-a2ui/core/actions';
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
-import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
+import { createA2uiAppElement, defineElements, type A2uiSession } from '@saga-a2ui/lit';
 import {
   ActionButton,
   actionButtonEntry,
@@ -78,6 +78,15 @@ export interface ActionConsumer {
   readonly surfaces: Record<string, SurfaceModel<LitComponentApi>>;
   /** Makes the next `attach` of this app throw. */
   failSetupFor: string | undefined;
+  /** In the default scenario, makes the discovery callback of the row at this data path throw once its binding is made. */
+  throwOnDiscoveryAt: string | undefined;
+  /**
+   * What each app element did with the sessions it created: how many, how many were disposed, and
+   * how many of the element's own listeners on the current session are still attached.
+   */
+  readonly sessions: Record<string, { created: number; disposed: number; listeners: number }>;
+  /** Every session an app element created, oldest first, kept so a test can deliver late input to a retired one. */
+  readonly sessionHistory: Record<string, A2uiSession[]>;
   stopDiscovery(app: string): void;
   send(app: string, input: unknown): IngestResult;
   /** `getById` on the app's setup view: 'ok', or the message of the error it threw. */
@@ -197,6 +206,9 @@ const consumer: ActionConsumer = {
   views: {},
   surfaces: {},
   failSetupFor: undefined,
+  throwOnDiscoveryAt: undefined,
+  sessions: {},
+  sessionHistory: {},
   pendingSessions: [],
   pendingRows: [],
   player: new PlayerOwner(),
@@ -279,7 +291,10 @@ function attachFor(app: string) {
     }
     consumer.views[app] = view;
     const bind = (id: string, action: ActionDefinition<ActionButtonActivation>) =>
-      view.watchById(id, ActionButton, (handle) => trace(app, handle, handle.bindAction('activate', action)));
+      view.watchById(id, ActionButton, (handle) => {
+        trace(app, handle, handle.bindAction('activate', action));
+        if (consumer.throwOnDiscoveryAt === handle.dataPath) throw new Error(`discovery failed at ${handle.dataPath}`);
+      });
     // 'orphan' is deliberately not watched: a control with no attached action must stay inert.
     stoppers[app] = [
       bind('details-toggle', toggle),
@@ -645,6 +660,31 @@ function defineApp(app: string): void {
             consumer.upstream.push({ app, action });
           });
         });
+        // Observation only, added after the fixture's own subscription above so that it counts just
+        // the element's listeners: wrapping changes nothing the element can see.
+        const record = (consumer.sessions[app] ??= { created: 0, disposed: 0, listeners: 0 });
+        record.created += 1;
+        record.listeners = 0;
+        (consumer.sessionHistory[app] ??= []).push(session);
+        const counted = <T extends (listener: never) => Subscription>(subscribe: T): T =>
+          ((listener: never) => {
+            record.listeners += 1;
+            const subscription = subscribe(listener);
+            return {
+              // Every call counts, so a second release shows as a negative balance.
+              unsubscribe: () => {
+                record.listeners -= 1;
+                subscription.unsubscribe();
+              },
+            };
+          }) as T;
+        session.onSurfaceCreated = counted(session.onSurfaceCreated.bind(session));
+        session.onSurfaceDeleted = counted(session.onSurfaceDeleted.bind(session));
+        const dispose = session.dispose.bind(session);
+        session.dispose = () => {
+          record.disposed += 1;
+          dispose();
+        };
         return session;
       },
       initialInput: layoutFor(SURFACE_ID),
