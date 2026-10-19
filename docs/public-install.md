@@ -4,8 +4,8 @@ SAGA A2UI does not yet have a public npm release. The current repository contain
 a runnable Lit example and private, unreleased SDK packages under `packages/` that cannot be
 installed from a registry. Locally packed copies of them, including the optional
 `@saga-a2ui/components` FaithfulCard, are built into an external example by
-`npm run build:answer-consumer` (see the README); that is a development check, not an
-installation recipe. This guide will name the tested package versions when the first release exists.
+`npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
+(see the README); those are development checks, not an installation recipe. This guide will name the tested package versions when the first release exists.
 
 ## Run the current source example
 

@@ -1,0 +1,20 @@
+{
+  "name": "saga-react-card-consumer-example",
+  "private": true,
+  "description": "A synthetic React application that shows tool-result answers in SAGA's optional React FaithfulCard through public package exports only, as one self-contained MCP Apps resource. It is not part of the npm workspace: scripts/build-react-card-consumer.ts installs the packed SDK packages into a clean copy of it and builds that.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@a2ui/react": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@saga-a2ui/components": "*",
+    "@saga-a2ui/core": "*",
+    "@saga-a2ui/mcp": "*",
+    "@saga-a2ui/react": "*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  }
+}

@@ -1,5 +1,6 @@
-import { expect, test, type Frame } from '@playwright/test';
-import { ARTWORK_SIZE, fontDataUrl, imageDataUrl, PROBE_ADVANCE_EM, pngBytes, woff2Bytes } from './asset-fixtures.js';
+import { expect, test } from '@playwright/test';
+import { ARTWORK_SIZE, fontDataUrl, imageDataUrl } from './asset-fixtures.js';
+import { directive, policyText, probeFont, probeImage, PROBE_WIDTH, settle } from './asset-probes.js';
 import { cleanupServedResources, IMAGE, IMAGE_HOST, open, policyOf, type OpenOptions } from './description-harness.js';
 
 // Trusted application artwork and fonts under the approved resource policy, observed in the built
@@ -20,8 +21,6 @@ const FONT_ORIGIN = 'https://fonts.example.com';
 const OTHER_ORIGIN = 'https://other.example.net';
 /** A data image short enough to sit in a description, which has a finite length bound. */
 const SHORT_DATA_IMAGE = 'data:image/png;base64,AAAA';
-/** One "A" at 16px in the probe font: twice the em, a width no fallback face gives a letter A. */
-const PROBE_WIDTH = PROBE_ADVANCE_EM * 16;
 
 type Level = 'standard' | 'strict';
 const LEVELS: readonly Level[] = ['standard', 'strict'];
@@ -42,102 +41,6 @@ const STATIC_ASSETS =
   '#static-text{position:absolute;left:0;top:0;opacity:0;white-space:pre;font:16px "StaticProbe",monospace}</style>' +
   `<img id="static-artwork" alt="" src="${imageDataUrl()}"><span id="static-text">A</span>`;
 const withTrustedAssets = (html: string): string => html.replace('</body>', `${STATIC_ASSETS}</body>`);
-
-interface Outcome {
-  readonly loaded: boolean;
-  /** The image's natural width, or the font's measured advance of one "A" in px. */
-  readonly size: number;
-  /** The effective directive of each security-policy violation the attempt raised. */
-  readonly violations: readonly string[];
-}
-
-const settle = (frame: Frame) => frame.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 150)));
-
-/** Loads an image from the trusted template: a data URL, an object URL, or an address. */
-function probeImage(frame: Frame, source: 'data' | 'blob' | { readonly url: string }): Promise<Outcome> {
-  return frame.evaluate(
-    async ({ source: wanted, png }) => {
-      const violations: string[] = [];
-      document.addEventListener('securitypolicyviolation', (event) => violations.push(event.effectiveDirective));
-      const bytes = Uint8Array.from(atob(png), (character) => character.charCodeAt(0));
-      const url =
-        wanted === 'data'
-          ? `data:image/png;base64,${png}`
-          : wanted === 'blob'
-            ? URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
-            : wanted.url;
-      const image = document.createElement('img');
-      const loaded = await new Promise<boolean>((resolve) => {
-        image.addEventListener('load', () => resolve(true));
-        image.addEventListener('error', () => resolve(false));
-        image.src = url;
-        document.body.append(image);
-      });
-      await new Promise((resolve) => setTimeout(resolve, 150)); // a violation event may follow the error
-      return { loaded, size: image.naturalWidth, violations };
-    },
-    { source, png: pngBytes().toString('base64') },
-  );
-}
-
-/**
- * Loads the probe font from a data URL, an object URL or an address, through the FontFace API or
- * an `@font-face` rule, then measures one "A" set in it with a fallback behind. Loaded means the
- * browser fetched and used the font (the measured advance is the probe's); a failure leaves the
- * fallback, whose advance is something else and whose text stays readable.
- */
-function probeFont(
-  frame: Frame,
-  source: 'data' | 'blob' | { readonly url: string },
-  via: 'api' | 'css' = 'api',
-): Promise<Outcome & { readonly readable: boolean }> {
-  return frame.evaluate(
-    async ({ source: wanted, font, via: route, family }) => {
-      const violations: string[] = [];
-      document.addEventListener('securitypolicyviolation', (event) => violations.push(event.effectiveDirective));
-      const bytes = Uint8Array.from(atob(font), (character) => character.charCodeAt(0));
-      const url =
-        wanted === 'data'
-          ? `data:font/woff2;base64,${font}`
-          : wanted === 'blob'
-            ? URL.createObjectURL(new Blob([bytes], { type: 'font/woff2' }))
-            : wanted.url;
-      let loaded = false;
-      if (route === 'api') {
-        const face = new FontFace(family, `url("${url}")`);
-        try {
-          await face.load();
-          document.fonts.add(face);
-          loaded = true;
-        } catch {
-          loaded = false;
-        }
-      } else {
-        const style = document.createElement('style');
-        style.textContent = `@font-face{font-family:"${family}";src:url("${url}")}`;
-        document.head.append(style);
-        loaded = (await document.fonts.load(`16px "${family}"`, 'A').catch(() => [])).length > 0;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      const text = document.createElement('span');
-      text.textContent = 'A';
-      text.style.cssText = `position:absolute;left:0;top:0;white-space:pre;font:16px "${family}", monospace`;
-      document.body.append(text);
-      const box = text.getBoundingClientRect();
-      return { loaded, size: box.width, violations, readable: box.width > 0 && box.height > 0 };
-    },
-    { source, font: woff2Bytes().toString('base64'), via, family: `F${Math.random().toString(36).slice(2)}` },
-  );
-}
-
-const policyText = (frame: Frame): Promise<string[]> =>
-  frame.evaluate(() =>
-    Array.from(document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]'), (meta) => meta.getAttribute('content') ?? ''),
-  );
-
-function directive(policy: string, name: string): string[] {
-  return policy.split(';').map((part) => part.trim()).filter((part) => part === name || part.startsWith(`${name} `));
-}
 
 async function openWith(page: Parameters<typeof open>[0], level: Level, lists: Lists, extra: Partial<OpenOptions> = {}) {
   return open(page, {
