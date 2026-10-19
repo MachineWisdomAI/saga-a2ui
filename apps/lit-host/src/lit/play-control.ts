@@ -58,7 +58,7 @@ function presentationFor(state: PlaybackViewState): Presentation {
         button: { label: 'Play', action: 'saga-play' },
       };
     case 'session-changed':
-      return { status: 'Your session changed. Reload to continue.' };
+      return { status: 'Your session changed. Open a new view or reload to continue.' };
   }
 }
 
