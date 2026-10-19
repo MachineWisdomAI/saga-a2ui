@@ -234,7 +234,15 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   let labelLost = false;
   const bindings = new Set<ActionBinding>();
 
-  const retired = () => disposed || tornDown || labelLost;
+  // `dispose()` has begun. Set before the bindings end so a canceled Play presents nothing while the
+  // view is closing; `disposed` itself stays last because it makes a second `dispose()` return early.
+  let closing = false;
+  // The identity of the current selection as a press's subject. A new object on every opener, valid
+  // or not, so an opener that retires the presentation also ends an undecided Play for the old
+  // selection even when it leaves the selected item itself unchanged (a malformed opener).
+  let selection: object = {};
+
+  const retired = () => disposed || closing || tornDown || labelLost;
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
@@ -258,6 +266,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
    */
   const loseLabel = () => {
     selected = undefined;
+    selection = {};
     disposeBindings();
     owner.teardown();
     labelLost = true;
@@ -273,6 +282,9 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
 
   const onOpened = (result: ToolResult) => {
     if (retired()) return;
+    // Every opener retires the presentation, so an undecided Play for the earlier presentation is
+    // stale at its next checkpoint whether or not the opener names a different item.
+    selection = {};
     const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
     if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
     if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) return loseLabel();
@@ -281,12 +293,18 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     clearWith({ kind: 'ready', episode: opened.data });
   };
 
-  /** Fetches the protected bytes with the capability and a fresh proof from the bound key. */
-  async function acquire(view: ViewPlayback, key: RecipientKey, signal: AbortSignal): Promise<Acquisition> {
+  /**
+   * Fetches the protected bytes with the capability and a fresh proof from the bound key. `current`
+   * is the invocation's own checkpoint: it also reads the work deadline's clock, so a proof that
+   * finished after the bound (its continuation delivered before the deadline timer) sends nothing.
+   */
+  async function acquire(view: ViewPlayback, key: RecipientKey, signal: AbortSignal, current: () => boolean): Promise<Acquisition> {
     try {
+      if (!current() || signal.aborted) return { kind: 'failed' };
       const proof = await signMediaProof(key, { capability: view.capability, url: view.mediaUrl });
-      // The work deadline may have passed while the proof was signed: no request leaves the view now.
-      if (signal.aborted) return { kind: 'failed' };
+      // The work deadline may have passed, or the Play been retired, while the proof was signed: no
+      // request carrying the capability and the proof leaves the view now.
+      if (!current() || signal.aborted) return { kind: 'failed' };
       const response = await fetch(view.mediaUrl, {
         headers: { [CAPABILITY_HEADER]: view.capability, [PROOF_HEADER]: proof },
         cache: 'no-store',
@@ -361,6 +379,14 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   );
   const recipientKey = prerequisite('recipient-key', async () => proceed({ key: await createRecipientKey() }));
 
+  /** Presents what a Play that returned its result established. */
+  const presentResult = (result: PlayResult, episode: OpenedEpisode): void => {
+    if (result.kind === 'gesture-needed') return present({ kind: 'gesture-needed', episode });
+    // Audio that is short enough can end before the player confirms it started. That end belongs
+    // to this lease, so it wins over the late `started` result.
+    if (result.kind === 'playing') present({ kind: owner.hasEnded(result.lease) ? 'ended' : 'playing', episode });
+  };
+
   const play: ActionDefinition<PlayControlEvents['play']> = Action.server<PlayControlEvents['play'], CallToolResult>('play', transport)
     .input(() => pressable((current) => !STATES_THAT_BLOCK_PLAY.has(current)))
     .atActivation(({ scope }): PlayActivation => {
@@ -402,7 +428,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       if (answer.kind === 'unsupported') throw new PlayFailure('unsupported');
       if (answer.kind === 'label-lost') throw new PlayFailure('label-lost');
 
-      const media = await acquire(answer.grant, key, signal);
+      const media = await acquire(answer.grant, key, signal, current);
       if (!current()) return abandoned;
       if (media.kind === 'refused') throw new PlayFailure('expired');
       if (media.kind === 'failed') throw new PlayFailure('media-failed');
@@ -424,11 +450,28 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     })
     .onSuccess(({ result, params, current }) => {
       if (!current()) return;
-      const { episode } = params;
-      if (result.kind === 'gesture-needed') return present({ kind: 'gesture-needed', episode });
-      // Audio that is short enough can end before the player confirms it started. That end belongs
-      // to this lease, so it wins over the late `started` result.
-      if (result.kind === 'playing') present({ kind: owner.hasEnded(result.lease) ? 'ended' : 'playing', episode });
+      presentResult(result, params.episode);
+    })
+    .onCanceled((context) => {
+      // A changed subject was a new opener, which presented its own state; a label loss, teardown
+      // or disposal retired the view and presents nothing. What is left is this Play's own control
+      // being retired (unmounted or replaced) while the view still shows it pending: with nothing
+      // else to move it on, pending would stay for good and refuse every later press.
+      if (context.cause !== 'disposed' || retired() || kind !== 'pending' || selected !== context.params.episode) return;
+      const { episode } = context.params;
+      // Audio that already started under this press belongs to the owner and is reported as such.
+      if (context.stage === 'completing') return presentResult(context.result, episode);
+      // Say only what the progress supports. A request that may have reached the server has an
+      // unknown effect, so no retry is invited; a new opener starts a fresh attempt. A grant whose
+      // bytes were never fetched is a known result and offers a fresh Play, never the old capability.
+      switch (context.activation.reached) {
+        case 'nothing-sent':
+          return present({ kind: 'ready', episode });
+        case 'request-sent':
+          return present({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
+        case 'grant-known':
+          return present({ kind: 'unavailable', episode });
+      }
     })
     .onFailure((context) => {
       if (!context.current()) return;
@@ -539,7 +582,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       if (retired()) return;
       // The selection is the subject of every press: a new opener changes it, which cancels an
       // undecided invocation at its next checkpoint instead of letting it finish for the old item.
-      const options = { subject: () => selected };
+      const options = { subject: () => selection };
       bindings.add(handle.bindAction('play', play, options));
       bindings.add(handle.bindAction('pause', pause, options));
       bindings.add(handle.bindAction('resume', resume, options));
@@ -550,6 +593,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     attach,
     dispose() {
       if (disposed) return;
+      closing = true;
       disposeBindings();
       owner.teardown();
       disposed = true;

@@ -1808,3 +1808,137 @@ describe('Play as one action on the rendered control', () => {
     expect(disposed.control.activate('play', new Event('click'))).toBe('unbound');
   });
 });
+
+// Review repair for PR 133: the three behaviours the migration to one action must keep. Each test
+// drives the public rig and checks what was dispatched, not only what the server recorded.
+describe('a Play that is retired keeps its protected fetch unsent and its presentation accurate', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const blockFor = (ms: number) => {
+    const until = performance.now() + ms;
+    while (performance.now() < until) {
+      // Synchronous work that overruns the bound.
+    }
+  };
+  const playRequests = (r: Rig) => r.forwarded.filter((call) => call.name === 'play_episode').length;
+  const mediaDispatches = (fetchSpy: { mock: { calls: unknown[][] } }) =>
+    fetchSpy.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/media/'));
+
+  it('dispatches no protected fetch when the proof finished after the work deadline, even before the timer ran', async () => {
+    const r = await rig({ limits: { deadlineMs: 100 } });
+    await r.select(EP1);
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
+      const signature = await sign(...args);
+      blockFor(150);
+      return signature;
+    });
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    // The capability and the proof never left the view: not "the server saw nothing", but no dispatch.
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('dispatches no protected fetch when the Play was retired while its proof was being signed', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
+      const signature = await sign(...args);
+      r.control.retire(); // the control leaves while the proof is being signed
+      return signature;
+    });
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+    await settle(60);
+
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('does not leave Play pending when its control is retired and replaced: the effect is unknown, and a deliberate press still plays', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+
+    r.control.retire();
+    const replacement = renderControl(r.actions);
+    held.release(); // the old request is answered after its control is gone
+    await settle(80);
+
+    // Honest about what is unknown, offering no blind retry, and never fetching for the old press.
+    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown', episode: { episodeId: 'ep-1' } });
+    expect(r.harness.playback.mediaReads).toEqual([]);
+
+    // The replacement control is not stuck behind a stale pending state.
+    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(playRequests(r)).toBe(2);
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+
+  it('returns to ready when its control is retired before any request was sent', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+    r.view.play();
+    expect(r.last()?.kind).toBe('pending');
+
+    r.control.retire();
+    const replacement = renderControl(r.actions);
+
+    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-1' } });
+    expect(playRequests(r)).toBe(0);
+    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(r.player.calls).toContain('stop'); // the lease taken for the retired press was given back
+  });
+
+  it('presents nothing from a Play canceled by the view’s own disposal', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+    const before = r.states.length;
+
+    r.view.dispose();
+    held.release();
+    await settle(60);
+
+    expect(r.states).toHaveLength(before);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('retires a Play in flight when a malformed opener clears the presentation, keeping a deliberate retry', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+    const dispatched = vi.spyOn(globalThis, 'fetch');
+
+    await r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+    held.release(); // the old, valid grant arrives after the opener retired the presentation
+    await settle(80);
+
+    expect(mediaDispatches(dispatched)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' } });
+    expect(r.player.calls).not.toContain('start');
+
+    // The unchanged selection stays pressable: a deliberate new Play asks the server afresh.
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(playRequests(r)).toBe(2);
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+});
