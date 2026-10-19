@@ -106,12 +106,34 @@ export interface PlayControlEvents {
 /** The directly imported token application setup passes to `watchById`. */
 export const PlayControl = componentKind<PlayControlEvents>('PlayControl');
 
+/**
+ * The two ways this view ends the reader's image consent for a description card shown beside the
+ * control. The card's view owns the consent itself (`ContentView.consent`, an image consent scope
+ * satisfies this interface); the controller only says when the selection it shows has ended.
+ */
+export interface ContentConsentEnding {
+  /** A new selection is arriving: consent given for the previous one ends. The view stays live. */
+  revokeAll(): void;
+  /**
+   * The view is over (teardown, disposal, a lost sign-in label): nothing still shown may grant consent,
+   * and the page ends the card itself, so no retained control of it can act afterwards. Told once.
+   */
+  retire(): void;
+}
+
 export interface PlaybackViewDependencies {
   readonly app: App;
   readonly transport: Transport;
   readonly player: AudioPlayer;
   /** Presents a state. Each call replaces everything shown before it. */
   readonly show: (state: PlaybackViewState) => void;
+  /**
+   * Present only when the page shows a description card beside the control; a standalone player
+   * needs none. Revoked before every opener is presented (a new opener is a new selection even for
+   * an unchanged description), retired for good with the view. Consent and Play have separate
+   * lifetimes: a press, a Play in flight and its outcome never touch it.
+   */
+  readonly contentConsent?: ContentConsentEnding;
 }
 
 export interface PlaybackViewConnection extends ToolResultViewConnection {
@@ -254,6 +276,14 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     bindings.clear();
   };
 
+  // Terminal, and told once: the view is over, so no card on screen may grant image consent again.
+  let consentRetired = false;
+  const retireConsent = () => {
+    if (consentRetired) return;
+    consentRetired = true;
+    deps.contentConsent?.retire();
+  };
+
   /** Stops the audio and presents `state`. The owner's whole-player stop is the application's own call. */
   const clearWith = (state: PlaybackViewState) => {
     owner.teardown();
@@ -270,6 +300,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     disposeBindings();
     owner.teardown();
     labelLost = true;
+    retireConsent();
     kind = 'session-changed';
     if (!disposed && !tornDown) deps.show({ kind: 'session-changed' });
   };
@@ -285,6 +316,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     // Every opener retires the presentation, so an undecided Play for the earlier presentation is
     // stale at its next checkpoint whether or not the opener names a different item.
     selection = {};
+    // Likewise, image consent given for what was shown does not carry to what is about to be.
+    deps.contentConsent?.revokeAll();
     const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
     if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
     if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) return loseLabel();
@@ -574,6 +607,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       tornDown = true;
       disposeBindings();
       owner.teardown();
+      retireConsent();
     },
   });
 
@@ -596,6 +630,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       closing = true;
       disposeBindings();
       owner.teardown();
+      retireConsent();
       disposed = true;
       connection.dispose();
     },

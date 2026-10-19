@@ -51,6 +51,9 @@ describe('the application pages built from the packed SDK packages', () => {
       expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/limits.ts', '@saga-a2ui/mcp/src/view/index.ts']),
     );
     expect(playback).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
+    // The player shows the episode's description beside Play through the optional card, from installed copies of the Lit element and its renderer-neutral contract (CARD1).
+    expect(playback).toEqual(expect.arrayContaining(['@saga-a2ui/components/src/faithful-card/index.ts', '@saga-a2ui/lit/src/faithful-card/index.ts']));
+    expect(page('vite.playback-view.config.ts').provenance.thirdPartyPackages).toContain('markdown-it');
     // The FaithfulCard pages reach the optional card, its renderer-neutral contract and Markdown parser, and (with an authored
     // protected control beside the card) the shared action seam and the server action, all through installed copies.
     const workflow = page('vite.card-workflow.config.ts').provenance;
@@ -69,7 +72,7 @@ describe('the application pages built from the packed SDK packages', () => {
   });
 
   it('keeps the optional FaithfulCard, its Markdown parser and React out of every page that does not use them', () => {
-    for (const config of ['vite.action-consumer.config.ts', 'vite.answer-view.config.ts', 'vite.subscriptions-view.config.ts', 'vite.playback-view.config.ts', 'vite.host-fixture.config.ts']) {
+    for (const config of ['vite.action-consumer.config.ts', 'vite.answer-view.config.ts', 'vite.subscriptions-view.config.ts', 'vite.host-fixture.config.ts']) {
       const { installedSdkFiles, thirdPartyPackages } = page(config).provenance;
       expect(installedSdkFiles.filter((file) => /^@saga-a2ui\/components\/|\/faithful-card\//.test(file)), config).toEqual([]);
       expect(thirdPartyPackages.filter((name) => /markdown-it|^react/.test(name)), config).toEqual([]);

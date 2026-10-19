@@ -99,7 +99,7 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 
 | File | Role |
 | --- | --- |
-| [`playback-main.ts`](../apps/lit-host/src/playback-main.ts) | Composes the bridge, controller, controls and Web Audio player; disposes on page exit |
+| [`playback-main.ts`](../apps/lit-host/src/playback-main.ts) | Composes the bridge, controller, controls, the optional description card (its content view and image consent) and Web Audio player; disposes on page exit |
 | [`@saga-a2ui/mcp/view`](../packages/mcp/src/view/index.ts) | Registers listeners before connecting, forwards teardown, stops delivery and closes once on disposal |
 | [`playback/playback.ts`](../apps/lit-host/src/playback/playback.ts) | Contract shared by server and view: tool names, `_meta` keys, strict schemas, fixed sentences |
 | [`playback/playback-server.ts`](../apps/lit-host/src/playback/playback-server.ts) | `play_episode` and `get_playable_episode` |
