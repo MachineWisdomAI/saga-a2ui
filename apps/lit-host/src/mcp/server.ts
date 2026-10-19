@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { registerPublicOperation, type OperationOutcome } from '@saga-a2ui/mcp/server';
+import { registerPublicOperation, type OperationOutcome, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from './content-resource.js';
 import {
@@ -34,6 +34,8 @@ export interface EpisodeServerOptions {
    * or description can change it.
    */
   readonly contentPolicy: ContentPolicy;
+  /** The request this server was built for, started by the listener at admission. */
+  readonly lifetime: RequestLifetime;
 }
 
 /** Copy only the public fields; the explicit projection is what keeps other fields private. */
@@ -49,28 +51,32 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-episode-demo', version: '0.0.0' });
   const view = contentResource(options.viewHtml, options.contentPolicy);
 
-  registerPublicOperation(server, {
-    name: EPISODE_TOOL_NAME,
-    title: 'Get episode',
-    description: 'Returns the public title and description of one synthetic episode.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    input: EpisodeRequestSchema,
-    output: PublicEpisodeSchema,
-    view: { ...view, title: 'Episode view' },
-    failures: {
-      absent: 'No public episode has that id.',
-      unavailable: 'The episode is unavailable.',
-      invalidOutput: 'The episode could not be shown.',
+  registerPublicOperation(
+    server,
+    {
+      name: EPISODE_TOOL_NAME,
+      title: 'Get episode',
+      description: 'Returns the public title and description of one synthetic episode.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      input: EpisodeRequestSchema,
+      output: PublicEpisodeSchema,
+      view: { ...view, title: 'Episode view' },
+      failures: {
+        absent: 'No public episode has that id.',
+        unavailable: 'The episode is unavailable.',
+        invalidOutput: 'The episode could not be shown.',
+      },
+      handle: ({ episodeId }): OperationOutcome<EpisodeRecord> => {
+        const record = options.catalog.find(episodeId);
+        return record ? { kind: 'record', record } : { kind: 'absent' };
+      },
+      project: (record) => {
+        const episode = toPublicEpisode(record);
+        return { text: `${episode.title} (${episode.episodeId})`, data: episode };
+      },
     },
-    handle: ({ episodeId }): OperationOutcome<EpisodeRecord> => {
-      const record = options.catalog.find(episodeId);
-      return record ? { kind: 'record', record } : { kind: 'absent' };
-    },
-    project: (record) => {
-      const episode = toPublicEpisode(record);
-      return { text: `${episode.title} (${episode.episodeId})`, data: episode };
-    },
-  });
+    { lifetime: options.lifetime },
+  );
 
   return server;
 }

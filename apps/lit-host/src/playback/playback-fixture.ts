@@ -4,7 +4,9 @@ import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
-import { startEpisodeListener, type EpisodeListener } from '../mcp/listener.js';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import type { BudgetSettings } from '@saga-a2ui/mcp/server';
+import { startEpisodeListener, type EpisodeListener, type RequestOutcome } from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';
 import type { PlaybackBackend, EpisodeRecord } from './playback-server.js';
 
@@ -36,6 +38,11 @@ export interface CountingPlayback {
    * read has started; the read finishes only after `release()`.
    */
   holdNextRead(): { readonly reached: Promise<void>; release(): void };
+  /**
+   * Holds the next entitlement lookup open, as a slow authorization service would. It answers
+   * `outcome` once released, however late; `signal` is what the lookup was asked to stop on.
+   */
+  holdNextEntitlement(): { readonly reached: Promise<void>; readonly signal: () => AbortSignal | undefined; release(outcome?: 'entitled' | 'denied'): void };
 }
 
 export function countingPlayback(
@@ -59,6 +66,9 @@ export function countingPlayback(
   let entitlementFault = options?.failEntitlementWith;
   let readFault: string | undefined;
   let heldRead: { readonly started: () => void; readonly gate: Promise<void> } | undefined;
+  let heldEntitlement:
+    | { readonly started: (signal: AbortSignal) => void; readonly gate: Promise<'entitled' | 'denied'> }
+    | undefined;
   return {
     entitlementChecks,
     mediaReads,
@@ -71,6 +81,18 @@ export function countingPlayback(
     failReadsWith(message) {
       readFault = message;
     },
+    holdNextEntitlement() {
+      let release!: (outcome: 'entitled' | 'denied') => void;
+      let started!: (signal: AbortSignal) => void;
+      let seen: AbortSignal | undefined;
+      const gate = new Promise<'entitled' | 'denied'>((resolve) => void (release = resolve));
+      const reached = new Promise<void>((resolve) => void (started = (signal) => {
+        seen = signal;
+        resolve();
+      }));
+      heldEntitlement = { started, gate };
+      return { reached, signal: () => seen, release: (outcome = 'entitled') => release(outcome) };
+    },
     holdNextRead() {
       let release!: () => void;
       let started!: () => void;
@@ -82,8 +104,14 @@ export function countingPlayback(
     backend: {
       // `recordFor` lets a test make the backend answer a lookup with a record whose own id differs.
       findEpisode: (episodeId) => options?.recordFor?.[episodeId] ?? episodes.find((episode) => episode.id === episodeId),
-      async checkEntitlement(accountId, episodeId) {
+      async checkEntitlement(accountId, episodeId, signal) {
         entitlementChecks.push({ accountId, episodeId });
+        const held = heldEntitlement;
+        heldEntitlement = undefined;
+        if (held) {
+          held.started(signal);
+          return held.gate; // answers whenever released, even after the request was abandoned
+        }
         if (entitlementFault) throw new Error(entitlementFault);
         return entitlements.get(accountId)?.has(episodeId) ? 'entitled' : 'denied';
       },
@@ -124,6 +152,13 @@ export interface PlaybackHarnessOptions {
   readonly failEntitlementWith?: string;
   readonly capabilityTtlSeconds?: number;
   readonly nowSeconds?: () => number;
+  /** The listener's budgets, and the playback route's own over them. */
+  readonly budgets?: BudgetSettings;
+  readonly playbackBudgets?: BudgetSettings;
+  /** Receives every finished request's outcome (status, causes). */
+  readonly observe?: (outcome: RequestOutcome) => void;
+  /** Replaces the development verifier, for a verifier that stalls or answers late. */
+  readonly verifier?: OAuthTokenVerifier;
 }
 
 export async function startPlaybackHarness(
@@ -137,11 +172,14 @@ export async function startPlaybackHarness(
     catalog: { find: () => undefined },
     ...(options.contentPolicy === undefined ? {} : { contentPolicy: options.contentPolicy }),
     port: 0,
+    ...(options.budgets === undefined ? {} : { budgets: options.budgets }),
+    ...(options.observe === undefined ? {} : { observe: options.observe }),
     playback: {
       viewHtml,
       backend: playback.backend,
       mediaStore: playback.store,
-      verifier: createDevelopmentVerifier(),
+      verifier: options.verifier ?? createDevelopmentVerifier(),
+      ...(options.playbackBudgets === undefined ? {} : { budgets: options.playbackBudgets }),
       ...(options.capabilityTtlSeconds === undefined ? {} : { capabilityTtlSeconds: options.capabilityTtlSeconds }),
       ...(options.nowSeconds === undefined ? {} : { nowSeconds: options.nowSeconds }),
     },

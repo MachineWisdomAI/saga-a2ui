@@ -27,6 +27,21 @@ export const RECIPIENT_KEY_META = 'saga-a2ui/recipient-key';
  */
 export const PLAYBACK_RESULT_META = 'saga-a2ui/playback';
 
+/**
+ * The reference application's bound on one Play attempt, from the press to audio actually advancing:
+ * key creation, the host call, proof signing, the media request and body, decoding and starting. It
+ * is the controller's own bound, independent of the server's request and operation limits, and
+ * consistent with the 30,000 ms client work default. Progress cannot extend it. Overridable per view.
+ */
+export const PLAYBACK_ATTEMPT_LIMIT_MS = 30_000;
+
+/**
+ * The longest one host call may be waited for by the transport itself. The MCP Apps client's own
+ * request timeout is 60,000 ms; this mirrors it so the call's timeout is never wider than that
+ * narrower safeguard even when more of the attempt remains.
+ */
+export const HOST_CALL_SAFEGUARD_MS = 60_000;
+
 /** Tool failure: the account is not entitled to this episode (or the episode does not exist). */
 export const PLAYBACK_DENIED_TEXT = 'Playback denied: this account does not have access to this episode.';
 

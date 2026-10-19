@@ -25,7 +25,7 @@ export interface ProtectedRequestPolicy {
 }
 
 export type ProtectedGate =
-  | { readonly kind: 'transport'; readonly status: 406 | 413 | 415; readonly error: string }
+  | { readonly kind: 'transport'; readonly status: 406 | 408 | 413 | 415; readonly error: string }
   | { readonly kind: 'protocol'; readonly status: 200 | 400; readonly id: RequestId; readonly code: number; readonly message: string }
   | { readonly kind: 'forward'; readonly body: unknown };
 

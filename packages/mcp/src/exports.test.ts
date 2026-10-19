@@ -45,13 +45,30 @@ const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 describe('package subpath exports', () => {
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
+      'BudgetConfigurationError',
       'OperationConfigurationError',
+      'StageFailure',
+      'assertBudgetSettings',
+      'createServerBudgets',
       'registerProtectedOperation',
       'registerPublicOperation',
+      'throwIfEnded',
+      'valueOrThrow',
       'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
-    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_BOUND_MS']);
+    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS', 'startBoundedTimer']);
+  });
+
+  it('expose the request-budget seam to a consumer through the package export', () => {
+    const budgets: server.ServerBudgets = server.createServerBudgets({ operationMs: 1_000 });
+    const lifetime: server.RequestLifetime = budgets.forRoute({ requestMs: 2_000 }).startRequest();
+    try {
+      expect([lifetime.operationMs, lifetime.requestMs]).toEqual([1_000, 2_000]);
+      expect(() => server.createServerBudgets({ requestMs: 0 })).toThrow(server.BudgetConfigurationError);
+    } finally {
+      lifetime.finish();
+    }
   });
 
   it('keep the server export free of any renderer, view or application code', async () => {

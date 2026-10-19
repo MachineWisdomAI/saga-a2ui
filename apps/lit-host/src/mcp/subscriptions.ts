@@ -25,8 +25,9 @@ export const EMPTY_SUBSCRIPTIONS_TEXT = 'No subscriptions.';
  * Finite bounds for this browse pipeline. Each bound is enforced at the boundary that can
  * reject the work before it is copied further: request bytes before the handler, argument
  * size before the backend, projected items and strings before serialization, incoming
- * host state before the view renders it, and `readBoundMs` on the server callback itself.
- * A backend read that exceeds that bound is retired; a later resolution is not emitted.
+ * host state before the view renders it. `readBoundMs` is the view's own wait for the read; the
+ * server's wait is the SDK operation limit (see the listener's budgets), which a backend read that
+ * exceeds is retired by, and a later resolution is not emitted.
  */
 export const SUBSCRIPTION_LIMITS = {
   maxRequestBytes: 65_536,

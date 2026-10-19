@@ -1,11 +1,14 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
+import { startBoundedTimer } from '@saga-a2ui/mcp/policy';
 import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
   MEDIA_PATH_PREFIX,
   OpenedEpisodeSchema,
+  HOST_CALL_SAFEGUARD_MS,
   PLAY_TOOL_NAME,
+  PLAYBACK_ATTEMPT_LIMIT_MS,
   PLAYBACK_DENIED_TEXT,
   PLAYBACK_RESULT_META,
   PLAYBACK_UNSUPPORTED_TEXT,
@@ -52,14 +55,23 @@ export type PlaybackViewState =
       readonly kind:
         | 'resume-blocked'
         | 'denied'
-        | 'sign-in-required'
         | 'expired'
         | 'unsupported'
-        | 'unavailable'
         | 'media-failed'
         | 'gesture-needed'
         | 'session-changed';
       readonly episode?: OpenedEpisode;
+    }
+  | {
+      readonly kind: 'unavailable';
+      readonly episode?: OpenedEpisode;
+      /**
+       * `unknown` when the Play request may have reached the server and nothing says what it did
+       * (a rejected or expired host call): a capability may have been issued. The view then
+       * invites no retry; a new opener starts a fresh attempt. Absent when nothing was sent, or
+       * when a known result came back.
+       */
+      readonly requestOutcome?: 'unknown';
     };
 
 export interface PlaybackViewDependencies {
@@ -68,6 +80,19 @@ export interface PlaybackViewDependencies {
   readonly player: AudioPlayer;
   /** Presents a state. Each call replaces everything shown before it. */
   readonly show: (state: PlaybackViewState) => void;
+  /**
+   * The longest one Play attempt may stay pending, from the press to audio advancing. Must be a
+   * finite positive number. Defaults to `PLAYBACK_ATTEMPT_LIMIT_MS`; progress never extends it.
+   */
+  readonly attemptLimitMs?: number;
+}
+
+/** The view was configured with an unusable bound. Raised before anything is requested. */
+export class PlaybackConfigurationError extends Error {
+  constructor(problem: string) {
+    super(`The playback view is not configured: ${problem}.`);
+    this.name = 'PlaybackConfigurationError';
+  }
 }
 
 export interface PlaybackViewConnection extends ToolResultViewConnection {
@@ -97,6 +122,14 @@ type Acquisition =
  * It does not dispose the connection; the later `dispose()` still closes it once. A start that
  * settles for a retired press releases the player only if no later press has taken it over.
  *
+ * Time: one attempt bound (`attemptLimitMs`) starts at the press, before the key is created, and
+ * covers every client stage after it. It is cleared by any outcome and by retirement, never by a
+ * successful start (the audio keeps playing), and nothing that happens inside the attempt renews
+ * it. On expiry the attempt is retired like any other end: its signal aborts, the player stops, and
+ * the view says `unavailable`, inviting no retry when a request may already have reached the server
+ * with an unknown effect. The host call also gets the attempt's signal and a timeout no wider than
+ * what the attempt has left.
+ *
  * Label loss: an opener or a grant under a label other than the pinned one ends this view for good.
  * The selection is cleared, the player stops, and `session-changed` stays: every later opener (the
  * old label, the new one or an unreadable one) is ignored, and Play, Pause and Resume do nothing.
@@ -109,6 +142,10 @@ type Acquisition =
  */
 export async function connectPlaybackView(deps: PlaybackViewDependencies): Promise<PlaybackViewConnection> {
   const { app, player } = deps;
+  const attemptLimitMs: unknown = deps.attemptLimitMs ?? PLAYBACK_ATTEMPT_LIMIT_MS;
+  if (typeof attemptLimitMs !== 'number' || !Number.isFinite(attemptLimitMs) || attemptLimitMs <= 0) {
+    throw new PlaybackConfigurationError('attemptLimitMs must be a finite positive number');
+  }
   let selected: OpenedEpisode | undefined;
   let pinnedSession: string | undefined;
   let kind: PlaybackViewState['kind'] = 'no-selection';
@@ -132,15 +169,30 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   // The start the player has not yet confirmed, and whether the audio ended while it was waiting.
   let starting: { readonly generation: number; ended: boolean } | undefined;
 
+  // The one timer and deadline of the attempt in flight. Both are cleared together.
+  let cancelAttemptTimer: (() => void) | undefined;
+  let attemptDeadline = 0;
+  // How far the attempt got, which decides what the view may say about the server's part in it.
+  let reached: 'nothing-sent' | 'request-sent' | 'grant-known' = 'nothing-sent';
+
   const retired = () => disposed || tornDown || labelLost;
+
+  const disarmAttempt = () => {
+    cancelAttemptTimer?.();
+    cancelAttemptTimer = undefined;
+  };
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
+    // Any outcome other than pending ends the attempt's clock. Playing is an outcome: the audio
+    // continues, only the bound on getting there is over.
+    if (state.kind !== 'pending') disarmAttempt();
     if (!retired()) deps.show(state);
   };
 
   /** Retires any pending request and stops the player; nothing audible or fetchable survives. */
   const retire = () => {
+    disarmAttempt();
     generation += 1;
     settling = undefined;
     abort?.abort();
@@ -151,6 +203,37 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   const clearWith = (state: PlaybackViewState) => {
     retire();
     present(state);
+  };
+
+  /**
+   * Starts the attempt's clock for the press that was just made. The deadline is absolute: nothing
+   * done later in the attempt moves it. If the attempt is still the current one and still pending
+   * when it passes, it ends like any other failure, and what the view may say depends on how far the
+   * attempt got: a request that may have reached the server has an unknown outcome.
+   */
+  const armAttempt = (mine: number, episode: OpenedEpisode) => {
+    disarmAttempt();
+    attemptDeadline = performance.now() + attemptLimitMs;
+    // Segmented, so an accepted limit above the native timer's maximum is not cut to about a millisecond.
+    cancelAttemptTimer = startBoundedTimer(attemptLimitMs, () => {
+      cancelAttemptTimer = undefined;
+      if (mine !== generation || retired() || kind !== 'pending') return;
+      expireAttempt(episode);
+    });
+  };
+
+  const expireAttempt = (episode: OpenedEpisode) =>
+    clearWith(reached === 'request-sent' ? { kind: 'unavailable', episode, requestOutcome: 'unknown' } : { kind: 'unavailable', episode });
+
+  /**
+   * Whether the attempt's deadline has passed and it was ended here. A timer is not the only witness:
+   * work that blocked the thread, or a continuation delivered before the timer, reaches the next stage
+   * after the deadline with the timer still waiting. Every continuation asks this before it goes on.
+   */
+  const attemptOver = (mine: number, episode: OpenedEpisode): boolean => {
+    if (mine !== generation || retired() || kind !== 'pending' || performance.now() < attemptDeadline) return false;
+    expireAttempt(episode);
+    return true;
   };
 
   /**
@@ -213,6 +296,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   async function acquire(view: ViewPlayback, key: Awaited<ReturnType<typeof createRecipientKey>>, signal: AbortSignal): Promise<Acquisition> {
     try {
       const proof = await signMediaProof(key, { capability: view.capability, url: view.mediaUrl });
+      // Past the bound (the timer may not have been delivered yet): no request leaves the view now.
+      if (signal.aborted || performance.now() >= attemptDeadline) return { kind: 'failed' };
       const response = await fetch(view.mediaUrl, {
         headers: { [CAPABILITY_HEADER]: view.capability, [PROOF_HEADER]: proof },
         cache: 'no-store',
@@ -253,21 +338,35 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       if (current()) present({ kind: 'unsupported', episode });
       return;
     }
-    if (!current()) return;
+    if (!current() || attemptOver(mine, episode)) return;
 
     let result: ToolResult;
+    reached = 'request-sent';
     try {
-      result = await app.callServerTool({
-        name: PLAY_TOOL_NAME,
-        arguments: { episodeId: episode.episodeId },
-        _meta: { [RECIPIENT_KEY_META]: key.publicJwk },
-      });
+      result = await app.callServerTool(
+        {
+          name: PLAY_TOOL_NAME,
+          arguments: { episodeId: episode.episodeId },
+          _meta: { [RECIPIENT_KEY_META]: key.publicJwk },
+        },
+        {
+          signal: controller.signal,
+          // No wider than what the attempt has left or the transport's own safeguard, and progress
+          // from the host never extends it (the App's default would).
+          timeout: Math.max(1, Math.min(attemptDeadline - performance.now(), HOST_CALL_SAFEGUARD_MS)),
+          resetTimeoutOnProgress: false,
+        },
+      );
     } catch {
-      // The host refused the proxied call (the listener's 401/403, before any tool handler).
-      if (current()) clearWith({ kind: 'sign-in-required', episode });
+      // A rejection, a timeout and an abort look the same from here: the host may or may not have
+      // forwarded the call, so this does not say the credential was refused, and the outcome of the
+      // request is unknown.
+      if (current()) clearWith({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
       return;
     }
     if (!current()) return; // retired while waiting: a late success must not restore anything
+    reached = 'grant-known'; // the server answered; what it answered decides the rest
+    if (attemptOver(mine, episode)) return; // answered, but after the bound: the result is dropped
 
     if (result.isError) {
       const text = result.content?.find((part) => part.type === 'text')?.text;
@@ -280,7 +379,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     if (!granted.success || !acceptable(granted.data, episode)) return clearWith({ kind: 'unavailable', episode });
 
     const media = await acquire(granted.data, key, controller.signal);
-    if (!current()) return;
+    if (!current() || attemptOver(mine, episode)) return;
     if (media.kind === 'refused') return clearWith({ kind: 'expired', episode });
     if (media.kind === 'failed') return clearWith({ kind: 'media-failed', episode });
 
@@ -295,6 +394,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         if (latestPlay === mine) player.stop();
         return;
       }
+      if (attemptOver(mine, episode)) return; // started after the bound: ending the attempt stops the player
       if (awaited.ended) return present({ kind: 'ended', episode });
       if (started === 'blocked') return clearWith({ kind: 'gesture-needed', episode });
       present({ kind: 'playing', episode });
@@ -335,6 +435,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       }
       present({ kind: 'pending', episode });
       latestPlay = generation;
+      reached = 'nothing-sent';
+      armAttempt(generation, episode);
       void run(episode, generation);
     },
     pause() {

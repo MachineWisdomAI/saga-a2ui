@@ -22,8 +22,18 @@ export const CLOSED_VIEW_CSP: ViewCsp = Object.freeze({
 });
 
 /**
- * How long one operation's handler may be waited for when its declaration states no bound. The
- * wait is finite on purpose: expiry retires the handler's result and returns the declared safe
- * failure. This is the established per-operation wait, not a whole-request deadline.
+ * How long one server operation may be waited for when neither the operation, its route nor the
+ * SDK instance states a limit: admission, credential verification, body ingestion, the complete
+ * handler including projection, an authorization lookup and a storage read are each an operation.
+ * An overridable product default, not a latency guarantee.
  */
-export const DEFAULT_OPERATION_BOUND_MS = 5_000;
+export const DEFAULT_OPERATION_MS = 3_000;
+
+/**
+ * How long one whole server request may run, from the adapter's admission of it (before
+ * authentication) through transport finish of a finite response, when no route or SDK instance
+ * states a limit. An established streaming response has an idle policy of its own instead.
+ */
+export const DEFAULT_REQUEST_MS = 10_000;
+
+export { startBoundedTimer } from './timer.js';

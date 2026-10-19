@@ -5,9 +5,12 @@ import { z } from 'zod';
 import { CLOSED_VIEW_CSP } from '../policy/index.js';
 import {
   OperationConfigurationError,
+  createServerBudgets,
   registerProtectedOperation,
   registerPublicOperation,
   type OperationView,
+  type RequestBudgets,
+  type RequestLifetime,
   type ProtectedOperation,
   type PublicOperation,
 } from './index.js';
@@ -544,5 +547,182 @@ describe('registration', () => {
   it('refuses a bound that is not finite and positive', () => {
     const operation = publicNotes({ boundMs: Number.POSITIVE_INFINITY });
     expect(() => operation()).toThrow(OperationConfigurationError);
+  });
+});
+
+describe('server budgets', () => {
+  /** The listener's part: one lifetime per request, handed to the per-request server factory. */
+  function budgeted(budgets: RequestBudgets, overrides: Partial<PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>> = {}) {
+    const lifetimes: RequestLifetime[] = [];
+    const build = (): McpServer => {
+      const lifetime = budgets.startRequest();
+      lifetimes.push(lifetime);
+      const server = new McpServer({ name: 'connector-test', version: '0.0.0' });
+      registerPublicOperation(server, publicOperation(overrides), { lifetime });
+      return server;
+    };
+    return { build, lifetimes };
+  }
+
+  function publicOperation(overrides: Partial<PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>>) {
+    const operation: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord> = {
+      name: 'get_note',
+      title: 'Get note',
+      description: 'Returns one public note.',
+      annotations: READ_ONLY,
+      input: NoteInput,
+      output: NoteOutput,
+      view: VIEW,
+      failures: FAILURES,
+      handle: async () => ({ kind: 'record', record: notes[0] as NoteRecord }),
+      project: (record) => ({ text: record.text, data: { noteId: record.id, text: record.text } }),
+      ...overrides,
+    };
+    return operation;
+  }
+
+  const never = () => new Promise<never>(() => undefined);
+  /** Every cause the requests recorded; the client's handshake requests record none. */
+  const causedBy = (lifetimes: readonly RequestLifetime[]) => lifetimes.flatMap((lifetime) => lifetime.causes);
+  const call = async (build: () => McpServer) => (await (await host(build)).connect()).callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+
+  it('uses the SDK instance operation limit when the operation states none', async () => {
+    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 40 }), { handle: never });
+    const started = Date.now();
+    const result = await call(build);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(causedBy(lifetimes)).toMatchObject([{ kind: 'operation-timeout', stage: 'handler', limitMs: 40, effect: 'unknown' }]);
+  });
+
+  it('lets the operation’s own boundMs override the instance limit, without a second timer', async () => {
+    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 5_000 }), { handle: never, boundMs: 30 });
+    const result = await call(build);
+    expect(result.isError).toBe(true);
+    expect(causedBy(lifetimes)).toMatchObject([{ kind: 'operation-timeout', limitMs: 30 }]);
+  });
+
+  it('never lets an operation limit above the request limit extend the request', async () => {
+    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 60_000, requestMs: 60 }), { handle: never });
+    const started = Date.now();
+    const result = await call(build);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(causedBy(lifetimes)[0]).toMatchObject({ kind: 'request-timeout' });
+  });
+
+  it('shares one aggregate budget across nested lookups and retries', async () => {
+    const attempts: number[] = [];
+    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 120 }), {
+      async handle(_input, request) {
+        for (let attempt = 1; ; attempt += 1) {
+          attempts.push(attempt);
+          // Every attempt would be allowed 100 ms on its own; together they must fit in 120 ms.
+          await request.within('storage', () => new Promise((resolve) => setTimeout(resolve, 100)).then(() => Promise.reject(new Error('transient')))).catch(() => undefined);
+          if (request.signal.aborted) throw new Error('aborted');
+        }
+      },
+    });
+    const result = await call(build);
+    expect(result.isError).toBe(true);
+    expect(attempts.length).toBeLessThanOrEqual(2);
+    expect(causedBy(lifetimes).at(-1)).toMatchObject({ kind: 'operation-timeout', stage: 'handler', limitMs: 120 });
+  });
+
+  it('does not project a record an uncooperative handler returns after the operation was retired', async () => {
+    let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
+    const late = new Promise<{ kind: 'record'; record: NoteRecord }>((resolve) => (release = resolve));
+    const projected: string[] = [];
+    const { build } = budgeted(createServerBudgets({ operationMs: 40 }), {
+      handle: () => late,
+      project: (record) => {
+        projected.push(record.id);
+        return { text: record.text, data: { noteId: record.id, text: record.text } };
+      },
+    });
+    const result = await call(build);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]); // the caller was answered first
+    release({ kind: 'record', record: notes[0] as NoteRecord }); // the handler ignored its signal and answers now
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(projected).toEqual([]); // no owned effect after the gate closed
+  });
+
+  it('cannot be extended by progress reports', async () => {
+    const { build } = budgeted(createServerBudgets({ operationMs: 100 }), {
+      async handle(_input, request) {
+        for (let step = 1; !request.signal.aborted; step += 1) {
+          await request.reportProgress({ progress: step });
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return { kind: 'absent' };
+      },
+    });
+    const started = Date.now();
+    const result = await call(build);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(Date.now() - started).toBeLessThan(1_500);
+  });
+
+  it('keeps a typed cause that preserves the dependency error without putting it in the result', async () => {
+    const { build, lifetimes } = budgeted(createServerBudgets(), {
+      handle: () => Promise.reject(new Error('db password is hunter2')),
+    });
+    const result = await call(build);
+    expect(JSON.stringify(result)).not.toContain('hunter2');
+    expect(causedBy(lifetimes)[0]).toMatchObject({ kind: 'dependency-failure', stage: 'handler', effect: 'unknown' });
+  });
+
+  it('does not let a handler that ignores its signal hold unrelated requests open', async () => {
+    const { build } = budgeted(createServerBudgets({ operationMs: 50 }), {
+      handle: (input) => (input.noteId === 'n1' ? never() : Promise.resolve({ kind: 'record', record: notes[1] as NoteRecord })),
+    });
+    const started = await host(build);
+    const [stuck, fine] = await Promise.all([
+      (await started.connect()).callTool({ name: 'get_note', arguments: { noteId: 'n1' } }),
+      (await started.connect()).callTool({ name: 'get_note', arguments: { noteId: 'n2' } }),
+    ]);
+    expect(stuck.isError).toBe(true);
+    expect(fine.isError).toBeUndefined();
+  });
+
+  it('rejects an invalid operation limit at registration, before any call', () => {
+    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, '40' as unknown as number]) {
+      const { build } = budgeted(createServerBudgets(), { boundMs: bad });
+      expect(() => build()).toThrow(OperationConfigurationError);
+    }
+  });
+
+  it('does not start a protected handler for a request that already ended', async () => {
+    const handled: unknown[] = [];
+    const build = (): McpServer => {
+      const lifetime = createServerBudgets().startRequest();
+      lifetime.disconnect();
+      const target = new McpServer({ name: 'connector-test', version: '0.0.0' });
+      registerProtectedOperation(
+        target,
+        {
+          name: 'get_my_note',
+          title: 'Get my note',
+          description: 'x',
+          annotations: READ_ONLY,
+          input: NoteInput,
+          output: NoteOutput,
+          view: VIEW,
+          failures: { ...FAILURES, signInRequired: 'Sign in.' },
+          identity: identityOf,
+          handle: async (input) => {
+            handled.push(input);
+            return { kind: 'absent' };
+          },
+          project: () => ({ text: '', data: { noteId: 'n1', text: '' } }),
+        },
+        { lifetime },
+      );
+      return target;
+    };
+    const started = await host(build);
+    const result = await (await started.connect('alice')).callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(handled).toEqual([]);
   });
 });
