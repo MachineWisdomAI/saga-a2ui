@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      No Content-Security-Policy here: the server derives it from the application's content policy and
+      embeds it, with that policy's configuration, in the document it serves (src/embedded-policy.ts).
+      The host applies the resource permissions the server publishes beside the document.
+    -->
+    <title>Answers</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main-harbor.tsx"></script>
+  </body>
+</html>
