@@ -281,6 +281,76 @@ describe('every callback that stalls, throws or misreports', () => {
     expect(causesOf(probe)).toEqual([expect.objectContaining({ kind: 'dependency-failure', stage: 'authentication' })]);
   });
 
+  it.each(MODES)('answers an identity whose `then` accessor throws with the declared failure alone (%s)', async (_name, jsonResponse) => {
+    // Inspecting the returned identity is inside the same boundary as calling the resolver, so what
+    // the accessor throws is kept as the typed authentication cause and never reaches the SDK.
+    const probe = newProbe();
+    const identity = () => Object.defineProperty({}, 'then', { get: () => { throw new Error(CANARY); } });
+    const client = await (await host(probe, jsonResponse, { identity })).connect('alice');
+    const result = await client.callTool({ name: 'mine', arguments: { id: 'a' } });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+    expect(probe.handled).toEqual([]);
+    expect(causesOf(probe)).toEqual([
+      expect.objectContaining({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error: expect.objectContaining({ message: CANARY }) }),
+    ]);
+  });
+
+  describe.each(MODES)('a handler outcome or projection that is not the declared shape, over %s', (_name, jsonResponse) => {
+    const outcomes: readonly [string, unknown, 'invalidOutput' | 'absent'][] = [
+      ['an unknown outcome kind', { kind: 'not-a-valid-outcome', record: 'a' }, 'invalidOutput'],
+      ['no outcome at all', undefined, 'invalidOutput'],
+      ['a refusal without text', { kind: 'refused' }, 'invalidOutput'],
+      ['a refusal whose text is not a string', { kind: 'refused', text: { canary: CANARY } }, 'invalidOutput'],
+      ['a refusal with empty text', { kind: 'refused', text: '' }, 'invalidOutput'],
+    ];
+    it.each(outcomes)('answers %s with the declared failure and projects nothing', async (_label, outcome, text) => {
+      const probe = newProbe();
+      const client = await (await host(probe, jsonResponse, { handle: () => outcome as OperationOutcome<string> })).connect('alice');
+      for (const tool of ['read', 'mine']) {
+        const result = await client.callTool({ name: tool, arguments: { id: 'a' } });
+        expect(result.isError, tool).toBe(true);
+        expect(result.content, tool).toEqual([{ type: 'text', text: FAILURES[text] }]);
+        expect(result.structuredContent, tool).toBeUndefined();
+        expect(JSON.stringify(result), tool).not.toContain(CANARY);
+      }
+      expect(probe.projected).toEqual([]);
+    });
+
+    it('still passes a well-formed refusal’s own text through', async () => {
+      const probe = newProbe();
+      const client = await (await host(probe, jsonResponse, { handle: () => ({ kind: 'refused', text: 'That is not allowed.' }) })).connect('alice');
+      const result = await client.callTool({ name: 'read', arguments: { id: 'a' } });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: 'text', text: 'That is not allowed.' }]);
+    });
+
+    it.each([
+      ['rejects', () => Promise.reject(new Error(CANARY))],
+      ['resolves', () => Promise.resolve({ text: 'a', data: { id: 'a', text: 'ok' } })],
+    ])('refuses an asynchronous projection that %s and consumes its rejection', async (_label, project) => {
+      const unhandled: unknown[] = [];
+      const record = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', record);
+      try {
+        const probe = newProbe();
+        const client = await (await host(probe, jsonResponse, { project: project as unknown as (record: string) => Projection })).connect('alice');
+        for (const tool of ['read', 'mine']) {
+          const result = await client.callTool({ name: tool, arguments: { id: 'a' } });
+          expect(result.isError, tool).toBe(true);
+          expect(result.content, tool).toEqual([{ type: 'text', text: FAILURES.invalidOutput }]);
+          expect(JSON.stringify(result), tool).not.toContain(CANARY);
+        }
+        // Unhandled rejections are reported after the microtask queue drains and a tick passes.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', record);
+      }
+    });
+  });
+
   it('keeps the typed cause of each failure for the application and out of the answer', async () => {
     const probe = newProbe();
     const client = await (await host(probe, true, { handle: () => Promise.reject(new Error(CANARY)) })).connect();

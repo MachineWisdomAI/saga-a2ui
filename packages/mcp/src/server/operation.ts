@@ -152,7 +152,7 @@ export class OperationConfigurationError extends Error {
 }
 
 const isFunction = (value: unknown): boolean => typeof value === 'function';
-const isText = (value: unknown): boolean => typeof value === 'string' && value.length > 0;
+const isText = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const isSchema = (value: unknown): boolean => typeof value === 'object' && value !== null && isFunction((value as { safeParse?: unknown }).safeParse);
 
 /** The fields registration checks, as an untrusted caller (plain JavaScript, a cast) might supply them. */
@@ -253,9 +253,24 @@ async function execute<Found>(
         // An uncooperative handler can answer after this operation was retired or ran out of time. The
         // projection is an owned stage of the same operation, so it starts only while the scope is live.
         throwIfEnded(scope);
-        if (outcome.kind === 'absent') return failure(declaration.failures.absent);
-        if (outcome.kind === 'refused') return failure(outcome.text);
-        const projection = project(outcome.record);
+        // The handler is application code too: only the three declared outcomes are acted on, and a
+        // refusal's text must be a real string before it can reach the SDK. Anything else is a contract
+        // break, answered before the projection can run, never serialized as a success.
+        const unchecked: unknown = outcome;
+        const kind = typeof unchecked === 'object' && unchecked !== null ? (unchecked as { kind?: unknown }).kind : undefined;
+        if (kind === 'absent') return failure(declaration.failures.absent);
+        if (kind === 'refused') {
+          const text = (unchecked as { text?: unknown }).text;
+          return failure(isText(text) ? text : declaration.failures.invalidOutput);
+        }
+        if (kind !== 'record') return failure(declaration.failures.invalidOutput);
+        const projection: unknown = project((unchecked as { record: Found }).record);
+        // Projections are synchronous. An asynchronous one is refused without being awaited, which
+        // would renew the budget, and its eventual rejection is consumed so it cannot surface unhandled.
+        if (isThenable(projection)) {
+          void Promise.resolve(projection).catch(() => undefined);
+          return failure(declaration.failures.invalidOutput);
+        }
         throwIfEnded(scope);
         // The callback is application code: a projection that is not the declared shape is a contract
         // break like invalid data, not a thrown fault and never something the SDK serializes.
@@ -362,17 +377,19 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
       if (ctx.mcpReq.signal.aborted || lifetime.check()) return failure(operation.failures.unavailable);
       let identity: Identity | undefined;
       try {
-        identity = operation.identity(ctx.http?.authInfo);
+        const resolved = operation.identity(ctx.http?.authInfo);
+        // Inspecting what the resolver returned is part of the same boundary: a `then` accessor is
+        // application code and may throw, and what it throws may name the identity provider.
+        if (isThenable(resolved)) {
+          // The resolver is synchronous. A promise would reach the handler as the principal; its own
+          // rejection, if any, is not ours to surface.
+          void Promise.resolve(resolved).catch(() => undefined);
+          throw new Error('The identity resolver returned a promise.');
+        }
+        identity = resolved;
       } catch (error) {
         // The resolver is application code; whatever it threw may name the identity provider.
         lifetime.record({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error });
-        return failure(operation.failures.unavailable);
-      }
-      if (isThenable(identity)) {
-        // The resolver is synchronous. A promise would reach the handler as the principal; its own
-        // rejection, if any, is not ours to surface.
-        void Promise.resolve(identity).catch(() => undefined);
-        lifetime.record({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error: new Error('The identity resolver returned a promise.') });
         return failure(operation.failures.unavailable);
       }
       if (identity === undefined) return failure(operation.failures.signInRequired);
