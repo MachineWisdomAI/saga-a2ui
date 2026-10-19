@@ -206,4 +206,38 @@ test.describe('result lifecycle through the bridge', () => {
     await expect(view.getByTestId('panel-title')).toHaveCount(1);
     await expect(view.locator('a2ui-surface')).toHaveCount(1);
   });
+
+  // The remount case above proves replacement: the fixture removes the old frame. Isolation between
+  // views is a different claim, and needs two frames that are alive at the same time.
+  test('two live views keep their own results, and tearing one down leaves the other unchanged', async ({ page }) => {
+    await page.goto('/host-fixture/index.html');
+    const resource = await readView();
+    await page.evaluate((r) => window.mountView?.(r), resource);
+    await page.evaluate((r) => window.mountView?.(r, { slot: 'second' }), resource);
+    const first = page.frameLocator('iframe[title="MCP App view"]');
+    const second = page.frameLocator('iframe[title="MCP App view (second)"]');
+    await expect(page.locator('iframe')).toHaveCount(2);
+
+    const send = (slot: string | undefined, payload: unknown) =>
+      page.evaluate((args) => window.deliverToolResult?.(args.payload as never, args.slot), { slot, payload });
+    await send(undefined, episode('First view'));
+    await send('second', episode('Second view'));
+    await expect(first.getByTestId('panel-title')).toHaveText('First view');
+    await expect(second.getByTestId('panel-title')).toHaveText('Second view');
+
+    // A result for one view reaches that view only.
+    await send('second', episode('Second view, newer'));
+    await expect(second.getByTestId('panel-title')).toHaveText('Second view, newer');
+    await expect(first.getByTestId('panel-title')).toHaveText('First view');
+
+    // Host teardown of the first view: it ignores what follows, the second keeps working.
+    await page.evaluate(() => window.teardownView?.());
+    await send(undefined, episode('After teardown')).catch(() => undefined);
+    await page.waitForTimeout(300);
+    await expect(first.getByTestId('panel-title')).toHaveText('First view');
+    await expect(second.getByTestId('panel-title')).toHaveText('Second view, newer');
+    await send('second', episode('Second view, after the first closed'));
+    await expect(second.getByTestId('panel-title')).toHaveText('Second view, after the first closed');
+    await expect(second.locator('a2ui-surface')).toHaveCount(1);
+  });
 });
