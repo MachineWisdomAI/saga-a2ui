@@ -39,8 +39,6 @@ function presentationFor(state: PlaybackViewState): Presentation {
         status: 'Playback denied: this account does not have access to this episode.',
         button: { label: 'Try again', action: 'saga-play' },
       };
-    case 'sign-in-required':
-      return { status: 'Sign in to play this episode.', button: { label: 'Try again', action: 'saga-play' } };
     case 'expired':
       return {
         status: 'Playback access expired. Press Play to ask for access again.',
@@ -49,6 +47,11 @@ function presentationFor(state: PlaybackViewState): Presentation {
     case 'unsupported':
       return { status: 'Playback is not supported here.' };
     case 'unavailable':
+      // The request may have reached the server and nothing says what it did, so pressing again is
+      // not offered: opening the episode again starts a fresh attempt with a fresh view of access.
+      if (state.requestOutcome === 'unknown') {
+        return { status: 'Playback could not be confirmed. Open this episode again to try playing it.' };
+      }
       return { status: 'Playback is unavailable right now.', button: { label: 'Try again', action: 'saga-play' } };
     case 'media-failed':
       return { status: 'The audio could not be played.', button: { label: 'Try again', action: 'saga-play' } };

@@ -53,10 +53,14 @@ export function mayAnswer(lifetime: RequestLifetime, res: ServerResponse): boole
   return cause === undefined || cause.kind === 'request-timeout';
 }
 
-const isEventStream = (res: ServerResponse): boolean => {
-  const type = res.getHeader('content-type');
-  return typeof type === 'string' && type.toLowerCase().startsWith('text/event-stream');
-};
+/** Whether `writeHead` was given a text/event-stream content type, as a status line plus a headers object or list. */
+function declaresEventStream(args: readonly unknown[]): boolean {
+  const headers = args.find((arg) => typeof arg === 'object' && arg !== null);
+  const pairs: [unknown, unknown][] = Array.isArray(headers)
+    ? headers.map((entry, index): [unknown, unknown] => (Array.isArray(entry) ? [entry[0], entry[1]] : [entry, headers[index + 1]]))
+    : Object.entries((headers ?? {}) as Record<string, unknown>);
+  return pairs.some(([name, value]) => typeof name === 'string' && name.toLowerCase() === 'content-type' && typeof value === 'string' && value.toLowerCase().startsWith('text/event-stream'));
+}
 
 /**
  * Connects one request's lifetime to its response, once, when the request is admitted. The caller
@@ -120,7 +124,7 @@ function watchStream(res: ServerResponse, lifetime: RequestLifetime, policy: Str
   const writeHead = res.writeHead.bind(res) as (...args: unknown[]) => ServerResponse;
   res.writeHead = ((...args: unknown[]) => {
     const written = writeHead(...args);
-    if (isEventStream(res)) {
+    if (declaresEventStream(args)) {
       lifetime.releaseRequestBudget();
       restart();
     }

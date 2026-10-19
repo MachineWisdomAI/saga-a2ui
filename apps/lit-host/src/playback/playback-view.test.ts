@@ -1,11 +1,17 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport, type CallToolRequest, type CallToolResult } from '@modelcontextprotocol/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PublicEpisode } from '../mcp/episode.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
 import { MEDIA_BYTES, startPlaybackHarness, startRecorder, type PlaybackHarness } from './playback-fixture.js';
-import { connectPlaybackView, type AudioPlayer, type PlaybackViewConnection, type PlaybackViewState } from './playback-view.js';
+import {
+  connectPlaybackView,
+  PlaybackConfigurationError,
+  type AudioPlayer,
+  type PlaybackViewConnection,
+  type PlaybackViewState,
+} from './playback-view.js';
 
 // The view's controller, joined to a real App/AppBridge pair. The bridge's tool handler plays the
 // part of the host: it forwards each proxied `tools/call` — including its `_meta` — to the REAL
@@ -131,6 +137,8 @@ interface Rig {
   readonly bridge: AppBridge;
   /** Every proxied tools/call the host forwarded, with the credential used. */
   readonly forwarded: CallToolRequest['params'][];
+  /** The cancellation signal the host received with each forwarded call, in order. */
+  readonly hostSignals: (AbortSignal | undefined)[];
   useToken(token: string | undefined): void;
   /** Holds the next proxied tools/call at the host until released, to model a slow round trip. */
   holdNextToolCall(): { release(): void };
@@ -152,19 +160,26 @@ async function rig(options: {
   afterGrant?: (harness: PlaybackHarness) => void;
   /** Lets a test change the view projection the host hands over, as a buggy or hostile path would. */
   tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
+  /** The controller's bound on one Play attempt. Defaults to the reference value. */
+  attemptLimitMs?: number;
+  /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
+  harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
 } = {}): Promise<Rig> {
   const harness = await startPlaybackHarness(
     options.entitlements ?? { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: [] },
+    options.harnessOptions,
   );
   const states: PlaybackViewState[] = [];
   const forwarded: CallToolRequest['params'][] = [];
+  const hostSignals: (AbortSignal | undefined)[] = [];
   let token: string | undefined = options.token ?? DEV_TOKENS.alice;
   let gate: Promise<void> | undefined;
   const player = fakePlayer();
   const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
   const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, options.serverTools === false ? {} : { serverTools: {} });
-  bridge.oncalltool = async (params) => {
+  bridge.oncalltool = async (params, extra) => {
     forwarded.push(params);
+    hostSignals.push(extra?.mcpReq?.signal);
     if (gate) {
       const waiting = gate;
       gate = undefined;
@@ -190,7 +205,13 @@ async function rig(options: {
   };
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
-  const view = await connectPlaybackView({ app, transport: viewSide, player, show: (state) => states.push(state) });
+  const view = await connectPlaybackView({
+    app,
+    transport: viewSide,
+    player,
+    show: (state) => states.push(state),
+    ...(options.attemptLimitMs === undefined ? {} : { attemptLimitMs: options.attemptLimitMs }),
+  });
   cleanup.push({ app, bridge, harness });
   return {
     app,
@@ -200,6 +221,7 @@ async function rig(options: {
     view,
     bridge,
     forwarded,
+    hostSignals,
     useToken: (next) => void (token = next),
     holdNextToolCall() {
       let release!: () => void;
@@ -291,14 +313,16 @@ describe('Play from the view when access is refused', () => {
     expect(kinds(r)).not.toContain('playing');
   });
 
-  it('distinguishes sign-in recovery from entitlement denial: a refused credential is not a denial', async () => {
+  it('does not call a refused host call a sign-in problem or a denial: it is unavailable, with the outcome unknown', async () => {
     const r = await rig();
     await r.select(EP1);
     r.useToken(DEV_TOKENS.expired);
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind).toBe('sign-in-required');
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown' });
     expect(kinds(r)).not.toContain('denied');
+    expect(kinds(r)).not.toContain('sign-in-required');
     expect(r.harness.playback.entitlementChecks).toEqual([]);
   });
 
@@ -1225,5 +1249,158 @@ describe('final loss of the pinned sign-in label', () => {
     await expect.poll(() => fresh.last()?.kind).toBe('playing');
     await expect.poll(() => other.last()?.kind).toBe('playing');
     expect(lost.last()).toEqual({ kind: 'session-changed' });
+  });
+});
+
+describe('the bound on one Play attempt', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('refuses an unusable bound before anything is requested', async () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '30000' as unknown as number]) {
+      await expect(rig({ attemptLimitMs: bad })).rejects.toThrow(PlaybackConfigurationError);
+    }
+  });
+
+  it('gives the host call the attempt’s signal and a timeout no wider than the attempt has left', async () => {
+    const r = await rig({ attemptLimitMs: 5_000 });
+    await r.select(EP1);
+    const call = vi.spyOn(r.app, 'callServerTool');
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+
+    const options = call.mock.calls[0]?.[1];
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
+    expect(options?.timeout).toBeGreaterThan(0);
+    expect(options?.timeout).toBeLessThanOrEqual(5_000);
+    expect(options?.resetTimeoutOnProgress).toBe(false); // host progress must not extend the attempt
+  });
+
+  it('ends a stalled host call as unavailable with an unknown outcome, aborts it, and invites no retry', async () => {
+    const r = await rig({ attemptLimitMs: 150 });
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown' });
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+    await expect.poll(() => r.hostSignals[0]?.aborted).toBe(true);
+    expect(r.player.calls).toContain('stop');
+
+    // The late host result finds a different generation: no media request, nothing restored.
+    held.release();
+    await settle(200);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+  });
+
+  it('allows a new press after an expiry that proves nothing was sent', async () => {
+    const r = await rig({ attemptLimitMs: 150 });
+    await r.select(EP1);
+    // Key creation never finishes, so the Play request is never sent.
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' } });
+    expect(r.last()).not.toHaveProperty('requestOutcome'); // nothing left the view, so a retry is honest
+    expect(r.forwarded).toEqual([]);
+
+    r.view.play(); // an explicit new press is a fresh attempt
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+  });
+
+  it('ends a stalled proof signature after the grant is known, with no media request', async () => {
+    const r = await rig({ attemptLimitMs: 200 });
+    await r.select(EP1);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(() => new Promise(() => undefined));
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(r.last()).toMatchObject({ kind: 'unavailable' });
+    expect(r.last()).not.toHaveProperty('requestOutcome');
+    expect(r.forwarded).toHaveLength(1); // the grant came back, so a retry is a plain new Play
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('ends a stalled media body, aborts the request, and drops the late bytes', async () => {
+    const r = await rig({ attemptLimitMs: 250 });
+    await r.select(EP1);
+    const read = r.harness.playback.holdNextRead();
+
+    r.view.play();
+    await read.reached;
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(r.last()).toMatchObject({ kind: 'unavailable' });
+    expect(r.last()).not.toHaveProperty('requestOutcome');
+    read.release();
+    await settle(150);
+    expect(r.player.calls).not.toContain('start');
+    expect(kinds(r)).not.toContain('playing');
+  });
+
+  it('ends a decode or start that never settles, stops the player, and ignores the late start', async () => {
+    const r = await rig({ attemptLimitMs: 250 });
+    await r.select(EP1);
+    const decoding = r.player.holdNextStart({ survivesStop: true }); // a player that ignores abort
+
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    expect(r.player.calls.at(-1)).toBe('stop');
+
+    decoding.release('started');
+    await settle(100);
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+    // The late start released the player again only because no later press had taken it over.
+    expect(r.player.calls.filter((call) => call === 'stop').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps successful playback going past the bound: the clock ends with the outcome, not the audio', async () => {
+    const r = await rig({ attemptLimitMs: 200 });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    const stops = r.player.calls.filter((call) => call === 'stop').length;
+    await settle(450);
+
+    expect(r.last()?.kind).toBe('playing');
+    expect(kinds(r)).toEqual(['ready', 'pending', 'playing']);
+    expect(r.player.calls.filter((call) => call === 'stop').length).toBe(stops);
+  });
+
+  it('starts a fresh bound for a later attempt instead of inheriting what an earlier one used', async () => {
+    const r = await rig({ attemptLimitMs: 400 });
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await settle(250);
+    held.release(); // the first attempt finishes in time, 250 ms in
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.player.endPlayback();
+    await expect.poll(() => r.last()?.kind).toBe('ended');
+
+    const second = r.holdNextToolCall();
+    r.view.play();
+    await settle(250); // would be 500 ms in total if the clocks were shared
+    second.release();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+  });
+
+  it('does not let a lost label, a teardown or a dispose leave the clock running', async () => {
+    const r = await rig({ attemptLimitMs: 150 });
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await r.deliver({ ...EP1 }); // same label: no loss, a new opener is just a new selection
+    held.release();
+    r.view.dispose();
+    await settle(300);
+    expect(kinds(r)).not.toContain('unavailable');
   });
 });

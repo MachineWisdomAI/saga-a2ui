@@ -253,7 +253,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
         path,
         status: res.headersSent ? res.statusCode : undefined,
         finished: res.writableFinished,
-        causes: lifetime.causes.filter((cause) => cause.kind !== 'completed'),
+        causes: lifetime.causes,
       });
     });
     void handle(req, res, lifetime, path).catch(() => {
@@ -367,7 +367,8 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
    * Never a 401 for a wait that merely expired, and never a claim that access was denied.
    */
   function stageFailed(stage: OwnedStage, cause: LifetimeCause, lifetime: RequestLifetime, req: IncomingMessage, res: ServerResponse): void {
-    if (cause.kind !== 'request-timeout') lifetime.record(cause); // the lifetime recorded its own expiry itself
+    // The lifetime recorded its own expiry, disconnect and completion itself; the rest are this stage's.
+    if (cause.kind !== 'request-timeout' && cause.kind !== 'disconnected' && cause.kind !== 'completed') lifetime.record(cause);
     if (cause.kind === 'disconnected' || cause.kind === 'cancelled' || cause.kind === 'completed') return;
     if (!mayAnswer(lifetime, res)) return;
     if (stage === 'authentication') return writeAuthDecision(res, { status: 500, error: 'server_error' });

@@ -283,7 +283,7 @@ class Root extends Scope implements RequestLifetime {
     if (this.signal.aborted) return;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
-    this.#causes.push(cause);
+    if (cause.kind !== 'completed') this.#causes.push(cause); // finishing normally is not something that went wrong
     super.end(cause);
   }
 

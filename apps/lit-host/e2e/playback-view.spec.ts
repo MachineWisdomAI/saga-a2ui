@@ -122,6 +122,8 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
   };
 }
 
+const UNCONFIRMED = 'Playback could not be confirmed. Open this episode again to try playing it.';
+
 const status = (view: FrameLocator) => view.getByTestId('play-status');
 const button = (view: FrameLocator) => view.getByTestId('play-button');
 
@@ -204,18 +206,61 @@ test.describe('the built player when access is refused', () => {
     expect(host.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' }]);
   });
 
-  test('a refused credential is sign-in recovery, not an entitlement denial', async ({ page }) => {
+  test('a refused host call is unconfirmed, not a denial or a sign-in claim, and invites no retry', async ({ page }) => {
     const host = await mountPlayer(page);
     await host.open('ep-1');
     host.useToken(DEV_TOKENS.expired);
 
     await button(host.view).click();
 
-    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'sign-in-required');
-    await expect(status(host.view)).toHaveText('Sign in to play this episode.');
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'unavailable');
+    await expect(status(host.view)).toHaveText(UNCONFIRMED);
     await expect(status(host.view)).not.toContainText('denied');
+    await expect(status(host.view)).not.toContainText('Sign in');
     expect(host.harness.playback.entitlementChecks).toEqual([]);
     expect(host.harness.playback.mediaReads).toEqual([]);
+    // Nothing the user can press remains, so keyboard focus moves to the announced status.
+    await expect(button(host.view)).toHaveCount(0);
+    await expect(status(host.view)).toBeFocused();
+    await expect(status(host.view)).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('opening the episode again is the recovery from an unconfirmed attempt', async ({ page }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    host.useToken(DEV_TOKENS.expired);
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(UNCONFIRMED);
+
+    host.useToken(DEV_TOKENS.alice);
+    await host.open('ep-1');
+    await expect(status(host.view)).toContainText('Ready to play The protected episode');
+    await button(host.view).click();
+
+    await expect(status(host.view)).toContainText('Playing The protected episode');
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
+  });
+
+  test('a host call that never answers ends at the attempt bound, aborts nothing else and recovers by opening again', async ({ page }) => {
+    await page.clock.install();
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    const never = host.holdNextToolCall();
+
+    await button(host.view).click();
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'pending');
+    await page.clock.fastForward(29_000);
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'pending'); // not yet
+    await page.clock.fastForward(2_000);
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'unavailable');
+    await expect(status(host.view)).toHaveText(UNCONFIRMED);
+    never.release(); // the host answers long after the view gave up
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'unavailable');
+    expect(host.harness.playback.mediaReads).toEqual([]);
+
+    await host.open('ep-1');
+    await expect(status(host.view)).toContainText('Ready to play');
   });
 
   test('a host that drops the call metadata gets an unsupported view, no checks and no bytes', async ({ page }) => {
@@ -459,6 +504,33 @@ test.describe('the built player states are announced and reflow', () => {
     }));
     expect(overflow?.scroll).toBeLessThanOrEqual(overflow?.client ?? 0);
     await expect(button(host.view)).toBeInViewport();
+  });
+});
+
+test.describe('the unconfirmed state reflows with a long title', () => {
+  const LONG_TITLE = 'An exceptionally long episode title that keeps going and going so that it must wrap at narrow widths ' + 'x'.repeat(10);
+
+  test('wraps at 320px with 200% text, keeps the title and status readable and focus on the status', async ({ page }) => {
+    const host = await mountPlayer(page, {
+      harness: { episodes: [{ id: 'ep-1', title: LONG_TITLE.slice(0, 120), description: 'Public.' }] },
+    });
+    await page.evaluate(() => {
+      const frame = document.querySelector('iframe');
+      if (frame) frame.style.cssText = 'width:320px;height:480px;border:0';
+    });
+    await host.open('ep-1');
+    await host.view.locator('html').evaluate((root) => void (root.style.fontSize = '200%'));
+    host.useToken(DEV_TOKENS.expired);
+    await button(host.view).click();
+    await expect(status(host.view)).toHaveText(UNCONFIRMED);
+
+    const overflow = await page.frames().find((frame) => frame !== page.mainFrame())?.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(overflow?.scroll).toBeLessThanOrEqual(overflow?.client ?? 0);
+    await expect(status(host.view)).toBeInViewport();
+    await expect(status(host.view)).toBeFocused();
   });
 });
 
