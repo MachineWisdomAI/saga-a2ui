@@ -4,13 +4,15 @@ import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { ANSWER_INVALID_OUTPUT_TEXT, ANSWER_LIMITS, ANSWER_TOOL_NAME, ANSWER_UNAVAILABLE_TEXT, ANSWER_VIEW_URI } from '../src/mcp/answer.js';
 import type { AnswerBackend } from '../src/mcp/answer-server.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // CORE3 end to end: the real listener, with a short operation limit -> a real MCP client's tools/call
-// -> the built answer view in a sandboxed iframe, through the test host's AppBridge. A stalled or
-// misbehaving application callback must reach the person only as the declared safe text, whatever
-// the response mode, and a late answer must change nothing. The local host fixture is not evidence
-// of any actual host.
+// -> the built answer view in a sandboxed iframe, through the test host's AppBridge. It runs against
+// the workspace build and, with SAGA_BUILT_DIR=dist-installed, the build made from the packed SDK
+// packages (VIEW2's harness, reused unchanged). A stalled or misbehaving application callback must
+// reach the person only as the declared safe text, whatever the response mode, and a late answer
+// must change nothing. The local host fixture is not evidence of any actual host.
 
 const CANARY = 'canary-pipeline-secret';
 const OPERATION_MS = 150;
@@ -27,7 +29,7 @@ const backend: AnswerBackend = {
 const listeners = {} as Record<'json' | 'event-stream', EpisodeListener>;
 
 test.beforeAll(async () => {
-  const viewHtml = await readFile(new URL('../dist/answer-view/answer.html', import.meta.url), 'utf8');
+  const viewHtml = await readFile(builtUrl('answer-view/answer.html'), 'utf8');
   for (const mode of ['json', 'event-stream'] as const) {
     listeners[mode] = await startEpisodeListener({
       viewHtml,
