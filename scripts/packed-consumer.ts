@@ -139,6 +139,32 @@ export async function bundleConsumerServer(consumer: string, entry: string): Pro
 }
 
 /**
+ * Builds a page with one of the consumer's own Vite configuration files (copied beside it, so the
+ * application's plugins, root and output directory are what an application outside this
+ * repository would use) and returns every module in the build's graph. The configuration's
+ * relative `outDir` resolves inside `consumer`.
+ */
+export async function buildConsumerFromConfig(consumer: string, configFile: string): Promise<string[]> {
+  const modules: string[] = [];
+  const collect: PluginOption = {
+    name: 'record-module-graph',
+    enforce: 'pre',
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) if (output.type === 'chunk') modules.push(...Object.keys(output.modules));
+    },
+  };
+  // Vite resolves a configuration's relative `root` from the working directory, as `npm run build` runs it.
+  const previous = process.cwd();
+  process.chdir(consumer);
+  try {
+    await build({ configFile: path.join(consumer, configFile), logLevel: 'warn', plugins: [collect] });
+  } finally {
+    process.chdir(previous);
+  }
+  return modules;
+}
+
+/**
  * Builds one of the consumer's HTML pages into `outDir`; the built file keeps the page's name
  * (`index.html` unless `page` names another). Plugins come from the repository's own tooling. A
  * consumer with several pages builds each in its own call, and `emptyOutDir: false` keeps what an
