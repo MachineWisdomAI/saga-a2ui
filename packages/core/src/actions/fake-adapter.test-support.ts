@@ -6,6 +6,7 @@ import {
   type BindOptions,
   type InstanceEvent,
   type InstanceHost,
+  type Limits,
   type OpenInstance,
 } from './index.js';
 
@@ -85,8 +86,8 @@ export function renderInstance(
   };
 }
 
-export function newHost(onSetupError: (error: unknown) => void = () => undefined): InstanceHost {
-  return createInstanceHost({ onSetupError });
+export function newHost(onSetupError: (error: unknown) => void = () => undefined, limits?: Limits): InstanceHost {
+  return createInstanceHost({ onSetupError, ...(limits === undefined ? {} : { limits }) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -122,9 +123,9 @@ export interface Rig {
 /** One control bound to `definition` through the public handle, with the binding's phases recorded. */
 export function rig(
   definition: unknown,
-  options: { id?: string; data?: Record<string, unknown>; bind?: BindOptions; observable?: boolean } = {},
+  options: { id?: string; data?: Record<string, unknown>; bind?: BindOptions; observable?: boolean; limits?: Limits } = {},
 ): Rig {
-  const host = newHost();
+  const host = newHost(undefined, options.limits);
   const control = renderInstance(host, options.id ?? 'c', {
     ...(options.data === undefined ? {} : { data: options.data }),
     ...(options.observable === undefined ? {} : { observable: options.observable }),

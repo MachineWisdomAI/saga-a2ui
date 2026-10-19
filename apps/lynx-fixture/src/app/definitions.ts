@@ -86,7 +86,6 @@ export const reviewOrder = Action.local<ActionButtonActivation>('review-order')
     trace({ ev: 'invoke', definition: 'review-order', item: params.orderId, background: onBackground() });
     return params.orderId;
   })
-  .limits({ deadlineMs: 60_000, hookMs: 5_000 })
   .onFailure(({ failure, current }) => {
     if (current()) trace({ ev: 'hook', hook: 'failure', kind: failure.kind });
   })
@@ -103,7 +102,6 @@ export const stageNote = Action.local<ActionButtonActivation>('stage-note')
         pendingRows.push({ noteId: params.noteId, release: resolve });
       }),
   )
-  .limits({ hookMs: 5_000 })
   .onSuccess(({ params, current }) => {
     if (current()) presentation.set(params.noteId, 'staged');
   })

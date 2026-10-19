@@ -86,7 +86,7 @@ describe('a Save-style local action', () => {
     const { control } = rig(action);
 
     control.press();
-    await elapse(60_000);
+    await elapse(20_000);
     expect(started).toEqual(['slow']);
 
     first.resolve(proceed());
@@ -119,7 +119,7 @@ describe('a Save-style local action', () => {
     await settle();
 
     expect(ran).toBe(false);
-    expect(stages).toEqual(['prerequisites', { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required' }, false]);
+    expect(stages).toEqual(['prerequisites', { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required', category: 'application' }, false]);
     expect(binding.state.phase).toBe('idle');
   });
 
@@ -220,7 +220,7 @@ describe('a Save-style local action', () => {
   });
 });
 
-describe('the optional work deadline and the hook budget', () => {
+describe('the work deadline and the hook budget', () => {
   it('expires during a stalled prerequisite as a prerequisite-stage failure; the handler never starts', async () => {
     const outcomes: Outcome<unknown>[] = [];
     const stalled = gate<ReturnType<typeof proceed>>();
@@ -244,7 +244,7 @@ describe('the optional work deadline and the hook budget', () => {
     expect(binding.state.phase).toBe('running');
     await elapse(1);
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout' } }]);
+    expect(outcomes).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
     expect(aborted).toBe(true);
     expect(binding.state.phase).toBe('idle');
 
@@ -285,22 +285,6 @@ describe('the optional work deadline and the hook budget', () => {
     expect(seen).toEqual(['failure:running:timeout']);
     expect(lateCurrent).toBe(false);
     expect(observed.map((event) => event.phase)).toContain('late-settlement');
-  });
-
-  it('puts no limit on a local handler that has no deadline: only cancellation can end it', async () => {
-    const never = gate();
-    const action = Action.local<Press>('forever')
-      .run(() => never.promise)
-      .limits({ hookMs: 1000 })
-      .build();
-    const { control, binding } = rig(action);
-
-    control.press();
-    await elapse(24 * 60 * 60 * 1000);
-    expect(binding.state.phase).toBe('running');
-
-    binding.dispose();
-    expect(binding.state.phase).toBe('disposed');
   });
 
   it('does not let the work deadline cover the required success hook', async () => {
@@ -364,8 +348,8 @@ describe('the optional work deadline and the hook budget', () => {
     await elapse(1000);
 
     expect(seen).toEqual([
-      { kind: 'success-hook-error', error: new Error('view failed'), result: { id: 1 } },
-      { kind: 'success-hook-timeout', result: { id: 2 } },
+      { kind: 'success-hook-error', error: new Error('view failed'), result: { id: 1 }, category: 'unknown' },
+      { kind: 'success-hook-timeout', result: { id: 2 }, category: 'timeout' },
     ]);
   });
 
@@ -1037,7 +1021,7 @@ describe('the work deadline ends the work callback before it announces the abort
 
     expect(observed).toEqual([false]);
     expect(written).toEqual([]);
-    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout' } }]);
+    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
     expect(failureCurrent).toBe(true);
     expect(binding.state.phase).toBe('idle');
   });
@@ -1067,7 +1051,7 @@ describe('the work deadline ends the work callback before it announces the abort
 
     expect(observed).toEqual([false]);
     expect(written).toEqual([]);
-    expect(decisions).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout' } }]);
+    expect(decisions).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
     expect(binding.state.phase).toBe('idle');
   });
 
@@ -1087,7 +1071,7 @@ describe('the work deadline ends the work callback before it announces the abort
     await elapse(10);
     await elapse(1000);
 
-    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout' } }]);
+    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
   });
 });
 
@@ -1472,14 +1456,14 @@ describe('observers and listeners cannot affect the action or leak', () => {
 describe('what the runtime refuses when the types are bypassed', () => {
   const draft = () => Action.local<Press>('x') as unknown as Record<string, (...args: unknown[]) => never>;
 
-  it('refuses limits that are not finite positive numbers, and hooks without limits', () => {
+  it('refuses limits that are not finite positive numbers, and accepts hooks without limits', () => {
     const withHandler = draft().run!(() => undefined) as unknown as Record<string, (...args: unknown[]) => never>;
 
-    for (const bad of [{}, { hookMs: 0 }, { hookMs: -1 }, { hookMs: Number.NaN }, { hookMs: Number.POSITIVE_INFINITY }, { hookMs: '5' }]) {
+    for (const bad of [{ hookMs: 0 }, { hookMs: -1 }, { hookMs: Number.NaN }, { hookMs: Number.POSITIVE_INFINITY }, { hookMs: '5' }]) {
       expect(() => withHandler.limits!(bad)).toThrow(/hookMs/);
     }
     expect(() => withHandler.limits!({ hookMs: 1, deadlineMs: 0 })).toThrow(/deadlineMs/);
-    expect(() => withHandler.onSuccess!(() => undefined)).toThrow(/limits/);
+    expect(() => withHandler.onSuccess!(() => undefined)).not.toThrow();
     expect(() => draft().limits!({ hookMs: 1 })).toThrow(/can only follow run/);
     expect(() => withHandler.whenBusy!('queue')).toThrow(/ignore/);
   });
@@ -1509,7 +1493,7 @@ describe('what the runtime refuses when the types are bypassed', () => {
 
 // Type-level cases. These lines are checked by `npm run typecheck`, not at runtime.
 describe('what the types guarantee', () => {
-  it('orders prerequisites by what they need, types the handler by what they provided, and gates the hooks behind limits', () => {
+  it('orders prerequisites by what they need and types the handler by what they provided', () => {
     // Never called: the lines below compile or fail to compile, and several would throw if they ran.
     const checks = (): void => {
       const session = prerequisite('session', () => proceed({ session: { userKey: 'u' } }));
@@ -1534,14 +1518,14 @@ describe('what the types guarantee', () => {
   
       // @ts-expect-error `provided` is unknown until a prerequisite provides something
       Action.local<Press>('unknown-provided').run(({ provided }) => provided.session);
-      // @ts-expect-error hooks wait for limits
-      Action.local<Press>('no-limits').run(() => 1).onSuccess;
+      // Hooks need no limits: the SDK defaults apply.
+      Action.local<Press>('no-limits').run(() => 1).onSuccess(() => undefined).build();
       // @ts-expect-error a hook is registered once
       Action.local<Press>('twice').run(() => 1).limits({ hookMs: 1 }).onSuccess(() => undefined).onSuccess;
       // @ts-expect-error limits are declared once
       Action.local<Press>('limits-twice').run(() => 1).limits({ hookMs: 1 }).limits;
-      // @ts-expect-error hookMs is required
-      Action.local<Press>('no-hook-budget').run(() => 1).limits({ deadlineMs: 1 });
+      // Each setting is optional on its own.
+      Action.local<Press>('no-hook-budget').run(() => 1).limits({ deadlineMs: 1 }).build();
       Action.local<Press>('failure-union')
         .run(() => 1)
         .limits({ hookMs: 1 })

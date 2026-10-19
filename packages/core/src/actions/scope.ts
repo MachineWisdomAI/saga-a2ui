@@ -1,3 +1,4 @@
+import { startTimer } from './limits.js';
 import { discardOutcome, isThenable, type Synchronous } from './thenable.js';
 
 // Resource ownership for one invocation. A resource is anything an invocation acquires that
@@ -46,8 +47,8 @@ export interface ActivationScope {
    */
   readonly active: boolean;
   /**
-   * Takes responsibility for a token the caller already holds, synchronously. Needs `limits`. If
-   * the invocation has already ended, the token is released at once and the call throws
+   * Takes responsibility for a token the caller already holds, synchronously. If the invocation
+   * has already ended, the token is released at once and the call throws
    * `InvocationEndedError`.
    */
   own<Token>(token: Token, release: Release<Token>): Held<Token>;
@@ -75,8 +76,8 @@ export interface ScopeHost {
   readonly label: string;
   /** True until the outcome is decided. */
   isActive(): boolean;
-  /** The required budget for every release; absent when the definition declared no limits. */
-  hookMs(): number | undefined;
+  /** The resolved budget for every release, fixed for the invocation. */
+  hookMs(): number;
   /** Tells the observer that a step outside the invocation's own sequence failed or stalled. */
   report(step: 'release' | 'adopt'): void;
 }
@@ -141,17 +142,11 @@ export class InvocationResources {
   private own<Token>(token: Token, release: Release<Token>): Held<Token> {
     const { host } = this;
     if (typeof release !== 'function') throw new TypeError(`Action '${host.label}': scope.own needs a release function.`);
-    const hookMs = host.hookMs();
-    if (hookMs === undefined) {
-      throw new Error(
-        `Action '${host.label}': holding a resource through the scope needs limits({ hookMs }), which bounds each release.`,
-      );
-    }
     // Interop assertion: the entry keeps `token` and `release` together, so the scope only ever
     // calls this release with the token it was given.
     const erased = release as Release<unknown>;
     if (!host.isActive()) {
-      this.releaseAtOnce(token, erased, hookMs);
+      this.releaseAtOnce(token, erased, host.hookMs());
       throw new InvocationEndedError(host.label);
     }
     const entry: Entry = { token, release: erased, state: 'held' };
@@ -214,11 +209,9 @@ export class InvocationResources {
   private adoptionRefused(entry: Entry): void {
     entry.state = 'held';
     if (!this.sweepFinished) return;
-    const hookMs = this.host.hookMs();
-    if (hookMs === undefined) return;
     entry.state = 'taken';
     this.remove(entry);
-    this.releaseAtOnce(entry.token, entry.release, hookMs);
+    this.releaseAtOnce(entry.token, entry.release, this.host.hookMs());
   }
 
   private remove(entry: Entry): void {
@@ -250,16 +243,16 @@ export class InvocationResources {
     }
     if (!isThenable(returned)) return;
     let waiting = true;
-    const timer = setTimeout(() => {
+    const timer = startTimer(hookMs, () => {
       if (!waiting) return;
       waiting = false;
       controller.abort();
       this.host.report('release');
-    }, hookMs);
+    });
     const stop = (failed: boolean): void => {
       if (!waiting) return;
       waiting = false;
-      clearTimeout(timer);
+      timer.cancel();
       if (failed) this.host.report('release');
     };
     try {

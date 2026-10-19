@@ -10,6 +10,7 @@ import {
   prerequisite,
   type ActionBinding,
   type InstanceEvent,
+  type Limits,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -141,8 +142,12 @@ function environmentFor(transport: ServerTransport<CallToolResult>, overrides: P
 }
 
 /** A rendered Archive control for one note. Several can share one component id, as repeated rows do. */
-function renderRow(definition: ReturnType<typeof archiveNoteWith<Press>>, noteId: string, options: { subject?: () => unknown } = {}): { press(): void; binding: ActionBinding; retire(): void; showNote(next: string): void } {
-  const host = createInstanceHost({ onSetupError: (error) => { throw error; } });
+function renderRow(
+  definition: ReturnType<typeof archiveNoteWith<Press>>,
+  noteId: string,
+  options: { subject?: () => unknown; limits?: Limits } = {},
+): { press(): void; binding: ActionBinding; retire(): void; showNote(next: string): void } {
+  const host = createInstanceHost({ onSetupError: (error) => { throw error; }, ...(options.limits === undefined ? {} : { limits: options.limits }) });
   let shows = noteId;
   let live = true;
   const instance = host.open({
@@ -252,9 +257,9 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
   it('reports a status-unknown timeout at the work deadline, though the stalled host later archives the note: an abort is not a rollback', async () => {
     const { app, side, forwarded, holdNext } = await stack();
     const { environment, screen } = environmentFor(app);
-    const quick = archiveNoteWith(noteOf, environment, { deadlineMs: 60, hookMs: 40 });
     const stalled = holdNext({ honorAbort: false });
-    const row = renderRow(quick, 'n-1');
+    // The application's SDK-instance configuration, not the action: the definition declares no limits.
+    const row = renderRow(archiveNoteWith(noteOf, environment), 'n-1', { limits: { deadlineMs: 60, hookMs: 40 } });
 
     row.press();
     await expect.poll(() => screen.shown.length).toBe(1);
@@ -298,7 +303,6 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     const short = Action.server<Press, CallToolResult>('short', app)
       .before(prerequisite('session', () => proceed()))
       .run(({ call }) => call('archive_note', { noteId: 'n-1' }, { timeoutMs: 40 }))
-      .limits({ deadlineMs: 5_000, hookMs: 500 })
       .onFailure(({ stage, failure }) => void outcomes.push(`${stage}:${failure.kind}`))
       .build();
     const host = createInstanceHost({ onSetupError: (error) => { throw error; } });

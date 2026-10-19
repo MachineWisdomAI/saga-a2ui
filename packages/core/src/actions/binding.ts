@@ -1,5 +1,6 @@
 import { planOf, type ActionDefinition } from './definition.js';
 import { emitObservation, Invocation, type InvocationOwner, type Seam } from './invocation.js';
+import { resolveLimits, type Limits } from './limits.js';
 import { discardOutcome, isThenable } from './thenable.js';
 
 export type BindingPhase = 'idle' | 'running' | 'settling' | 'disposed';
@@ -35,6 +36,11 @@ export interface BindingSeam extends Seam {
    * disposed. A no-op when the slot holds a newer installation.
    */
   readonly detach: () => void;
+  /**
+   * The configuration of the SDK instance that owns this binding, already validated and copied.
+   * It supplies each bound the action did not override; absent means the defaults apply.
+   */
+  readonly limits?: Limits;
 }
 
 let bindingCount = 0;
@@ -59,6 +65,8 @@ export function createBinding<Event>(
   seam: BindingSeam,
 ): { readonly binding: ActionBinding; readonly activate: (event: Event) => void } {
   const plan = planOf(definition);
+  // Resolved here, once, from two immutable layers: an invocation's clocks cannot change afterwards.
+  const limits = resolveLimits(plan.limits, seam.limits ?? {});
   const listeners = new Set<() => void>();
   let state: BindingState = Object.freeze({ phase: 'idle' });
   let disposing = false;
@@ -144,7 +152,7 @@ export function createBinding<Event>(
       ignore(owner);
       return;
     }
-    const invocation = new Invocation<Event>(plan, invocationOwner, seam);
+    const invocation = new Invocation<Event>(plan, invocationOwner, seam, limits);
     const replaced = owner;
     owner = invocation;
     replaced?.replaced();

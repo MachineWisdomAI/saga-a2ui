@@ -6,7 +6,6 @@ import {
   refuse,
   type ActionDefinition,
   type PrerequisiteContext,
-  type ServerLimits,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
 
@@ -77,9 +76,6 @@ export const auditIntent = (environment: Pick<ArchiveEnvironment, 'audit'>) =>
     (await environment.audit(params.noteId, signal)) ? proceed() : refuse('audit-unavailable'),
   );
 
-/** The work deadline and hook budget of the example. Examples, not defaults. */
-export const ARCHIVE_LIMITS: ServerLimits = { deadlineMs: 30_000, hookMs: 2_000 };
-
 /**
  * `noteIdOf` is the only renderer-specific part: it reads and validates the note identifier from
  * that renderer's event. The adapter copied the underlying value from the exact rendered
@@ -88,7 +84,6 @@ export const ARCHIVE_LIMITS: ServerLimits = { deadlineMs: 30_000, hookMs: 2_000 
 export function archiveNoteWith<Event>(
   noteIdOf: (event: Event) => string,
   environment: ArchiveEnvironment,
-  limits: ServerLimits = ARCHIVE_LIMITS,
 ): ActionDefinition<Event> {
   return Action.server<Event, CallToolResult>('archive-note', environment.transport)
     .input((event) => ({ noteId: noteIdOf(event) }))
@@ -102,7 +97,6 @@ export function archiveNoteWith<Event>(
       if (reply.isError === true) throw new ArchiveRejected('The server declined to archive the note');
       return parseArchived(reply);
     })
-    .limits(limits)
     .onSuccess(async ({ params, result, signal, current }) => {
       await environment.recordArchived(params.noteId, result.archivedAt, signal);
       if (current()) environment.show(params.noteId, { kind: 'archived', archivedAt: result.archivedAt });
