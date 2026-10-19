@@ -6,9 +6,9 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Repository setup is underway. A minimal private Lit application (`apps/lit-host`) builds and renders locally, and a retained Lynx Web qualification fixture (`apps/lynx-fixture`, see ACT3; not an adapter) runs ACT1's action runtime on ReactLynx. Five private, unreleased SDK packages (`packages/core`, `packages/lit`, `packages/mcp`, `packages/components`, the last holding only the optional FaithfulCard preparation slice, and `packages/react`, only a qualification slice of direct action attachment) exist and no host compatibility is available yet, and the app has not been verified in ChatGPT or Claude. This repository starts private and is intended to become public after a separate publication decision.
+Five private, unreleased SDK packages exist: `packages/core`, `packages/lit`, `packages/mcp`, `packages/components` (the passive FaithfulCard preparation slice), and `packages/react` (a qualification slice of direct action attachment). A minimal private Lit application (`apps/lit-host`) builds and renders locally, and a retained Lynx Web qualification fixture (`apps/lynx-fixture`, see ACT3; not an adapter) runs ACT1's action runtime on ReactLynx. This repository starts private and is intended to become public after a separate publication decision.
 
-The first implementation will exercise a small Lit application in ChatGPT and Claude. React and Lynx remain Stage A targets; Alexa+ enters the initial host investigation.
+Host observations are specific to the tested flow. A Lit consumer displayed host-delivered answers in Alexa+. A separate self-contained React/A2UI probe displayed initial server data in ChatGPT, Claude and the Alexa+ web simulator. Its in-card server-tool update passed in ChatGPT and Claude and timed out in Alexa+; the accepted Lit flow did not exercise that interaction. See the [dated host observations and limits](docs/2026-10-19_host-compatibility-observations_v1.md). These results do not complete the installed SAGA React recipe or establish the timeout's cause or repair location.
 
 ## Planned packages
 
