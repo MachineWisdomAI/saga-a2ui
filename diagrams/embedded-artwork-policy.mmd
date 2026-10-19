@@ -1,0 +1,15 @@
+graph TD
+  A[Trusted application configuration] --> P[Immutable shared policy]
+  P --> S[Baseline: data: in both modes; blob: only in Standard]
+  S --> C[Image CSP: baseline plus exact HTTPS origins]
+  S --> F[Font CSP: baseline plus separate font origins]
+  F --> W[Trusted fonts load with readable fallback]
+  B[Trusted data or blob images] --> T[Trusted template or CSS]
+  T --> C
+  C --> D[Decoration displays]
+  U[Supplied Markdown] --> R[Restricted reader and renderer]
+  R --> I[Shared content image decision]
+  P --> I
+  I --> G[Require HTTPS, exact host and enforcement; Strict also requires current consent]
+  G -->|Pass| V[Content image displays]
+  G -->|Fail, including data and blob URLs| X[Inert source or placeholder]
