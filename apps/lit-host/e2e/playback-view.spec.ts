@@ -12,6 +12,7 @@ import {
   type PlaybackHarnessOptions,
 } from '../src/playback/playback-fixture.js';
 import { toneWav } from '../src/playback/synthetic-media.js';
+import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: the real listener with real bearer credentials, the controlled media service, and
@@ -20,7 +21,7 @@ import type { HostedResource } from './host-fixture/host.js';
 // real HTTP. Audio is real Web Audio in Chromium; a wrapper records the contexts the view creates
 // so a test can observe the audio clock. This is not evidence for any actual chat host.
 
-const builtView = new URL('../dist/playback-view/playback.html', import.meta.url);
+const builtView = builtUrl('playback-view/playback.html');
 const OPENER = 'get_playable_episode';
 const PLAY = 'play_episode';
 

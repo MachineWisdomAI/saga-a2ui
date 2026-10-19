@@ -4,6 +4,7 @@ import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { ANSWER_TOOL_NAME, ANSWER_UNAVAILABLE_TEXT, ANSWER_VIEW_URI } from '../src/mcp/answer.js';
 import type { AnswerBackend } from '../src/mcp/answer-server.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: the real listener (public answer endpoint, no credential) -> a real MCP client's
@@ -26,7 +27,7 @@ const backend: AnswerBackend = {
 const listeners = {} as Record<'json' | 'event-stream', EpisodeListener>;
 
 test.beforeAll(async () => {
-  const viewHtml = await readFile(new URL('../dist/answer-view/answer.html', import.meta.url), 'utf8');
+  const viewHtml = await readFile(builtUrl('answer-view/answer.html'), 'utf8');
   for (const mode of ['json', 'event-stream'] as const) {
     listeners[mode] = await startEpisodeListener({
       viewHtml,

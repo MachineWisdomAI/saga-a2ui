@@ -3,12 +3,13 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // End to end: real MCP server over Streamable HTTP -> real tools/call and resources/read ->
 // the built view in a sandboxed iframe of a local host fixture -> real AppBridge delivery.
 
-const builtView = new URL('../dist/view/view.html', import.meta.url);
+const builtView = builtUrl('view/view.html');
 let listener: EpisodeListener;
 let client: Client;
 
