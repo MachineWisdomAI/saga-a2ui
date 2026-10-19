@@ -276,7 +276,7 @@ describe('activation work, ownership of an existing token and acquisition after 
     // The activation did not complete, so no activation value exists; the failure is the outcome and
     // the cancellation, already obsolete, keeps the failure hook from presenting.
     expect(seen).toEqual([]);
-    expect(outcomes[0]).toEqual({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: failure } });
+    expect(outcomes[0]).toEqual({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: failure, category: 'unknown' } });
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
@@ -1130,7 +1130,7 @@ describe('transfer', () => {
     control.press();
     await settle();
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: failure } }]);
+    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: failure, category: 'unknown' } }]);
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 });
@@ -1373,7 +1373,7 @@ describe('failures of the event-turn callback', () => {
 
     expect(ran).toBe(false);
     // The failure hook runs first; the release follows it.
-    expect(failures).toEqual([['input', { kind: 'activation-error', error: boom }, 0]]);
+    expect(failures).toEqual([['input', { kind: 'activation-error', error: boom, category: 'unknown' }, 0]]);
     expect(released).toEqual(['first']);
     expect(binding.state.phase).toBe('idle');
   });
@@ -1448,14 +1448,18 @@ describe('failures of the event-turn callback', () => {
     expect(seen).toMatchObject({ kind: 'activation-error', error: expect.any(TypeError) });
   });
 
-  it('refuses to hold a resource without limits, and a release that is not a function', async () => {
+  it('holds a resource without any declared limit, and refuses a release that is not a function', async () => {
     let activationFailure: unknown;
-    let handlerFailure: unknown;
+    let handlerHeld: unknown;
+    const released: string[] = [];
     const noLimits = Action.local<Press>('no-limits')
-      .atActivation(({ scope }) => scope.own('t', () => undefined))
+      .atActivation(({ scope }) => scope.own('t', (token) => void released.push(token)))
       .run(() => 0)
       .build();
-    expect(() => rig(noLimits).control.press()).toThrow(/hookMs/);
+    const { control, binding } = rig(noLimits);
+    expect(() => control.press()).not.toThrow();
+    expect(released).toEqual(['t']);
+    expect(binding.state.phase).toBe('idle');
 
     const badRelease = Action.local<Press>('bad-release')
       .atActivation(({ scope }) => scope.own('t', 'not a function' as never))
@@ -1469,16 +1473,12 @@ describe('failures of the event-turn callback', () => {
     const handlerNoLimits = Action.local<Press>('handler-no-limits')
       .run(async ({ scope }) => {
         await Promise.resolve();
-        try {
-          scope.own('t', () => undefined);
-        } catch (error) {
-          handlerFailure = error;
-        }
+        handlerHeld = scope.own('t', () => undefined).token;
       })
       .build();
     rig(handlerNoLimits).control.press();
     await settle();
-    expect(handlerFailure).toBeInstanceOf(Error);
+    expect(handlerHeld).toBe('t');
   });
 
   it('keeps the busy policy over a settling invocation that still holds a token to release', async () => {

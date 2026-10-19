@@ -412,7 +412,6 @@ const makeSaveDraft = (app: string) =>
       consumer.log.push({ app, action: 'save-draft', user: provided.user, length: provided.length });
       return { user: provided.user, length: provided.length };
     })
-    .limits({ deadlineMs: 5000, hookMs: 1000 })
     .onSuccess(({ result, current }) => {
       if (current()) present(app, 'message', `saved by ${result.user} (${result.length})`);
     })
@@ -434,7 +433,6 @@ const makeStage = (app: string) =>
           consumer.pendingRows.push({ app, noteId: params.noteId, release: resolve });
         }),
     )
-    .limits({ hookMs: 1000 })
     .onSuccess(({ params, current }) => {
       if (current()) present(app, 'message', `staged ${params.noteId}`);
     })
@@ -497,7 +495,6 @@ const makePlay = (app: string) => {
       }
       return { state: 'playing', lease: activation.token } as const;
     })
-    .limits({ deadlineMs: 5000, hookMs: 1000 })
     .onSuccess(({ result }) => {
       if (player.failNextPresentation) {
         player.failNextPresentation = false;
@@ -538,7 +535,6 @@ const makeLookup = (app: string) => {
       consumer.log.push({ app, action: 'lookup-held', lease: held.token.id });
       return held.token.id;
     })
-    .limits({ deadlineMs: 5000, hookMs: 1000 })
     .onSuccess(({ result }) => present(app, 'message', `looked up with lease ${result}`))
     .build();
 };

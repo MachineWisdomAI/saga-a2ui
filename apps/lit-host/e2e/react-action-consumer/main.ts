@@ -288,7 +288,6 @@ const saveDraft = Action.local<ActionButtonActivation>('save-draft')
     consumer.log.push({ action: 'save-draft', user: provided.user, length: params.text.length });
     return { user: provided.user };
   })
-  .limits({ deadlineMs: 5000, hookMs: 1000 })
   .onSuccess(({ result, current }) => {
     if (current()) present('message', `saved by ${result.user}`);
   })
@@ -311,7 +310,6 @@ const stage = Action.local<ActionButtonActivation>('stage-note')
         consumer.pendingRows.push({ noteId: params.noteId, release: resolve });
       }),
   )
-  .limits({ hookMs: 1000 })
   .onSuccess(({ params, current }) => {
     if (current()) present('message', `staged ${params.noteId}`);
   })

@@ -1,3 +1,5 @@
+import type { ErrorCategory } from './category.js';
+
 // The vocabulary of how one invocation ends. An outcome is decided once and never edited; every
 // failed and canceled variant names the stage it was decided in, so a hook (and `onFinally`) can
 // tell "the handler never started" from "the handler may already have done its work".
@@ -6,30 +8,48 @@
 export type CancelCause = 'replaced' | 'disposed' | 'subject-changed';
 
 /**
+ * Every failure carries a `category` beside its `kind`. The kind says what the runtime saw; the
+ * category says why, as far as the evidence goes, and is `'unknown'` when nothing established it.
+ * Where a failure has an original `error`, that value is kept untouched for inspection (an
+ * `ActionError` keeps the error it wrapped as its own `cause`). Neither is a message to show.
+ */
+interface Categorized {
+  readonly category: ErrorCategory;
+}
+
+/**
  * Failures during the synchronous activation prefix. Nothing was awaited and no prerequisite or
  * handler has run. `atActivation` may already have performed its own effects: a token it took
  * into the scope before it failed is still released.
  */
-export type InputFailure =
+export type InputFailure = (
   | { readonly kind: 'invalid-input'; readonly error: unknown }
-  | { readonly kind: 'activation-error'; readonly error: unknown };
+  | { readonly kind: 'activation-error'; readonly error: unknown }
+) &
+  Categorized;
 
 /** Failures while prerequisites run. The handler has not started and `provided` is incomplete. */
-export type PrerequisiteFailure =
+export type PrerequisiteFailure = (
   | { readonly kind: 'refused'; readonly prerequisite: string; readonly reason: string }
   | { readonly kind: 'prerequisite-error'; readonly prerequisite: string; readonly error: unknown }
-  | { readonly kind: 'timeout' };
+  | { readonly kind: 'timeout' }
+) &
+  Categorized;
 
 /**
  * Failures once the handler has started. `handler-error` and `timeout` say only that the handler
- * threw or had not settled: what it already did is unknown to the runtime. The two success-hook
- * kinds are different: the handler returned `result` before the required hook failed.
+ * threw or had not settled: what it already did is unknown to the runtime, and neither a timeout
+ * nor a cancellation shows that anything was rolled back or that a retry is safe. The two
+ * success-hook kinds are different: the handler returned `result` before the required hook
+ * failed, and that result is kept.
  */
-export type RunningFailure<Result> =
+export type RunningFailure<Result> = (
   | { readonly kind: 'handler-error'; readonly error: unknown }
   | { readonly kind: 'timeout' }
   | { readonly kind: 'success-hook-error'; readonly error: unknown; readonly result: Result }
-  | { readonly kind: 'success-hook-timeout'; readonly result: Result };
+  | { readonly kind: 'success-hook-timeout'; readonly result: Result }
+) &
+  Categorized;
 
 /** Steps after the outcome is decided. 'adopt' is a transfer callback that returned a thenable. */
 export type CleanupStep = 'onFailure' | 'onCanceled' | 'onFinally' | 'release' | 'adopt';
@@ -68,7 +88,10 @@ export interface Freshness {
 /** What a prerequisite that adds no values provides. */
 export type NoValues = Record<never, never>;
 
-/** Telemetry: no parameters, provided values, results or error objects, by construction. */
+/**
+ * Telemetry: no parameters, provided values, results, error objects, categories or causes, by
+ * construction. The failure kind is a fixed word, never text from an error.
+ */
 export type ObservedPhase =
   | 'ignored'
   | 'started'

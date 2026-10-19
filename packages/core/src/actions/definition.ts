@@ -8,9 +8,10 @@ import type {
   PrerequisiteFailure,
   RunningFailure,
 } from './outcome.js';
+import { readLimits, type Limits } from './limits.js';
 import type { Prerequisite } from './prerequisite.js';
 import type { ActivationScope, InvocationScope } from './scope.js';
-import { checkTransport, type ServerCalls, type ServerLimits, type ServerReply, type ServerTransport } from './server.js';
+import { checkTransport, type ServerCalls, type ServerReply, type ServerTransport } from './server.js';
 import type { Synchronous } from './thenable.js';
 
 /** What `atActivation` receives, in the event's own call stack. */
@@ -112,16 +113,6 @@ export interface FinallyContext<Result> extends HookContext {
   readonly obsolete: boolean;
 }
 
-/**
- * `hookMs` bounds each step after the handler settles: the required `onSuccess`, the outcome
- * hook, and `onFinally`. `deadlineMs`, when given, bounds the prerequisites and the handler
- * together. Neither has a default, and no timer covers a whole invocation.
- */
-export interface Limits {
-  readonly deadlineMs?: number;
-  readonly hookMs: number;
-}
-
 export type BusyPolicy = 'ignore' | 'replace';
 
 /**
@@ -134,12 +125,6 @@ export interface ActionDefinition<Event> {
   /** Phantom member: a definition accepts events assignable to `Event`. Never set at runtime. */
   readonly accepts?: (event: Event) => void;
 }
-
-/**
- * What the handler of a server action also receives. A local action has none of it: its `Calls`
- * is `unknown`, which adds nothing to the handler context.
- */
-type IsServer<Calls> = Calls extends ServerCalls<ServerReply> ? true : false;
 
 /**
  * The start of every definition. The order is fixed: `input` (optional), `atActivation` (optional),
@@ -196,22 +181,17 @@ export interface ActionDraftChain<Event, Params, Activation, Provided = unknown,
 type HookName = 'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally';
 type TailName = 'limits' | 'whenBusy' | 'observe' | HookName;
 
-/**
- * Hooks wait for `limits`, which supplies the budget they need. A server action also cannot
- * `build` until it has them, because it needs a work deadline as well.
- */
-type Hidden<Used extends TailName, Calls> = 'limits' extends Used
-  ? never
-  : HookName | (IsServer<Calls> extends true ? 'build' : never);
-
 interface TailMembers<Event, Params, Activation, Provided, Result, Used extends TailName, Calls> {
   /**
-   * Required before any hook, and before a scope can own a token: `hookMs` bounds each release.
-   * `deadlineMs` is optional for a local action and required for a server action. Each finite and
-   * positive.
+   * Overrides the bounds for this action alone, for a local and a server action alike. Each
+   * setting is optional and resolves on its own: this override, then the owning SDK instance's
+   * configuration, then the default (30,000 ms of work, 5,000 ms per awaited hook or cleanup
+   * step). A supplied value must be a finite number greater than zero, and is checked here even
+   * when another layer would take precedence; the arguments are copied, so later changes to the
+   * object reach nothing. Hooks and resource ownership need no call to `limits`.
    */
   limits(
-    limits: IsServer<Calls> extends true ? ServerLimits : Limits,
+    limits: Limits,
   ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'limits', Calls>;
   /** `ignore` (the default) drops an activation while busy; `replace` cancels the running invocation. */
   whenBusy(
@@ -245,7 +225,7 @@ export type ActionDraftWithHandler<
   Result = unknown,
   Used extends TailName = never,
   Calls = unknown,
-> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used, Calls>, Used | Hidden<Used, Calls>>;
+> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used, Calls>, Used>;
 
 // ---------------------------------------------------------------------------------------------
 // What the runtime reads. Internal: authors only see the definition.
@@ -266,7 +246,8 @@ export interface ActionPlan<Event> {
   readonly activate: ((context: ActivationContext<Event>) => unknown) | undefined;
   readonly prerequisites: readonly Prerequisite<object, unknown, unknown>[];
   readonly handler: (context: HandlerContext<unknown, unknown, unknown>) => unknown;
-  readonly limits: Limits | undefined;
+  /** This action's own overrides: what the definition declared, validated and copied. Possibly empty. */
+  readonly limits: Limits;
   readonly hooks: ErasedHooks;
   readonly busy: BusyPolicy;
   readonly observer: ActionObserver | undefined;
@@ -289,15 +270,8 @@ export function planOf<Event>(definition: ActionDefinition<Event>): ActionPlan<E
   throw new TypeError('This is not an action definition. Build one with Action.local(...).run(...).build().');
 }
 
-function checkPositive(label: string, name: string, value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError(`Action '${label}': ${name} must be a finite number greater than zero.`);
-  }
-  return value;
-}
-
 type HookKey = keyof ErasedHooks;
-const hookKeys: readonly HookKey[] = ['onSuccess', 'onFailure', 'onCanceled', 'onFinally'];
+const noOverrides: Limits = Object.freeze({});
 
 /** Everything a chain has declared so far. Never mutated: every step makes a new one. */
 interface Declared {
@@ -316,7 +290,7 @@ interface Declared {
 // interface that is valid next (see the interfaces above). Every value is frozen, and each call
 // returns a new draft, so a retained alias is a branch rather than a second registration on one
 // chain. The runtime checks each step too, so a call that bypasses the types (JavaScript, or an
-// `any` cast) is refused: a repeated registration, a hook before `limits`, a bad limit.
+// `any` cast) is refused: a repeated registration, a hook before `run`, a bad limit.
 class Draft {
   constructor(
     private readonly label: string,
@@ -376,17 +350,8 @@ class Draft {
   limits(limits: unknown): Draft {
     this.mustFollowRun('limits');
     if (this.declared.limits !== undefined) throw new Error(`Action '${this.label}': limits can be declared once.`);
-    const given = (limits ?? {}) as { deadlineMs?: unknown; hookMs?: unknown };
-    const hookMs = checkPositive(this.label, 'hookMs', given.hookMs);
-    // A server request is bounded by what is left of the work deadline, so a server action has one.
-    if (this.declared.transport !== undefined && given.deadlineMs === undefined) {
-      throw new TypeError(`Action '${this.label}': a server action needs limits({ deadlineMs, hookMs }), because each request is bounded by the work deadline.`);
-    }
-    const bounds: Limits =
-      given.deadlineMs === undefined
-        ? { hookMs }
-        : { deadlineMs: checkPositive(this.label, 'deadlineMs', given.deadlineMs), hookMs };
-    return this.next({ limits: Object.freeze(bounds) });
+    // Checked now, copied, and kept apart from the caller's object.
+    return this.next({ limits: readLimits(`Action '${this.label}'`, limits) });
   }
 
   whenBusy(policy: unknown): Draft {
@@ -407,9 +372,6 @@ class Draft {
 
   private withHook(key: HookKey, hook: unknown): Draft {
     this.mustFollowRun(key);
-    if (this.declared.limits === undefined) {
-      throw new Error(`Action '${this.label}': ${key} needs limits({ hookMs }) first, which bounds how long the runtime waits.`);
-    }
     if (this.declared.hooks[key] !== undefined) throw new Error(`Action '${this.label}': ${key} can be declared once.`);
     if (typeof hook !== 'function') throw new TypeError(`Action '${this.label}': ${key} needs a function.`);
     return this.next({ hooks: Object.freeze({ ...this.declared.hooks, [key]: hook }) });
@@ -432,12 +394,6 @@ class Draft {
     const { label, declared } = this;
     const { handler } = declared;
     if (handler === undefined) throw new Error(`Action '${label}' cannot be built before run.`);
-    if (hookKeys.some((key) => declared.hooks[key] !== undefined) && declared.limits === undefined) {
-      throw new Error(`Action '${label}' has a hook but no limits.`);
-    }
-    if (declared.transport !== undefined && declared.limits === undefined) {
-      throw new Error(`Action '${label}' is a server action and cannot be built without limits({ deadlineMs, hookMs }).`);
-    }
     return new BuiltAction<never>(label, {
       label,
       // Interop assertions, the only ones in this module. The typed interfaces above are what tie
@@ -448,7 +404,7 @@ class Draft {
       activate: declared.activate as ActionPlan<never>['activate'],
       prerequisites: declared.prerequisites,
       handler: handler as ActionPlan<never>['handler'],
-      limits: declared.limits,
+      limits: declared.limits ?? noOverrides,
       hooks: declared.hooks,
       busy: declared.busy ?? 'ignore',
       observer: declared.observer,

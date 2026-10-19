@@ -1,5 +1,6 @@
 import { createBinding, type ActionBinding } from './binding.js';
 import type { ActionDefinition } from './definition.js';
+import { readLimits, type Limits } from './limits.js';
 
 // The adapter-facing half of direct attachment. A renderer adapter (Lit today) opens one
 // `OpenInstance` per rendered component instance and forwards that instance's own events to it.
@@ -169,7 +170,19 @@ interface Registration {
   readonly callbackScopes: Set<ActionBinding>[];
 }
 
-export function createInstanceHost(options: { readonly onSetupError: (error: unknown) => void }): InstanceHost {
+export interface InstanceHostOptions {
+  readonly onSetupError: (error: unknown) => void;
+  /**
+   * This SDK instance's defaults for every action bound through it: used for each bound an action
+   * does not override itself, and before the product defaults. Validated now, even for a setting
+   * every action overrides, and copied, so changing the object afterwards affects nothing, not
+   * even an invocation already running. Another host has its own.
+   */
+  readonly limits?: Limits;
+}
+
+export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
+  const limits = readLimits('Instance host limits', options.limits);
   const instances = new Set<InstanceRecord>();
   const registrations = new Set<Registration>();
   let closed = false;
@@ -263,6 +276,7 @@ export function createInstanceHost(options: { readonly onSetupError: (error: unk
         // Throws for a definition `Action` did not build, before anything is installed.
         const { binding, activate } = createBinding(action, {
           detach,
+          limits,
           isLive: () => !record.retired && record.isLive(),
           subject,
           watchScope: record.watchScope,

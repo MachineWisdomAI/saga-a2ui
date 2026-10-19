@@ -119,7 +119,7 @@ describe('a server action', () => {
     expect(sessionChecks).toBe(1);
     expect(requests).toHaveLength(0);
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'prerequisites', failure: { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required' } },
+      { status: 'failed', stage: 'prerequisites', failure: { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required', category: 'application' } },
     ]);
   });
 
@@ -209,12 +209,12 @@ describe('a server action', () => {
     expect('call' in (context ?? {})).toBe(false);
   });
 
-  it('cannot be built without a work deadline and a hook budget, even by a caller that bypasses the types', () => {
+  it('builds without limits, and refuses an invalid one even from a caller that bypasses the types', () => {
     const { transport } = controlledTransport();
     const base = Action.server<Press>('archive', transport).run(({ call }) => call('x', {}));
     const untyped = base as unknown as { build(): unknown; limits(limits: unknown): { build(): unknown } };
-    expect(() => untyped.build()).toThrow(/limits/);
-    expect(() => untyped.limits({ hookMs: 10 })).toThrow(/deadlineMs/);
+    expect(() => untyped.build()).not.toThrow();
+    expect(() => untyped.limits({ hookMs: 10 }).build()).not.toThrow();
     expect(() => untyped.limits({ deadlineMs: 0, hookMs: 10 })).toThrow(/deadlineMs/);
     expect(() => untyped.limits({ deadlineMs: 10, hookMs: Number.NaN })).toThrow(/hookMs/);
     expect(() => untyped.limits({ deadlineMs: 10, hookMs: 10 }).build()).not.toThrow();
@@ -369,7 +369,7 @@ describe('how a server action ends', () => {
     await elapse(100);
 
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result: { archivedAt: 9 } } },
+      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result: { archivedAt: 9 }, category: 'timeout' } },
     ]);
     expect(requests).toHaveLength(1);
   });
@@ -385,7 +385,7 @@ describe('how a server action ends', () => {
     await elapse(1_000);
 
     expect(signal?.aborted).toBe(true);
-    expect(report.outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout' } }]);
+    expect(report.outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
     expect(binding.state.phase).toBe('idle');
 
     // The reply that arrives afterwards is a late settlement: no success work, nothing reported.
@@ -462,7 +462,7 @@ describe('how a server action ends', () => {
 
     expect(outcomes).toEqual([
       { status: 'canceled', cause: 'disposed', stage: 'prerequisites' },
-      { status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout' } },
+      { status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } },
     ]);
     expect(requests).toHaveLength(0); // the protected operation was never requested
     expect(sessionRequests).toBe(2); // the prerequisite’s own requests are counted apart
@@ -572,8 +572,8 @@ describe('what the types allow and refuse for a server action', () => {
   it('accepts the complete authoring chain and refuses each misuse', () => {
     const { transport } = controlledTransport();
 
-    // Positive: the reply type flows to the handler, the result to the success hook, and a local
-    // action still needs no deadline.
+    // Positive: the reply type flows to the handler and the result to the success hook, and every
+    // limit is optional.
     const complete = Action.server<Press>('complete', transport)
       .input((event) => ({ noteId: String(event.read('id')) }))
       .before(prerequisite('session', () => proceed({ user: 'u-1' })))
@@ -601,21 +601,15 @@ describe('what the types allow and refuse for a server action', () => {
 
     // Negative. Some of these throw if they ran, so they are compiled and never called.
     const refusedByTheCompiler = (): void => {
-    // @ts-expect-error a server action cannot be built before it has limits
+    // A server action builds without limits, takes hooks without them, and overrides either alone.
     Action.server<Press>('n13', transport).run(() => 0).build();
-    Action.server<Press>('n14', transport)
+    Action.server<Press>('n14', transport).run(() => 0).onSuccess(() => undefined).build();
+    Action.server<Press>('n15', transport).run(() => 0).limits({ hookMs: 1 }).build();
+    Action.server<Press>('hook-ms', transport).run(() => 0).limits({ deadlineMs: 1 }).build();
+    Action.server<Press>('text', transport)
       .run(() => 0)
-      // @ts-expect-error hooks wait for limits, so every hook has a budget
-      .onSuccess(() => undefined);
-    Action.server<Press>('n15', transport)
-      .run(() => 0)
-      // @ts-expect-error a server action’s limits must include the work deadline
-      .limits({ hookMs: 1 })
-      .build();
-    Action.server<Press>('hook-ms', transport)
-      .run(() => 0)
-      // @ts-expect-error and the hook budget
-      .limits({ deadlineMs: 1 })
+      // @ts-expect-error a limit is a number
+      .limits({ deadlineMs: '1' })
       .build();
     Action.local<Press>('n8').run(
       // @ts-expect-error a local handler has no server call

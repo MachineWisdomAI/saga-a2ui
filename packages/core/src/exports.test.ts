@@ -47,12 +47,14 @@ describe('@saga-a2ui/core exports', () => {
   it('expose exactly the supported names for actions', () => {
     expect(Object.keys(actions).sort()).toEqual([
       'Action',
+      'ActionError',
       'InvocationEndedError',
       'componentKind',
       'createInstanceHost',
       'prerequisite',
       'proceed',
       'refuse',
+      'snapshotLimits',
     ]);
   });
 

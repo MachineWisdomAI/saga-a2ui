@@ -47,19 +47,13 @@ export interface ServerCallOptions {
 export interface ServerCalls<Reply extends ServerReply = ServerReply> {
   /**
    * Sends one request through the transport and returns the transport's reply unchanged. The
-   * request carries the invocation's signal and a timeout that is the time left on the work
-   * deadline, or less. A call after the invocation stopped waiting for the handler, or after the
+   * request carries the invocation's signal and a timeout that is the time left on the resolved
+   * work deadline (the action's override, the instance configuration or the default), or less. A call after the invocation stopped waiting for the handler, or after the
    * work deadline, rejects without sending anything. The timeout covers one call, not the whole
    * invocation, and aborting the signal ends the client's wait: it does not show that the host
    * forwarded the cancellation or that the server stopped.
    */
   call(name: string, args: Readonly<Record<string, unknown>>, options?: ServerCallOptions): Promise<Reply>;
-}
-
-/** Work deadline and hook budget are both required for a server action. Each finite and positive. */
-export interface ServerLimits {
-  readonly deadlineMs: number;
-  readonly hookMs: number;
 }
 
 /** Reads the transport an application passed: an object with a `callServerTool` function. */

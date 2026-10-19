@@ -5,7 +5,7 @@ import { a2uiV0_9Decoder, createMessageSession, type MessageSession } from '@sag
 import { createElement, Fragment, StrictMode, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import type { InstanceView } from '@saga-a2ui/core/actions';
+import type { InstanceView, Limits } from '@saga-a2ui/core/actions';
 import { ActionButtonEntry } from './action-button.js';
 import { InstanceHostProvider, useActionSetup } from './instance-host.js';
 
@@ -144,11 +144,14 @@ export function surfaceView(options: {
   readonly surface: SurfaceModel<ReactCatalogComponent>;
   readonly setup: (view: InstanceView) => void;
   readonly onSetupError?: (error: unknown) => void;
+  /** The application's action limits, handed to the provider. */
+  readonly limits?: Limits;
   /** Rendered after the surface, so its layout effects run after the surface's own. */
   readonly after?: ReactNode;
 }): ReactElement {
   return createElement(InstanceHostProvider, {
     onSetupError: options.onSetupError ?? (() => undefined),
+    ...(options.limits === undefined ? {} : { limits: options.limits }),
     children: createElement(
       Fragment,
       null,
