@@ -6,6 +6,8 @@ This companion belongs to the [action binding Blueprint](./action_binding.bluepr
 
 **Terminology check.** After the rename, TypeScript 5.9.3 checked the current section A (`authoring.types.ts`, SHA-256 prefix `db268151d6eb67fa`) and section B (`renderer.types.ts`, `c3141ecc02fa9ae8`) using their printed commands: both exited 0 without diagnostics. Removing the directives still produced the intended 26 and 1 errors respectively. A comparison of every TypeScript block in the Blueprint and this companion against the pre-edit revision found only the terminology rename. The earlier renderer-package checks below were not rerun; their original compiler and package-version claims remain historical. This check establishes no runtime behavior.
 
+**2026-10-19 amendment boundary.** The module now specifies optional overrides and SDK-instance defaults. Section A below and its checks remain historical evidence of the earlier explicit-limit design; specifically, N13–N15 and the `limits` gates are superseded for future implementation. They do not validate the amended builder surface or configuration resolution. Preserve these receipts; replace the relevant declaration and behavioral checks when implementing the amendment. No declarations or runtime were changed here.
+
 ## Contents
 
 - [A. Authoring declarations](#a-authoring-declarations): the declarations behind every authoring example, with the positive and negative type cases.
