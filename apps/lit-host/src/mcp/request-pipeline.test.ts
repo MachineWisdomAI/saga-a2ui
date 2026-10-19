@@ -441,3 +441,26 @@ describe('a request cancelled in the POST that carried it', () => {
     expect(outcomes[0]?.causes).toMatchObject([{ kind: 'cancelled', stage: 'handler', effect: 'none' }, { kind: 'request-timeout', limitMs: 250 }]);
   });
 });
+
+describe('a cancelled request on a streaming endpoint', () => {
+  it('ends at the stream idle policy, not the request deadline, and never enters a handler', async () => {
+    const asked: string[] = [];
+    const listener = await start({
+      budgets: { requestMs: 5_000 },
+      answer: { viewHtml: VIEW_HTML, responseMode: 'event-stream', streaming: { idleMs: 150 }, backend: { answer: async (question) => (asked.push(question), 'never') } },
+    });
+    const started = Date.now();
+    const body = JSON.stringify([
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: ANSWER_TOOL_NAME, arguments: { question: 'Q?' } } },
+      { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } },
+    ]);
+    const reply = await fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, body });
+    expect(reply.status).toBe(200);
+    await reply.text().catch(() => undefined);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(asked).toEqual([]);
+    await expect.poll(() => outcomes.length).toBe(1);
+    expect(outcomes[0]).toMatchObject({ finished: false });
+    expect(outcomes[0]?.causes).toContainEqual({ kind: 'operation-timeout', stage: 'delivery', limitMs: 150, effect: 'unknown' });
+  });
+});
