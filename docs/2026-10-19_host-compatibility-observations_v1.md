@@ -24,6 +24,16 @@ The accepted Lit consumer flow used a conversation-level tool call followed by d
 
 Both that Lit flow and the React probe displayed host-delivered data in Alexa+. The accepted Lit flow did **not** test the in-card tool round trip that timed out in the React probe. These results do not establish a renderer-specific cause or a general Lit-versus-React compatibility ranking.
 
+## Lit-only in-card follow-up
+
+A separate Lit 3.3.3 probe used MCP Apps 2.0.3 directly, without A2UI rendering or SAGA Action Bindings. Its self-contained resource was 620,848 bytes, SHA-256 `74a418e718dfa021ee647f4dbcb8ed229dbcd17d7ded3e4ecd66c3b838e65b5b`. Alexa's cached HTML matched those exact bytes. A local browser control using the real MCP Apps bridge and an HTTP server call displayed the returned revision and receipt in the same mounted Lit instance.
+
+In one clean Alexa+ simulator run on 19 October, initial revision 12 displayed. The native button call reached the server, which returned revision 13; the simulator logged that result at 11:33:43.022 UTC. The iframe recorded no incoming message after the call before its timeout at 11:34:41.774, and retained revision 12 in the same instance with one mount and zero updates. Initial messages had arrived and validated. No successful fresh-conversation repeat was completed: a temporary tunnel rotated, and a later opening request did not invoke the tool or display a card. Those attempts are not additional completed in-card failures.
+
+**This was a data-only update to the existing cached UI.** The read tool and returned result supplied no resource URI; the immutable HTML remained unchanged. The simulator's `/toolResult` REPLACE operation replaced result data, not the `ui://` bundle. This observation does not demonstrate broken Lit data binding: the local control applied real returned data. Delivery from the simulator to the existing iframe is the unresolved observed boundary, not a proven root cause or required repair location.
+
+Both the React and Lit probes bypassed SAGA `bindAction` and `Action.server`; their results do not qualify or reject the integrated SAGA action path in Alexa. Comparing Lit without A2UI with React plus A2UI does not isolate renderer choice. No CSP relaxation, alternate app transport or production repair was introduced. The temporary development configuration was restored and its original tool discovery verified. These observations do not alter the earlier React passes or passive Lit acceptance.
+
 ## Follow-up diagnostics and limits
 
 A diagnostic React artifact added message and callback tracing. In its clean Alexa run, initial messages arrived and validated, but the raw iframe trace recorded no incoming message after the button call before its 60-second timeout. The server response and simulator update directive contained the new value; the mounted card retained its initial value. This diagnostic artifact was not retested in ChatGPT or Claude.
