@@ -4,7 +4,11 @@ import { basicCatalog, ColumnApi, TextApi } from '@a2ui/web_core/v0_9/basic_cata
 import {
   createContentPolicy,
   createFaithfulCardReader,
+  createImageConsentScope,
+  establishImageEnforcement,
+  type ContentPolicy,
   type HostLinks,
+  type ImageConsentScope,
   type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
@@ -20,9 +24,17 @@ import { createRoot, type Root } from 'react-dom/client';
 // explicitly imported stylesheet. The bundle is React's development build under Strict Mode, as in
 // an application under development. `?level=strict` and `?host=denied|unavailable|failed|pending`
 // choose among this application's own compiled-in settings; nothing in an answer can.
+//
+// Images. The page does what an application does for its content policy: it puts the policy's
+// derived Content-Security-Policy in the document before anything is rendered, establishes image
+// enforcement from the policy values the document actually carries, and owns one consent scope per
+// view. `?csp=absent` leaves the document without the policy, so every image stays inert.
+// `?second=1` mounts a second, independent view (its own session, provider and consent scope) in
+// `#root-b`, for the cases that interleave views.
 
 export const CATALOG_ID = 'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
 export const SURFACE_ID = 'cards';
+export const SECOND_SURFACE_ID = 'cards-b';
 
 declare const __REACT_FAITHFUL_CARD_IDENTITIES__: Record<string, string>;
 
@@ -54,12 +66,19 @@ const FIRST = [
   '',
   'An unbroken identifier: ' + 'abcdefghij'.repeat(12),
   '',
-  'An image reference ![chart](https://images.example.com/chart.png) stays inert.',
+  'An image ![chart](https://images.example.com/chart.png) appears where the policy permits it.',
   '',
   '```',
   'code block line',
   '```',
 ].join('\n');
+
+/** The second card: another permitted image, and the references that must stay inert text. */
+const SECOND =
+  'Second card with [another](https://docs.example.com/second) and ![other](https://images.example.com/other.png). ' +
+  'Inert: ![inline](data:image/png;base64,iVBORw0KGgo=) ![object](blob:https://images.example.com/0f8fad5b) ' +
+  '![elsewhere](https://elsewhere.example.net/x.png) ![plain](http://images.example.com/plain.png) ' +
+  '![redirected](https://images.example.com/redirect.png).';
 
 const layout = (): unknown[] => [
   { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
@@ -78,8 +97,26 @@ const layout = (): unknown[] => [
     version: 'v0.9',
     updateDataModel: {
       surfaceId: SURFACE_ID,
-      value: { first: { version: 1, markdown: FIRST }, second: 'Second card with [another](https://docs.example.com/second).' },
+      value: { first: { version: 1, markdown: FIRST }, second: SECOND },
     },
+  },
+];
+
+const secondLayout = (): unknown[] => [
+  { version: 'v0.9', createSurface: { surfaceId: SECOND_SURFACE_ID, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    updateComponents: {
+      surfaceId: SECOND_SURFACE_ID,
+      components: [
+        { id: 'root', component: 'Column', children: ['only'] },
+        { id: 'only', component: 'FaithfulCard', contractVersion: 1, markdown: { path: '/only' } },
+      ],
+    },
+  },
+  {
+    version: 'v0.9',
+    updateDataModel: { surfaceId: SECOND_SURFACE_ID, value: { only: 'The other view ![third](https://images.example.com/third.png) and [a link](https://docs.example.com/third).' } },
   },
 ];
 
@@ -89,7 +126,16 @@ export interface ReactFaithfulCardConsumer {
   /** Answers for each request made while the host's answer is `pending`, in order. */
   readonly pending: ((outcome: LinkOpenOutcome) => void)[];
   readonly identities: Record<string, string>;
+  /** The first view's consent scope, which the application (this page) owns and the spec revokes as an application would. */
+  readonly consent: ImageConsentScope;
+  /** The second view's, present only with `?second=1`. */
+  readonly secondConsent: ImageConsentScope | undefined;
+  /** Every Content-Security-Policy value the document carries. */
+  readonly documentPolicies: string[];
+  /** The policy value the content policy derives, which the document must carry exactly. */
+  readonly derivedPolicy: string;
   send(input: unknown): IngestResult;
+  sendSecond(input: unknown): IngestResult;
   unmount(): void;
   mount(): void;
 }
@@ -116,58 +162,96 @@ const hostLinks: HostLinks = {
 };
 
 // The application's trusted settings, built once.
-const reader = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000 });
-const policy = createContentPolicy({ level, imageHosts: ['images.example.com'] });
-if (!reader.ok || !policy.ok) throw new Error('the page settings are invalid');
-const view: FaithfulCardView = { reader: reader.reader, policy: policy.policy, hostLinks };
+const readerResult = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000 });
+const policyResult = createContentPolicy({ level, imageHosts: ['images.example.com'] });
+if (!readerResult.ok || !policyResult.ok) throw new Error('the page settings are invalid');
+const reader = readerResult.reader;
+const policy = policyResult.policy;
+
+/** The restrictions go into the document before any card is rendered, as an application's own page would carry them. */
+function carryPolicy(derived: ContentPolicy): void {
+  if (params.get('csp') === 'absent') return;
+  const meta = document.createElement('meta');
+  meta.httpEquiv = 'Content-Security-Policy';
+  meta.content = derived.resource.contentSecurityPolicy;
+  document.head.append(meta);
+}
+carryPolicy(policy);
+const documentPolicies = Array.from(document.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'), (meta) => meta.getAttribute('content') ?? '');
+
+/** One view: the trusted settings, with the enforcement the document demonstrates and its own consent scope. */
+function viewWithScope(): { readonly view: FaithfulCardView; readonly consent: ImageConsentScope } {
+  const consent = createImageConsentScope();
+  return {
+    consent,
+    view: {
+      reader,
+      policy,
+      hostLinks,
+      imageEnforcement: establishImageEnforcement(policy, documentPolicies),
+      consent,
+    },
+  };
+}
+const first = viewWithScope();
+const second = params.get('second') === '1' ? viewWithScope() : undefined;
 
 interface OpenSession {
   readonly session: MessageSession<ReactCatalogComponent>;
   readonly surface: SurfaceModel<ReactCatalogComponent>;
 }
 
-function openSession(): OpenSession {
+function openSession(messages: unknown[]): OpenSession {
   const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
   let surface: SurfaceModel<ReactCatalogComponent> | undefined;
   session.onSurfaceCreated((created) => {
     surface = created;
   });
-  const result = session.ingest(layout());
+  const result = session.ingest(messages);
   if (!result.ok || !surface) throw new Error('the layout was not accepted');
   return { session, surface };
 }
 
-let current = openSession();
-let root: Root | undefined;
+const currentFirst = openSession(layout());
+const currentSecond = second === undefined ? undefined : openSession(secondLayout());
+const roots = new Map<string, Root>();
 
-function container(): HTMLElement {
-  const element = document.getElementById('root');
-  if (!element) throw new Error('no root element');
+function container(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`no ${id} element`);
   return element;
 }
 
-function render(): void {
-  root?.render(
-    createElement(
-      StrictMode,
-      null,
-      createElement(FaithfulCardProvider, { view, children: createElement(A2uiSurface, { surface: current.surface }) }),
-    ),
-  );
+function render(id: string, view: FaithfulCardView, surface: SurfaceModel<ReactCatalogComponent>): void {
+  roots
+    .get(id)
+    ?.render(createElement(StrictMode, null, createElement(FaithfulCardProvider, { view, children: createElement(A2uiSurface, { surface }) })));
 }
 
 const consumer: ReactFaithfulCardConsumer = {
   requests,
   pending,
   identities: { ...__REACT_FAITHFUL_CARD_IDENTITIES__, runtimeReact: reactVersion, runtimeReactDom: reactDomVersion },
-  send: (input) => current.session.ingest(input),
+  consent: first.consent,
+  secondConsent: second?.consent,
+  documentPolicies,
+  derivedPolicy: policy.resource.contentSecurityPolicy,
+  send: (input) => currentFirst.session.ingest(input),
+  sendSecond: (input) => {
+    if (currentSecond === undefined) throw new Error('the second view is not mounted; use ?second=1');
+    return currentSecond.session.ingest(input);
+  },
   unmount: () => {
-    root?.unmount();
-    root = undefined;
+    for (const root of roots.values()) root.unmount();
+    roots.clear();
   },
   mount: () => {
-    root = createRoot(container());
-    render();
+    roots.set('root', createRoot(container('root')));
+    render('root', first.view, currentFirst.surface);
+    if (second !== undefined && currentSecond !== undefined) {
+      roots.set('root-b', createRoot(container('root-b')));
+      render('root-b', second.view, currentSecond.surface);
+    }
   },
 };
 window.reactFaithfulCard = consumer;

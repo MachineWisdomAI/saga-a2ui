@@ -1,16 +1,25 @@
-import { describeLinkOutcome, type BlockNode, type ContentPolicy, type InlineNode, type LinkOpenOutcome, type TableCell } from '@saga-a2ui/components/faithful-card';
+import {
+  describeLinkOutcome,
+  type BlockNode,
+  type ContentPolicy,
+  type ImageContext,
+  type InlineNode,
+  type LinkOpenOutcome,
+  type TableCell,
+} from '@saga-a2ui/components/faithful-card';
 import { Fragment, type ReactElement, type ReactNode } from 'react';
+import { CommittedImage } from './image.js';
 
 // Templates: the closed set of restricted nodes the components package produces, each mapped to a
 // fixed element with text children. Nothing here builds markup from text (React escapes every
-// string it is given, and no raw-HTML escape hatch is used), and a link is activatable only when
-// the trusted content policy permits it. Which node cases exist is decided by the types in
+// string it is given, and no raw-HTML escape hatch is used), and a link or image is activatable
+// only when the trusted content policy permits it. Which node cases exist is decided by the types in
 // `@saga-a2ui/components/faithful-card`: both `switch` statements end in an exhaustiveness check,
 // so a new case fails to compile here until it is rendered.
 //
 // This module holds no state and runs no effect. The lifecycle (`lifecycle.ts`) supplies the
-// revision-bound controls, and `faithful-card.css` supplies the presentation through the semantic
-// classes below.
+// revision-bound controls and the consent, `image.tsx` the one element that loads, and
+// `faithful-card.css` supplies the presentation through the semantic classes below.
 
 /** What one render pass needs; assembled once so the node templates stay small. */
 export interface Rendering {
@@ -21,19 +30,26 @@ export interface Rendering {
   readonly linkOutcomes: ReadonlyMap<number, LinkOpenOutcome>;
   /** Called by a link's button; the lifecycle decides whether it still stands. */
   readonly openLink: (ordinal: number, url: string) => void;
+  /** The view's enforcement and the card's live consent: the inputs of every image decision. */
+  readonly images: ImageContext;
+  /** Image positions whose load failed under the current consent. */
+  readonly failedImages: ReadonlySet<number>;
+  /** Called when a shown image fails to load; the lifecycle decides whether the failure still counts. */
+  readonly imageFailed: (ordinal: number) => void;
 }
 
 /** Positions in the content, counted as the templates are produced in source order. */
 interface Counters {
   link: number;
+  image: number;
   table: number;
 }
 
 /** The rendering plus the counters of one pass; the counters belong to the pass, never to its caller. */
 type Pass = Rendering & { readonly counters: Counters };
 
-/** The reason an image reference is not loaded: this renderer does not fetch images yet. */
-export const IMAGE_LOADING_UNAVAILABLE = 'image-loading-unavailable';
+/** Why a permitted image is shown as text: the browser could not load it. */
+const IMAGE_LOAD_FAILED = 'load-failed';
 
 function never(node: never): never {
   throw new Error(`Unhandled card node: ${JSON.stringify(node)}`);
@@ -87,7 +103,7 @@ function BlockedFragment(props: {
  * tables from the start again instead of continuing where the first stopped.
  */
 export function Blocks(props: { readonly nodes: readonly BlockNode[]; readonly rendering: Rendering }): ReactElement {
-  const pass: Pass = { ...props.rendering, counters: { link: 0, table: 0 } };
+  const pass: Pass = { ...props.rendering, counters: { link: 0, image: 0, table: 0 } };
   return <>{inOrder(props.nodes.map((node) => block(node, pass, false)))}</>;
 }
 
@@ -257,17 +273,25 @@ function link(node: Extract<InlineNode, { kind: 'link' }>, r: Pass): ReactNode {
 }
 
 /**
- * An image reference is never fetched here: this renderer has no image consent yet, so the
- * reference stays inert text in its original position and, under Strict, can be revealed as source.
+ * An image is an element only when the policy permits it for this view: an exactly listed HTTPS
+ * host, demonstrated enforcement and, under Strict, the reader's live consent. Anything else, and
+ * an image that failed to load, stays inert text in its original position (under Strict it can be
+ * revealed as source). Data and blob references are never permitted, so they are always that text.
  */
 function image(node: Extract<InlineNode, { kind: 'image' }>, r: Pass): ReactNode {
+  const ordinal = r.counters.image++;
+  const decision = r.policy.decideImage(node.source, r.images);
+  if (decision.allowed && !r.failedImages.has(ordinal)) {
+    return <CommittedImage url={decision.url} alt={node.alt} eager={r.strict} onFailure={() => r.imageFailed(ordinal)} />;
+  }
+  const reason = decision.allowed ? IMAGE_LOAD_FAILED : decision.reason;
   const alt = node.alt === '' ? 'no description' : node.alt;
   if (r.strict) {
     return (
       <BlockedFragment
         kind="image"
         testId="md-image-blocked"
-        reason={IMAGE_LOADING_UNAVAILABLE}
+        reason={reason}
         revealed={r.revealed}
         placeholder={`[Image blocked: ${alt}]`}
         source={() => `![${node.alt}](${node.source})`}
@@ -275,7 +299,7 @@ function image(node: Extract<InlineNode, { kind: 'image' }>, r: Pass): ReactNode
     );
   }
   return (
-    <span className="saga-card-placeholder" data-testid="md-image-blocked" data-reason={IMAGE_LOADING_UNAVAILABLE}>
+    <span className="saga-card-placeholder" data-testid="md-image-blocked" data-reason={reason}>
       [Image not loaded: {alt}]
     </span>
   );

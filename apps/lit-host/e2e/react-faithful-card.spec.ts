@@ -9,11 +9,54 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // Chromium evidence for the React card; it is not evidence for any named host or installed package.
 
 const SURFACE = 'cards';
+const SECOND_SURFACE = 'cards-b';
+
+// Every HTTPS request the page makes is answered here, so none reaches a real server and the spec
+// sees exactly which ones the browser sent. A request the page's Content-Security-Policy blocks is
+// never sent and never appears. `redirect.png` answers with a redirect to a host the policy does not
+// list, to observe that the browser enforces the policy on the redirect target too.
+const IMAGE_BODY = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"></svg>';
+const REDIRECT_TARGET = 'https://elsewhere.example.net/landed.png';
+const sent = new WeakMap<Page, string[]>();
+
+async function serveHttps(page: Page): Promise<void> {
+  if (sent.has(page)) return;
+  const urls: string[] = [];
+  sent.set(page, urls);
+  await page.addInitScript(() => {
+    const violations: string[] = [];
+    (window as unknown as { violations: string[] }).violations = violations;
+    document.addEventListener('securitypolicyviolation', (event) => violations.push(`${event.violatedDirective} ${event.blockedURI}`));
+  });
+  await page.route(/^https:\/\//, async (route) => {
+    const url = route.request().url();
+    urls.push(url);
+    if (new URL(url).pathname === '/redirect.png') {
+      await route.fulfill({ status: 302, headers: { location: REDIRECT_TARGET } });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'cache-control': 'no-store' }, body: IMAGE_BODY });
+  });
+}
 
 async function open(page: Page, query = ''): Promise<void> {
+  await serveHttps(page);
   await page.goto(`/react-faithful-card/index.html${query}`);
   await expect(page.getByTestId('card-content').first()).toBeVisible();
 }
+
+/** The HTTPS requests the browser sent so far. */
+const sentUrls = (page: Page): string[] => [...(sent.get(page) ?? [])];
+const violations = (page: Page) => page.evaluate(() => (window as unknown as { violations: string[] }).violations);
+/** Lets any request a change would have started be sent before the spec says none was. */
+async function quiet(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+const CHART = 'https://images.example.com/chart.png';
+const OTHER = 'https://images.example.com/other.png';
+const THIRD = 'https://images.example.com/third.png';
+const REDIRECT = 'https://images.example.com/redirect.png';
 
 const requests = (page: Page) => page.evaluate(() => window.reactFaithfulCard.requests);
 const send = (page: Page, input: unknown) => page.evaluate((payload) => window.reactFaithfulCard.send(payload), input);
@@ -187,15 +230,247 @@ test.describe('Standard links in a browser', () => {
     expect(await page.evaluate(() => window.scrollX)).toBe(0);
   });
 
-  test('requests images from nowhere: an image reference stays inert text', async ({ page }) => {
-    const imageRequests: string[] = [];
-    page.on('request', (request) => {
-      if (request.url().includes('images.example.com')) imageRequests.push(request.url());
-    });
+});
+
+test.describe('Standard images under the built Content-Security-Policy', () => {
+  test('the document carries exactly the policy the content policy derives', async ({ page }) => {
     await open(page);
-    await expect(card(page, 'first').getByTestId('md-image-blocked')).toHaveText('[Image not loaded: chart]');
-    expect(await page.locator('img, picture, source').count()).toBe(0);
-    expect(imageRequests).toEqual([]);
+    const { documentPolicies, derivedPolicy } = await page.evaluate(() => window.reactFaithfulCard);
+    expect(documentPolicies).toEqual([derivedPolicy]);
+    expect(derivedPolicy).toContain('img-src https://images.example.com;');
+    expect(derivedPolicy).toContain("default-src 'none'");
+  });
+
+  test('loads an exactly listed HTTPS image without consent, and sends nothing for the references that stay inert', async ({ page }) => {
+    await open(page);
+    const first = card(page, 'first');
+    const second = card(page, 'second');
+    await expect(first.locator('img')).toHaveAttribute('src', CHART);
+    await expect(second.locator('img[alt="other"]')).toHaveAttribute('src', OTHER);
+    await expect.poll(() => sentUrls(page).filter((url) => url.endsWith('.png')).sort()).toEqual([CHART, OTHER, REDIRECT].sort());
+    await expect(second.getByTestId('md-image-blocked')).toHaveCount(5);
+    await quiet(page);
+
+    // Data, blob, unlisted-host and plain-http references are text in their place and were never requested.
+    const reasons = await second.getByTestId('md-image-blocked').evaluateAll((all) => all.map((one) => one.getAttribute('data-reason')));
+    expect(reasons).toEqual(['not-https', 'not-https', 'host-not-allowed', 'not-https', 'load-failed']);
+    expect(sentUrls(page).sort()).toEqual([CHART, OTHER, REDIRECT].sort());
+    expect(await second.locator('img').count()).toBe(1);
+    expect(await page.getByTestId('card-controls').count()).toBe(0);
+    expect(await requests(page)).toEqual([]);
+  });
+
+  test('enforces the policy on a redirect: a listed image that redirects elsewhere is blocked before it is requested and shown as text', async ({ page }) => {
+    await open(page);
+    const redirected = card(page, 'second').getByTestId('md-image-blocked').last();
+    await expect(redirected).toHaveAttribute('data-reason', 'load-failed');
+    await expect(redirected).toHaveText('[Image not loaded: redirected]');
+    expect(sentUrls(page)).toContain(REDIRECT);
+    expect(sentUrls(page)).not.toContain(REDIRECT_TARGET);
+    // The browser reports a blocked redirect against the request that was redirected, not its target.
+    expect(await violations(page)).toEqual([`img-src ${REDIRECT}`]);
+  });
+
+  test('the browser, not only the card, refuses an image from an unlisted origin', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => {
+      const image = document.createElement('img');
+      image.src = 'https://elsewhere.example.net/injected.png';
+      document.body.append(image);
+    });
+    await expect.poll(() => violations(page)).toContain('img-src https://elsewhere.example.net/injected.png');
+    await quiet(page);
+    expect(sentUrls(page)).not.toContain('https://elsewhere.example.net/injected.png');
+  });
+
+  test('keeps every image inert when the document does not carry the derived restrictions', async ({ page }) => {
+    await open(page, '?csp=absent');
+    expect(await page.evaluate(() => window.reactFaithfulCard.documentPolicies)).toEqual([]);
+    await expect(card(page, 'first').getByTestId('md-image-blocked')).toHaveAttribute('data-reason', 'enforcement-unestablished');
+    expect(await page.locator('#root img').count()).toBe(0);
+    await quiet(page);
+    expect(sentUrls(page)).toEqual([]);
+  });
+});
+
+test.describe('Strict images and consent in a browser', () => {
+  test('sends no image request before consent, shows the listed images after Show images, and removes them with Hide images', async ({ page }) => {
+    await open(page, '?level=strict');
+    const first = card(page, 'first');
+    await quiet(page);
+    expect(sentUrls(page)).toEqual([]);
+    expect(await page.locator('#root img').count()).toBe(0);
+    await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+
+    await first.getByTestId('images-toggle').click();
+    await expect(first.locator('img')).toHaveAttribute('src', CHART);
+    await expect(first.getByTestId('images-status')).toHaveText('Images shown.');
+    await expect.poll(() => sentUrls(page)).toEqual([CHART]);
+    // Consent is for this card only: the second card still shows placeholders and requested nothing.
+    expect(await card(page, 'second').locator('img').count()).toBe(0);
+
+    await first.getByTestId('images-toggle').click();
+    await expect(first.locator('img')).toHaveCount(0);
+    await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+    await expect(first.getByTestId('md-image-blocked')).toHaveAttribute('data-reason', 'consent-required');
+    await quiet(page);
+    expect(sentUrls(page)).toEqual([CHART]);
+  });
+
+  test('works from the keyboard and keeps focus on the control', async ({ page }) => {
+    await open(page, '?level=strict');
+    const toggle = card(page, 'first').getByTestId('images-toggle');
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveText('Hide images');
+    await expect(toggle).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(toggle).toHaveText('Show images');
+    await expect(toggle).toBeFocused();
+  });
+
+  test('never requests data, blob, unlisted or plain-http references, even with consent; a redirect off the list is blocked', async ({ page }) => {
+    await open(page, '?level=strict');
+    const second = card(page, 'second');
+    await second.getByTestId('images-toggle').click();
+    await expect.poll(() => sentUrls(page).sort()).toEqual([OTHER, REDIRECT].sort());
+    await expect(second.getByTestId('md-image-blocked')).toHaveCount(5);
+    await expect(second.locator('img')).toHaveCount(1);
+    await quiet(page);
+    expect(sentUrls(page)).not.toContain(REDIRECT_TARGET);
+    // The browser reports a blocked redirect against the request that was redirected, not its target.
+    expect(await violations(page)).toEqual([`img-src ${REDIRECT}`]);
+    const reasons = await second.getByTestId('md-image-blocked').evaluateAll((all) => all.map((one) => one.getAttribute('data-reason')));
+    expect(reasons).toEqual(['not-https', 'not-https', 'host-not-allowed', 'not-https', 'load-failed']);
+  });
+
+  test('revealing the source grants nothing: no image, no request, no host call', async ({ page }) => {
+    await open(page, '?level=strict');
+    const first = card(page, 'first');
+    await first.getByTestId('source-toggle').click();
+    await first.getByTestId('md-image-blocked').click();
+    await first.getByTestId('md-link-inert').click();
+    await quiet(page);
+    expect(await page.locator('#root img').count()).toBe(0);
+    expect(sentUrls(page)).toEqual([]);
+    expect(await requests(page)).toEqual([]);
+    await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+  });
+
+  test('is ended for the card by new content, and the next images need a new press', async ({ page }) => {
+    await open(page, '?level=strict');
+    const first = card(page, 'first');
+    await first.getByTestId('images-toggle').click();
+    await expect(first.locator('img')).toHaveCount(1);
+    const second = card(page, 'second');
+    await second.getByTestId('images-toggle').click();
+    await expect(second.locator('img[alt="other"]')).toHaveAttribute('src', OTHER);
+
+    await send(page, data('/first/markdown', 'Replacement with ![new](https://images.example.com/chart.png?v=2)'));
+    await expect(first.locator('img')).toHaveCount(0);
+    await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+    // Another card of the same view keeps its consent.
+    await expect(second.locator('img[alt="other"]')).toHaveAttribute('src', OTHER);
+    await quiet(page);
+    expect(sentUrls(page).filter((url) => url.includes('v=2'))).toEqual([]);
+
+    await first.getByTestId('images-toggle').click();
+    await expect(first.locator('img')).toHaveAttribute('src', 'https://images.example.com/chart.png?v=2');
+  });
+
+  test('is ended for every card when the application revokes the view, and a new press is a new grant; retiring ends it for good', async ({ page }) => {
+    await open(page, '?level=strict');
+    const first = card(page, 'first');
+    const second = card(page, 'second');
+    await first.getByTestId('images-toggle').click();
+    await second.getByTestId('images-toggle').click();
+    await expect(page.locator('#root img')).toHaveCount(2);
+    const staleHide = await first.getByTestId('images-toggle').elementHandle();
+
+    await page.evaluate(() => window.reactFaithfulCard.consent.revokeAll());
+    await expect(page.locator('#root img')).toHaveCount(0);
+    await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+    await expect(second.getByTestId('images-toggle')).toHaveText('Show images');
+    await first.getByTestId('images-toggle').click();
+    await expect(first.locator('img')).toHaveCount(1);
+
+    const before = sentUrls(page).length;
+    await page.evaluate(() => window.reactFaithfulCard.consent.retire());
+    await expect(page.locator('#root img')).toHaveCount(0);
+    await expect(first.getByTestId('images-toggle')).toBeDisabled();
+    await expect(first.getByTestId('images-unavailable')).toHaveAttribute('data-reason', 'view-ended');
+    // A control the reader still holds from before cannot bring images back.
+    await staleHide!.evaluate((button) => (button as HTMLButtonElement).click());
+    await first.getByTestId('images-toggle').click({ force: true });
+    await quiet(page);
+    expect(await page.locator('#root img').count()).toBe(0);
+    expect(sentUrls(page).length).toBe(before);
+  });
+
+  test('unmounting the cards ends their consent, and a new mount starts without images or requests', async ({ page }) => {
+    await open(page, '?level=strict');
+    await card(page, 'first').getByTestId('images-toggle').click();
+    await expect(page.locator('#root img')).toHaveCount(1);
+    await page.evaluate(() => window.reactFaithfulCard.unmount());
+    await expect(page.getByTestId('card-root')).toHaveCount(0);
+    const before = sentUrls(page).length;
+    await page.evaluate(() => window.reactFaithfulCard.mount());
+    await expect(page.getByTestId('card-root')).toHaveCount(2);
+    await quiet(page);
+    expect(await page.locator('#root img').count()).toBe(0);
+    expect(sentUrls(page).length).toBe(before);
+    // Unmounting released the cards' own grants; it did not retire the view's scope, which is live: the first press works.
+    await card(page, 'first').getByTestId('images-toggle').click();
+    await expect(page.locator('#root img')).toHaveCount(1);
+  });
+
+  test('a replaced component ends the old card’s consent and a replacement starts afresh', async ({ page }) => {
+    await open(page, '?level=strict');
+    await card(page, 'second').getByTestId('images-toggle').click();
+    await expect(card(page, 'second').locator('img[alt="other"]')).toHaveCount(1);
+    await send(page, [{ version: 'v0.9', updateComponents: { surfaceId: SURFACE, components: [{ id: 'second', component: 'Text', text: 'plain now' }] } }]);
+    await expect(page.getByTestId('app-text')).toHaveText('plain now');
+    await send(page, [
+      { version: 'v0.9', updateComponents: { surfaceId: SURFACE, components: [{ id: 'second', component: 'FaithfulCard', contractVersion: 1, markdown: { path: '/second' } }] } },
+    ]);
+    await expect(card(page, 'second').getByTestId('images-toggle')).toHaveText('Show images');
+    expect(await card(page, 'second').locator('img').count()).toBe(0);
+  });
+
+  test('keeps two views apart: revoking or retiring one leaves the other’s images and consent alone', async ({ page }) => {
+    await open(page, '?level=strict&second=1');
+    const other = page.locator('#root-b');
+    await card(page, 'first').getByTestId('images-toggle').click();
+    await other.getByTestId('images-toggle').click();
+    await expect(page.locator('#root img')).toHaveCount(1);
+    await expect(other.locator('img')).toHaveAttribute('src', THIRD);
+
+    await page.evaluate(() => window.reactFaithfulCard.consent.revokeAll());
+    await expect(page.locator('#root img')).toHaveCount(0);
+    await expect(other.locator('img')).toHaveCount(1);
+    await page.evaluate(() => window.reactFaithfulCard.secondConsent!.retire());
+    await expect(other.locator('img')).toHaveCount(0);
+    await expect(other.getByTestId('images-toggle')).toBeDisabled();
+    // The first view is still live.
+    await card(page, 'first').getByTestId('images-toggle').click();
+    await expect(page.locator('#root img')).toHaveCount(1);
+    expect(await other.locator('img').count()).toBe(0);
+    // New content in the second view leaves the first view's images and consent alone.
+    await page.evaluate(([surface]) => window.reactFaithfulCard.sendSecond([{ version: 'v0.9', updateDataModel: { surfaceId: surface, path: '/only', value: 'Replaced' } }]), [SECOND_SURFACE]);
+    await expect(other.getByTestId('card-content')).toHaveText('Replaced');
+    await expect(page.locator('#root img')).toHaveCount(1);
+    await expect(card(page, 'first').getByTestId('images-toggle')).toHaveText('Hide images');
+  });
+
+  test('shows nothing and offers nothing when the document does not carry the derived restrictions', async ({ page }) => {
+    await open(page, '?level=strict&csp=absent');
+    const first = card(page, 'first');
+    await expect(first.getByTestId('images-toggle')).toBeDisabled();
+    await expect(first.getByTestId('images-unavailable')).toHaveAttribute('data-reason', 'none-qualify');
+    await first.getByTestId('images-toggle').click({ force: true });
+    await quiet(page);
+    expect(sentUrls(page)).toEqual([]);
+    expect(await page.locator('#root img').count()).toBe(0);
   });
 });
 
