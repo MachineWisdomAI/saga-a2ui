@@ -79,9 +79,23 @@ The resource CSP always includes `data:` and `blob:` in `img-src`, in both Stand
 | One exact host | `img-src data: blob: https://images.example.com` |
 | Multiple exact hosts | `img-src data: blob: https://a.example.com https://b.example.com` |
 
-These are resource permissions for rendering images, not new content permissions. All other directives retain their existing restrictions, including `font-src 'none'` and the existing connection policy. This slice uses system fonts. The exact HTTPS image-origin list remains unchanged: `data:` and `blob:` are scheme sources, not external hosts, and must not be added to broad resource-domain permissions. Reconstructing the immutable policy from `policy.configuration` must produce the same restrictions, including both baseline schemes, without adding a new configuration field.
+These are resource permissions for rendering images, not new content permissions. The font resource permission is defined below. Other directives, including the connection policy, retain their existing restrictions. The exact HTTPS image-origin list remains unchanged: `data:` and `blob:` are scheme sources, not external hosts, and must not be added to broad resource-domain permissions. Reconstructing the immutable policy from `policy.configuration` must produce the same restrictions, including both baseline schemes, without adding an embedded-image flag.
 
 Allowing `blob:` supports application-owned images represented by browser-managed objects, including generated images and local file previews. It does not itself permit a network fetch. If an application obtains bytes over the network before creating a blob URL, that fetch still needs the applicable connection permission. The application owns creation and revocation of its object URLs; this amendment introduces no blob registry or content-image conversion service. Blob permission is independent of whether the first card consumer uses it. See the [CSP image directive](https://www.w3.org/TR/CSP/#directive-img-src) and [File API object URL model](https://www.w3.org/TR/FileAPI/#url).
+
+### Trusted fonts
+
+Both modes derive `font-src data: blob:` by default, without an opt-in flag for these schemes. Trusted application CSS can embed WOFF2 bytes in a data URL or use an application-owned blob URL through `@font-face`; ordinary system-font fallback remains available. The application owns blob URL cleanup. Answer text, tool results and A2UI properties cannot supply font URLs, inject CSS or select a font policy. Font loading does not use Show images consent.
+
+Trusted application resource configuration may additionally supply `fontOrigins`, a separate exact HTTPS origin allowlist that defaults to empty. Validate and normalize origins before constructing the immutable resource policy; reject wildcards, non-HTTPS schemes, credentials, non-root paths, queries and fragments. Keep an explicit non-default port as part of the origin, and deduplicate normalized entries. This is resource configuration, not answer content or a change to the Standard/Strict content level. Configuration serialization and reconstruction must preserve this list. Image hosts never implicitly authorize fonts, and font origins never implicitly authorize images.
+
+Build the font source list by combining `data:`, `blob:` and all validated font origins. For example, one configured origin produces `font-src data: blob: https://fonts.example.com`; adding more origins cannot drop either baseline scheme. Trusted authored `@font-face` URLs can load automatically in either mode without Show images consent. Redirects must remain within the declared font origins under the effective host/document policies. If enforcement or delivery cannot support that path, use the readable fallback rather than broaden permissions.
+
+Font-file requests carry normal network metadata, and their paths or query strings can encode data. Even fixed URLs may expose which character subsets were needed through `unicode-range` selection. Therefore application-authored font URLs must not be constructed from supplied answer text, credentials or private request data. Static asset-version parameters are allowed; an origin allowlist does not validate the information in a URL. These constraints preserve trusted typography without introducing a font-consent control or treating remote fonts as inherently private.
+
+The resource builder emits one `font-src` directive. Its baseline schemes must survive policy reconstruction and any configured source composition, just as they do for `img-src`. Where the host requires broad resource-domain metadata, declare the required font origins there while retaining restrictive document CSP so the combined policy grants those origins only font access. Font permissions do not grant image, script, stylesheet, frame or connection permissions. A remote font stylesheet is a stylesheet request and is not authorized merely by allowing its font-file origin.
+
+Font loading through `@font-face` follows browser font-fetch and CORS rules; CSP permission alone does not guarantee a font will load. A failed font uses the authored fallback, keeping text readable. Verification must establish that the intended font actually loaded rather than infer success from a CSS family declaration. See [CSP font sources](https://www.w3.org/TR/CSP/#directive-font-src) and [CSS font fetching and privacy considerations](https://www.w3.org/TR/css-fonts-4/).
 
 ### Artwork and answer images take separate paths
 
@@ -91,7 +105,7 @@ Answer text still passes through the restricted Markdown reader and typed render
 
 CSP's `data:` and `blob:` allowances do not distinguish trusted image references from untrusted ones. The trust boundary therefore depends on fixed authored templates and the shared content decisions: untrusted content must never be copied into an image source or CSS outside those decisions. The resource allowance is not a sanitizer for arbitrary application markup. It authorizes no new HTML injection path, inline SVG markup, image proxy or renderer-specific policy fork.
 
-![Baseline resource permissions allow embedded and object-URL images, while supplied Markdown images still require shared content checks.](../../diagrams/embedded-artwork-policy.png)
+![Separate image and font resource permissions preserve their baseline schemes; supplied Markdown images still require shared content checks.](../../diagrams/embedded-artwork-policy.png)
 
 [Mermaid source](../../diagrams/embedded-artwork-policy.mmd) · [Editable Excalidraw](../../diagrams/embedded-artwork-policy.excalidraw) · [SVG](../../diagrams/embedded-artwork-policy.svg)
 
@@ -101,7 +115,7 @@ For example, an application uses an empty external-image allowlist and builds a 
 
 The resource and view reconstruct the same policy through public SDK exports. `establishImageEnforcement` must continue to require the exact derived document policy; the baseline scheme allowances cannot manufacture established enforcement when the required policy is missing or mismatched. A consumer must not hand-edit a more permissive CSP. A host may impose stricter restrictions; blocked artwork remains a visible qualification failure, not a reason to relax other directives or substitute a remote asset.
 
-The immutable resource identity includes its compiled code, policy, CSS and artwork bytes. Changing those bytes changes the identity. Supplying another answer reuses the resource and updates only validated data; it does not rebuild or re-register artwork. The baseline image schemes add no new runtime asset request, connection origin or host-specific branch.
+The immutable resource identity includes its compiled code, policy, CSS, embedded font and artwork bytes. Changing those bytes changes the identity. Supplying another answer reuses the resource and updates only validated data; it does not rebuild or re-register artwork. The baseline schemes add no network dependency. Remote fonts are an optional resource capability; the self-contained card recipe embeds any required font bytes and remains usable without external runtime assets.
 
 | Verification case | Required result |
 | --- | --- |
@@ -110,14 +124,18 @@ The immutable resource identity includes its compiled code, policy, CSS and artw
 | Content images with exact allowed hosts | Existing HTTPS, exact-host, redirect and demonstrated image-only enforcement rules still apply. Strict requires current consent; Hide images and invalidation revoke it. |
 | Invalid trusted configuration or attempted answer configuration | Existing validation fails invalid configuration explicitly. Answer data cannot mutate the policy or gain template/CSS control. |
 | Policy round-trip or missing/mismatched document policy | Round-tripping retains both baseline schemes and the allowed origins. Missing/mismatched enforcement leaves content images inert. |
-| Built resource under attempted external runtime loads | Script, stylesheet, font, frame and connection restrictions remain unchanged; bundled artwork creates no external dependency. |
+| Embedded and blob fonts in both modes | A representative WOFF2 font loads through trusted `@font-face` CSS with `font-src data: blob:`; blocked or invalid font input leaves readable fallback text. |
+| Font source composition and reconstruction | Empty, one-origin and multiple-origin configurations retain `data:` and `blob:` in the single font directive in both modes. Normalization, deduplication and round-tripping preserve exact origins and ports; invalid entries fail explicitly. |
+| Remote font loading and isolation | With working CORS, a trusted font loads from its declared origin; an unlisted origin or redirect destination is blocked. Image-only permission grants no font access, font-only permission grants no image/script/stylesheet access, and fallback remains readable after failure. |
+| Answer content and font requests | Hostile answer text cannot inject `@font-face`, change font configuration or become a request path/query. Application font URLs contain no answer, credential or private request data. |
+| Built resource under attempted external runtime loads | Script, stylesheet, frame and connection restrictions remain unchanged; embedded fonts and artwork create no external dependency. |
 | Changed artwork/policy versus changed answer | Artifact changes yield a new resource identity; answer-only changes reuse it and display the supplied values. |
 
 Run these cases through public policy interfaces and the actual built browser resource, observing image rendering and consequential requests. Local checks establish policy and browser behavior; the required real-host card runs remain separate acceptance evidence.
 
 ### Amendment scope and delivery
 
-Approval replaces only the earlier resource-policy assumption that an empty image-host list forbids every image, by permitting data and blob image sources by default in both modes. An empty host list continues to forbid every content image. The earlier Markdown fidelity, content-link rules, image consent, lifetime ownership, delivery policy and server authorization remain unchanged. Existing source-implementation records above do not establish implementation of these baseline permissions.
+Approval replaces only the earlier resource-policy assumption that an empty image-host list forbids every image, by permitting data and blob image sources by default in both modes. The font amendment also replaces `font-src 'none'` with baseline `data:` and `blob:` font sources plus a separate trusted exact HTTPS font-origin allowlist. An empty host list continues to forbid every content image. The earlier Markdown fidelity, content-link rules, image consent, lifetime ownership, delivery policy and server authorization remain unchanged. Existing source-implementation records above do not establish implementation of these baseline permissions.
 
 Implement the shared resource-policy derivation and its built-resource regression cases before consumer adoption. REACT3 then consumes the same policy through the optional React card; consumer branding remains consumer-owned. This amendment does not change the #28 prerequisite, absorb #33's complete React recipe, grant implementation dispatch or authorize publication/deployment. Preserve the accepted consumer artifact during qualification.
 
