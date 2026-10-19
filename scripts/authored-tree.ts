@@ -8,6 +8,7 @@ import path from 'node:path';
 export const SKIP_DIRECTORIES = new Set([
   'node_modules',
   'dist',
+  'dist-installed',
   'coverage',
   'test-results',
   'playwright-report',
