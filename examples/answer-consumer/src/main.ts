@@ -1,4 +1,5 @@
-import { registerFaithfulCard, type LinkOpenOutcome } from '@saga-a2ui/lit/faithful-card';
+import type { LinkOpenOutcome } from '@saga-a2ui/components/faithful-card';
+import { registerFaithfulCard } from '@saga-a2ui/lit/faithful-card';
 import { createAnswerAppElement } from './answer-app.js';
 import { briefAnswers, fixtureAnswers } from './answer-function.js';
 import { brandings, type BrandName } from './branding.js';

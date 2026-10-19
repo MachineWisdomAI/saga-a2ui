@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFaithfulCardReader, type FaithfulCardReader } from './reader.js';
+import { createFaithfulCardReader, describeContentFailure, type FaithfulCardReader } from './reader.js';
 
 // The reader is the component's one entry for untrusted content: trusted settings in, a value
 // or an explicit failure out. The trusted bound and dialect are validated independently of the
@@ -107,5 +107,31 @@ describe('reading supplied content', () => {
     const result = reader.read({ contractVersion: 1, markdown: 'x', dialect: 'commonmark-tables-strikethrough', maxLength: 99999 });
     expect(result).toEqual({ ok: false, failure: { kind: 'invalid' } });
     expect(reader.read(content('a'.repeat(2001))).ok).toBe(false);
+  });
+});
+
+describe('telling the reader why content was refused', () => {
+  const secret = 'PRIVATE-ANSWER-TEXT';
+  const failureOf = (input: unknown, maxLength = 20) => {
+    const result = readerWith({ dialect: 'commonmark', maxLength }).read(input);
+    if (result.ok) throw new Error('expected a refusal');
+    return result.failure;
+  };
+
+  it('names the limit that was exceeded and nothing of the content', () => {
+    const tooLong = describeContentFailure(failureOf(content(`${secret} ${'x'.repeat(30)}`)));
+    expect(tooLong).toBe('This content is too long to display (50 characters; the limit is 20).');
+    const tooNested = describeContentFailure(failureOf(content(`${'> '.repeat(25)}${secret}`), 1000));
+    expect(tooNested).toContain('nesting limit is 20 levels');
+    expect(tooNested).not.toContain(secret);
+  });
+
+  it('distinguishes an unsupported version from content of the wrong shape', () => {
+    expect(describeContentFailure(failureOf({ contractVersion: 2, markdown: secret }))).toBe(
+      'This content uses a version of the card contract that this application does not support.',
+    );
+    expect(describeContentFailure(failureOf({ contractVersion: 1, markdown: secret, extra: true }))).toBe(
+      'This content is not valid for this card.',
+    );
   });
 });

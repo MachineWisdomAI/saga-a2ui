@@ -1,11 +1,13 @@
 {
   "name": "@saga-a2ui/react",
   "private": true,
-  "description": "React binding for SAGA A2UI: the opt-in action control and instance host for direct action attachment",
+  "description": "React binding for SAGA A2UI: the opt-in action control and instance host for direct action attachment, and the optional FaithfulCard",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
-    "./actions": "./src/actions/index.ts"
+    "./actions": "./src/actions/index.ts",
+    "./faithful-card": "./src/faithful-card/index.ts",
+    "./faithful-card.css": "./src/faithful-card/faithful-card.css"
   },
   "files": [
     "src",
@@ -21,9 +23,17 @@
     "@saga-a2ui/core": "*"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0"
+    "@saga-a2ui/components": "*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@saga-a2ui/components": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@saga-a2ui/components": "*",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

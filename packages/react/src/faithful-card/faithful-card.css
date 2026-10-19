@@ -1,0 +1,132 @@
+/*
+ * Presentation of the React FaithfulCard. Import it explicitly (`@saga-a2ui/react/faithful-card.css`);
+ * nothing in the component loads a stylesheet, and every rule below is scoped under `.saga-card`, so
+ * it cannot restyle the surrounding application and an application's own rules for its own elements
+ * cannot be broken by it.
+ *
+ * Tokens. Set any of these on the card or on an ancestor. Each has a neutral fallback.
+ *   --saga-card-font-family      font of the card (default: inherited)
+ *   --saga-card-font-size        font size of the card (default: inherited)
+ *   --saga-card-line-height      line height (default: inherited)
+ *   --saga-card-reading-width    widest line length of the card, in any length unit; `ch` follows
+ *                                the card's own font size (default: 70ch)
+ *   --saga-card-text-color       text colour (default: inherited)
+ *   --saga-card-accent-color     links and the quote rule (default: inherited)
+ *   --saga-card-muted-color      link hostnames (default: inherited)
+ *   --saga-card-border-color     tables and rules (default: #999)
+ *   --saga-card-code-background  code and preformatted text (default: translucent grey)
+ *
+ * Semantic classes. The card's own elements carry these; style them for an application's look.
+ *   .saga-card                   the card, and the alert shown when content is refused
+ *   .saga-card-content           the interpreted content
+ *   .saga-card-failure           the alert for refused content or a missing provider
+ *   .saga-card-controls          the Strict control row (Reveal source / Hide source)
+ *   .saga-card-link              a link the host may open (a button, so it can never navigate by itself)
+ *   .saga-card-link-host         the parsed hostname shown inside that button
+ *   .saga-card-link-status       the readable answer after a link request
+ *   .saga-card-link-inert        a link that cannot be activated, shown with its destination
+ *   .saga-card-link-destination  that destination text
+ *   .saga-card-blocked           an inline placeholder for a blocked link, image or markup
+ *   .saga-card-source            a block of source text (raw markup, or a revealed blocked block)
+ *   .saga-card-placeholder       an image reference that is not loaded
+ *   .saga-card-table-scroll      the keyboard-focusable region a table scrolls in
+ */
+.saga-card {
+  display: block;
+  box-sizing: border-box;
+  max-inline-size: var(--saga-card-reading-width, 70ch);
+  font-family: var(--saga-card-font-family, inherit);
+  font-size: var(--saga-card-font-size, inherit);
+  line-height: var(--saga-card-line-height, inherit);
+  color: var(--saga-card-text-color, inherit);
+  overflow-wrap: anywhere;
+}
+
+.saga-card .saga-card-link {
+  font: inherit;
+  color: var(--saga-card-accent-color, inherit);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.saga-card .saga-card-link-host {
+  font-size: 0.85em;
+  color: var(--saga-card-muted-color, inherit);
+}
+
+.saga-card blockquote {
+  margin-inline: 1em;
+  padding-inline-start: 0.75em;
+  border-inline-start: 3px solid var(--saga-card-accent-color, var(--saga-card-border-color, #999));
+}
+
+.saga-card pre {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  padding: 0.5em;
+  background: var(--saga-card-code-background, rgba(127, 127, 127, 0.15));
+}
+
+.saga-card code {
+  background: var(--saga-card-code-background, rgba(127, 127, 127, 0.15));
+}
+
+.saga-card pre code {
+  background: none;
+}
+
+.saga-card hr {
+  border: 0;
+  border-top: 1px solid var(--saga-card-border-color, #999);
+}
+
+.saga-card .saga-card-table-scroll {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  margin-block: 0.5em;
+}
+
+.saga-card table {
+  border-collapse: collapse;
+  overflow-wrap: normal;
+}
+
+.saga-card th,
+.saga-card td {
+  border: 1px solid var(--saga-card-border-color, #999);
+  padding: 0.25em 0.5em;
+  text-align: start;
+}
+
+.saga-card [data-align='left'] {
+  text-align: left;
+}
+
+.saga-card [data-align='center'] {
+  text-align: center;
+}
+
+.saga-card [data-align='right'] {
+  text-align: right;
+}
+
+.saga-card .saga-card-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.saga-card [data-presentation='placeholder'],
+.saga-card .saga-card-placeholder {
+  font-style: italic;
+}
+
+.saga-card .saga-card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  margin-block: 0.5em;
+}

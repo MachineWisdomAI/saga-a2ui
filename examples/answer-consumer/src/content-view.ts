@@ -3,8 +3,9 @@ import {
   createFaithfulCardReader,
   createImageConsentScope,
   establishImageEnforcement,
+  type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
-import { documentContentSecurityPolicies, type ContentView, type HostLinks } from '@saga-a2ui/lit/faithful-card';
+import { documentContentSecurityPolicies, type ContentView } from '@saga-a2ui/lit/faithful-card';
 
 /**
  * The trusted settings of the card, created once by the application: the Markdown dialect and a

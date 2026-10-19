@@ -8,4 +8,3 @@ export {
   requestContentView,
   type ContentView,
 } from './content-view.js';
-export { NO_HOST_LINKS, type HostLinks, type LinkOpenOutcome } from './host-links.js';

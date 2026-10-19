@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React FaithfulCard consumer</title>
+    <style>
+      /* The page's own styling: the card must neither inherit changes from it by accident nor leak into it. */
+      body { font-family: Georgia, serif; font-size: 17px; line-height: 1.4; margin: 8px; color: #222; }
+      .page-owned blockquote { margin-inline-start: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class="page-owned">
+      <p data-testid="page-paragraph">Page-owned paragraph.</p>
+      <blockquote data-testid="page-quote">Page-owned quote.</blockquote>
+      <table data-testid="page-table"><tr><td>Page-owned cell</td></tr></table>
+      <pre data-testid="page-pre">page-owned pre</pre>
+      <button type="button" data-testid="page-button">Page button</button>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
