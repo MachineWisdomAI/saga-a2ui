@@ -629,6 +629,24 @@ describe('server budgets', () => {
     expect(causedBy(lifetimes).at(-1)).toMatchObject({ kind: 'operation-timeout', stage: 'handler', limitMs: 120 });
   });
 
+  it('does not project a record an uncooperative handler returns after the operation was retired', async () => {
+    let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
+    const late = new Promise<{ kind: 'record'; record: NoteRecord }>((resolve) => (release = resolve));
+    const projected: string[] = [];
+    const { build } = budgeted(createServerBudgets({ operationMs: 40 }), {
+      handle: () => late,
+      project: (record) => {
+        projected.push(record.id);
+        return { text: record.text, data: { noteId: record.id, text: record.text } };
+      },
+    });
+    const result = await call(build);
+    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]); // the caller was answered first
+    release({ kind: 'record', record: notes[0] as NoteRecord }); // the handler ignored its signal and answers now
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(projected).toEqual([]); // no owned effect after the gate closed
+  });
+
   it('cannot be extended by progress reports', async () => {
     const { build } = budgeted(createServerBudgets({ operationMs: 100 }), {
       async handle(_input, request) {

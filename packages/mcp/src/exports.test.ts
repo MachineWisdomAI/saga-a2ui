@@ -57,7 +57,7 @@ describe('package subpath exports', () => {
       'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
-    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS']);
+    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS', 'startBoundedTimer']);
   });
 
   it('expose the request-budget seam to a consumer through the package export', () => {

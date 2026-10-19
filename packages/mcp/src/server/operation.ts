@@ -2,7 +2,7 @@ import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@model
 import type { AuthInfo, CallToolResult, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 import type { ViewCsp } from '../policy/index.js';
-import { createServerBudgets, valueOrThrow, type BoundedScope, type RequestLifetime } from './lifetime.js';
+import { createServerBudgets, throwIfEnded, valueOrThrow, type BoundedScope, type RequestLifetime } from './lifetime.js';
 
 // Declared MCP operations. The application owns the listener, authentication, domain
 // authorization and every backend effect; it hands this module an operation declaration and an
@@ -244,9 +244,13 @@ async function execute<Found>(
       async (scope): Promise<CallToolResult> => {
         const { handling, project } = run(requestFor(ctx, live, scope));
         const outcome = await handling;
+        // An uncooperative handler can answer after this operation was retired or ran out of time. The
+        // projection is an owned stage of the same operation, so it starts only while the scope is live.
+        throwIfEnded(scope);
         if (outcome.kind === 'absent') return failure(declaration.failures.absent);
         if (outcome.kind === 'refused') return failure(outcome.text);
         const projection = project(outcome.record);
+        throwIfEnded(scope);
         const parsed = declaration.output.safeParse(projection.data);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
         return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
@@ -346,7 +350,7 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
   assertConfigured(operation, true);
   register(server, operation, (args, ctx) =>
     withLifetime(context, async (lifetime) => {
-      if (ctx.mcpReq.signal.aborted || lifetime.signal.aborted) return failure(operation.failures.unavailable);
+      if (ctx.mcpReq.signal.aborted || lifetime.check()) return failure(operation.failures.unavailable);
       let identity: Identity | undefined;
       try {
         identity = operation.identity(ctx.http?.authInfo);

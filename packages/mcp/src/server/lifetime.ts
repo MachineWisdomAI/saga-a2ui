@@ -1,4 +1,4 @@
-import { DEFAULT_OPERATION_MS, DEFAULT_REQUEST_MS } from '../policy/index.js';
+import { DEFAULT_OPERATION_MS, DEFAULT_REQUEST_MS, startBoundedTimer } from '../policy/index.js';
 
 // The server request lifetime: one monotonic, absolute request deadline that starts when the
 // adapter admits the request, plus the bounded operations that run inside it. This module is
@@ -63,7 +63,8 @@ export function valueOrThrow<T>(result: StageResult<T>): T {
  * is checked by the code that would start the effect, not left to the callback stopping.
  */
 export function throwIfEnded(scope: BoundedScope): void {
-  if (scope.signal.aborted) throw new StageFailure(scope.signal.reason as LifetimeCause); // only this module aborts a scope's signal, always with a cause
+  const cause = scope.check();
+  if (cause) throw new StageFailure(cause);
 }
 
 /** One or both budgets, as an application or route states them. Every supplied value is validated. */
@@ -115,6 +116,12 @@ export interface BoundedScope {
   /** What this scope has left: the least of its own deadline and every enclosing deadline. */
   remainingMs(): number;
   /**
+   * Why this scope is over, or `undefined` while it is live. A deadline that has already passed counts
+   * even when its timer has not been delivered yet (synchronous work, a starved event loop): the scope
+   * ends now. Code that is about to start an owned effect asks this instead of waiting for the timer.
+   */
+  check(): LifetimeCause | undefined;
+  /**
    * Runs one bounded stage. It does not start when the scope is already over or `upstream` is already
    * aborted. A result that loses the race to a limit, an enclosing deadline or cancellation is dropped.
    * Throws `BudgetConfigurationError` for an invalid `limitMs`, before `work` is called.
@@ -148,7 +155,8 @@ class Scope implements BoundedScope {
   constructor(
     private readonly parent: Scope | undefined,
     deadline: number,
-    private readonly childLimitMs: number | undefined,
+    /** The operation limit for a nested stage that states none. Every scope in a request carries the same one. */
+    private readonly childLimitMs: number,
     private readonly stage: Stage | undefined,
     private readonly limitMs: number,
   ) {
@@ -184,7 +192,7 @@ class Scope implements BoundedScope {
   }
 
   /** Ends an ancestor whose deadline has passed but whose timer has not run yet (a starved event loop). */
-  private expireOverdue(): LifetimeCause | undefined {
+  check(): LifetimeCause | undefined {
     const chain: Scope[] = [];
     for (let scope: Scope | undefined = this; scope; scope = scope.parent) chain.unshift(scope);
     for (const scope of chain) {
@@ -202,19 +210,21 @@ class Scope implements BoundedScope {
     if (options.limitMs !== undefined && !isBudget(options.limitMs)) {
       throw new BudgetConfigurationError(`Stage "${stage}"`, ['limitMs must be a finite positive number']);
     }
-    const refusal = this.expireOverdue();
+    const refusal = this.check();
     if (refusal) return Promise.resolve({ ok: false, cause: refusal });
     if (options.upstream?.aborted) return Promise.resolve({ ok: false, cause: { kind: 'cancelled', stage, effect: effectOf(stage) } });
 
+    // Each nested stage resolves its own limit (its override, else the operation limit that applies to the
+    // whole request) and is then clamped by every enclosing deadline through the scope chain.
     const limit = options.limitMs ?? this.childLimitMs;
-    const child = new Scope(this, limit === undefined ? Number.POSITIVE_INFINITY : now() + limit, undefined, stage, limit ?? 0);
+    const child = new Scope(this, now() + limit, this.childLimitMs, stage, limit);
     const leave = this.enter(stage);
     return new Promise<StageResult<T>>((resolve) => {
       let settled = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let cancelTimer: (() => void) | undefined;
       const upstream = options.upstream;
       const detach = () => {
-        if (timer !== undefined) clearTimeout(timer);
+        cancelTimer?.();
         this.signal.removeEventListener('abort', onEnclosingEnded);
         upstream?.removeEventListener('abort', onCancelled);
         leave?.();
@@ -230,14 +240,25 @@ class Scope implements BoundedScope {
       const fail = (cause: LifetimeCause) => settle({ ok: false, cause });
       const onEnclosingEnded = () => fail(this.reasonOf());
       const onCancelled = () => fail({ kind: 'cancelled', stage, effect: effectOf(stage) });
+      // A timer is only one way a deadline is noticed. Work that blocks the thread, or a continuation that
+      // is delivered before the timer, would otherwise be accepted after the budget ran out; so a result,
+      // success or failure, is first held against the absolute deadlines.
+      const accept = (result: StageResult<T>) => {
+        const overdue = child.check();
+        settle(overdue ? { ok: false, cause: overdue } : result);
+      };
       const errored = (error: unknown) =>
-        fail(error instanceof StageFailure ? error.failure : { kind: 'dependency-failure', stage, effect: effectOf(stage), error });
+        accept({ ok: false, cause: error instanceof StageFailure ? error.failure : { kind: 'dependency-failure', stage, effect: effectOf(stage), error } });
 
       this.signal.addEventListener('abort', onEnclosingEnded, { once: true });
       upstream?.addEventListener('abort', onCancelled, { once: true });
-      if (limit !== undefined) timer = setTimeout(() => fail(child.expiry()), limit);
+      cancelTimer = startBoundedTimer(limit, () => fail(child.expiry()));
       try {
-        Promise.resolve(work(child)).then((value) => settle({ ok: true, value }), errored);
+        Promise.resolve(work(child)).then((value) => accept({ ok: true, value }), errored);
+        // Synchronous work has returned: if it overran, the stage is over now, whatever the promise says
+        // (a later settlement is ignored, and a late rejection is still handled above).
+        const overdue = child.check();
+        if (overdue) fail(overdue);
       } catch (error) {
         errored(error);
       }
@@ -248,14 +269,14 @@ class Scope implements BoundedScope {
 class Root extends Scope implements RequestLifetime {
   readonly #stages: Stage[] = [];
   readonly #causes: LifetimeCause[] = [];
-  #timer: ReturnType<typeof setTimeout> | undefined;
+  #cancelTimer: (() => void) | undefined;
 
   constructor(
     readonly operationMs: number,
     readonly requestMs: number,
   ) {
     super(undefined, now() + requestMs, operationMs, undefined, requestMs);
-    this.#timer = setTimeout(() => this.end(this.expiry()), requestMs);
+    this.#cancelTimer = startBoundedTimer(requestMs, () => this.end(this.expiry()));
   }
 
   get cause(): LifetimeCause | undefined {
@@ -281,8 +302,8 @@ class Root extends Scope implements RequestLifetime {
 
   override end(cause: LifetimeCause): void {
     if (this.signal.aborted) return;
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
-    this.#timer = undefined;
+    this.#cancelTimer?.();
+    this.#cancelTimer = undefined;
     if (cause.kind !== 'completed') this.#causes.push(cause); // finishing normally is not something that went wrong
     super.end(cause);
   }
@@ -302,8 +323,8 @@ class Root extends Scope implements RequestLifetime {
 
   releaseRequestBudget(): void {
     if (this.signal.aborted) return;
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
-    this.#timer = undefined;
+    this.#cancelTimer?.();
+    this.#cancelTimer = undefined;
     this.deadline = Number.POSITIVE_INFINITY;
   }
 }

@@ -1404,3 +1404,60 @@ describe('the bound on one Play attempt', () => {
     expect(kinds(r)).not.toContain('unavailable');
   });
 });
+
+describe('the bound on one Play attempt does not depend on timer delivery', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** Blocks the thread: the promise continuation that follows is delivered before the attempt's timer. */
+  const blockFor = (ms: number) => {
+    const until = performance.now() + ms;
+    while (performance.now() < until) {
+      // Synchronous work that overruns the bound.
+    }
+  };
+
+  it('keeps an accepted limit above the native timer maximum instead of expiring it at once', async () => {
+    const r = await rig({ attemptLimitMs: 3_000_000_000 });
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+
+    r.view.play();
+    await settle(150); // a 32-bit overflow would have ended the attempt after about a millisecond
+    expect(r.last()?.kind).toBe('pending');
+
+    held.release();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+  });
+
+  it('refuses a proof that finished after the bound: no media request, no start', async () => {
+    const r = await rig({ attemptLimitMs: 100 });
+    await r.select(EP1);
+    const sign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
+      const signature = await sign(...args);
+      blockFor(150);
+      return signature;
+    });
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.player.calls).not.toContain('start');
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+  });
+
+  it('ends an attempt whose player start came back after the bound, and stops the player', async () => {
+    const r = await rig({ attemptLimitMs: 150 });
+    await r.select(EP1);
+    vi.spyOn(r.player, 'start').mockImplementationOnce(() => {
+      blockFor(200);
+      return Promise.resolve('started');
+    });
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+    expect(r.player.calls.at(-1)).toBe('stop');
+  });
+});

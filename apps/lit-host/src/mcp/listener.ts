@@ -248,12 +248,13 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     }
     const route = routeFor(path);
     const lifetime = route.budgets.startRequest();
-    bindResponseToLifetime(req, res, lifetime, route.streaming, () => {
+    bindResponseToLifetime(req, res, lifetime, route.streaming, (delivered) => {
       try {
         options.observe?.({
           path,
           status: res.headersSent ? res.statusCode : undefined,
-          finished: res.writableFinished,
+          // Delivered, not merely finished: a response the deadline destroyed also reports `writableFinished`.
+          finished: delivered,
           causes: lifetime.causes,
         });
       } catch {

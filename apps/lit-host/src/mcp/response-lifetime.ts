@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { startBoundedTimer } from '@saga-a2ui/mcp/policy';
 import type { RequestLifetime } from '@saga-a2ui/mcp/server';
 
 // The Node side of the request lifetime: it tells the portable lifetime what the transport did
@@ -71,17 +72,27 @@ export function bindResponseToLifetime(
   res: ServerResponse,
   lifetime: RequestLifetime,
   streaming: StreamingPolicy | undefined,
-  onClosed: () => void,
+  /** Called once, when the response is closed. `delivered` is true only when the transport finished it undestroyed. */
+  onClosed: (delivered: boolean) => void,
 ): void {
   // A write to a response we destroyed must not escape as an unhandled error.
   res.on('error', () => undefined);
   req.on('error', () => undefined);
 
-  res.once('finish', () => lifetime.finish());
+  // Destroying a response also emits `finish` on current Node (with `destroyed` already true and
+  // `writableFinished` true), so neither event nor flag says the peer received the whole response. Only a
+  // finish on a response nobody destroyed is delivery; anything else ended the response early.
+  let delivered = false;
+  res.once('finish', () => {
+    if (res.destroyed) return;
+    delivered = true;
+    lifetime.finish();
+  });
   res.once('close', () => {
-    // A close after transport finish is not a cancellation; before it, the caller went away.
-    if (!res.writableFinished) lifetime.disconnect();
-    onClosed();
+    // A close after delivery is not a cancellation; before it, the caller went away (or we destroyed it,
+    // in which case the request already ended with its own cause and this changes nothing).
+    if (!delivered) lifetime.disconnect();
+    onClosed(delivered);
   });
 
   lifetime.signal.addEventListener(
@@ -105,18 +116,20 @@ export function bindResponseToLifetime(
  * takes over: every write the transport actually flushes restarts the idle clock.
  */
 function watchStream(res: ServerResponse, lifetime: RequestLifetime, policy: StreamingPolicy): void {
-  let idle: ReturnType<typeof setTimeout> | undefined;
+  let idle: (() => void) | undefined;
   const stop = () => {
-    if (idle !== undefined) clearTimeout(idle);
+    idle?.();
     idle = undefined;
   };
   const restart = () => {
     stop();
     if (res.writableEnded || res.destroyed) return;
-    idle = setTimeout(() => {
+    // Segmented: an accepted idle limit above the native timer's maximum must not expire at once.
+    idle = startBoundedTimer(policy.idleMs, () => {
+      idle = undefined;
       lifetime.record({ kind: 'operation-timeout', stage: 'delivery', limitMs: policy.idleMs, effect: 'unknown' });
       res.destroy();
-    }, policy.idleMs);
+    });
   };
   res.once('close', stop);
   res.once('finish', stop);

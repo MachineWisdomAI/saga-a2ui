@@ -35,3 +35,5 @@ export const DEFAULT_OPERATION_MS = 3_000;
  * states a limit. An established streaming response has an idle policy of its own instead.
  */
 export const DEFAULT_REQUEST_MS = 10_000;
+
+export { startBoundedTimer } from './timer.js';
