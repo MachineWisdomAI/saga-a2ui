@@ -75,7 +75,12 @@ test('the player view is one self-contained document with no server code, creden
   const html = await readFile(builtUrl('playback-view/playback.html'), 'utf8');
   expect(html).not.toMatch(/<script[^>]+\bsrc=/); // no external script
   expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/);
-  expect(html).not.toMatch(/<audio|<video|<source/i); // bytes are decoded in script, never given to a media element
+  // Bytes are decoded in script, never given to a media element: the document has none, and nothing
+  // constructs one. (The optional description card brings the upstream A2UI Lit renderer along, whose
+  // unused media components contain `<audio` and `<video` template text, so the check is on the
+  // document's markup and on construction rather than on every character of the script.)
+  expect(html.replace(/<script\b[\s\S]*?<\/script>/gi, '')).not.toMatch(/<audio|<video|<source/i);
+  expect(html).not.toMatch(/new Audio\(|createElement\(["'`](?:audio|video|source)["'`]\)/);
   expect(violations(html, ['createPlaybackServer', 'createMediaService', 'node:crypto', 'playback:play'])).toEqual([]);
   // The only thing signed in the view is a proof, and its key is generated at run time.
   expect(html).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);

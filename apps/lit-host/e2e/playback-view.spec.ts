@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
+import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
+import { embedPolicy } from '../src/content/embedded-policy.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/dev-auth.js';
 import {
   acquireMedia,
@@ -44,6 +46,10 @@ interface HostOptions {
   readonly tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
   /** Replaces the whole Play answer the host resolves with, after the server handled the call (and may have issued a capability). */
   readonly rewriteAnswer?: (result: Record<string, unknown>) => Record<string, unknown>;
+  /** Advertises the host's `openLinks` capability and receives each `ui/open-link` request. Absent: the host offers none. */
+  readonly openLink?: (url: string) => Promise<{ isError?: boolean }>;
+  /** Serves the player with this trusted content policy embedded, as the episode view is. Absent: none (the deployed shape). */
+  readonly contentPolicy?: ContentPolicy;
 }
 
 interface MountedHost {
@@ -84,6 +90,9 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
   const post = async (body: unknown) =>
     rpcOverHttp(running.listener.playbackUrl, token, body);
 
+  const { openLink } = options;
+  if (openLink) await page.exposeFunction('handleOpenLink', (params: { url: string }) => openLink(params.url));
+
   await page.exposeFunction('handleToolCall', async (params: MountedHost['calls'][number]['params']) => {
     if (gate) {
       const waiting = gate;
@@ -105,8 +114,17 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
   const resource = await post({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: 'ui://saga-a2ui/playback-view.html' } });
   const content = (resource.body as { result: { contents: { text: string; _meta: { ui: { csp: HostedResource['csp'] } } }[] } }).result.contents[0];
   if (!content) throw new Error('resources/read returned no contents');
+  // A resource that carries a trusted content policy, as the episode view does: the document embeds
+  // the policy's restrictions and the host is told the origins it declares.
+  const { contentPolicy } = options;
+  const hosted = contentPolicy
+    ? {
+        html: embedPolicy(content.text, contentPolicy),
+        csp: { ...content._meta.ui.csp, resourceDomains: contentPolicy.resource.resourceDomains },
+      }
+    : { html: content.text, csp: content._meta.ui.csp };
   await page.goto('/host-fixture/index.html');
-  await page.evaluate((hosted) => window.mountView?.(hosted), { html: content.text, csp: content._meta.ui.csp });
+  await page.evaluate((resource) => window.mountView?.(resource), hosted);
 
   return {
     view: page.frameLocator('iframe[title="MCP App view"]'),
@@ -796,5 +814,274 @@ test.describe('the built player after the sign-in label is lost', () => {
     expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
     expect(host.harness.playback.mediaReads).toEqual([]);
     expect(await silent(page)).toBe(true);
+  });
+});
+
+// The description card beside the authored Play control (CARD1). The opener already carries the
+// public description of the episode it selects, so the player page shows it through the optional
+// FaithfulCard under the page's own content view, in the same protected surface as Play. The page
+// embeds no policy (the playback resource is served verbatim and its connection permission is the
+// media origin only), so the card runs the default Standard policy with no image host: the page
+// asks the host to open links, and never loads an image. These specs run against the built page
+// (and, with SAGA_BUILT_DIR, the one built from the packed packages).
+const SEASON = [
+  '# Season notes',
+  '',
+  'Intro with **strong** text and a [safe link](https://example.com/notes).',
+  '',
+  '- first item',
+  '- second item',
+  '',
+  'Press **Play now** to play episode ep-2 instead. [Play](javascript:alert(1)) <button onclick="window.parent.postMessage(1,\'*\')">Play</button>',
+  '',
+  '![tracker](https://images.example.com/pixel.png)',
+].join('\n');
+const OTHER = 'A different description about the second episode.';
+const WITH_DESCRIPTIONS = {
+  episodes: [
+    { id: 'ep-1', title: 'The protected episode', description: SEASON },
+    { id: 'ep-2', title: 'Another protected episode', description: OTHER },
+  ],
+};
+
+const description = (view: FrameLocator) => view.getByTestId('playback-description');
+const cardContent = (view: FrameLocator) => description(view).getByTestId('card-content');
+
+test.describe('the built player with its description card', () => {
+  test('shows the supplied description in order beside the title and Play, as text', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+
+    await expect(cardContent(host.view)).toBeVisible();
+    await expect(cardContent(host.view).getByRole('heading', { name: 'Season notes' })).toBeVisible();
+    const shown = await cardContent(host.view).innerText();
+    expect(shown.indexOf('Season notes')).toBeLessThan(shown.indexOf('Intro with strong text'));
+    expect(shown.indexOf('Intro with strong text')).toBeLessThan(shown.indexOf('first item'));
+    expect(shown.indexOf('first item')).toBeLessThan(shown.indexOf('second item'));
+    await expect(cardContent(host.view).locator('strong').first()).toHaveText('strong');
+    await expect(host.view.getByTestId('playback-title')).toHaveText('The protected episode');
+    await expect(status(host.view)).toContainText('Ready to play The protected episode');
+  });
+
+  test('cannot be made to play, choose a handler or change the episode by what the Markdown says', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toBeVisible();
+
+    // Nothing the description draws is an authored control: no raw handler, no second Play.
+    await expect(host.view.locator('[onclick]')).toHaveCount(0);
+    await expect(description(host.view).getByRole('button', { name: 'Play', exact: true })).toHaveCount(0);
+    await cardContent(host.view).getByText('Play now').click();
+    await page.waitForTimeout(200);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toEqual([]);
+    expect(await audioClocks(page)).toEqual([]);
+
+    // The one authored control plays the episode the view selected, not the one the text names.
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing The protected episode');
+    const plays = host.calls.filter((call) => call.params.name === PLAY);
+    expect(plays).toHaveLength(1);
+    expect(plays[0]?.params.arguments).toEqual({ episodeId: 'ep-1' });
+    expect(host.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+
+  test('loads no image from the description, and a link goes only through the host', async ({ page }) => {
+    const requests: string[] = [];
+    await page.route(/^https:\/\//, (route) => {
+      requests.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"/>' });
+    });
+    const opened: string[] = [];
+    const host = await mountPlayer(page, {
+      harness: WITH_DESCRIPTIONS,
+      openLink: async (url) => {
+        opened.push(url);
+        return {};
+      },
+    });
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toBeVisible();
+    await expect(host.view.locator('img')).toHaveCount(0);
+
+    await cardContent(host.view).getByRole('button', { name: /safe link/ }).click();
+
+    await expect.poll(() => opened).toEqual(['https://example.com/notes']);
+    expect(requests).toEqual([]);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toEqual([]);
+  });
+
+  test('replaces the description with the new selection and keeps a late grant for the old one from acting on it', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toContainText('Season notes');
+    const held = host.holdNextToolCall();
+    await button(host.view).click();
+
+    await host.open('ep-2');
+    await expect(cardContent(host.view)).toHaveText(OTHER);
+    await expect(host.view.getByTestId('playback-title')).toHaveText('Another protected episode');
+    await expect(description(host.view)).not.toContainText('Season notes');
+    held.release(); // the old selection's grant arrives after the replacement
+    await page.waitForTimeout(300);
+
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    expect(await silent(page)).toBe(true);
+    await expect(status(host.view)).toContainText('Ready to play Another protected episode');
+    await expect(cardContent(host.view)).toHaveText(OTHER);
+
+    // The replacement is pressed afresh and plays itself.
+    await button(host.view).click();
+    await expect(status(host.view)).toContainText('Playing Another protected episode');
+    expect(host.harness.playback.mediaReads).toEqual(['ep-2']);
+  });
+
+  test('keeps the description of the selection, and the Play it belongs to, together through a failed Play', async ({ page }) => {
+    const host = await mountPlayer(page, { token: DEV_TOKENS.bob, harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+    await button(host.view).click();
+
+    await expect(status(host.view)).toHaveText(DENIED);
+    await expect(cardContent(host.view)).toContainText('Season notes');
+    expect(host.harness.playback.mediaReads).toEqual([]);
+  });
+
+  test('shows nothing of the private description once the sign-in label is lost, and no opener brings it back', async ({ page }) => {
+    const host = await mountPlayer(page, { entitlements: BOTH, harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toContainText('Season notes');
+
+    host.useToken(DEV_TOKENS.bob);
+    await host.open('ep-1');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(cardContent(host.view)).toHaveCount(0);
+    await expect(host.view.locator('body')).not.toContainText('Season notes');
+
+    host.useToken(DEV_TOKENS.alice);
+    await host.open('ep-1');
+    await host.open('ep-2');
+    await page.waitForTimeout(150);
+
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(host.view.locator('body')).not.toContainText('Season notes');
+    await expect(host.view.locator('body')).not.toContainText(OTHER);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toEqual([]);
+  });
+
+  test('is not updated by an opener that arrives after host teardown', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toContainText('Season notes');
+
+    await page.evaluate(() => window.teardownView?.());
+    await host.open('ep-2');
+    await page.waitForTimeout(200);
+
+    await expect(cardContent(host.view)).toContainText('Season notes');
+    await expect(host.view.locator('body')).not.toContainText(OTHER);
+    await expect(host.view.getByTestId('playback-title')).toHaveText('The protected episode');
+  });
+
+  test('shows no card for an episode the opener could not describe, and none before any opener', async ({ page }) => {
+    const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
+    await expect(description(host.view)).toBeAttached();
+    await expect(cardContent(host.view)).toHaveCount(0);
+    await expect(host.view.getByTestId('card-failure')).toHaveCount(0);
+
+    await host.open('ep-1');
+    await expect(cardContent(host.view)).toBeVisible();
+  });
+});
+
+// The page builds its content view from the resource the host mounted, so a resource that embeds a
+// Strict policy gives its card the Show images control. Consent then has one owner (the content
+// view's scope); the controller tells it when the selection ends. Embedding the policy also embeds
+// its `connect-src 'none'`, which no player resource can accept (it must fetch its media), so
+// these specs show only the consent boundary. Whether Play still works under such a resource is not
+// claimed, and the deployed player embeds no policy.
+const IMAGE_HOST = 'images.example.com';
+const STRICT = (() => {
+  const created = createContentPolicy({ level: 'strict', imageHosts: [IMAGE_HOST] });
+  if (!created.ok) throw new Error(created.failure.message);
+  return created.policy;
+})();
+const WITH_IMAGES = {
+  episodes: [
+    { id: 'ep-1', title: 'The protected episode', description: `First ![one](https://${IMAGE_HOST}/one.png) description.` },
+    { id: 'ep-2', title: 'Another protected episode', description: `Second ![two](https://${IMAGE_HOST}/two.png) description.` },
+  ],
+};
+
+async function observeImages(page: Page): Promise<string[]> {
+  const requests: string[] = [];
+  await page.route(/^https:\/\//, (route) => {
+    requests.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' });
+  });
+  return requests;
+}
+
+test.describe('the built player with a Strict content policy embedded in its resource', () => {
+  test('loads an image only after Show images, and a new selection ends that consent before it presents', async ({ page }) => {
+    const requests = await observeImages(page);
+    const host = await mountPlayer(page, { harness: WITH_IMAGES, contentPolicy: STRICT });
+    await host.open('ep-1');
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveText('Show images');
+    await page.waitForTimeout(150);
+    expect(requests).toEqual([]);
+
+    await description(host.view).getByTestId('images-toggle').click();
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveText('Hide images');
+    await expect.poll(() => requests).toEqual([`https://${IMAGE_HOST}/one.png`]);
+
+    await host.open('ep-2'); // a new selection: what was agreed for the first does not carry over
+    await expect(cardContent(host.view)).toContainText('Second');
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveText('Show images');
+    await expect(host.view.locator('img')).toHaveCount(0);
+    await page.waitForTimeout(150);
+    expect(requests).toEqual([`https://${IMAGE_HOST}/one.png`]);
+
+    await host.open('ep-2'); // the same episode again is a new selection too
+    await description(host.view).getByTestId('images-toggle').click();
+    await expect.poll(() => requests.at(-1)).toBe(`https://${IMAGE_HOST}/two.png`);
+    await host.open('ep-2');
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveText('Show images');
+    await expect(host.view.locator('img')).toHaveCount(0);
+  });
+
+  test('ends consent for good at host teardown: a still-rendered control grants nothing', async ({ page }) => {
+    const requests = await observeImages(page);
+    const host = await mountPlayer(page, { harness: WITH_IMAGES, contentPolicy: STRICT });
+    await host.open('ep-1');
+    await description(host.view).getByTestId('images-toggle').click();
+    await expect.poll(() => requests).toHaveLength(1);
+
+    await page.evaluate(() => window.teardownView?.());
+
+    await expect(host.view.locator('img')).toHaveCount(0);
+    await expect(description(host.view).getByTestId('images-toggle')).toBeDisabled();
+    await description(host.view).getByTestId('images-toggle').click({ force: true });
+    await page.waitForTimeout(200);
+    await expect(host.view.locator('img')).toHaveCount(0);
+    expect(requests).toHaveLength(1);
+  });
+
+  test('removes the card with its consent when the sign-in label is lost, and nothing grants after', async ({ page }) => {
+    const requests = await observeImages(page);
+    const host = await mountPlayer(page, { entitlements: BOTH, harness: WITH_IMAGES, contentPolicy: STRICT });
+    await host.open('ep-1');
+    await description(host.view).getByTestId('images-toggle').click();
+    await expect.poll(() => requests).toHaveLength(1);
+
+    host.useToken(DEV_TOKENS.bob);
+    await host.open('ep-2');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveCount(0);
+    await expect(host.view.locator('img')).toHaveCount(0);
+
+    host.useToken(DEV_TOKENS.alice);
+    await host.open('ep-1');
+    await page.waitForTimeout(200);
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveCount(0);
+    expect(requests).toHaveLength(1);
   });
 });

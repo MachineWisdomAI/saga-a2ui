@@ -166,6 +166,8 @@ interface Rig {
   readonly harness: PlaybackHarness;
   readonly player: FakePlayer;
   readonly states: PlaybackViewState[];
+  /** Every presented state (`show:<kind>`) and every consent call (`revokeAll`, `retire`), in order. */
+  readonly consentLog: string[];
   readonly view: ControlPresses;
   /** The action host the controls are bound on, with the limits the rig was given. */
   readonly actions: InstanceHost;
@@ -205,6 +207,8 @@ async function rig(options: {
   showThrowsFor?: PlaybackViewState['kind'];
   /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
   harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
+  /** Joins a description card's consent scope to the view, recording its calls beside every presented state. */
+  withContentConsent?: boolean;
 } = {}): Promise<Rig> {
   const harness = await startPlaybackHarness(
     options.entitlements ?? { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: [] },
@@ -248,14 +252,19 @@ async function rig(options: {
   };
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
+  const consentLog: string[] = [];
   const connection = await connectPlaybackView({
     app,
     transport: viewSide,
     player,
     show: (state) => {
       states.push(state);
+      consentLog.push(`show:${state.kind}`);
       if (state.kind === options.showThrowsFor) throw new Error('the presenter failed');
     },
+    ...(options.withContentConsent
+      ? { contentConsent: { revokeAll: () => void consentLog.push('revokeAll'), retire: () => void consentLog.push('retire') } }
+      : {}),
   });
   const actions = createInstanceHost({ onSetupError: (error) => void setupErrors.push(error), ...(options.limits ? { limits: options.limits } : {}) });
   actions.register(connection.attach);
@@ -273,6 +282,7 @@ async function rig(options: {
     harness,
     player,
     states,
+    consentLog,
     view,
     actions,
     control,
@@ -1940,5 +1950,104 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
     await expect.poll(() => r.last()?.kind).toBe('playing');
     expect(playRequests(r)).toBe(2);
     expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+  });
+});
+
+// The description card beside the Play control (CARD1). The card's image consent has one owner, the
+// page's content view; this controller only tells it when the selection it shows ends. Consent and
+// Play have separate lifetimes: a press, playback and a pause never touch consent, and consent
+// ending never touches a Play.
+describe('the description card’s image consent beside the Play control', () => {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
+  const BOTH = { entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'] } };
+  const consentCalls = (r: Rig) => r.consentLog.filter((entry) => !entry.startsWith('show:'));
+
+  it('ends consent before each opener presents, so images agreed to for one selection never show beside the next', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+    await r.select(EP2);
+    await r.select(EP2); // the same episode again is still a new selection
+
+    expect(r.consentLog).toEqual([
+      'revokeAll', 'show:ready',
+      'revokeAll', 'show:ready',
+      'revokeAll', 'show:ready',
+    ]);
+  });
+
+  it('ends consent for an opener the view cannot read as well, before it presents the unavailable state', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+    await r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+
+    expect(r.consentLog.slice(-2)).toEqual(['revokeAll', 'show:unavailable']);
+  });
+
+  it('leaves consent alone while the listener plays, pauses and resumes', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.view.pause();
+    await expect.poll(() => r.last()?.kind).toBe('paused');
+    r.view.resume();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+
+    expect(consentCalls(r)).toEqual(['revokeAll']);
+  });
+
+  it('retires consent for good when the pinned sign-in label is lost, and no later opener revives it', async () => {
+    const r = await rig({ ...BOTH, withContentConsent: true });
+    await r.select(EP1);
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    // The opener under the other label still revokes first (every opener does), then the loss retires.
+    expect(r.consentLog.slice(-3)).toEqual(['revokeAll', 'retire', 'show:session-changed']);
+
+    r.useToken(DEV_TOKENS.alice);
+    await r.deliver(EP2);
+    await settled();
+
+    expect(r.consentLog.slice(-3)).toEqual(['revokeAll', 'retire', 'show:session-changed']);
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+  });
+
+  it('retires consent when the host tears the view down, and a late opener neither revokes nor presents', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+    await r.bridge.teardownResource({});
+    expect(consentCalls(r)).toEqual(['revokeAll', 'retire']);
+    const logged = r.consentLog.length;
+
+    await r.deliver(EP2);
+    await settled();
+
+    expect(r.consentLog).toHaveLength(logged);
+  });
+
+  it('retires consent when the view is disposed, once however often it is disposed', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+
+    r.view.dispose();
+    r.view.dispose();
+
+    expect(consentCalls(r)).toEqual(['revokeAll', 'retire']);
+  });
+
+  it('does not touch consent while a Play is pending or when it settles', async () => {
+    const r = await rig({ withContentConsent: true });
+    await r.select(EP1);
+    const held = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+
+    held.release();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+
+    expect(consentCalls(r)).toEqual(['revokeAll']);
   });
 });

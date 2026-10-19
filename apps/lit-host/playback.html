@@ -15,11 +15,15 @@
         font-size: 1.25rem;
         overflow-wrap: anywhere;
       }
+      .description:not(:empty) {
+        margin: 0 0 0.75rem;
+      }
     </style>
   </head>
   <body>
     <main>
       <h1 data-testid="playback-title">Player</h1>
+      <div data-testid="playback-description" class="description"></div>
       <saga-play-control></saga-play-control>
     </main>
     <script type="module" src="/src/playback-main.ts"></script>
