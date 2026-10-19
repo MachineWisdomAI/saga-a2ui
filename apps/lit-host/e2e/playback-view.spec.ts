@@ -41,6 +41,8 @@ interface HostOptions {
   readonly afterGrant?: () => void;
   /** Changes the view projection the host hands over, as a buggy or hostile host path would. */
   readonly tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
+  /** Replaces the whole Play answer the host resolves with, after the server handled the call (and may have issued a capability). */
+  readonly rewriteAnswer?: (result: Record<string, unknown>) => Record<string, unknown>;
 }
 
 interface MountedHost {
@@ -92,6 +94,7 @@ async function mountPlayer(page: Page, options: HostOptions = {}): Promise<Mount
     if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
     const result = (response.body as { result: MountedHost['calls'][number]['result'] }).result;
     calls.push({ params, result });
+    if (params.name === PLAY && options.rewriteAnswer) return options.rewriteAnswer(result as Record<string, unknown>);
     if (params.name === PLAY && !(result as { isError?: boolean }).isError) options.afterGrant?.();
     const grant = result._meta?.['saga-a2ui/playback'];
     if (params.name !== PLAY || !grant || !options.tamperGrant) return result;
@@ -223,6 +226,26 @@ test.describe('the built player when access is refused', () => {
     await expect(button(host.view)).toHaveCount(0);
     await expect(status(host.view)).toBeFocused();
     await expect(status(host.view)).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('a generic tool error is unconfirmed too: no Play or Try again, focus on the status, and nothing retries', async ({ page }) => {
+    // The server issued a capability for the good request; only the answer the view receives is a generic failure.
+    const host = await mountPlayer(page, {
+      rewriteAnswer: () => ({ isError: true, content: [{ type: 'text', text: 'Playback is unavailable.' }] }),
+    });
+    await host.open('ep-1');
+
+    await button(host.view).click();
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'unavailable');
+    await expect(status(host.view)).toHaveText(UNCONFIRMED);
+    await expect(button(host.view)).toHaveCount(0);
+    await expect(status(host.view)).toBeFocused();
+    await expect(status(host.view)).toHaveAttribute('aria-live', 'polite');
+    await page.waitForTimeout(150);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    expect(await silent(page)).toBe(true);
   });
 
   test('opening the episode again is the recovery from an unconfirmed attempt', async ({ page }) => {
