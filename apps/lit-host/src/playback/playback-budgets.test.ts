@@ -164,7 +164,7 @@ describe('a media acquisition is its own bounded request', () => {
 });
 
 describe('Play is a bounded handler', () => {
-  async function playUnder(lifetimeBudgets: { operationMs: number; requestMs: number }) {
+  async function playUnder(lifetimeBudgets: { operationMs: number; requestMs: number }, labelViewSession: () => string = () => `vs_${'a'.repeat(22)}`) {
     const playback = countingPlayback({ [DEV_ACCOUNTS.alice]: ['ep-1'] });
     const issued: unknown[] = [];
     const mediaService: MediaService = {
@@ -185,7 +185,7 @@ describe('Play is a bounded handler', () => {
         viewHtml: '<!doctype html>',
         backend: playback.backend,
         mediaService,
-        labelViewSession: () => `vs_${'a'.repeat(22)}`,
+        labelViewSession,
         mediaOrigin: 'http://127.0.0.1:1',
         lifetime,
       });
@@ -240,6 +240,18 @@ describe('Play is a bounded handler', () => {
     lookup.release('entitled');
     await sleep(60);
     expect(issued).toEqual([]);
+  });
+
+  it('answers a generic failure even though a capability was already issued, so an error never shows that nothing was', async () => {
+    const { issued, url, key } = await playUnder({ operationMs: 1_000, requestMs: 2_000 }, () => {
+      throw new Error('label service down');
+    });
+    const response = await play(url, key);
+    const body = (await response.json()) as { result: { isError: boolean; content: { text: string }[]; _meta?: Record<string, unknown> } };
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toBe(PLAYBACK_UNAVAILABLE_TEXT); // the same sentence a pre-issue failure gets
+    expect(body.result._meta?.['saga-a2ui/playback']).toBeUndefined(); // the caller is given no grant
+    expect(issued).toHaveLength(1); // yet the capability exists
   });
 
   it('still issues one capability for a lookup that answers in time', async () => {
