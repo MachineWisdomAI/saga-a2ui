@@ -95,6 +95,7 @@ export function CardContent(props: FaithfulCardProps & { readonly isLive?: () =>
     linkOutcomes: lifecycle.linkOutcomes,
     openLink: (ordinal, url) => lifecycle.openLink(view.hostLinks, ordinal, url),
     images: lifecycle.images,
+    imageStillPermitted: (source) => lifecycle.imageStillPermitted(source),
     failedImages: lifecycle.failedImages,
     imageFailed: (ordinal) => lifecycle.imageFailed(ordinal),
   };

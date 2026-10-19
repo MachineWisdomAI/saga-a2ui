@@ -32,6 +32,8 @@ export interface Rendering {
   readonly openLink: (ordinal: number, url: string) => void;
   /** The view's enforcement and the card's live consent: the inputs of every image decision. */
   readonly images: ImageContext;
+  /** The same decision asked again at the moment an image would be requested, from live consent. */
+  readonly imageStillPermitted: (source: string) => boolean;
   /** Image positions whose load failed under the current consent. */
   readonly failedImages: ReadonlySet<number>;
   /** Called when a shown image fails to load; the lifecycle decides whether the failure still counts. */
@@ -282,7 +284,15 @@ function image(node: Extract<InlineNode, { kind: 'image' }>, r: Pass): ReactNode
   const ordinal = r.counters.image++;
   const decision = r.policy.decideImage(node.source, r.images);
   if (decision.allowed && !r.failedImages.has(ordinal)) {
-    return <CommittedImage url={decision.url} alt={node.alt} eager={r.strict} onFailure={() => r.imageFailed(ordinal)} />;
+    return (
+      <CommittedImage
+        url={decision.url}
+        alt={node.alt}
+        eager={r.strict}
+        stillPermitted={() => r.imageStillPermitted(node.source)}
+        onFailure={() => r.imageFailed(ordinal)}
+      />
+    );
   }
   const reason = decision.allowed ? IMAGE_LOAD_FAILED : decision.reason;
   const alt = node.alt === '' ? 'no description' : node.alt;

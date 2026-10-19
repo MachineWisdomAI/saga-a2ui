@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, Fragment, type ReactElement } from 'react';
+import { act, createElement, Fragment, useLayoutEffect, useState, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ImageConsent, ImageConsentScope } from '@saga-a2ui/components/faithful-card';
 import { mount, type Mounted } from '../actions/fixture.test-support.js';
@@ -320,6 +320,91 @@ describe('a committed image', () => {
     }
     // Set once, after the commit, even though Strict Mode rendered twice and replayed the effects.
     expect(created).toEqual([{ src: IMAGE, inDocument: true }]);
+  });
+});
+
+describe('consent ended earlier in the commit that shows an image', () => {
+  // The application owns the scope and can end it from any effect. When it does so from an effect
+  // that runs before the card's own in the same commit, the card has already rendered the image as
+  // permitted. React removes it in the render that follows, but a browser requests an image the
+  // moment it has an address, so the address must not be given to consent that has just ended.
+  type Ending = 'retire' | 'revokeAll';
+  const SRC_ASSIGNED: Array<{ readonly src: string; readonly live: boolean }> = [];
+
+  function recordAddresses(live: () => boolean): () => void {
+    const original = HTMLImageElement.prototype.setAttribute;
+    HTMLImageElement.prototype.setAttribute = function (this: HTMLImageElement, name: string, value: string): void {
+      if (name === 'src') SRC_ASSIGNED.push({ src: value, live: live() });
+      original.call(this, name, value);
+    };
+    return () => {
+      HTMLImageElement.prototype.setAttribute = original;
+      SRC_ASSIGNED.length = 0;
+    };
+  }
+
+  // An application whose own click handler (a bubbling one, so it runs in the same batch as the
+  // card's Show images) turns on an earlier sibling that ends the scope from a layout effect.
+  function application(scope: ImageConsentScope, ending: Ending, view: FaithfulCardView): ReactElement {
+    const Ender = (props: { readonly active: boolean }): null => {
+      useLayoutEffect(() => {
+        if (props.active) {
+          if (ending === 'retire') scope.retire();
+          else scope.revokeAll();
+        }
+      }, [props.active]);
+      return null;
+    };
+    const Owner = (): ReactElement => {
+      const [active, setActive] = useState(false);
+      return createElement(
+        'div',
+        { onClick: () => setActive(true), 'data-testid': 'owner' },
+        createElement(Ender, { active }),
+        createElement(FaithfulCard, { markdown: withImage(), contractVersion: 1 }),
+      );
+    };
+    return under(view, createElement(Owner));
+  }
+
+  it.each<[Ending]>([['retire'], ['revokeAll']])(
+    'gives no address to an image whose consent %s ended in an earlier effect of the same commit',
+    (ending) => {
+      const { view, app } = watchedView();
+      const restore = recordAddresses(() => app.retired === false);
+      try {
+        mounted = mount({ strict: true });
+        mounted.render(application(app, ending, view));
+        showImages(mounted);
+        // Nothing was requested for consent that had ended, and the image is gone.
+        expect(SRC_ASSIGNED).toEqual([]);
+        expect(sources(mounted.container)).toEqual([]);
+        expect(one(mounted.container, 'images-toggle').textContent).toBe('Show images');
+        if (ending === 'retire') {
+          expect(one(mounted.container, 'images-unavailable').getAttribute('data-reason')).toBe('view-ended');
+        } else {
+          // Revoking everything leaves the view live, so a later press is a new grant and does load.
+          showImages(mounted);
+          expect(sources(mounted.container)).toEqual([IMAGE]);
+          expect(SRC_ASSIGNED).toEqual([{ src: IMAGE, live: true }]);
+        }
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('still gives the address when nothing ended the consent, once per image', () => {
+    const { view, app } = watchedView();
+    const restore = recordAddresses(() => app.retired === false);
+    try {
+      mounted = mount({ strict: true });
+      mounted.render(under(view, card(withImage())));
+      showImages(mounted);
+      expect(SRC_ASSIGNED).toEqual([{ src: IMAGE, live: true }]);
+    } finally {
+      restore();
+    }
   });
 });
 

@@ -408,6 +408,29 @@ test.describe('Strict images and consent in a browser', () => {
     expect(sentUrls(page).length).toBe(before);
   });
 
+  // The application ends the view's consent from an effect that runs before the card's own in the
+  // commit of the press. A request cannot be taken back, so the browser must never be sent one.
+  for (const ending of ['retire', 'revokeAll'] as const) {
+    test(`sends no request for an image whose consent ${ending} ended in the same commit as the press`, async ({ page }) => {
+      await open(page, `?level=strict&ends=${ending}`);
+      const first = card(page, 'first');
+      await first.getByTestId('images-toggle').click();
+      await quiet(page);
+      expect(await page.locator('#root img').count()).toBe(0);
+      expect(sentUrls(page)).toEqual([]);
+      await expect(first.getByTestId('images-toggle')).toHaveText('Show images');
+      if (ending === 'retire') {
+        await expect(first.getByTestId('images-toggle')).toBeDisabled();
+        await expect(first.getByTestId('images-unavailable')).toHaveAttribute('data-reason', 'view-ended');
+      } else {
+        // The view is still live: a later press is a new grant, and only then is the image requested.
+        await first.getByTestId('images-toggle').click();
+        await expect(first.locator('img')).toHaveAttribute('src', CHART);
+        await expect.poll(() => sentUrls(page)).toEqual([CHART]);
+      }
+    });
+  }
+
   test('unmounting the cards ends their consent, and a new mount starts without images or requests', async ({ page }) => {
     await open(page, '?level=strict');
     await card(page, 'first').getByTestId('images-toggle').click();

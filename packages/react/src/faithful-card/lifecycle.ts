@@ -45,6 +45,13 @@ export interface CardLifecycle {
   readonly linkOutcomes: ReadonlyMap<number, LinkOpenOutcome>;
   /** The inputs of every image decision: the view's enforcement and whether this card holds live consent. */
   readonly images: ImageContext;
+  /**
+   * Asks the policy again, now, whether `source` may be requested: this render's owner still
+   * stands and the grant it showed under is still live. Render decided from the state it saw; this
+   * is read at the moment of the side effect, because the application can revoke or retire the
+   * scope from an earlier effect of the same commit, and a request cannot be taken back.
+   */
+  imageStillPermitted(source: string): boolean;
   /** True when the view has ended image consent for good and this card holds none. */
   readonly imagesEnded: boolean;
   /** Image positions that failed to load, which the template shows as not loaded. */
@@ -146,6 +153,11 @@ export function useCardLifecycle(
     sourceRevealed: revision.sourceRevealed,
     linkOutcomes: revision.linkOutcomes,
     images: { enforcement: view?.imageEnforcement ?? 'unestablished', consent: standing === 'granted' ? 'granted' : 'not-granted' },
+    imageStillPermitted(source) {
+      if (view === undefined || !isLive()) return false;
+      const consent = grant?.live === true ? 'granted' : 'not-granted';
+      return view.policy.decideImage(source, { enforcement: view.imageEnforcement, consent }).allowed;
+    },
     imagesEnded: standing === 'ended',
     failedImages: revision.failedImages,
     toggleSource() {

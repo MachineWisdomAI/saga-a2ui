@@ -14,7 +14,7 @@ import {
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { faithfulCardEntry, FaithfulCardProvider, type FaithfulCardView } from '@saga-a2ui/react/faithful-card';
 import '@saga-a2ui/react/faithful-card.css';
-import { createElement, StrictMode, version as reactVersion, type ReactNode } from 'react';
+import { createElement, StrictMode, useLayoutEffect, useState, version as reactVersion, type ReactNode } from 'react';
 import { version as reactDomVersion } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -30,7 +30,8 @@ import { createRoot, type Root } from 'react-dom/client';
 // enforcement from the policy values the document actually carries, and owns one consent scope per
 // view. `?csp=absent` leaves the document without the policy, so every image stays inert.
 // `?second=1` mounts a second, independent view (its own session, provider and consent scope) in
-// `#root-b`, for the cases that interleave views.
+// `#root-b`, for the cases that interleave views. `?ends=retire|revokeAll` adds an application
+// element that ends the first view's consent in the same commit as the first press.
 
 export const CATALOG_ID = 'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
 export const SURFACE_ID = 'cards';
@@ -222,10 +223,31 @@ function container(id: string): HTMLElement {
   return element;
 }
 
+/**
+ * `?ends=retire|revokeAll`: an application that, on any press inside the first view, ends that
+ * view's consent from a layout effect of an element placed before the cards. The effect therefore
+ * runs earlier in the same commit as the card's Show images, which is the ordering an application
+ * hits when it handles a selection or teardown while a card updates. It acts once, on the first press.
+ */
+function Ender(props: { readonly pressed: boolean; readonly scope: ImageConsentScope; readonly mode: 'retire' | 'revokeAll' }): null {
+  const { pressed, scope, mode } = props;
+  useLayoutEffect(() => {
+    if (!pressed) return;
+    if (mode === 'retire') scope.retire();
+    else scope.revokeAll();
+  }, [pressed, scope, mode]);
+  return null;
+}
+function EndsOnPress(props: { readonly scope: ImageConsentScope; readonly mode: 'retire' | 'revokeAll'; readonly children: ReactNode }): ReactNode {
+  const [pressed, setPressed] = useState(false);
+  return createElement('div', { onClick: () => setPressed(true) }, createElement(Ender, { pressed, scope: props.scope, mode: props.mode }), props.children);
+}
+const ends = params.get('ends') === 'retire' ? 'retire' : params.get('ends') === 'revokeAll' ? 'revokeAll' : undefined;
+
 function render(id: string, view: FaithfulCardView, surface: SurfaceModel<ReactCatalogComponent>): void {
-  roots
-    .get(id)
-    ?.render(createElement(StrictMode, null, createElement(FaithfulCardProvider, { view, children: createElement(A2uiSurface, { surface }) })));
+  const surfaceElement = createElement(A2uiSurface, { surface });
+  const body = ends !== undefined && id === 'root' ? createElement(EndsOnPress, { scope: view.consent, mode: ends, children: surfaceElement }) : surfaceElement;
+  roots.get(id)?.render(createElement(StrictMode, null, createElement(FaithfulCardProvider, { view, children: body })));
 }
 
 const consumer: ReactFaithfulCardConsumer = {
