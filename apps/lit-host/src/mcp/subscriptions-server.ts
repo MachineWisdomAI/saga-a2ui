@@ -76,55 +76,55 @@ export function createSubscriptionsServer(options: SubscriptionsServerOptions): 
   registerProtectedOperation(
     server,
     {
-    name: SUBSCRIPTIONS_TOOL_NAME,
-    title: 'List my subscriptions',
-    description: 'Returns the signed-in user’s own subscriptions.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    input: SubscriptionsRequestSchema,
-    output: SubscriptionsResultSchema,
-    view: {
-      uri: SUBSCRIPTIONS_VIEW_URI,
-      title: 'Subscriptions view',
-      html: options.viewHtml,
-      csp: CLOSED_VIEW_CSP,
-    },
-    ...(options.readBoundMs === undefined ? {} : { boundMs: options.readBoundMs }),
-    failures: {
-      absent: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
-      unavailable: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
-      invalidOutput: INVALID_OUTPUT_TEXT,
-      signInRequired: SIGN_IN_REQUIRED_TEXT,
-    },
-    identity: identityFromAuthInfo,
-    async handle(args, identity, request): Promise<OperationOutcome<PublishedAccount>> {
-      if (args.status !== undefined && !isSubscriptionStatus(args.status)) {
-        return { kind: 'refused', text: INVALID_SUBSCRIPTION_INPUT_TEXT };
-      }
-      const account = await request.within('storage', (signal) => options.backend.listSubscriptions(identity.accountId, signal));
-      if (!account) return { kind: 'absent' };
-      const published = args.status === undefined
-        ? account
-        : {
-            displayName: account.displayName,
-            subscriptions: account.subscriptions.filter((record) => record.status === args.status),
-          };
-      return { kind: 'record', record: { account: published, signInId: identity.signInId } };
-    },
-    // Each field is copied from the record explicitly (no spreading); the connector validates the
-    // result against the strict output contract before anything is serialized.
-    project: ({ account, signInId }) => ({
-      text: `${account.displayName}: ${account.subscriptions.length} subscription(s)`,
-      data: {
-        displayName: account.displayName,
-        subscriptions: account.subscriptions.map((record) => ({
-          subscriptionId: record.subscriptionId,
-          creator: record.creator,
-          tier: record.tier,
-          status: record.status,
-        })),
-        viewSession: options.labelViewSession(signInId),
+      name: SUBSCRIPTIONS_TOOL_NAME,
+      title: 'List my subscriptions',
+      description: 'Returns the signed-in user’s own subscriptions.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      input: SubscriptionsRequestSchema,
+      output: SubscriptionsResultSchema,
+      view: {
+        uri: SUBSCRIPTIONS_VIEW_URI,
+        title: 'Subscriptions view',
+        html: options.viewHtml,
+        csp: CLOSED_VIEW_CSP,
       },
-    }),
+      ...(options.readBoundMs === undefined ? {} : { boundMs: options.readBoundMs }),
+      failures: {
+        absent: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+        unavailable: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+        invalidOutput: INVALID_OUTPUT_TEXT,
+        signInRequired: SIGN_IN_REQUIRED_TEXT,
+      },
+      identity: identityFromAuthInfo,
+      async handle(args, identity, request): Promise<OperationOutcome<PublishedAccount>> {
+        if (args.status !== undefined && !isSubscriptionStatus(args.status)) {
+          return { kind: 'refused', text: INVALID_SUBSCRIPTION_INPUT_TEXT };
+        }
+        const account = await request.within('storage', (signal) => options.backend.listSubscriptions(identity.accountId, signal));
+        if (!account) return { kind: 'absent' };
+        const published = args.status === undefined
+          ? account
+          : {
+              displayName: account.displayName,
+              subscriptions: account.subscriptions.filter((record) => record.status === args.status),
+            };
+        return { kind: 'record', record: { account: published, signInId: identity.signInId } };
+      },
+      // Each field is copied from the record explicitly (no spreading); the connector validates the
+      // result against the strict output contract before anything is serialized.
+      project: ({ account, signInId }) => ({
+        text: `${account.displayName}: ${account.subscriptions.length} subscription(s)`,
+        data: {
+          displayName: account.displayName,
+          subscriptions: account.subscriptions.map((record) => ({
+            subscriptionId: record.subscriptionId,
+            creator: record.creator,
+            tier: record.tier,
+            status: record.status,
+          })),
+          viewSession: options.labelViewSession(signInId),
+        },
+      }),
     },
     { lifetime: options.lifetime },
   );

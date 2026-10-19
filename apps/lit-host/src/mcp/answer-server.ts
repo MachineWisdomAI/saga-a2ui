@@ -44,28 +44,28 @@ export function createAnswerServer(options: AnswerServerOptions): McpServer {
   registerPublicOperation(
     server,
     {
-    name: ANSWER_TOOL_NAME,
-    title: 'Answer a question',
-    description: 'Answers one question from the public synthetic knowledge base.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    input: AnswerRequestSchema,
-    output: AnswerResultSchema,
-    view: { uri: ANSWER_VIEW_URI, title: 'Answer view', html: options.viewHtml, csp: CLOSED_VIEW_CSP },
-    ...(options.answerBoundMs === undefined ? {} : { boundMs: options.answerBoundMs }),
-    failures: {
-      absent: ANSWER_NOT_AVAILABLE_TEXT,
-      unavailable: ANSWER_UNAVAILABLE_TEXT,
-      invalidOutput: ANSWER_INVALID_OUTPUT_TEXT,
-    },
-    async handle({ question }, request): Promise<OperationOutcome<AnswerResult>> {
-      const answer = await options.backend.answer(question, request);
-      // The result repeats the question exactly as asked: that is what binds the two.
-      return answer === undefined ? { kind: 'absent' } : { kind: 'record', record: { question, answer } };
-    },
-    project: (record) => ({
-      text: record.answer,
-      data: { question: record.question, answer: record.answer },
-    }),
+      name: ANSWER_TOOL_NAME,
+      title: 'Answer a question',
+      description: 'Answers one question from the public synthetic knowledge base.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      input: AnswerRequestSchema,
+      output: AnswerResultSchema,
+      view: { uri: ANSWER_VIEW_URI, title: 'Answer view', html: options.viewHtml, csp: CLOSED_VIEW_CSP },
+      ...(options.answerBoundMs === undefined ? {} : { boundMs: options.answerBoundMs }),
+      failures: {
+        absent: ANSWER_NOT_AVAILABLE_TEXT,
+        unavailable: ANSWER_UNAVAILABLE_TEXT,
+        invalidOutput: ANSWER_INVALID_OUTPUT_TEXT,
+      },
+      async handle({ question }, request): Promise<OperationOutcome<AnswerResult>> {
+        const answer = await options.backend.answer(question, request);
+        // The result repeats the question exactly as asked: that is what binds the two.
+        return answer === undefined ? { kind: 'absent' } : { kind: 'record', record: { question, answer } };
+      },
+      project: (record) => ({
+        text: record.answer,
+        data: { question: record.question, answer: record.answer },
+      }),
     },
     { lifetime: options.lifetime },
   );

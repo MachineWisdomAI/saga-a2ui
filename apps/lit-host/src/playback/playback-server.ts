@@ -116,41 +116,41 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
       if (!recipient.success) return failure(PLAYBACK_UNSUPPORTED_TEXT);
 
       return boundedHandler(options, ctx, async (scope) => {
-      // The pinned SDK copies a thrown message into the tool failure, so nothing escapes this
-      // handler as an exception: a backend failure is a fixed sentence, and so is a contract fault.
-      try {
-        const decision = valueOrThrow(
-          await scope.run('authorization', (stage) => options.backend.checkEntitlement(identity.accountId, episodeId, stage.signal)),
-        );
-        const episode = options.backend.findEpisode(episodeId);
-        if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
+        // The pinned SDK copies a thrown message into the tool failure, so nothing escapes this
+        // handler as an exception: a backend failure is a fixed sentence, and so is a contract fault.
+        try {
+          const decision = valueOrThrow(
+            await scope.run('authorization', (stage) => options.backend.checkEntitlement(identity.accountId, episodeId, stage.signal)),
+          );
+          const episode = options.backend.findEpisode(episodeId);
+          if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
 
-        // The public fields are validated before a capability exists, so a record that breaks the
-        // contract leaves no issued-but-undelivered grant behind.
-        const shown = ViewEpisodeSchema.parse({ episodeId: episode.id, title: episode.title });
-        const { kty, crv, x, y } = recipient.data;
-        const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
-        // The lookup above may have answered after this handler was abandoned. No capability is
-        // issued for a request the gate has closed.
-        throwIfEnded(scope);
-        const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
+          // The public fields are validated before a capability exists, so a record that breaks the
+          // contract leaves no issued-but-undelivered grant behind.
+          const shown = ViewEpisodeSchema.parse({ episodeId: episode.id, title: episode.title });
+          const { kty, crv, x, y } = recipient.data;
+          const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
+          // The lookup above may have answered after this handler was abandoned. No capability is
+          // issued for a request the gate has closed.
+          throwIfEnded(scope);
+          const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
 
-        // Two projections, each built field by field and validated before serialization. Only
-        // the view's, in `_meta`, carries the capability.
-        const forModel = ModelPlaybackSchema.parse({ text: PLAYBACK_AUTHORIZED_TEXT });
-        const forView = ViewPlaybackSchema.parse({
-          episodeId: shown.episodeId,
-          title: shown.title,
-          viewSession: options.labelViewSession(identity.signInId),
-          mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
-          capability: issued.capability,
-          expiresAt: issued.expiresAt,
-        });
-        return { content: [{ type: 'text', text: forModel.text }], _meta: { [PLAYBACK_RESULT_META]: forView } };
-      } catch (error) {
-        if (error instanceof ZodError) return failure(PLAYBACK_INVALID_RESULT_TEXT);
-        throw error; // an ended scope or a failed dependency: the bounded handler records the cause and answers unavailable
-      }
+          // Two projections, each built field by field and validated before serialization. Only
+          // the view's, in `_meta`, carries the capability.
+          const forModel = ModelPlaybackSchema.parse({ text: PLAYBACK_AUTHORIZED_TEXT });
+          const forView = ViewPlaybackSchema.parse({
+            episodeId: shown.episodeId,
+            title: shown.title,
+            viewSession: options.labelViewSession(identity.signInId),
+            mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
+            capability: issued.capability,
+            expiresAt: issued.expiresAt,
+          });
+          return { content: [{ type: 'text', text: forModel.text }], _meta: { [PLAYBACK_RESULT_META]: forView } };
+        } catch (error) {
+          if (error instanceof ZodError) return failure(PLAYBACK_INVALID_RESULT_TEXT);
+          throw error; // an ended scope or a failed dependency: the bounded handler records the cause and answers unavailable
+        }
       });
     },
   );

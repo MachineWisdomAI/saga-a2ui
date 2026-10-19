@@ -54,26 +54,26 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
   registerPublicOperation(
     server,
     {
-    name: EPISODE_TOOL_NAME,
-    title: 'Get episode',
-    description: 'Returns the public title and description of one synthetic episode.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    input: EpisodeRequestSchema,
-    output: PublicEpisodeSchema,
-    view: { ...view, title: 'Episode view' },
-    failures: {
-      absent: 'No public episode has that id.',
-      unavailable: 'The episode is unavailable.',
-      invalidOutput: 'The episode could not be shown.',
-    },
-    handle: ({ episodeId }): OperationOutcome<EpisodeRecord> => {
-      const record = options.catalog.find(episodeId);
-      return record ? { kind: 'record', record } : { kind: 'absent' };
-    },
-    project: (record) => {
-      const episode = toPublicEpisode(record);
-      return { text: `${episode.title} (${episode.episodeId})`, data: episode };
-    },
+      name: EPISODE_TOOL_NAME,
+      title: 'Get episode',
+      description: 'Returns the public title and description of one synthetic episode.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      input: EpisodeRequestSchema,
+      output: PublicEpisodeSchema,
+      view: { ...view, title: 'Episode view' },
+      failures: {
+        absent: 'No public episode has that id.',
+        unavailable: 'The episode is unavailable.',
+        invalidOutput: 'The episode could not be shown.',
+      },
+      handle: ({ episodeId }): OperationOutcome<EpisodeRecord> => {
+        const record = options.catalog.find(episodeId);
+        return record ? { kind: 'record', record } : { kind: 'absent' };
+      },
+      project: (record) => {
+        const episode = toPublicEpisode(record);
+        return { text: `${episode.title} (${episode.episodeId})`, data: episode };
+      },
     },
     { lifetime: options.lifetime },
   );

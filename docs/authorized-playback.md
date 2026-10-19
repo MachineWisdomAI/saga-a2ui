@@ -69,6 +69,8 @@ The view shows what the audio actually did. Pause shows `paused` only once the a
 
 Each Play gets a generation number. Starting a new Play or clearing the current one advances it, aborts the byte fetch and stops the player. A late response from an earlier generation cannot restore audio. Presses are ignored while authorization is pending or audio is loaded. Every authorization retry is a new Play with a fresh entitlement check; the view never reuses a capability. Resume of already-loaded audio is different: it uses the existing decoded bytes. While the controller is active, a new opener result resets it to `ready` when it carries the pinned sign-in label. An opener or a Play grant under a different label ends the controller for good: it clears the selection, stops the player, shows `session-changed` with no control and asks the user to open a new view or reload. Later openers, including one under the old label or an unreadable one, are ignored, and Play, Pause and Resume do nothing. A new view or a reload pins its own label.
 
+One attempt bound (`attemptLimitMs`, 30,000 ms by default) covers the whole press: it starts before the key is created and ends with any outcome or retirement, but not with a successful start. When it expires the attempt is retired like any other failure (the signal aborts, the player stops, a late result is dropped) and the view shows `unavailable`. If the Play request may already have reached the server (a rejected, timed-out or aborted host call) the outcome is unknown, so the view says playback could not be confirmed, offers no Try again and asks the user to open the episode again; the view-state diagram above predates this wording. An expiry before anything was sent, or after the server answered, keeps Try again. The view never claims that a rejected host call was a sign-in problem, because the host does not say.
+
 Host teardown is terminal for this controller. It aborts the media fetch, releases the player and prevents Play, Pause, Resume, end events and outstanding asynchronous work from presenting anything or starting another request. The diagram's **retired** node describes this internal lifetime; it is not a displayed player status. Teardown stops bridge delivery, but the later `dispose()` still closes the connection exactly once. The page also calls `dispose()` on `pagehide` if no teardown arrived.
 
 Cleanup belongs to the Play that started the work. If an old `player.start()` settles after retirement, it releases the player only if no newer Play has taken ownership; an old completion must never stop newer audio. These teardown and cleanup rules are implemented in v0.1.0. The label-loss rule above follows the 2026-10-19 decision (final loss, recovery by a new view or reload). A delayed opener under the same label cannot be detected, and none of this proves teardown, view reuse or cancellation behavior in an actual assistant host.
@@ -85,9 +87,10 @@ handle(request)
       1. declared Content-Length within policy.limits.maxRequestBytes
       2. authenticate(verifier, requirement): bearer token, realm, scope
       3. Content-Type and Accept headers
-      4. read the body, up to policy.limits.maxRequestBytes
+      4. read the body, up to policy.limits.maxRequestBytes (a bounded stage)
       5. classifyProtectedBody(body, policy): JSON-RPC shape, allowed tools, argument bounds
-      6. endpoint.createServer() runs the tool with the verified identity
+      6. endpoint.createServer(lifetime) runs the tool with the verified identity
+      (every step above is a stage of the request's one lifetime, started at admission)
 ```
 
 The media path answers a CORS preflight with `204` and rejects any method other than `GET` or `OPTIONS` with `405`.
