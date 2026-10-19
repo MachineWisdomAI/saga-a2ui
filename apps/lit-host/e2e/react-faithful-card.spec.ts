@@ -237,7 +237,8 @@ test.describe('Standard images under the built Content-Security-Policy', () => {
     await open(page);
     const { documentPolicies, derivedPolicy } = await page.evaluate(() => window.reactFaithfulCard);
     expect(documentPolicies).toEqual([derivedPolicy]);
-    expect(derivedPolicy).toContain('img-src https://images.example.com;');
+    // The listed host extends the level's embedded baseline (data: in both, blob: in Standard only).
+    expect(derivedPolicy).toMatch(/img-src [^;]*https:\/\/images\.example\.com(;|$)/);
     expect(derivedPolicy).toContain("default-src 'none'");
   });
 
