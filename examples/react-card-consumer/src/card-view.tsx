@@ -112,8 +112,13 @@ export async function mountCardView(brand: Brand): Promise<void> {
     </StrictMode>,
   );
 
-  /** Replaces the answer shown. A result that is not the published output, or an error, clears it and says so. */
+  /**
+   * Replaces the answer shown. A result that is not the published output, or an error, clears it and says so.
+   * Every result is a new selection, so it first revokes the view's image consent: an answer whose Markdown
+   * equals the previous one would otherwise look unchanged to the card and keep the earlier grant.
+   */
   const show = (result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void => {
+    view.consent.revokeAll();
     const markdown = result.isError === true ? undefined : readAnswerMarkdown(result.structuredContent);
     const shown = answer.show(markdown ?? '');
     status.set(markdown !== undefined && shown.ok ? 'answer' : 'problem');

@@ -739,6 +739,42 @@ test('Strict image consent ends when the host tears the view down', async ({ pag
   await expect(view.getByTestId('images-toggle')).toBeDisabled();
 });
 
+test('Strict image consent ends when a new tool result replaces the selection, even with equal Markdown, and a fresh press can grant again', async ({ page }) => {
+  const session = await startSession(page);
+  const markdown = `Look: ![chart](${IMAGE}).`;
+  const answers = new Map([
+    ['first', markdown],
+    ['second', markdown],
+    ['third', markdown],
+  ]);
+  const served = await serve('harbor', { level: 'strict', imageHosts: [IMAGE_HOST] }, answers);
+  const { view } = await mountWithAnswer(page, session, served, 'first');
+  const images = content(view).getByTestId('md-image');
+  const show = view.getByRole('button', { name: 'Show images' });
+  await show.click();
+  await expect(images).toHaveCount(1);
+
+  // A distinct question with identical Markdown is a new selection: the earlier grant does not carry over.
+  await deliver(page, await served.call('second'));
+  await expect(images).toHaveCount(0);
+  await expect(show).toBeEnabled();
+  expect(served.asked).toEqual(['first', 'second']);
+
+  // A fresh press grants again for this selection only.
+  await show.click();
+  await expect(images).toHaveCount(1);
+
+  // A failed result replaces the selection as well, and a recovered equal answer starts without consent.
+  await deliver(page, await served.call('please fail'));
+  await expect(status(view)).toHaveText('The answer could not be shown.');
+  await expect(images).toHaveCount(0);
+  await deliver(page, await served.call('third'));
+  await expect(status(view)).toHaveText('Answer');
+  await expect(images).toHaveCount(0);
+  await expect(show).toBeEnabled();
+  expect(session.problems).toEqual([]);
+});
+
 test('a link in the answer leaves only as a request to the host, which decides', async ({ page }) => {
   const session = await startSession(page, { openLinks: true });
   const answers = new Map([['link', 'Read [the guide](https://docs.example.com/guide).']]);
