@@ -1,6 +1,6 @@
 ---
 feature_name: content_safety_levels
-status: approved
+status: draft
 module_blueprints: [action_binding]
 dependencies: []
 date_added: 2026-10-15
@@ -9,6 +9,8 @@ date_added: 2026-10-15
 # Content safety levels
 
 ## Status
+
+- Draft amendment, 2026-10-19: [Trusted embedded artwork](#trusted-embedded-artwork) proposes only an opt-in resource permission for bundled images, as specified in [REACT3](https://github.com/MachineWisdomAI/saga-a2ui/issues/31). It is not approved or implemented. The prior approved content-safety and lifetime contracts, and their design-to-code records below, remain current until human approval of this amendment.
 
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/content_safety_levels.blueprint.md).
 - Implementation: partial overall. Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for POL1/POL2 at [`MachineWisdomAI/saga-a2ui@6d3916da15a6207a5a546f06a86f772fd31b9ce3`](https://github.com/MachineWisdomAI/saga-a2ui/commit/6d3916da15a6207a5a546f06a86f772fd31b9ce3) through [PR #70](https://github.com/MachineWisdomAI/saga-a2ui/pull/70) and [PR #72](https://github.com/MachineWisdomAI/saga-a2ui/pull/72). The [POL1 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/70#pullrequestreview-5555182721) and [POL2 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/72#pullrequestreview-5555391827) record local source qualification, including actual browser requests and stale-control regressions.
@@ -57,13 +59,59 @@ Description text and parser-generated HTML must never reach `unsafeHTML`, `unsaf
 
 One policy value must determine both resource configuration and view behavior. MCP Apps’ [`resourceDomains`](https://github.com/modelcontextprotocol/ext-apps/blob/v2.0.3/src/spec.types.ts) covers images, scripts, stylesheets, fonts and media. It is a broad origin permission, not an image-only control. POL1 must demonstrate additional restrictive resource CSP or an equivalent supported path so adding an image host grants no new script, style, font or media permissions, while preserving authored media policy. If that restriction cannot be enforced, images stay inert even after Show images.
 
-The resource must declare its bounded image origins and applicable restrictions before mounting. Show images can use only those existing permissions; reader consent cannot relax CSP. The renderer sends no Strict image request before consent. Tests inspect the built resource’s effective restrictions and actual requests, not just declared metadata.
+The resource must declare its bounded image origins and applicable restrictions before mounting. Show images can use only those existing permissions; reader consent cannot relax CSP. The renderer sends no Strict content-image request before consent. Tests inspect the built resource’s effective restrictions and actual requests, not just declared metadata.
 
 Each view receives its immutable policy and callback explicitly. Reader consent is separate, revocable view state and cannot mutate that policy. There is no mutable module-wide “current policy,” host-name switch or callback registry. Interleaved views cannot share consent or change one another’s effects. Resource identity must distinguish policy variants whenever their required host metadata differs, so a cached resource cannot silently supply another policy.
 
 URLs are parsed with supported platform APIs and validated before any effect. Only absolute HTTPS content destinations can activate. Exact-host image matching must reject suffix tricks, subdomains not explicitly listed, credentials and malformed input; wildcard matching is outside the contract. If the host cannot enforce the selected image destination boundary, the image stays inert. Resource permissions for authored media remain separately derived and cannot be borrowed by content images.
 
 The Markdown module and policy module stay renderer independent in the application. Lit registration, templates, styling and host callbacks stay at their existing integration boundary. This separation permits later extraction without introducing placeholder packages or making Markdown a requirement of unrelated application catalog components.
+
+## Trusted embedded artwork
+
+A self-contained card can include application-owned artwork without fetching an external image. The current shared [FaithfulCard policy](../../packages/components/src/faithful-card/policy.ts), inspected at SDK revision `78820dfce3d119d4c82d3d12020af65bef1e2fb1`, derives `img-src 'none'` when the image host allowlist is empty. That blocks bundled raster artwork encoded as data URLs, even when the artwork belongs to the trusted template rather than the answer.
+
+This amendment proposes `embeddedImages?: boolean` in trusted policy configuration, defaulting to `false`. When enabled, the shared policy adds `data:` only to `img-src`. With an empty external-image allowlist, the resulting image directive is `img-src data:`; with allowed HTTPS origins, it includes those origins alongside `data:`. It must not combine `'none'` with other image sources. All other directives retain their existing restrictions, including `font-src 'none'`. This slice uses system fonts.
+
+The option belongs to application composition and the renderer-neutral component policy. It is never part of `FaithfulCardContent`, a tool result or an A2UI data model. Non-boolean values fail configuration explicitly. The policy remains immutable, and reconstructing it from `policy.configuration` must preserve the option and produce the same resource restrictions. The exact HTTPS image-origin list remains unchanged: `data:` is not an external host and must not be added to broad resource-domain permissions.
+
+### Artwork and answer images take separate paths
+
+The consumer imports its selected static artwork at build time and references those bundled bytes from its trusted template or CSS. The shared policy supplies the matching resource CSP before mounting. Bundled decoration may display in Standard and Strict without Show images consent; Hide images revokes content-image consent and does not remove application decoration.
+
+Answer text still passes through the restricted Markdown reader and typed renderer. `decideImage` and `offerImages` retain their existing meaning: content images require an absolute HTTPS URL, an exactly allowed host and established enforcement, plus current consent in Strict. A Markdown `data:` URL remains rejected even when `embeddedImages` is enabled and consent is granted. Raw HTML and revealed source remain inert text. The content wire contract stays exactly `contractVersion` and `markdown`; answers cannot select assets, CSS, templates or policy.
+
+CSP's `data:` allowance does not distinguish a trusted data image from an untrusted one. The trust boundary therefore depends on fixed authored templates and the shared content decisions: untrusted content must never be copied into an image source or CSS outside those decisions. This option is not a sanitizer for arbitrary application markup. It authorizes no new HTML injection path, inline SVG markup, image proxy or renderer-specific policy fork.
+
+![Trusted configuration allows bundled artwork through the resource policy, while supplied Markdown images still require shared content checks.](../../diagrams/embedded-artwork-policy.png)
+
+[Mermaid source](../../diagrams/embedded-artwork-policy.mmd) · [Editable Excalidraw](../../diagrams/embedded-artwork-policy.excalidraw) · [SVG](../../diagrams/embedded-artwork-policy.svg)
+
+For example, an application enables embedded images with an empty external-image allowlist and builds a card containing a decorative raster image. The artwork displays from the immutable HTML resource. A supplied answer containing either a data-image reference or an external HTTPS image still displays an inert placeholder or source text. Enabling Strict and revealing source does not change either content-image decision.
+
+### Enforcement, caching and failure
+
+The resource and view reconstruct the same policy through public SDK exports. `establishImageEnforcement` must continue to require the exact derived document policy; enabling embedded images cannot manufacture established enforcement when the required policy is missing or mismatched. A consumer must not hand-edit a more permissive CSP. A host may impose stricter restrictions; blocked artwork remains a visible qualification failure, not a reason to relax other directives or substitute a remote asset.
+
+The immutable resource identity includes its compiled code, policy, CSS and artwork bytes. Changing those bytes changes the identity. Supplying another answer reuses the resource and updates only validated data; it does not rebuild or re-register artwork. The option adds no new runtime asset request, connection origin or host-specific branch.
+
+| Verification case | Required result |
+| --- | --- |
+| Option omitted or false, empty host list | Existing policy behavior remains: embedded artwork is blocked and no content image is permitted. |
+| Option true, empty host list, Standard and Strict | Bundled trusted raster artwork displays under the built document policy; answer-supplied data and HTTPS images stay inert, including after source reveal and consent. |
+| Option true with an exact allowed image host | Existing HTTPS, exact-host, redirect and demonstrated image-only enforcement rules still govern content images. Strict requires current consent; Hide images and invalidation revoke it. |
+| Malformed option or attempted answer configuration | Invalid trusted configuration fails explicitly. Answer data cannot mutate the policy or gain template/CSS control. |
+| Policy round-trip or missing/mismatched document policy | Round-tripping preserves the option and restrictions. Missing/mismatched enforcement leaves content images inert. |
+| Built resource under attempted external runtime loads | Script, stylesheet, font, frame and connection restrictions remain unchanged; bundled artwork creates no external dependency. |
+| Changed artwork/policy versus changed answer | Artifact changes yield a new resource identity; answer-only changes reuse it and display the supplied values. |
+
+Run these cases through public policy interfaces and the actual built browser resource, observing image rendering and consequential requests. Local checks establish policy and browser behavior; the required real-host card runs remain separate acceptance evidence.
+
+### Amendment scope and delivery
+
+Approval replaces only the earlier resource-policy assumption that an empty image-host list forbids every image, by allowing trusted bundled artwork when explicitly configured. An empty host list continues to forbid every content image. The earlier Markdown fidelity, content-link rules, image consent, lifetime ownership, delivery policy and server authorization remain unchanged. Existing source-implementation records above do not establish implementation of this option.
+
+Implement the shared policy option and its built-resource regression cases before enabling it in a consumer. REACT3 then consumes the same policy through the optional React card; consumer branding remains consumer-owned. This amendment does not change the #28 prerequisite, absorb #33's complete React recipe, grant implementation dispatch or authorize publication/deployment. Preserve the accepted consumer artifact during qualification.
 
 ## Failure and recovery
 
@@ -90,7 +138,7 @@ Use the same ordinary and hostile descriptions in both modes. The browser test m
 | Standard with default configuration | The image allowlist is empty. No content image loads. Show the parsed hostname visibly and accessibly before a validated HTTPS link invokes the host callback. |
 | Standard with one exact image host | Load only permitted HTTPS image destinations. Reject suffix tricks, unlisted subdomains, credentials and malformed/non-HTTPS URLs. Demonstrate effective image-only restrictions and redirect enforcement without broadening script/style/font/media permissions. |
 | Host link callback is absent or denies navigation | Show explicit readable inert feedback with no direct-navigation fallback. |
-| Strict before and after Show images | Before consent, including after source reveal, observe zero image requests and link callbacks. After consent, only otherwise-permitted images load; invalid/unallowlisted destinations remain unfetched and links remain inert. With no qualifying image, show blocked/unavailable feedback instead of enabling Show images. |
+| Strict before and after Show images | Before consent, including after source reveal, observe zero content-image requests and link callbacks. After consent, only otherwise-permitted images load; invalid/unallowlisted destinations remain unfetched and links remain inert. With no qualifying image, show blocked/unavailable feedback instead of enabling Show images. |
 | Images are hidden or consent becomes stale | Hide images removes displayed images. Description/policy/selection changes, replacement and disposal, identity/session retirement where observable, and any invalidation by the consent owner reject old controls and late results. Revalidation cannot restore consent. New content requires fresh consent; another view cannot inherit it. |
 | Description content tries to inject HTML/scripts, policy or actions | Restricted-token rendering leaves it inert, including after reveal. Trusted configuration and action arguments remain unchanged; ordinary input cannot reach executable markup paths. |
 | Standard and Strict views interleave updates and disposal | Each retains its own policy and callback. Updating or disposing one cannot enable effects or break cleanup in the other. |

@@ -1,0 +1,12 @@
+graph TD
+  A[Trusted application configuration] --> P[Immutable shared policy]
+  P -->|embeddedImages true| C[Resource CSP permits data images]
+  B[Bundled static artwork] --> T[Trusted template or CSS]
+  T --> C
+  C --> D[Decoration displays]
+  U[Supplied Markdown] --> R[Restricted reader and renderer]
+  R --> I[Shared content image decision]
+  P --> I
+  I --> G[Require HTTPS, exact host and enforcement\nStrict also requires current consent]
+  G -->|Pass| V[Content image displays]
+  G -->|Fail, including data URLs| X[Inert source or placeholder]
