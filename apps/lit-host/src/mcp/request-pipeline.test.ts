@@ -414,3 +414,30 @@ describe('what a caller’s own claims cannot do', () => {
     expect(seen).toEqual([['reportProgress', 'signal', 'within']]);
   });
 });
+
+describe('a request cancelled in the POST that carried it', () => {
+  const batch = (tool: string, args: Record<string, unknown>) => [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: tool, arguments: args } },
+    { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } },
+  ];
+
+  it('never enters a handler, gets no response for the cancelled call, and ends at the request deadline', async () => {
+    const asked: string[] = [];
+    const listener = await start({
+      budgets: { operationMs: 100, requestMs: 250 },
+      answer: { viewHtml: VIEW_HTML, backend: { answer: async (question) => (asked.push(question), 'never') } },
+    });
+    const started = Date.now();
+    const response = await fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, body: JSON.stringify(batch(ANSWER_TOOL_NAME, { question: 'Q?' })) }).then(
+      async (reply) => ({ status: reply.status, body: await reply.text().catch(() => 'destroyed') }),
+      () => ({ status: 0, body: 'destroyed' }),
+    );
+    expect(asked).toEqual([]);
+    // The protocol answers a cancelled request with nothing; the exchange is then bounded, not left open.
+    expect(response.body === 'destroyed' || response.body === '').toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_500);
+    await expect.poll(() => outcomes.length).toBe(1);
+    expect(outcomes[0]).toMatchObject({ finished: false });
+    expect(outcomes[0]?.causes).toMatchObject([{ kind: 'cancelled', stage: 'handler', effect: 'none' }, { kind: 'request-timeout', limitMs: 250 }]);
+  });
+});

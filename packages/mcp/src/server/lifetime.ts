@@ -212,7 +212,8 @@ class Scope implements BoundedScope {
     }
     const refusal = this.check();
     if (refusal) return Promise.resolve({ ok: false, cause: refusal });
-    if (options.upstream?.aborted) return Promise.resolve({ ok: false, cause: { kind: 'cancelled', stage, effect: effectOf(stage) } });
+    // The work never starts, so nothing about it can be unknown: this is the one cancellation with no effect to wonder about.
+    if (options.upstream?.aborted) return Promise.resolve({ ok: false, cause: { kind: 'cancelled', stage, effect: 'none' } });
 
     // Each nested stage resolves its own limit (its override, else the operation limit that applies to the
     // whole request) and is then clamped by every enclosing deadline through the scope chain.

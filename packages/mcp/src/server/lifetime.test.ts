@@ -199,7 +199,8 @@ describe('nested operations', () => {
     const lifetime = createServerBudgets().startRequest();
     const work = vi.fn();
     const upstream = AbortSignal.abort();
-    expect(await lifetime.run('handler', work, { upstream })).toMatchObject({ ok: false, cause: { kind: 'cancelled', stage: 'handler' } });
+    // Nothing started, so the cause says there is no effect to wonder about (unlike a cancellation of running work).
+    expect(await lifetime.run('handler', work, { upstream })).toMatchObject({ ok: false, cause: { kind: 'cancelled', stage: 'handler', effect: 'none' } });
     expect(work).not.toHaveBeenCalled();
     expect(lifetime.signal.aborted).toBe(false); // an operation was cancelled, not the whole request
   });
