@@ -1,0 +1,9 @@
+/* The neutral brand: none of the card's tokens is set, so every one keeps its fallback. */
+@font-face {
+  font-family: 'NeutralMark';
+  src: url('../../assets/neutral-mark.woff2') format('woff2');
+}
+
+.card-app { --brand-title-family: 'NeutralMark', system-ui, sans-serif; }
+
+.card-banner { background-image: url('../../assets/neutral-mark.svg'); }

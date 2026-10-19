@@ -1,0 +1,21 @@
+/* A differently branded application of the same implementation: only tokens, artwork and font differ. */
+@font-face {
+  font-family: 'HarborMark';
+  src: url('../../assets/harbor-mark.woff2') format('woff2');
+}
+
+.card-app {
+  --app-surface: #eef5fb;
+  --saga-card-font-family: 'Helvetica Neue', Arial, sans-serif;
+  --saga-card-font-size: 1.0625rem;
+  --saga-card-line-height: 1.6;
+  --saga-card-text-color: #10202e;
+  --saga-card-accent-color: #005a9c;
+  --saga-card-muted-color: #4a5a68;
+  --saga-card-border-color: #9db8cc;
+  --saga-card-code-background: #dbe8f2;
+  --saga-card-reading-width: 60ch;
+  --brand-title-family: 'HarborMark', Georgia, serif;
+}
+
+.card-banner { background-image: url('../../assets/harbor-mark.svg'); }

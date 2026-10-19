@@ -1,0 +1,38 @@
+/*
+ * The application's own frame around the card, shared by every brand. A brand (brands/*.css) supplies
+ * the card's CSS custom properties, its trusted artwork and its trusted font; nothing here and nothing
+ * in an answer can change which artwork or font those are.
+ */
+body { margin: 0; }
+
+.card-app {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 1rem;
+  box-sizing: border-box;
+  background: var(--app-surface, #ffffff);
+  color: var(--saga-card-text-color, #1f2328);
+  font-family: var(--saga-card-font-family, system-ui, sans-serif);
+  line-height: 1.5;
+}
+
+.card-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
+  padding: 0.5rem;
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: auto 100%;
+}
+
+.card-artwork { display: block; height: 2rem; width: auto; }
+
+.card-title {
+  margin: 0;
+  color: var(--saga-card-accent-color, #0969da);
+  font-family: var(--brand-title-family, system-ui, sans-serif);
+}
+
+.card-status { min-height: 1.5em; margin-block: 0.5rem; }

@@ -109,7 +109,7 @@ export async function serveResource(options: OpenOptions): Promise<{ resource: H
  * unlisted origin. Playwright adds a permissive CORS header to a fulfilled response that has none,
  * so a denial has to name another origin to reach the browser's own CORS check.
  */
-async function observeNetwork(page: Page, requests: string[]): Promise<void> {
+export async function observeNetwork(page: Page, requests: string[]): Promise<void> {
   await page.route(/^https:\/\//, async (route) => {
     const url = new URL(route.request().url());
     requests.push(url.href);
