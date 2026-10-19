@@ -1,17 +1,19 @@
-import type {
-  BlockNode,
-  ImageConsent,
-  ImageContext,
-  InlineNode,
-  InterpretedCard,
-  ReadResult,
-  FaithfulCardReader,
-  TableCell,
+import {
+  describeContentFailure,
+  describeLinkOutcome,
+  type BlockNode,
+  type ImageConsent,
+  type ImageContext,
+  type InlineNode,
+  type InterpretedCard,
+  type LinkOpenOutcome,
+  type ReadResult,
+  type FaithfulCardReader,
+  type TableCell,
 } from '@saga-a2ui/components/faithful-card';
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { blockedFragment } from './blocked-fragment.js';
 import { requestContentView, type ContentView } from './content-view.js';
-import type { LinkOpenOutcome } from './host-links.js';
 
 // Renders a FaithfulCard. The components package has already reduced the Markdown to a closed set
 // of nodes; every case below is a fixed template with text bindings. Nothing here builds markup
@@ -28,13 +30,6 @@ import type { LinkOpenOutcome } from './host-links.js';
 // --saga-card-line-height, --saga-card-text-color, --saga-card-accent-color (links and the quote
 // rule), --saga-card-muted-color (link hosts), --saga-card-border-color (tables and rules) and
 // --saga-card-code-background.
-
-const LINK_FEEDBACK: Record<LinkOpenOutcome, string> = {
-  opened: 'The host was asked to open this link.',
-  denied: 'The host did not open this link.',
-  unavailable: 'This host cannot open links.',
-  failed: 'The link could not be opened.',
-};
 
 /** What one render pass needs; assembled once so the node templates stay small. */
 interface Rendering {
@@ -219,19 +214,7 @@ export class FaithfulCardContentElement extends LitElement {
     const interpretation = this.interpretation(view);
     if (!interpretation.ok) {
       const { failure } = interpretation;
-      switch (failure.kind) {
-        case 'too-long':
-          return this.failure('too-long', html`This content is too long to display (${failure.length} characters; the limit is ${failure.limit}).`);
-        case 'too-nested':
-          return this.failure(
-            'too-nested',
-            html`This content is nested too deeply to display (the nesting limit is ${failure.limit} levels; a quote counts as one and a list item as two).`,
-          );
-        case 'unsupported-version':
-          return this.failure('unsupported-version', html`This content uses a version of the card contract that this application does not support.`);
-        case 'invalid':
-          return this.failure('invalid', html`This content is not valid for this card.`);
-      }
+      return this.failure(failure.kind, html`${describeContentFailure(failure)}`);
     }
     const { card } = interpretation;
     const rendering: Rendering = {
@@ -470,9 +453,7 @@ export class FaithfulCardContentElement extends LitElement {
 
   /** A link that was not opened stays readable: its destination is shown as inert text. */
   private feedback(outcome: LinkOpenOutcome, url: string): TemplateResult {
-    return outcome === 'opened'
-      ? html`${LINK_FEEDBACK.opened}`
-      : html`${LINK_FEEDBACK[outcome]} Destination: ${url}`;
+    return html`${describeLinkOutcome(outcome, url)}`;
   }
 
   /**

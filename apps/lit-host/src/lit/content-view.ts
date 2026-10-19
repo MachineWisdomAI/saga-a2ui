@@ -1,5 +1,10 @@
-import { createFaithfulCardReader, createImageConsentScope, establishImageEnforcement } from '@saga-a2ui/components/faithful-card';
-import { documentContentSecurityPolicies, type ContentView, type HostLinks } from '@saga-a2ui/lit/faithful-card';
+import {
+  createFaithfulCardReader,
+  createImageConsentScope,
+  establishImageEnforcement,
+  type HostLinks,
+} from '@saga-a2ui/components/faithful-card';
+import { documentContentSecurityPolicies, type ContentView } from '@saga-a2ui/lit/faithful-card';
 import { CONTENT_POLICY_ELEMENT_ID, policyFromEmbedded } from '../content/embedded-policy.js';
 
 /**

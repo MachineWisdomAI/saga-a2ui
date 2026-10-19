@@ -116,3 +116,20 @@ export function createFaithfulCardReader(settings: unknown): CreateReaderResult 
     }),
   };
 }
+
+/**
+ * The sentence a reader sees when supplied content is refused. Every renderer shows this text, so
+ * the wording has one owner. It names the limit that was exceeded, never any of the content.
+ */
+export function describeContentFailure(failure: ContentFailure): string {
+  switch (failure.kind) {
+    case 'too-long':
+      return `This content is too long to display (${failure.length} characters; the limit is ${failure.limit}).`;
+    case 'too-nested':
+      return `This content is nested too deeply to display (the nesting limit is ${failure.limit} levels; a quote counts as one and a list item as two).`;
+    case 'unsupported-version':
+      return 'This content uses a version of the card contract that this application does not support.';
+    case 'invalid':
+      return 'This content is not valid for this card.';
+  }
+}

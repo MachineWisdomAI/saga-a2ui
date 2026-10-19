@@ -5,6 +5,7 @@ import {
   createFaithfulCardReader,
   createImageConsentScope,
   type ImageEnforcement,
+  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { createA2uiAppElement, defineElements, ElementConflictError } from '@saga-a2ui/lit';
@@ -15,7 +16,6 @@ import {
   provideContentView,
   registerFaithfulCard,
   type ContentView,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/lit/faithful-card';
 
 // Test-only page. It mounts FaithfulCards the way an application would, but several in one

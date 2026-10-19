@@ -1,5 +1,6 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import { registerFaithfulCard, type HostLinks } from '@saga-a2ui/lit/faithful-card';
+import type { HostLinks } from '@saga-a2ui/components/faithful-card';
+import { registerFaithfulCard } from '@saga-a2ui/lit/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import { createAnswerViewElement } from './answer-view.js';
 import { brandings } from './branding.js';

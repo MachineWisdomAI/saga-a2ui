@@ -1,3 +1,7 @@
+// How a card asks its host to open a link the content policy has already validated. The contract
+// is renderer-neutral, so every renderer's card (Lit, React) and every application's host adapter
+// share one definition and one set of reader-facing messages.
+
 /**
  * What happened to a request to open a validated link.
  *
@@ -20,3 +24,18 @@ export interface HostLinks {
 
 /** For a page that has no host at all: every link stays inert and nothing navigates. */
 export const NO_HOST_LINKS: HostLinks = Object.freeze({ open: () => Promise.resolve<LinkOpenOutcome>('unavailable') });
+
+const LINK_OUTCOME_MESSAGES: Record<LinkOpenOutcome, string> = {
+  opened: 'The host was asked to open this link.',
+  denied: 'The host did not open this link.',
+  unavailable: 'This host cannot open links.',
+  failed: 'The link could not be opened.',
+};
+
+/**
+ * The text a reader sees for a link request's outcome. A link that was not opened stays readable:
+ * its destination follows as plain text.
+ */
+export function describeLinkOutcome(outcome: LinkOpenOutcome, url: string): string {
+  return outcome === 'opened' ? LINK_OUTCOME_MESSAGES.opened : `${LINK_OUTCOME_MESSAGES[outcome]} Destination: ${url}`;
+}

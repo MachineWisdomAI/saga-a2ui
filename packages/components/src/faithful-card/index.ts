@@ -1,5 +1,6 @@
 export {
   createFaithfulCardReader,
+  describeContentFailure,
   FAITHFUL_CARD_CONTRACT_VERSION,
   type ContentFailure,
   type CreateReaderResult,
@@ -44,4 +45,5 @@ export {
   type ImageConsent,
   type ImageConsentScope,
 } from './image-consent.js';
+export { describeLinkOutcome, NO_HOST_LINKS, type HostLinks, type LinkOpenOutcome } from './host-links.js';
 export { FaithfulCardApi } from './catalog.js';
