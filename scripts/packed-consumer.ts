@@ -15,7 +15,7 @@ import { build, type InlineConfig, type PluginOption } from 'vite';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export type SdkPackage = 'core' | 'lit' | 'components' | 'mcp';
+export type SdkPackage = 'core' | 'lit' | 'components' | 'mcp' | 'react';
 
 export interface PackedManifest {
   readonly name?: string;
