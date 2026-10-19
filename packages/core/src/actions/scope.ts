@@ -1,4 +1,4 @@
-import { timerDelay } from './limits.js';
+import { startTimer } from './limits.js';
 import { discardOutcome, isThenable, type Synchronous } from './thenable.js';
 
 // Resource ownership for one invocation. A resource is anything an invocation acquires that
@@ -243,16 +243,16 @@ export class InvocationResources {
     }
     if (!isThenable(returned)) return;
     let waiting = true;
-    const timer = setTimeout(() => {
+    const timer = startTimer(hookMs, () => {
       if (!waiting) return;
       waiting = false;
       controller.abort();
       this.host.report('release');
-    }, timerDelay(hookMs));
+    });
     const stop = (failed: boolean): void => {
       if (!waiting) return;
       waiting = false;
-      clearTimeout(timer);
+      timer.cancel();
       if (failed) this.host.report('release');
     };
     try {

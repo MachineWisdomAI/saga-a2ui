@@ -10,7 +10,7 @@ import type {
   PrerequisiteFailure,
 } from './outcome.js';
 import { categorize } from './category.js';
-import { timerDelay, type ResolvedLimits } from './limits.js';
+import { startTimer, type LimitTimer, type ResolvedLimits } from './limits.js';
 import { readAnswer, type Prerequisite } from './prerequisite.js';
 import { InvocationResources } from './scope.js';
 import { requestTimeout, type ServerCalls, type ServerTransport } from './server.js';
@@ -48,7 +48,6 @@ export interface InvocationOwner<Event> {
 
 let invocationCount = 0;
 
-type Timer = ReturnType<typeof setTimeout>;
 type Settled = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: unknown };
 type WorkStage = 'prerequisites' | 'running' | 'completing';
 type StepKind = 'prerequisite' | 'handler' | 'onSuccess' | 'onFailure' | 'onCanceled' | 'release' | 'onFinally';
@@ -83,7 +82,7 @@ export function emitObservation(
  */
 class Step {
   eligible = true;
-  timer: Timer | undefined;
+  timer: LimitTimer | undefined;
   /** Hook steps have their own signal; work steps share the invocation's. */
   constructor(
     readonly kind: StepKind,
@@ -109,7 +108,7 @@ class Step {
   }
 
   clearTimer(): void {
-    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.timer?.cancel();
     this.timer = undefined;
   }
 }
@@ -144,7 +143,7 @@ export class Invocation<Event> {
   private readonly cleanupErrors: CleanupError[] = [];
   private subjectAtStart: unknown;
   private subjectCaptured = false;
-  private deadlineTimer: Timer | undefined;
+  private deadlineTimer: LimitTimer | undefined;
   private workStartedAt = 0;
   private unwatch: () => void = noUnsubscribe;
   private activating = false;
@@ -526,11 +525,11 @@ export class Invocation<Event> {
     if (this.deadlineTimer !== undefined || this.outcome !== undefined) return;
     // Counted from the end of the activation prefix, so progress and a later wait never extend it.
     const remaining = Math.max(0, this.limits.deadlineMs - (Date.now() - this.workStartedAt));
-    this.deadlineTimer = setTimeout(() => this.onDeadline(), timerDelay(remaining));
+    this.deadlineTimer = startTimer(remaining, () => this.onDeadline());
   }
 
   private clearDeadline(): void {
-    if (this.deadlineTimer !== undefined) clearTimeout(this.deadlineTimer);
+    this.deadlineTimer?.cancel();
     this.deadlineTimer = undefined;
   }
 
@@ -818,12 +817,12 @@ export class Invocation<Event> {
     if (!step.eligible) return;
     if (spec.budget !== undefined) {
       const { ms, expire } = spec.budget;
-      step.timer = setTimeout(() => {
+      step.timer = startTimer(ms, () => {
         if (!step.eligible) return;
         step.abandon();
         if (this.step === step) this.step = undefined;
         expire();
-      }, timerDelay(ms));
+      });
       return;
     }
     this.armDeadline();

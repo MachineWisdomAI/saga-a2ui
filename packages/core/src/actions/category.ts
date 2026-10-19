@@ -47,10 +47,14 @@ export class ActionError extends Error {
  */
 export function categorize(error: unknown, fallback: ErrorCategory = 'unknown'): ErrorCategory {
   if (error instanceof ActionError) return error.category;
-  if (error instanceof Error) {
-    // The platform's own typed errors (DOMException, AbortSignal.timeout) carry these exact names.
-    if (error.name === 'TimeoutError') return 'timeout';
-    if (error.name === 'AbortError') return 'canceled';
+  // The platform's own typed errors (what `AbortSignal.timeout` and `fetch` reject with) are
+  // DOMExceptions with these exact names. A plain Error that merely carries the same `name` is
+  // not typed evidence.
+  const platform: unknown = (globalThis as { DOMException?: unknown }).DOMException;
+  if (typeof platform === 'function' && error instanceof platform) {
+    const { name } = error as { name?: unknown };
+    if (name === 'TimeoutError') return 'timeout';
+    if (name === 'AbortError') return 'canceled';
   }
   return fallback;
 }

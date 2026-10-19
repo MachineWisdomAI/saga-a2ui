@@ -224,6 +224,88 @@ describe('an action declared without any limit', () => {
 
     expect(binding.state.phase).toBe('running');
   });
+
+  // The longest delay one platform timer honors is 2,147,483,647 ms. An accepted limit beyond it is
+  // waited out in full, not shortened, so every case crosses the first span and ends at the limit.
+  const firstSpanMs = 2_147_483_647;
+  const longMs = 3_000_000_000;
+
+  it('keeps a work deadline beyond the first platform timer span running past it, and ends it at the limit', async () => {
+    const events: ObservedEvent[] = [];
+    const action = Action.local<Press>('long-deadline')
+      .run(never)
+      .limits({ deadlineMs: longMs })
+      .observe((event) => void events.push(event))
+      .build();
+    const { control, binding } = rig(action);
+
+    control.press();
+    await elapse(firstSpanMs + 1);
+    expect(binding.state.phase).toBe('running');
+    await elapse(longMs - firstSpanMs - 2);
+    expect(binding.state.phase).toBe('running');
+    await elapse(1);
+
+    expect(events.find((event) => event.phase === 'outcome-decided')).toMatchObject({ status: 'failed', failureKind: 'timeout', elapsedMs: longMs });
+    expect(binding.state.phase).not.toBe('running');
+  });
+
+  it('keeps a hook budget beyond the first platform timer span, and ends it at the budget', async () => {
+    const events: ObservedEvent[] = [];
+    const action = Action.local<Press>('long-hook')
+      .run(() => {
+        throw new Error('fails');
+      })
+      .limits({ hookMs: longMs })
+      .observe((event) => void events.push(event))
+      .onFailure(never)
+      .build();
+
+    rig(action).control.press();
+    await elapse(firstSpanMs + 1);
+    expect(events.some((event) => event.phase === 'cleanup-error')).toBe(false);
+    await elapse(longMs - firstSpanMs - 1);
+
+    const decided = events.find((event) => event.phase === 'outcome-decided');
+    const gaveUp = events.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'onFailure');
+    expect(gaveUp).toBeDefined();
+    expect(gaveUp!.elapsedMs - decided!.elapsedMs).toBe(longMs);
+  });
+
+  it('keeps the release budget of a late acquisition beyond the first platform timer span', async () => {
+    const observed: ObservedEvent[] = [];
+    const lateAcquire = gate<string>();
+    const action = Action.local<Press>('long-late-lease')
+      .run(async ({ scope }) => {
+        await scope.acquire(() => lateAcquire.promise, () => never()).catch(() => undefined);
+      })
+      .observe((event) => void observed.push(event))
+      .build();
+    const { control, binding } = rig(action, { limits: { hookMs: longMs } });
+
+    control.press();
+    binding.dispose();
+    lateAcquire.resolve('go');
+    await elapse(firstSpanMs + 1);
+    expect(observed.some((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'release')).toBe(false);
+    await elapse(longMs - firstSpanMs - 1);
+
+    const stalled = observed.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'release');
+    expect(stalled?.elapsedMs).toBe(longMs);
+  });
+
+  it('does not wait out a long bound once the step has finished: the pending timer is cancelled', async () => {
+    const action = Action.local<Press>('long-then-done')
+      .run(() => Promise.resolve('done'))
+      .limits({ deadlineMs: longMs, hookMs: longMs })
+      .build();
+    const { control } = rig(action);
+
+    control.press();
+    await elapse(0);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe('each limit resolves on its own: action override, then the instance configuration, then the default', () => {
@@ -421,6 +503,13 @@ describe('a supplied value is validated where it is supplied, before any activat
   });
 });
 
+/** The reason a real `AbortSignal.timeout` rejects with, read after its timer ran on the real clock. */
+async function timeoutReason(): Promise<unknown> {
+  const signal = AbortSignal.timeout(1);
+  await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  return signal.reason;
+}
+
 describe('error categories supplement the stage and the failure kind', () => {
   type Define = (report: (outcome: Outcome<unknown>) => void) => unknown;
 
@@ -492,26 +581,56 @@ describe('error categories supplement the stage and the failure kind', () => {
     expect(() => new ActionError(7 as never, 'no category')).toThrow(TypeError);
   });
 
-  it('reads the platform’s own timeout and abort errors as such, and nothing else it merely resembles', async () => {
-    const timeout = await run(
-      failing('platform-timeout', () => {
-        throw new DOMException('timed out', 'TimeoutError');
-      }),
-    );
-    const aborted = await run(
-      failing('platform-abort', () => {
-        throw new DOMException('aborted', 'AbortError');
-      }),
-    );
-    const lookalike = await run(
-      failing('lookalike', () => {
-        throw Object.assign(new Error('x'), { name: 'TimeoutErrorish' });
-      }),
-    );
+  it('reads the platform’s own timeout and abort errors as such', async () => {
+    const platform: readonly (readonly [string, () => unknown, ErrorCategory])[] = [
+      ['DOMException TimeoutError', () => new DOMException('timed out', 'TimeoutError'), 'timeout'],
+      ['DOMException AbortError', () => new DOMException('aborted', 'AbortError'), 'canceled'],
+      ['AbortSignal.timeout reason', () => AbortSignal.timeout(0).reason, 'timeout'],
+      ['AbortController.abort reason', () => {
+        const controller = new AbortController();
+        controller.abort();
+        return controller.signal.reason;
+      }, 'canceled'],
+    ];
+    for (const [name, make, category] of platform) {
+      // The reason of `AbortSignal.timeout` exists only after the timer ran, so read it on the real clock.
+      vi.useRealTimers();
+      const thrown = name === 'AbortSignal.timeout reason' ? await timeoutReason() : make();
+      vi.useFakeTimers();
+      const outcome = await run(
+        failing('platform', () => {
+          throw thrown;
+        }),
+      );
+      expect(outcome, name).toMatchObject({ failure: { kind: 'handler-error', category } });
+    }
+  });
 
-    expect(timeout).toMatchObject({ failure: { kind: 'handler-error', category: 'timeout' } });
-    expect(aborted).toMatchObject({ failure: { kind: 'handler-error', category: 'canceled' } });
-    expect(lookalike).toMatchObject({ failure: { category: 'unknown' } });
+  it('does not take an ordinary error for a platform error because it carries the same name', async () => {
+    const lookalikes = [
+      Object.assign(new Error('ordinary failure'), { name: 'TimeoutError' }),
+      Object.assign(new Error('ordinary failure'), { name: 'AbortError' }),
+      Object.assign(new Error('x'), { name: 'TimeoutErrorish' }),
+      Object.assign(new TypeError('x'), { name: 'AbortError' }),
+      { name: 'TimeoutError', message: 'plain object' },
+    ];
+    for (const thrown of lookalikes) {
+      const outcome = await run(
+        failing('lookalike', () => {
+          throw thrown;
+        }),
+      );
+      expect(outcome, String(thrown.name)).toMatchObject({ failure: { kind: 'handler-error', category: 'unknown' } });
+    }
+  });
+
+  it('keeps an application’s own classification, even when it wraps a lookalike', async () => {
+    const outcome = await run(
+      failing('wrapped', () => {
+        throw new ActionError('unavailable', 'Try later', { cause: Object.assign(new Error('x'), { name: 'TimeoutError' }) });
+      }),
+    );
+    expect(outcome).toMatchObject({ failure: { category: 'unavailable' } });
   });
 
   it('categorizes what the runtime itself decided: refusal, deadline, input and the prerequisite error', async () => {
