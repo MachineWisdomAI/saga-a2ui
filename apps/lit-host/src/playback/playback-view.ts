@@ -67,9 +67,9 @@ export type PlaybackViewState =
       readonly episode?: OpenedEpisode;
       /**
        * `unknown` when the Play request may have reached the server and nothing says what it did
-       * (a rejected or expired host call): a capability may have been issued. The view then
-       * invites no retry; a new opener starts a fresh attempt. Absent when nothing was sent, or
-       * when a known result came back.
+       * (a rejected or expired host call, a generic tool error, or an unusable grant): a capability
+       * may have been issued. The view then invites no retry; a new opener starts a fresh attempt.
+       * Absent when nothing was sent, or when a known result came back.
        */
       readonly requestOutcome?: 'unknown';
     };
@@ -107,6 +107,14 @@ type Acquisition =
   | { readonly kind: 'bytes'; readonly bytes: ArrayBuffer }
   | { readonly kind: 'refused' } // the media service said no: expired or revoked
   | { readonly kind: 'failed' }; // the network or the response body failed
+
+/** What a resolved Play result establishes. Only `unclassified` leaves the server's effect unknown. */
+type PlayAnswer =
+  | { readonly kind: 'denied' }
+  | { readonly kind: 'unsupported' }
+  | { readonly kind: 'label-lost' }
+  | { readonly kind: 'unclassified' }
+  | { readonly kind: 'grant'; readonly grant: ViewPlayback };
 
 /**
  * Presents one episode with a Play control and owns the one foreground player.
@@ -173,6 +181,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   let cancelAttemptTimer: (() => void) | undefined;
   let attemptDeadline = 0;
   // How far the attempt got, which decides what the view may say about the server's part in it.
+  // `grant-known` is reached only by a classified answer (a precise early refusal or a valid grant);
+  // a resolved call that is a generic error or an unusable grant stays `request-sent`.
   let reached: 'nothing-sent' | 'request-sent' | 'grant-known' = 'nothing-sent';
 
   const retired = () => disposed || tornDown || labelLost;
@@ -325,6 +335,27 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     }
   };
 
+  /**
+   * Reads a resolved Play result without trusting the transport. Only the server's two fixed early
+   * refusals (both made before any capability exists) and a valid grant for the selected episode
+   * establish a known outcome. Every other answer is `unclassified`: a generic tool error or an
+   * unusable grant does not show that no capability was issued (the server issues one before it
+   * finishes building the response), so it is never matched on its wording or its origin.
+   */
+  const classifyAnswer = (result: ToolResult, episode: OpenedEpisode): PlayAnswer => {
+    if (result.isError) {
+      const text = result.content?.find((part) => part.type === 'text')?.text;
+      if (text === PLAYBACK_DENIED_TEXT) return { kind: 'denied' };
+      if (text === PLAYBACK_UNSUPPORTED_TEXT) return { kind: 'unsupported' };
+      return { kind: 'unclassified' };
+    }
+    const granted = ViewPlaybackSchema.safeParse(result._meta?.[PLAYBACK_RESULT_META]);
+    if (!granted.success) return { kind: 'unclassified' };
+    // A well-formed grant under another label proves the sign-in changed, whatever it names.
+    if (granted.data.viewSession !== pinnedSession) return { kind: 'label-lost' };
+    return acceptable(granted.data, episode) ? { kind: 'grant', grant: granted.data } : { kind: 'unclassified' };
+  };
+
   async function run(episode: OpenedEpisode, mine: number): Promise<void> {
     const current = () => mine === generation && !retired();
     if (!app.getHostCapabilities()?.serverTools) return present({ kind: 'unsupported', episode });
@@ -365,20 +396,21 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       return;
     }
     if (!current()) return; // retired while waiting: a late success must not restore anything
-    reached = 'grant-known'; // the server answered; what it answered decides the rest
+
+    // Classify the answer before anything decides expiry or recovery. A transport that resolved says
+    // nothing about the server's effect: only a precise early refusal or a valid grant for this
+    // episode and sign-in establishes a known result. Any other answer leaves the request's effect
+    // unknown (`reached` stays 'request-sent'), whether the bound has passed or not.
+    const answer = classifyAnswer(result, episode);
+    if (answer.kind !== 'unclassified') reached = 'grant-known';
     if (attemptOver(mine, episode)) return; // answered, but after the bound: the result is dropped
 
-    if (result.isError) {
-      const text = result.content?.find((part) => part.type === 'text')?.text;
-      if (text === PLAYBACK_DENIED_TEXT) return clearWith({ kind: 'denied', episode });
-      if (text === PLAYBACK_UNSUPPORTED_TEXT) return clearWith({ kind: 'unsupported', episode });
-      return clearWith({ kind: 'unavailable', episode });
-    }
-    const granted = ViewPlaybackSchema.safeParse(result._meta?.[PLAYBACK_RESULT_META]);
-    if (granted.success && granted.data.viewSession !== pinnedSession) return loseLabel();
-    if (!granted.success || !acceptable(granted.data, episode)) return clearWith({ kind: 'unavailable', episode });
+    if (answer.kind === 'unclassified') return clearWith({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
+    if (answer.kind === 'denied') return clearWith({ kind: 'denied', episode });
+    if (answer.kind === 'unsupported') return clearWith({ kind: 'unsupported', episode });
+    if (answer.kind === 'label-lost') return loseLabel();
 
-    const media = await acquire(granted.data, key, controller.signal);
+    const media = await acquire(answer.grant, key, controller.signal);
     if (!current() || attemptOver(mine, episode)) return;
     if (media.kind === 'refused') return clearWith({ kind: 'expired', episode });
     if (media.kind === 'failed') return clearWith({ kind: 'media-failed', episode });

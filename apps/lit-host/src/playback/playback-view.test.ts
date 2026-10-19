@@ -160,6 +160,8 @@ async function rig(options: {
   afterGrant?: (harness: PlaybackHarness) => void;
   /** Lets a test change the view projection the host hands over, as a buggy or hostile path would. */
   tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
+  /** Replaces the whole Play answer the host resolves with, after the server handled the call. */
+  rewriteAnswer?: (result: CallToolResult) => CallToolResult;
   /** The controller's bound on one Play attempt. Defaults to the reference value. */
   attemptLimitMs?: number;
   /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
@@ -197,6 +199,8 @@ async function rig(options: {
     });
     if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
     const result = ((await response.json()) as { result: CallToolResult }).result;
+    // The server really handled the call (and may have issued a capability); only the answer changes.
+    if (params.name === 'play_episode' && options.rewriteAnswer) return options.rewriteAnswer(result);
     const grant = result._meta?.['saga-a2ui/playback'];
     if (params.name !== 'play_episode' || result.isError || !grant) return result;
     options.afterGrant?.(harness);
@@ -1459,5 +1463,154 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
 
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     expect(r.player.calls.at(-1)).toBe('stop');
+  });
+});
+
+describe('a resolved Play result that does not establish its effect', () => {
+  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const PLAY_RESULT_META = 'saga-a2ui/playback';
+  /** The server really handled the call (issuing a capability for a good request); the host resolves with this instead. */
+  const genericError = (text = 'Playback is unavailable.'): ((result: CallToolResult) => CallToolResult) => () => ({
+    isError: true,
+    content: [{ type: 'text', text }],
+  });
+  const withGrant = (change: (grant: Record<string, unknown>) => Record<string, unknown>) => (result: CallToolResult): CallToolResult => ({
+    ...result,
+    _meta: { ...result._meta, [PLAY_RESULT_META]: change(result._meta?.[PLAY_RESULT_META] as Record<string, unknown>) },
+  });
+
+  /** An unknown outcome sends nothing more on its own: one Play call, no media request, no player start. */
+  async function expectUnknownAndInert(r: Rig): Promise<void> {
+    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' }, requestOutcome: 'unknown' });
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+    await settle(200);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(1);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.player.calls).not.toContain('start');
+    expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
+  }
+
+  it('keeps a generic tool error unknown: no retry, no media, no player start and no automatic second call', async () => {
+    const r = await rig({ rewriteAnswer: genericError() });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+
+    await expectUnknownAndInert(r);
+    expect(r.harness.playback.entitlementChecks).toHaveLength(1); // the server's one lookup for the one Play
+  });
+
+  it.each([
+    ['unusable private metadata', withGrant(({ capability: _capability, ...rest }) => rest)],
+    ['metadata for another episode', withGrant((grant) => ({ ...grant, episodeId: 'ep-2' }))],
+    ['no private metadata at all', (result: CallToolResult): CallToolResult => ({ content: result.content })],
+  ])('keeps a success result carrying %s unknown, never grant-known, and fetches nothing', async (_name, rewriteAnswer) => {
+    const r = await rig({ rewriteAnswer });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+
+    await expectUnknownAndInert(r);
+  });
+
+  it('still reads a precise early refusal as its own outcome, whatever else a generic error says', async () => {
+    const denied = await rig({ token: DEV_TOKENS.bob });
+    await denied.select(EP1);
+    denied.view.play();
+    await expect.poll(() => denied.last()?.kind).toBe('denied');
+    expect(denied.last()).not.toHaveProperty('requestOutcome');
+
+    // Wording that merely resembles the fixed sentences is not a refusal.
+    const lookalike = await rig({ rewriteAnswer: genericError('Playback denied: this account does not have access to this episode. ') });
+    await lookalike.select(EP1);
+    lookalike.view.play();
+    await expect.poll(() => lookalike.last()?.kind).toBe('unavailable');
+    expect(lookalike.last()).toMatchObject({ requestOutcome: 'unknown' });
+  });
+
+  it('keeps a generic error that arrives after the bound, before its timer, unknown rather than safe to retry', async () => {
+    const r = await rig({
+      attemptLimitMs: 100,
+      rewriteAnswer: (result) => {
+        // The thread is blocked past the absolute bound: the continuation runs before the attempt's timer.
+        const until = performance.now() + 150;
+        while (performance.now() < until) {
+          // Synchronous work that overruns the bound.
+        }
+        return genericError()(result);
+      },
+    });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+
+    await expectUnknownAndInert(r);
+  });
+
+  it('keeps a malformed result that arrives after the bound unknown, and a late valid grant fetches nothing', async () => {
+    const block = () => {
+      const until = performance.now() + 150;
+      while (performance.now() < until) {
+        // Synchronous work that overruns the bound.
+      }
+    };
+    const malformed = await rig({
+      attemptLimitMs: 100,
+      rewriteAnswer: (result) => {
+        block();
+        return { content: result.content };
+      },
+    });
+    await malformed.select(EP1);
+    malformed.view.play();
+    await expect.poll(() => malformed.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expectUnknownAndInert(malformed);
+
+    // A valid, matching grant is a known result even when late: nothing is revived and no media is requested.
+    const late = await rig({
+      attemptLimitMs: 100,
+      rewriteAnswer: (result) => {
+        block();
+        return result;
+      },
+    });
+    await late.select(EP1);
+    late.view.play();
+    await expect.poll(() => late.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    expect(late.last()).not.toHaveProperty('requestOutcome');
+    await settle(150);
+    expect(late.harness.playback.mediaReads).toEqual([]);
+    expect(kinds(late)).toEqual(['ready', 'pending', 'unavailable']);
+  });
+
+  it('still reads a valid grant under another sign-in label as a permanent session change', async () => {
+    const r = await rig({ rewriteAnswer: withGrant((grant) => ({ ...grant, viewSession: `vs_${'z'.repeat(22)}` })) });
+    await r.select(EP1);
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(r.harness.playback.mediaReads).toEqual([]);
+  });
+
+  it('keeps a valid matching grant known: a later media failure still offers a fresh Play, never the old capability', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    r.player.failNextStart();
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('media-failed');
+    expect(r.last()).not.toHaveProperty('requestOutcome');
+    expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
+
+    r.view.play(); // the deliberate recovery is a new Play, with a freshly granted capability
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
+    const [first, second] = r.forwarded.filter((call) => call.name === 'play_episode');
+    expect(second?._meta).not.toBe(first?._meta);
   });
 });
