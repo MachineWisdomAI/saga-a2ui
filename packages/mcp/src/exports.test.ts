@@ -60,6 +60,17 @@ describe('package subpath exports', () => {
     expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS']);
   });
 
+  it('expose the request-budget seam to a consumer through the package export', () => {
+    const budgets: server.ServerBudgets = server.createServerBudgets({ operationMs: 1_000 });
+    const lifetime: server.RequestLifetime = budgets.forRoute({ requestMs: 2_000 }).startRequest();
+    try {
+      expect([lifetime.operationMs, lifetime.requestMs]).toEqual([1_000, 2_000]);
+      expect(() => server.createServerBudgets({ requestMs: 0 })).toThrow(server.BudgetConfigurationError);
+    } finally {
+      lifetime.finish();
+    }
+  });
+
   it('keep the server export free of any renderer, view or application code', async () => {
     const { modules, code } = await bundle('@saga-a2ui/mcp/server', 'node');
     expect(modules.some((id) => id.endsWith('/packages/mcp/src/server/operation.ts'))).toBe(true); // the graph was really walked

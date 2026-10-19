@@ -692,7 +692,10 @@ describe('server budgets', () => {
           view: VIEW,
           failures: { ...FAILURES, signInRequired: 'Sign in.' },
           identity: identityOf,
-          handle: async (input) => void handled.push(input) ?? { kind: 'absent' },
+          handle: async (input) => {
+            handled.push(input);
+            return { kind: 'absent' };
+          },
           project: () => ({ text: '', data: { noteId: 'n1', text: '' } }),
         },
         { lifetime },

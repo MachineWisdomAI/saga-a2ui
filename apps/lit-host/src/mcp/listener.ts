@@ -249,12 +249,16 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     const route = routeFor(path);
     const lifetime = route.budgets.startRequest();
     bindResponseToLifetime(req, res, lifetime, route.streaming, () => {
-      options.observe?.({
-        path,
-        status: res.headersSent ? res.statusCode : undefined,
-        finished: res.writableFinished,
-        causes: lifetime.causes,
-      });
+      try {
+        options.observe?.({
+          path,
+          status: res.headersSent ? res.statusCode : undefined,
+          finished: res.writableFinished,
+          causes: lifetime.causes,
+        });
+      } catch {
+        // Diagnostics must never change what a caller sees or leave a request open.
+      }
     });
     void handle(req, res, lifetime, path).catch(() => {
       if (res.destroyed) return;

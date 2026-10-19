@@ -17,6 +17,7 @@ import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
 import { EPISODE_VIEW_URI } from '../apps/lit-host/src/mcp/episode.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';
 import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
+import { createServerBudgets } from '@saga-a2ui/mcp/server';
 import { createEpisodeServer } from '../apps/lit-host/src/mcp/server.js';
 import { fileURLToPath } from 'node:url';
 
@@ -91,7 +92,8 @@ describe('candidate identity', () => {
 
     async function served(policy: ContentPolicy) {
       const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client');
-      const server = createEpisodeServer({ catalog: { find: () => undefined }, viewHtml, contentPolicy: policy });
+      const lifetime = createServerBudgets().startRequest();
+      const server = createEpisodeServer({ catalog: { find: () => undefined }, viewHtml, contentPolicy: policy, lifetime });
       const client = new Client({ name: 'identity-test', version: '0.0.0' });
       const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
       await server.connect(serverSide);
@@ -107,6 +109,7 @@ describe('candidate identity', () => {
       } finally {
         await client.close();
         await server.close();
+        lifetime.finish();
       }
     }
 
