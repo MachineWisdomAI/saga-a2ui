@@ -45,7 +45,12 @@ describe('the application pages built from the packed SDK packages', () => {
     expect(page('vite.answer-view.config.ts').provenance.installedSdkFiles).toEqual(
       expect.arrayContaining(['@saga-a2ui/lit/src/a2ui/app-element.ts', '@saga-a2ui/mcp/src/view/index.ts']),
     );
-    expect(page('vite.playback-view.config.ts').provenance.installedSdkFiles).toContain('@saga-a2ui/mcp/src/policy/timer.ts');
+    // Playback runs through the reusable typed server action of core, and the old controller timer is gone.
+    const playback = page('vite.playback-view.config.ts').provenance.installedSdkFiles;
+    expect(playback).toEqual(
+      expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/limits.ts', '@saga-a2ui/mcp/src/view/index.ts']),
+    );
+    expect(playback).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
   });
 
   it('keeps the optional FaithfulCard, its Markdown parser and React out of every page that does not use them', () => {
