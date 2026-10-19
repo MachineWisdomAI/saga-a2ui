@@ -976,9 +976,85 @@ test.describe('the built player with its description card', () => {
     await host.open('ep-2');
     await page.waitForTimeout(200);
 
-    await expect(cardContent(host.view)).toContainText('Season notes');
+    await expect(cardContent(host.view)).toHaveCount(0);
     await expect(host.view.locator('body')).not.toContainText(OTHER);
     await expect(host.view.getByTestId('playback-title')).toHaveText('The protected episode');
+  });
+
+  // The review of PR148 (P2): teardown ends the card's effects, not only the controller's. A link
+  // button kept from before teardown (a script, an assistive tool, a stale reference) must ask the
+  // host for nothing, and a host answer that was still pending must not be shown by it.
+  test('ends the card at host teardown: a retained safe link asks the host for nothing', async ({ page }) => {
+    const opened: string[] = [];
+    const host = await mountPlayer(page, {
+      harness: WITH_DESCRIPTIONS,
+      openLink: async (url) => {
+        opened.push(url);
+        return {};
+      },
+    });
+    await host.open('ep-1');
+    const retained = await cardContent(host.view).getByRole('button', { name: /safe link/ }).elementHandle();
+    if (!retained) throw new Error('the safe link was not rendered');
+
+    await page.evaluate(() => window.teardownView?.());
+    await expect(description(host.view).locator('saga-faithful-card-content')).toHaveCount(0);
+    await retained.evaluate((link) => (link as HTMLButtonElement).click());
+    await page.waitForTimeout(200);
+
+    expect(opened).toEqual([]);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toEqual([]);
+  });
+
+  test('ends the card at host teardown: a host link answer still pending is not shown afterwards', async ({ page }) => {
+    const opened: string[] = [];
+    let answer!: (result: { isError?: boolean }) => void;
+    const host = await mountPlayer(page, {
+      harness: WITH_DESCRIPTIONS,
+      openLink: (url) => {
+        opened.push(url);
+        return new Promise((resolve) => void (answer = resolve));
+      },
+    });
+    await host.open('ep-1');
+    const retained = await cardContent(host.view).getByRole('button', { name: /safe link/ }).elementHandle();
+    const card = await description(host.view).locator('saga-faithful-card-content').elementHandle();
+    if (!retained || !card) throw new Error('the card was not rendered');
+    await retained.evaluate((link) => (link as HTMLButtonElement).click());
+    await expect.poll(() => opened).toEqual(['https://example.com/notes']);
+
+    await page.evaluate(() => window.teardownView?.());
+    answer({ isError: true }); // the host's answer arrives after teardown
+    await page.waitForTimeout(300);
+
+    // The card was disconnected, so the answer reached nothing: the removed element shows no outcome.
+    expect(await card.evaluate((element) => element.isConnected)).toBe(false);
+    expect(await card.evaluate((element) => element.querySelector('[data-testid="md-link-status"]')?.textContent ?? '')).toBe('');
+    await expect(description(host.view).locator('saga-faithful-card-content')).toHaveCount(0);
+    expect(opened).toHaveLength(1);
+  });
+
+  test('ends the card at label loss: a retained safe link asks the host for nothing', async ({ page }) => {
+    const opened: string[] = [];
+    const host = await mountPlayer(page, {
+      entitlements: BOTH,
+      harness: WITH_DESCRIPTIONS,
+      openLink: async (url) => {
+        opened.push(url);
+        return {};
+      },
+    });
+    await host.open('ep-1');
+    const retained = await cardContent(host.view).getByRole('button', { name: /safe link/ }).elementHandle();
+    if (!retained) throw new Error('the safe link was not rendered');
+
+    host.useToken(DEV_TOKENS.bob);
+    await host.open('ep-1');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await retained.evaluate((link) => (link as HTMLButtonElement).click());
+    await page.waitForTimeout(200);
+
+    expect(opened).toEqual([]);
   });
 
   test('shows no card for an episode the opener could not describe, and none before any opener', async ({ page }) => {
@@ -1048,18 +1124,22 @@ test.describe('the built player with a Strict content policy embedded in its res
     await expect(host.view.locator('img')).toHaveCount(0);
   });
 
-  test('ends consent for good at host teardown: a still-rendered control grants nothing', async ({ page }) => {
+  test('ends consent for good at host teardown: the card is removed and a control kept from before grants nothing', async ({ page }) => {
     const requests = await observeImages(page);
     const host = await mountPlayer(page, { harness: WITH_IMAGES, contentPolicy: STRICT });
     await host.open('ep-1');
     await description(host.view).getByTestId('images-toggle').click();
     await expect.poll(() => requests).toHaveLength(1);
 
+    const retained = await description(host.view).getByTestId('images-toggle').elementHandle();
+    if (!retained) throw new Error('the images control was not rendered');
+
     await page.evaluate(() => window.teardownView?.());
 
+    // The card leaves with the consent: no image remains, and the control kept from before grants nothing.
     await expect(host.view.locator('img')).toHaveCount(0);
-    await expect(description(host.view).getByTestId('images-toggle')).toBeDisabled();
-    await description(host.view).getByTestId('images-toggle').click({ force: true });
+    await expect(description(host.view).getByTestId('images-toggle')).toHaveCount(0);
+    await retained.evaluate((toggle) => (toggle as HTMLButtonElement).click());
     await page.waitForTimeout(200);
     await expect(host.view.locator('img')).toHaveCount(0);
     expect(requests).toHaveLength(1);

@@ -31,6 +31,28 @@ const app = new App({ name: 'saga-a2ui-playback-view', version: '0.0.0' });
 const content = contentViewFromDocument(document, createAppHostLinks(app));
 if (content.ok) provideContentView(descriptionHost, content.view);
 
+// The view is over (host teardown, disposal or a lost sign-in label): no card may be shown again.
+let cardEnded = false;
+
+/**
+ * What the controller tells the page about the selection's end. Image consent keeps its one owner,
+ * the content view's scope. On the terminal call the page also removes the card: a card that
+ * stayed mounted would keep its revision current, so a retained safe link would still ask the
+ * host to open it and a host answer still pending would still be shown. Removing the element
+ * retires both (the card ends its consent and invalidates its link results when it leaves the
+ * document), and `cardEnded` keeps any later presentation from mounting another.
+ */
+const contentConsent = content.ok
+  ? {
+      revokeAll: () => content.view.consent.revokeAll(),
+      retire() {
+        content.view.consent.retire();
+        cardEnded = true;
+        descriptionHost.replaceChildren();
+      },
+    }
+  : undefined;
+
 /**
  * Shows the selected episode's description beside the control, or nothing. One card element serves
  * the page: a new description reaches it as a changed property, which ends that card's own image
@@ -39,6 +61,7 @@ if (content.ok) provideContentView(descriptionHost, content.view);
  */
 function showDescription(state: PlaybackViewState): void {
   const episode = 'episode' in state ? state.episode : undefined;
+  if (cardEnded) return;
   if (!content.ok || !episode) {
     descriptionHost.replaceChildren();
     return;
@@ -58,7 +81,7 @@ const connection = await connectPlaybackView({
   transport: new PostMessageTransport(window.parent, window.parent),
   player: createWebAudioPlayer(),
   // The card's consent belongs to its content view; the controller says when a selection ends.
-  ...(content.ok ? { contentConsent: content.view.consent } : {}),
+  ...(contentConsent ? { contentConsent } : {}),
   show(state: PlaybackViewState) {
     control.state = state;
     title.textContent = 'episode' in state && state.episode ? state.episode.title : 'Player';

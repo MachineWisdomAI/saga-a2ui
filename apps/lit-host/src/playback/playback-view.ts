@@ -114,7 +114,10 @@ export const PlayControl = componentKind<PlayControlEvents>('PlayControl');
 export interface ContentConsentEnding {
   /** A new selection is arriving: consent given for the previous one ends. The view stays live. */
   revokeAll(): void;
-  /** The view is over (teardown, disposal, a lost sign-in label): nothing still shown may grant consent. */
+  /**
+   * The view is over (teardown, disposal, a lost sign-in label): nothing still shown may grant consent,
+   * and the page ends the card itself, so no retained control of it can act afterwards. Told once.
+   */
   retire(): void;
 }
 
