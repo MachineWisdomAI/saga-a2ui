@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/lit",
   "private": true,
-  "description": "Lit binding for SAGA A2UI: mounts a core message session's surface with an application's own catalog and owns its disposal",
+  "description": "Lit binding for SAGA A2UI: mounts a core message session's surface with an application's own catalog and owns its disposal, with the optional /actions control and instance host and the optional /faithful-card element",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
