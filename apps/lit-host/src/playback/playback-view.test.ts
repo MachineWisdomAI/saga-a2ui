@@ -135,7 +135,10 @@ interface Rig {
   /** Holds the next proxied tools/call at the host until released, to model a slow round trip. */
   holdNextToolCall(): { release(): void };
   last(): PlaybackViewState | undefined;
+  /** Delivers an opener result and waits until the view shows that episode. */
   select(episode: PublicEpisode): Promise<void>;
+  /** Delivers an opener result and returns, whether or not the view presents anything. */
+  deliver(episode: PublicEpisode): Promise<void>;
 }
 
 const cleanup: { app: App; bridge: AppBridge; harness: PlaybackHarness }[] = [];
@@ -204,26 +207,32 @@ async function rig(options: {
       return { release };
     },
     last: () => states.at(-1),
+    deliver,
     // The host mounts the view by running the model-visible opener, then delivers its real result.
     select: async (episode) => {
-      const response = await fetch(harness.listener.playbackUrl ?? '', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: 'get_playable_episode', arguments: { episodeId: episode.episodeId } },
-        }),
-      });
-      await bridge.sendToolResult(((await response.json()) as { result: CallToolResult }).result);
+      await deliver(episode);
       await expect.poll(() => states.at(-1)).toMatchObject({ episode: { episodeId: episode.episodeId } });
     },
   };
+
+  /** Runs the opener under the credential in force now and delivers its real result, without waiting for a state. */
+  async function deliver(episode: PublicEpisode): Promise<void> {
+    const response = await fetch(harness.listener.playbackUrl ?? '', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_playable_episode', arguments: { episodeId: episode.episodeId } },
+      }),
+    });
+    await bridge.sendToolResult(((await response.json()) as { result: CallToolResult }).result);
+  }
 }
 
 afterEach(async () => {
@@ -1003,5 +1012,218 @@ describe('late player-start cleanup is scoped to its own acquisition', () => {
 
     expect(r.player.calls.slice(calls)).toEqual(['stop']);
     expect(kinds(r)).not.toContain('playing');
+  });
+});
+
+// The sign-in label pinned by the first opener is the view's freshness check. Losing it through a
+// mismatched opener or grant is final for the view instance: recovery is a new view or a reload.
+// The selection stays cleared, every later opener (old label, new label or unreadable) is ignored,
+// and Play, Pause and Resume cannot reactivate the view or issue protected work.
+describe('final loss of the pinned sign-in label', () => {
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
+  const BOTH = { entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'] } };
+  const playRequests = (r: Rig) => r.forwarded.filter((call) => call.name === 'play_episode').length;
+  const unreadable = (r: Rig) => r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+  const garbled = (r: Rig) => r.bridge.sendToolResult({ content: [{ type: 'text', text: 'x' }], structuredContent: { surprise: true } });
+
+  /** Presses every control and reports whether anything reached the host, the player or the media service. */
+  async function pressEverything(r: Rig): Promise<void> {
+    r.view.play();
+    r.view.pause();
+    r.view.resume();
+    await settled();
+  }
+
+  /** The state the view must hold for good once the label is lost, with nothing selected or playing. */
+  function expectRetired(r: Rig, before: { states: number; calls: number; playRequests: number }): void {
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(r.states.slice(before.states).every((state) => state.kind === 'session-changed')).toBe(true);
+    expect(playRequests(r)).toBe(before.playRequests);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.player.calls.slice(before.calls)).not.toContain('prepare');
+    expect(r.player.calls.slice(before.calls)).not.toContain('start');
+    expect(r.player.calls.slice(before.calls)).not.toContain('resume');
+  }
+
+  it('ignores an opener under the old label after an opener under another label retired the view', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1); // pins Alice's label
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+
+    r.useToken(DEV_TOKENS.alice); // the old label is back
+    await r.deliver(EP1);
+    await r.deliver(EP2);
+    await pressEverything(r);
+
+    expectRetired(r, before);
+  });
+
+  it('ignores a later opener under the new label as well, without adopting it', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+
+    await r.deliver(EP2); // still Bob: the label that caused the loss
+    await pressEverything(r);
+
+    expectRetired(r, before);
+  });
+
+  it('clears the selection when the label is lost through a mismatched grant, and keeps it cleared', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1); // opened by Alice
+    r.useToken(DEV_TOKENS.bob); // the host now proxies Bob's credential; Bob is entitled, so the server grants
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    expect(r.last()).toEqual({ kind: 'session-changed' }); // no selected episode is carried
+    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+
+    await unreadable(r); // an unreadable opener cannot fall back to the old selection
+    await garbled(r);
+    r.useToken(DEV_TOKENS.alice);
+    await r.deliver(EP1); // nor can an opener under the old label
+    await pressEverything(r);
+
+    expectRetired(r, before);
+    expect(r.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' }]);
+  });
+
+  it('stays retired through an unreadable opener, which neither reselects nor offers Try again', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+
+    await unreadable(r);
+    await garbled(r);
+    await pressEverything(r);
+
+    expectRetired(r, before);
+  });
+
+  it('stops playing audio at the loss and keeps Pause, Resume, a stale end and the old label from reviving it', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    expect(r.player.calls.at(-1)).toBe('stop');
+    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const reads = r.harness.playback.mediaReads.length;
+
+    r.useToken(DEV_TOKENS.alice);
+    await r.deliver(EP1);
+    r.player.endPlayback();
+    await pressEverything(r);
+
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(r.states.slice(before.states).every((state) => state.kind === 'session-changed')).toBe(true);
+    expect(r.player.calls.slice(before.calls)).toEqual([]);
+    expect(playRequests(r)).toBe(before.playRequests);
+    expect(r.harness.playback.mediaReads.length).toBe(reads);
+  });
+
+  it('does not let Resume revive a paused view after the label was lost', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    r.view.pause();
+    await expect.poll(() => r.last()?.kind).toBe('paused');
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    const calls = r.player.calls.length;
+
+    await unreadable(r);
+    await pressEverything(r);
+
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(r.player.calls.slice(calls)).toEqual([]);
+  });
+
+  it('keeps a start that was pending at the loss from playing, even after an opener under the old label', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    const decoding = r.player.holdNextStart({ survivesStop: true });
+    r.view.play();
+    await expect.poll(() => r.player.calls.includes('start')).toBe(true);
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    r.useToken(DEV_TOKENS.alice);
+    await r.deliver(EP1);
+    const calls = r.player.calls.length;
+    const shown = r.states.length;
+
+    decoding.release('started'); // the retired start settles late
+    await settled();
+
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(kinds(r)).not.toContain('playing');
+    expect(r.states.length).toBe(shown);
+    expect(r.player.calls.slice(calls)).toEqual(['stop']); // released once, never restarted
+  });
+
+  it('does not let a Play whose grant is still in flight at the loss outlive it', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    const inFlight = r.holdNextToolCall();
+    r.view.play();
+    await expect.poll(() => playRequests(r)).toBe(1);
+    r.useToken(DEV_TOKENS.bob);
+    await r.deliver(EP1);
+    await expect.poll(() => r.last()?.kind).toBe('session-changed');
+    r.useToken(DEV_TOKENS.alice);
+    await r.deliver(EP1);
+
+    inFlight.release();
+    await settled();
+
+    expect(r.last()).toEqual({ kind: 'session-changed' });
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(kinds(r)).not.toContain('playing');
+  });
+
+  it('still lets a same-label opener for another item move the view on before any loss', async () => {
+    const r = await rig(BOTH);
+    await r.select(EP1);
+    await r.select(EP2);
+    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+
+    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.harness.playback.mediaReads).toEqual(['ep-2']);
+  });
+
+  it('lets a fresh view bootstrap and play after another view lost its label, leaving independent views alone', async () => {
+    const lost = await rig(BOTH);
+    const other = await rig(BOTH);
+    await lost.select(EP1);
+    await other.select(EP1);
+    lost.useToken(DEV_TOKENS.bob);
+    await lost.deliver(EP1);
+    await expect.poll(() => lost.last()?.kind).toBe('session-changed');
+
+    const fresh = await rig({ ...BOTH, token: DEV_TOKENS.bob }); // a new view, as after a reload
+    await fresh.select(EP1);
+    fresh.view.play();
+    other.view.play();
+
+    await expect.poll(() => fresh.last()?.kind).toBe('playing');
+    await expect.poll(() => other.last()?.kind).toBe('playing');
+    expect(lost.last()).toEqual({ kind: 'session-changed' });
   });
 });

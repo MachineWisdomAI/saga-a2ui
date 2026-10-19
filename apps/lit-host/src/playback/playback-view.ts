@@ -97,6 +97,12 @@ type Acquisition =
  * It does not dispose the connection; the later `dispose()` still closes it once. A start that
  * settles for a retired press releases the player only if no later press has taken it over.
  *
+ * Label loss: an opener or a grant under a label other than the pinned one ends this view for good.
+ * The selection is cleared, the player stops, and `session-changed` stays: every later opener (the
+ * old label, the new one or an unreadable one) is ignored, and Play, Pause and Resume do nothing.
+ * Recovery is a new view or a reload, which pins its own label. The loss is detected only when a
+ * result carries a different label; a delayed opener under the same label cannot be told apart.
+ *
  * Trust: the response is accepted only if it names the selected episode, the pinned sign-in and a
  * media URL for that same episode. The sign-in label is freshness only; the server authorizes every
  * Play and every media acquisition. A retry never reuses saved authorization: it is a new Play.
@@ -113,6 +119,9 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   // teardown does not close the connection, so the later `dispose()` must still close it once.
   let tornDown = false;
   let disposed = false;
+  // The pinned label was lost through an opener or a grant. Unlike the per-request generation, this
+  // is permanent for the view: nothing clears it, so no later result can reactivate the controller.
+  let labelLost = false;
   // The generation of the latest Play press, which owns the player's one resource. A start that
   // settles for an earlier press may release the player only while no later press has taken it.
   let latestPlay = 0;
@@ -123,7 +132,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   // The start the player has not yet confirmed, and whether the audio ended while it was waiting.
   let starting: { readonly generation: number; ended: boolean } | undefined;
 
-  const retired = () => disposed || tornDown;
+  const retired = () => disposed || tornDown || labelLost;
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
@@ -142,6 +151,18 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   const clearWith = (state: PlaybackViewState) => {
     retire();
     present(state);
+  };
+
+  /**
+   * Ends the view after the pinned label was lost: clears the selection, stops the player and shows
+   * `session-changed`. The flag is set last and never cleared, so every later input is inert.
+   */
+  const loseLabel = () => {
+    selected = undefined;
+    retire();
+    labelLost = true;
+    kind = 'session-changed';
+    if (!disposed && !tornDown) deps.show({ kind: 'session-changed' });
   };
 
   player.onEnded(() => {
@@ -182,10 +203,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     if (retired()) return;
     const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
     if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
-    if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) {
-      selected = undefined;
-      return clearWith({ kind: 'session-changed' });
-    }
+    if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) return loseLabel();
     pinnedSession = opened.data.viewSession;
     selected = opened.data;
     clearWith({ kind: 'ready', episode: opened.data });
@@ -258,10 +276,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       return clearWith({ kind: 'unavailable', episode });
     }
     const granted = ViewPlaybackSchema.safeParse(result._meta?.[PLAYBACK_RESULT_META]);
-    if (!granted.success || !acceptable(granted.data, episode)) {
-      const changed = granted.success && granted.data.viewSession !== pinnedSession;
-      return clearWith({ kind: changed ? 'session-changed' : 'unavailable', episode });
-    }
+    if (granted.success && granted.data.viewSession !== pinnedSession) return loseLabel();
+    if (!granted.success || !acceptable(granted.data, episode)) return clearWith({ kind: 'unavailable', episode });
 
     const media = await acquire(granted.data, key, controller.signal);
     if (!current()) return;
@@ -304,7 +320,7 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   return {
     play() {
       if (retired() || !selected) return;
-      if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'resume-blocked' || kind === 'session-changed') return;
+      if (kind === 'pending' || kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') return;
       const episode = selected;
       // Retire first: stopping releases the player's context, so preparing before it would
       // destroy the context this press just unlocked.

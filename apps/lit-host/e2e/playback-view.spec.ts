@@ -648,3 +648,57 @@ test.describe('the built player after host teardown', () => {
     expect(host.harness.playback.mediaReads).toEqual([]);
   });
 });
+
+const RETIRED_TEXT = 'Your session changed. Open a new view or reload to continue.';
+const BOTH = { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'] };
+
+// The label the view pinned is lost for good: the built page says how to recover, offers no
+// control, and an opener under the old label cannot bring the controls back. The delayed copy of an
+// opener under the SAME label is not detectable and is not claimed here.
+test.describe('the built player after the sign-in label is lost', () => {
+  test('an opener under another label retires it, names the recovery and ignores the old label afterwards', async ({ page }) => {
+    const host = await mountPlayer(page, { entitlements: BOTH });
+    await host.open('ep-1');
+    await expect(status(host.view)).toContainText('Ready to play The protected episode');
+
+    host.useToken(DEV_TOKENS.bob);
+    await host.open('ep-1');
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'session-changed');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(button(host.view)).toHaveCount(0);
+
+    host.useToken(DEV_TOKENS.alice); // the old label is back
+    await host.open('ep-1');
+    await host.open('ep-2');
+    await page.waitForTimeout(150);
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'session-changed');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(button(host.view)).toHaveCount(0);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toEqual([]);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    expect(await silent(page)).toBe(true);
+  });
+
+  test('a grant under another label retires it the same way and the old label cannot revive the controls', async ({ page }) => {
+    const host = await mountPlayer(page, { entitlements: BOTH });
+    await host.open('ep-1');
+    await expect(button(host.view)).toBeVisible();
+    host.useToken(DEV_TOKENS.bob); // the host proxies Bob's credential; Bob is entitled, so the server grants
+
+    await button(host.view).click();
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'session-changed');
+    await expect(status(host.view)).toHaveText(RETIRED_TEXT);
+    await expect(button(host.view)).toHaveCount(0);
+
+    host.useToken(DEV_TOKENS.alice);
+    await host.open('ep-1');
+    await page.waitForTimeout(150);
+
+    await expect(host.view.getByTestId('play-root')).toHaveAttribute('data-state', 'session-changed');
+    await expect(button(host.view)).toHaveCount(0);
+    expect(host.calls.filter((call) => call.params.name === PLAY)).toHaveLength(1);
+    expect(host.harness.playback.mediaReads).toEqual([]);
+    expect(await silent(page)).toBe(true);
+  });
+});
