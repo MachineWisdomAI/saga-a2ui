@@ -4,6 +4,7 @@ import { expect, type Frame, type FrameLocator, type Page } from '@playwright/te
 import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
 import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import { woff2Bytes } from './asset-fixtures.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // Descriptions rendered by the built view, in the sandboxed iframe of the local host fixture,
@@ -36,6 +37,8 @@ export interface Opened {
 
 export interface OpenOptions {
   readonly imageHosts?: readonly string[];
+  /** Trusted exact HTTPS origins that may serve fonts. Defaults to none. */
+  readonly fontOrigins?: readonly string[];
   /** The trusted content level. Defaults to Standard. */
   readonly level?: 'standard' | 'strict';
   /** Strict only: how blocked fragments first appear. */
@@ -67,6 +70,7 @@ export function policyOf(imageHosts: readonly string[], settings: object = {}): 
 
 function policyFor(options: OpenOptions): ContentPolicy {
   return policyOf(options.imageHosts ?? [], {
+    ...(options.fontOrigins === undefined ? {} : { fontOrigins: options.fontOrigins }),
     ...(options.level === undefined ? {} : { level: options.level }),
     ...(options.blockedPresentation === undefined ? {} : { blockedPresentation: options.blockedPresentation }),
   });
@@ -98,7 +102,13 @@ export async function serveResource(options: OpenOptions): Promise<{ resource: H
   return { resource: { html: options.transformHtml?.(content.text) ?? content.text, csp: ui.csp }, client };
 }
 
-/** Answers every https request locally and records it. Redirects and probes have fixed paths. */
+/**
+ * Answers every https request locally and records it. Redirects and probes have fixed paths. A
+ * font is a real, loadable one and carries CORS headers, except `cors-denied.woff2`, which allows
+ * only some other origin (a server that denies this one); `redirect-font.woff2` redirects to an
+ * unlisted origin. Playwright adds a permissive CORS header to a fulfilled response that has none,
+ * so a denial has to name another origin to reach the browser's own CORS check.
+ */
 async function observeNetwork(page: Page, requests: string[]): Promise<void> {
   await page.route(/^https:\/\//, async (route) => {
     const url = new URL(route.request().url());
@@ -107,14 +117,21 @@ async function observeNetwork(page: Page, requests: string[]): Promise<void> {
     if (url.pathname === '/redirect-out.png') {
       return route.fulfill({ status: 302, headers: { ...cors, location: 'https://other.example.net/stolen.png' } });
     }
+    if (url.pathname === '/redirect-font.woff2') {
+      return route.fulfill({ status: 302, headers: { ...cors, location: 'https://other.example.net/stolen.woff2' } });
+    }
+    if (url.pathname === '/cors-denied.woff2') {
+      const denying = { 'access-control-allow-origin': 'https://unrelated.example', 'cache-control': 'no-store' };
+      return route.fulfill({ status: 200, headers: denying, contentType: 'font/woff2', body: woff2Bytes() });
+    }
+    if (url.pathname.endsWith('.woff2')) {
+      return route.fulfill({ status: 200, headers: cors, contentType: 'font/woff2', body: woff2Bytes() });
+    }
     if (url.pathname.endsWith('.js')) {
       return route.fulfill({ status: 200, headers: cors, contentType: 'text/javascript', body: 'window.__external = 1;' });
     }
     if (url.pathname.endsWith('.css')) {
       return route.fulfill({ status: 200, headers: cors, contentType: 'text/css', body: 'body { color: red; }' });
-    }
-    if (url.pathname.endsWith('.woff2')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'font/woff2', body: 'not a font' });
     }
     if (url.pathname.endsWith('.mp3')) {
       return route.fulfill({ status: 200, headers: cors, contentType: 'audio/mpeg', body: 'not audio' });

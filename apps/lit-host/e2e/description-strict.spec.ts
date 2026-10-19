@@ -417,6 +417,7 @@ test.describe('the built resource', () => {
     expect(JSON.parse(embedded ?? 'null')).toEqual({
       level: 'strict',
       imageHosts: [IMAGE_HOST],
+      fontOrigins: [],
       blockedPresentation: 'placeholder',
     });
   });

@@ -13,11 +13,11 @@ import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
 // Actual-host mapping (MAP1) measures this candidate, so it needs identities, not descriptions.
 // It reads the lockfile and the built output; it starts nothing and records no secrets.
 //
-//   npm run build && npm run candidate:identity [-- --out FILE] [--image-host HOST ...]
+//   npm run build && npm run candidate:identity [-- --out FILE] [--image-host HOST ...] [--font-origin ORIGIN ...]
 //
 // The episode view is reported as served (policy applied, same construction path as the MCP
-// server), with the raw build identified separately. Pass the --image-host values the candidate
-// is configured with; the default is the default policy.
+// server), with the raw build identified separately. Pass the --image-host and --font-origin values
+// the candidate is configured with; the default is the default policy.
 
 const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -159,18 +159,22 @@ function optionValues(argv: readonly string[], name: string): string[] {
 
 /**
  * Builds the policy the served resource was configured with: `--level strict`,
- * `--blocked-presentation placeholder|inert-text` and `--image-host HOST` (repeatable) are the
- * same settings the application passes to `createContentPolicy`. Without any, the default policy.
+ * `--blocked-presentation placeholder|inert-text`, `--image-host HOST` and `--font-origin ORIGIN`
+ * (both repeatable) are the same settings the application passes to `createContentPolicy`. Without any, the default policy.
  */
 export function policyFromArgs(argv: readonly string[]): ContentPolicy {
   const [level] = optionValues(argv, '--level');
   const [blockedPresentation] = optionValues(argv, '--blocked-presentation');
   const imageHosts = optionValues(argv, '--image-host');
-  if (level === undefined && blockedPresentation === undefined && imageHosts.length === 0) return DEFAULT_CONTENT_POLICY;
+  const fontOrigins = optionValues(argv, '--font-origin');
+  if (level === undefined && blockedPresentation === undefined && imageHosts.length === 0 && fontOrigins.length === 0) {
+    return DEFAULT_CONTENT_POLICY;
+  }
   const created = createContentPolicy({
     ...(level === undefined ? {} : { level }),
     ...(blockedPresentation === undefined ? {} : { blockedPresentation }),
     imageHosts,
+    fontOrigins,
   });
   if (!created.ok) throw new Error(`Invalid content policy configuration: ${created.failure.message}`);
   return created.policy;

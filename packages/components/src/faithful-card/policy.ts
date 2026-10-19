@@ -14,6 +14,9 @@ import { z } from 'zod';
 /** The most exact image hosts one policy may name. A finite bound keeps the derived policy small. */
 export const MAX_IMAGE_HOSTS = 32;
 
+/** The most exact font origins one policy may name, bounded for the same reason. */
+const MAX_FONT_ORIGINS = 32;
+
 export type ContentLevel = 'standard' | 'strict';
 
 /**
@@ -27,6 +30,7 @@ export type PolicyFailure =
   | { readonly kind: 'invalid-level'; readonly message: string }
   | { readonly kind: 'invalid-presentation'; readonly message: string }
   | { readonly kind: 'invalid-image-host'; readonly message: string }
+  | { readonly kind: 'invalid-font-origin'; readonly message: string }
   | { readonly kind: 'invalid-config'; readonly message: string };
 
 export type CreatePolicyResult =
@@ -70,16 +74,29 @@ export type ImageOffer =
 
 /** Content-related restrictions the resource must declare before it is mounted. */
 export interface ResourcePolicy {
-  /** Exact HTTPS origins that may serve images. Empty means no content image may load. */
-  readonly imageOrigins: readonly string[];
   /**
-   * A Content-Security-Policy that grants the image origins to `img-src` only. A host that
-   * builds its own policy from the resource's `resourceDomains` can broaden scripts, styles,
-   * fonts and media to those origins; this policy is applied in addition to the host's, and a
-   * document must satisfy both, so no origin gains any permission other than loading images.
-   * `'unsafe-inline'` covers the single-file view's own inline script and styles and no origin.
-   * The restrictions are declared before mounting at either level; Strict's consent cannot
-   * relax them.
+   * Exact HTTPS origins that may serve content images. Empty means no content image may load from
+   * the network; it does not affect the embedded `data:` images the document may always display.
+   */
+  readonly imageOrigins: readonly string[];
+  /** Exact HTTPS origins, with any explicit port, that may serve fonts. Never authorizes images. */
+  readonly fontOrigins: readonly string[];
+  /**
+   * What the resource declares to a host as `resourceDomains`: the image origins and the font
+   * origins together, because that host permission is not per resource type. The document's own
+   * restrictions below are what keep each origin to its one type.
+   */
+  readonly resourceDomains: readonly string[];
+  /**
+   * A Content-Security-Policy with one `img-src` and one `font-src`. Each starts from the level's
+   * baseline schemes (`data:` at both levels, `blob:` at Standard only), which trusted embedded
+   * artwork and fonts use, and adds that type's own origins. A host that builds its own policy
+   * from `resourceDomains` can broaden scripts, styles, fonts, images and media to those origins;
+   * this policy is applied in addition to the host's, and a document must satisfy both, so no
+   * origin gains any permission other than the one type it was configured for. The baseline
+   * schemes fetch nothing from the network. `'unsafe-inline'` covers the single-file view's own
+   * inline script and styles and no origin. The restrictions are declared before mounting at
+   * either level; Strict's consent cannot relax them.
    */
   readonly contentSecurityPolicy: string;
 }
@@ -87,13 +104,19 @@ export interface ResourcePolicy {
 /**
  * The validated settings a policy was created from. `createContentPolicy(policy.configuration)`
  * yields an equal policy, which is how the resource carries it to the view. Strict adds its
- * blocked presentation; Standard has no such setting.
+ * blocked presentation; Standard has no such setting. The level's baseline `data:`/`blob:`
+ * sources follow from the level and are never part of the configuration.
  */
 export type PolicyConfiguration =
-  | { readonly level: 'standard'; readonly imageHosts: readonly string[] }
+  | {
+      readonly level: 'standard';
+      readonly imageHosts: readonly string[];
+      readonly fontOrigins: readonly string[];
+    }
   | {
       readonly level: 'strict';
       readonly imageHosts: readonly string[];
+      readonly fontOrigins: readonly string[];
       readonly blockedPresentation: BlockedPresentation;
     };
 
@@ -102,6 +125,8 @@ export interface ContentPolicy {
   readonly blockedPresentation: BlockedPresentation;
   /** Exact lowercase hostnames, sorted and without duplicates. */
   readonly imageHosts: readonly string[];
+  /** Normalized exact HTTPS origins that may serve fonts, sorted and without duplicates. */
+  readonly fontOrigins: readonly string[];
   readonly configuration: PolicyConfiguration;
   readonly resource: ResourcePolicy;
   /** Only an absolute HTTPS destination without credentials may be activated, and never under Strict. */
@@ -119,6 +144,7 @@ const ConfigSchema = z
   .object({
     level: z.enum(['standard', 'strict']).optional(),
     imageHosts: z.array(z.unknown()).max(MAX_IMAGE_HOSTS).optional(),
+    fontOrigins: z.array(z.unknown()).max(MAX_FONT_ORIGINS).optional(),
     blockedPresentation: z.enum(['placeholder', 'inert-text']).optional(),
   })
   .strict();
@@ -150,6 +176,31 @@ function isExactHost(candidate: unknown): candidate is string {
   }
 }
 
+/**
+ * A trusted font origin as written: `https://`, a host, an optional numeric port and at most the
+ * root path. The class excludes userinfo, backslashes (which URL parsing reads as slashes), a
+ * query, a fragment, whitespace and everything after a path, so none of them can be normalized
+ * away silently; a trailing colon with no port is rejected the same way.
+ */
+const FONT_ORIGIN = /^https:\/\/[^/?#\\@\s:]+(?::\d+)?\/?$/i;
+
+/**
+ * Returns the normalized origin (lowercase ASCII host, the port only when it is not the default)
+ * of a valid trusted font origin, or `undefined`. The host must meet the same DNS-character rule
+ * as an image host, which also keeps CSP delimiters, wildcards and IP literals out of the derived
+ * `font-src`.
+ */
+function normalizeFontOrigin(candidate: unknown): string | undefined {
+  if (typeof candidate !== 'string' || !FONT_ORIGIN.test(candidate)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return undefined;
+  }
+  return isExactHost(url.hostname) ? url.origin : undefined;
+}
+
 type ParsedUrl =
   | { readonly ok: true; readonly url: URL }
   | { readonly ok: false; readonly reason: 'malformed' | 'not-https' | 'credentials' };
@@ -166,14 +217,31 @@ function parseHttpsUrl(raw: string): ParsedUrl {
   return { ok: true, url };
 }
 
-function deriveResourcePolicy(imageHosts: readonly string[]): ResourcePolicy {
+/**
+ * The schemes trusted embedded images and fonts need, by level. `data:` is available at both
+ * levels; `blob:` only at Standard, where an application-owned object URL is a convenience.
+ * Neither fetches from the network, and neither is an origin: configured origins extend this
+ * list and can neither replace it nor add `blob:` to Strict.
+ */
+const BASELINE_SCHEMES: Readonly<Record<ContentLevel, readonly string[]>> = {
+  standard: ['data:', 'blob:'],
+  strict: ['data:'],
+};
+
+function deriveResourcePolicy(
+  level: ContentLevel,
+  imageHosts: readonly string[],
+  fontOrigins: readonly string[],
+): ResourcePolicy {
   const imageOrigins = Object.freeze(imageHosts.map((host) => `https://${host}`));
+  const baseline = BASELINE_SCHEMES[level];
+  const resourceDomains = Object.freeze([...new Set([...imageOrigins, ...fontOrigins])].sort());
   const contentSecurityPolicy = [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
     "style-src 'unsafe-inline'",
-    `img-src ${imageOrigins.join(' ') || "'none'"}`,
-    "font-src 'none'",
+    `img-src ${[...baseline, ...imageOrigins].join(' ')}`,
+    `font-src ${[...baseline, ...fontOrigins].join(' ')}`,
     "media-src 'none'",
     "connect-src 'none'",
     "frame-src 'none'",
@@ -181,7 +249,7 @@ function deriveResourcePolicy(imageHosts: readonly string[]): ResourcePolicy {
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ');
-  return Object.freeze({ imageOrigins, contentSecurityPolicy });
+  return Object.freeze({ imageOrigins, fontOrigins, resourceDomains, contentSecurityPolicy });
 }
 
 function failureFor(error: z.ZodError): PolicyFailure {
@@ -226,14 +294,30 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
     }
   }
   const imageHosts = Object.freeze([...new Set(requested as string[])].sort());
-  const resource = deriveResourcePolicy(imageHosts);
+  const normalizedFontOrigins: string[] = [];
+  for (const origin of parsed.data.fontOrigins ?? []) {
+    const normalized = normalizeFontOrigin(origin);
+    if (normalized === undefined) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalid-font-origin',
+          message:
+            'Each font origin must be an exact HTTPS origin, with an explicit port if it is not the default: no wildcard, credentials, path, query or fragment.',
+        },
+      };
+    }
+    normalizedFontOrigins.push(normalized);
+  }
+  const fontOrigins = Object.freeze([...new Set(normalizedFontOrigins)].sort());
+  const resource = deriveResourcePolicy(level, imageHosts, fontOrigins);
   const allowedOrigins = new Set(resource.imageOrigins);
   const strict = level === 'strict';
   const blockedPresentation: BlockedPresentation = strict
     ? (parsed.data.blockedPresentation ?? 'placeholder')
     : 'inert-text';
   const configuration: PolicyConfiguration = Object.freeze(
-    strict ? { level, imageHosts, blockedPresentation } : { level, imageHosts },
+    strict ? { level, imageHosts, fontOrigins, blockedPresentation } : { level, imageHosts, fontOrigins },
   );
 
   /** Whether this image could load at all, before the reader's consent is considered. */
@@ -250,6 +334,7 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
     level,
     blockedPresentation,
     imageHosts,
+    fontOrigins,
     configuration,
     resource,
     decideLink(destination: string): LinkDecision {

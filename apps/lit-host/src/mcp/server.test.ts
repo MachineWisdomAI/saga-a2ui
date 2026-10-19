@@ -123,6 +123,38 @@ describe('episode MCP server over streamable HTTP', () => {
     await expect(client.readResource({ uri: EPISODE_VIEW_URI })).rejects.toThrow();
   });
 
+  it('declares a configured font origin as a resource domain beside the image host, under its own identity', async () => {
+    const created = createContentPolicy({ imageHosts: ['images.example.com'], fontOrigins: ['https://fonts.example.com:8443'] });
+    if (!created.ok) throw new Error(created.failure.message);
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      contentPolicy: created.policy,
+      port: 0,
+    });
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(listener.url)));
+    open.listener = listener;
+    open.client = client;
+
+    const { tools } = await client.listTools();
+    const uri = (tools[0]?._meta as { ui: { resourceUri: string } }).ui.resourceUri;
+    const { contents } = await client.readResource({ uri });
+    expect(contents[0]?._meta).toEqual({
+      ui: {
+        csp: {
+          connectDomains: [],
+          resourceDomains: ['https://fonts.example.com:8443', 'https://images.example.com'],
+          frameDomains: [],
+          baseUriDomains: [],
+        },
+      },
+    });
+    const html = contents[0] && 'text' in contents[0] ? contents[0].text : '';
+    expect(html).toContain("font-src data: blob: https://fonts.example.com:8443;");
+    expect(html).toContain('img-src data: blob: https://images.example.com;');
+  });
+
   it.each([
     ['a missing id', {}],
     ['an id with disallowed characters', { episodeId: '../etc/passwd' }],

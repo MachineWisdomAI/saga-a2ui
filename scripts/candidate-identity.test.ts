@@ -176,6 +176,17 @@ describe('candidate identity', () => {
       expect(() => policyFromArgs(['--image-host'])).toThrow(/requires a value/);
     });
 
+    it('builds the font origins from --font-origin and rejects an invalid origin instead of falling back', () => {
+      expect(policyFromArgs([]).fontOrigins).toEqual([]);
+      expect(policyFromArgs(['--font-origin', 'https://fonts.example.com:8443', '--font-origin', 'https://a.example.com']).fontOrigins).toEqual([
+        'https://a.example.com',
+        'https://fonts.example.com:8443',
+      ]);
+      expect(() => policyFromArgs(['--font-origin', 'https://*.example.com'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--font-origin', 'http://fonts.example.com'])).toThrow(/Invalid content policy/);
+      expect(() => policyFromArgs(['--font-origin'])).toThrow(/requires a value/);
+    });
+
     it('builds a Strict policy from --level and --blocked-presentation, and rejects invalid values', () => {
       expect(policyFromArgs([]).level).toBe('standard');
       expect(policyFromArgs(['--level', 'strict']).level).toBe('strict');

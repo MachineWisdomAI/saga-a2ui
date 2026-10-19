@@ -18,12 +18,16 @@ export interface ContentResource {
  * another policy's variant: the default policy keeps the base URI, and every different
  * configuration gets its own. That includes a Strict policy whose declared domains equal a
  * Standard policy's: the host metadata is the same but the embedded configuration, and so the
- * view's behavior, is not. Image origins are the only declared domains; the host's broad
- * `resourceDomains` permission is narrowed to images by the restrictions in the document.
+ * view's behavior, is not. The image origins and the font origins are the only declared domains;
+ * the host's broad `resourceDomains` permission is narrowed to each origin's own resource type
+ * by the restrictions in the document. The embedded `data:` and `blob:` baseline needs no
+ * declaration. The URI follows the policy configuration; an application whose bundle also carries
+ * its own artwork, CSS and fonts derives its identity from the final document bytes instead (see
+ * `viewUriForHtml` in `@saga-a2ui/mcp/server`).
  */
 export function contentResource(viewHtml: string, policy: ContentPolicy): ContentResource {
-  const origins = policy.resource.imageOrigins;
-  const isDefault = policy.level === 'standard' && origins.length === 0;
+  const isDefault =
+    policy.level === 'standard' && policy.imageHosts.length === 0 && policy.fontOrigins.length === 0;
   const uri = isDefault
     ? EPISODE_VIEW_URI
     : EPISODE_VIEW_URI.replace(
@@ -33,6 +37,6 @@ export function contentResource(viewHtml: string, policy: ContentPolicy): Conten
   return {
     uri,
     html: embedPolicy(viewHtml, policy),
-    csp: { connectDomains: [], resourceDomains: origins, frameDomains: [], baseUriDomains: [] },
+    csp: { connectDomains: [], resourceDomains: policy.resource.resourceDomains, frameDomains: [], baseUriDomains: [] },
   };
 }

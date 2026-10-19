@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
+import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { policyFromEmbedded } from '../content/embedded-policy.js';
 import { EPISODE_VIEW_URI } from './episode.js';
 import { contentResource } from './content-resource.js';
@@ -123,5 +124,84 @@ describe('reading an embedded configuration', () => {
     ['an unknown presentation', '{"level":"strict","imageHosts":[],"blockedPresentation":"collapsed"}'],
   ])('fails explicitly for %s instead of guessing a policy', (_name, text) => {
     expect(policyFromEmbedded(text).ok).toBe(false);
+  });
+});
+
+describe('the resource of a policy with trusted font origins', () => {
+  const FONTS = ['https://fonts.example.com', 'https://assets.example.org:8443'];
+
+  it('declares font origins beside image origins, once each, and nothing else', () => {
+    const resource = contentResource(VIEW, configured({ imageHosts: ['images.example.com'], fontOrigins: FONTS }));
+    expect(resource.csp).toEqual({
+      connectDomains: [],
+      resourceDomains: ['https://assets.example.org:8443', 'https://fonts.example.com', 'https://images.example.com'],
+      frameDomains: [],
+      baseUriDomains: [],
+    });
+    const shared = contentResource(
+      VIEW,
+      configured({ imageHosts: ['cdn.example.com'], fontOrigins: ['https://cdn.example.com'] }),
+    );
+    expect(shared.csp.resourceDomains).toEqual(['https://cdn.example.com']);
+  });
+
+  it('declares nothing for the embedded baseline: a Strict and a Standard policy without origins declare no domains', () => {
+    expect(contentResource(VIEW, configured({})).csp.resourceDomains).toEqual([]);
+    expect(contentResource(VIEW, configured({ level: 'strict' })).csp.resourceDomains).toEqual([]);
+  });
+
+  it('gives a font-origin variant its own identity, even when its declared domains equal an image-host variant', () => {
+    const base = contentResource(VIEW, configured({})).uri;
+    const fonts = contentResource(VIEW, configured({ fontOrigins: ['https://cdn.example.com'] }));
+    const images = contentResource(VIEW, configured({ imageHosts: ['cdn.example.com'] }));
+    expect(fonts.csp).toEqual(images.csp);
+    expect(new Set([base, fonts.uri, images.uri]).size).toBe(3);
+    expect(contentResource(VIEW, configured({ fontOrigins: ['https://cdn.example.com:443'] })).uri).toBe(fonts.uri);
+  });
+
+  it('embeds the font origins so the view rebuilds the same policy, in either level', () => {
+    for (const level of ['standard', 'strict']) {
+      const policy = configured({ level, imageHosts: ['images.example.com'], fontOrigins: FONTS });
+      const rebuilt = policyFromEmbedded(embeddedJson(contentResource(VIEW, policy).html));
+      expect(rebuilt.ok && rebuilt.policy.configuration).toEqual(policy.configuration);
+      expect(rebuilt.ok && rebuilt.policy.resource.contentSecurityPolicy).toBe(policy.resource.contentSecurityPolicy);
+    }
+  });
+
+  it.each([
+    ['a wildcard origin', '{"level":"standard","imageHosts":[],"fontOrigins":["https://*.example.com"]}'],
+    ['a plain HTTP origin', '{"level":"standard","imageHosts":[],"fontOrigins":["http://fonts.example.com"]}'],
+    ['an origin with a path', '{"level":"strict","imageHosts":[],"fontOrigins":["https://fonts.example.com/css"]}'],
+    ['an origin that would start a new directive', '{"level":"standard","fontOrigins":["https://fonts.example.com;script-src"]}'],
+  ])('fails explicitly for an embedded configuration with %s', (_name, text) => {
+    expect(policyFromEmbedded(text).ok).toBe(false);
+  });
+});
+
+// A rebuilt card keeps its identity only while its bytes are unchanged. The application derives the
+// identity of the document it serves with the SDK helper, so changing the policy, the CSS, a font or
+// the artwork changes it. An answer is never part of the document, so a new answer reuses it (see server.test.ts).
+describe('identity of the self-contained resource', () => {
+  const artworkPixel = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+  const cardDocument = (parts: { artwork?: string; font?: string; css?: string; code?: string } = {}): string =>
+    '<!doctype html><html><head><meta charset="UTF-8" />' +
+    `<style>${parts.css ?? 'body{margin:0}'}@font-face{font-family:Card;src:url(data:font/woff2;base64,${parts.font ?? 'AAAA'})}</style>` +
+    `</head><body><img alt="" src="data:image/png;base64,${parts.artwork ?? artworkPixel}"><script>${parts.code ?? '1'}</script></body></html>`;
+  const identity = (html: string, policy: ContentPolicy = configured({})): string =>
+    viewUriForHtml(contentResource(html, policy).html);
+
+  it('is stable for equal bytes and changes with the code, CSS, font, artwork or policy bytes', () => {
+    const base = identity(cardDocument());
+    expect(identity(cardDocument())).toBe(base);
+    const changed = [
+      identity(cardDocument({ code: '2' })),
+      identity(cardDocument({ css: 'body{margin:1px}' })),
+      identity(cardDocument({ font: 'BBBB' })),
+      identity(cardDocument({ artwork: `${artworkPixel.slice(0, -4)}AAAA` })),
+      identity(cardDocument(), configured({ level: 'strict' })),
+      identity(cardDocument(), configured({ fontOrigins: ['https://fonts.example.com'] })),
+      identity(cardDocument(), configured({ imageHosts: ['images.example.com'] })),
+    ];
+    expect(new Set([base, ...changed]).size).toBe(changed.length + 1);
   });
 });

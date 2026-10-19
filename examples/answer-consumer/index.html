@@ -4,13 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!--
-      The restrictions the content policy in src/main.ts derives for the host images.example.com
-      (`createContentPolicy({ level: 'standard', imageHosts: ['images.example.com'] }).resource.contentSecurityPolicy`).
-      Images load only while this value is exactly what the policy derives; otherwise they stay inert.
+      The restrictions the content policy in src/main.ts derives for the host images.example.com, once per
+      level (`createContentPolicy({ level, imageHosts: ['images.example.com'] }).resource.contentSecurityPolicy`).
+      Images load only while the value for the selected level is exactly what its policy derives; otherwise they
+      stay inert. This page serves both levels from one build, so it carries both values and a document must
+      satisfy each: the stricter one, which omits `blob:`, is what the page enforces. An application with one
+      fixed level ships only that level's value.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://images.example.com; font-src 'none'; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: https://images.example.com; font-src data: blob:; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https://images.example.com; font-src data:; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Answers</title>
     <style>
