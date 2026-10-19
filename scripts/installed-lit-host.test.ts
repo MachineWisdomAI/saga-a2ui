@@ -51,6 +51,21 @@ describe('the application pages built from the packed SDK packages', () => {
       expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/limits.ts', '@saga-a2ui/mcp/src/view/index.ts']),
     );
     expect(playback).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
+    // The FaithfulCard pages reach the optional card, its renderer-neutral contract and Markdown parser, and (with an authored
+    // protected control beside the card) the shared action seam and the server action, all through installed copies.
+    const workflow = page('vite.card-workflow.config.ts').provenance;
+    expect(workflow.installedSdkFiles).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/components/src/faithful-card/index.ts',
+        '@saga-a2ui/lit/src/faithful-card/index.ts',
+        '@saga-a2ui/lit/src/actions/action-button.ts',
+        '@saga-a2ui/core/src/actions/server.ts',
+      ]),
+    );
+    expect(workflow.thirdPartyPackages).toContain('markdown-it');
+    expect(page('vite.faithful-card.config.ts').provenance.installedSdkFiles).toEqual(
+      expect.arrayContaining(['@saga-a2ui/components/src/faithful-card/index.ts', '@saga-a2ui/lit/src/faithful-card/index.ts']),
+    );
   });
 
   it('keeps the optional FaithfulCard, its Markdown parser and React out of every page that does not use them', () => {
@@ -87,6 +102,8 @@ describe('the application pages built from the packed SDK packages', () => {
       'host-fixture/index.html',
       'catalog-isolation/index.html',
       'action-consumer/index.html',
+      'faithful-card/index.html',
+      'card-workflow/index.html',
     ]) {
       expect(listed, required).toContain(required);
     }
