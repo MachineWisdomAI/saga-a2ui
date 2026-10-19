@@ -1,7 +1,8 @@
 graph TD
   A[Trusted application configuration] --> P[Immutable shared policy]
-  P --> C[Image CSP: data: and blob: plus exact HTTPS origins]
-  P --> F[Font CSP: data: and blob: plus separate font origins]
+  P --> S[Baseline: data: in both modes; blob: only in Standard]
+  S --> C[Image CSP: baseline plus exact HTTPS origins]
+  S --> F[Font CSP: baseline plus separate font origins]
   F --> W[Trusted fonts load with readable fallback]
   B[Trusted data or blob images] --> T[Trusted template or CSS]
   T --> C
