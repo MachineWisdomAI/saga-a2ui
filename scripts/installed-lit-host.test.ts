@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildInstalledLitHost, INSTALLED_PAGE_CONFIGS, INSTALLED_SDK_PACKAGES, type BuiltPage, type InstalledLitHostIdentity } from './build-installed-lit-host.js';
-import { createWorkDirectory } from './packed-consumer.js';
+import { buildInstalledLitHost, classifyModules, INSTALLED_PAGE_CONFIGS, INSTALLED_SDK_PACKAGES, type BuiltPage, type InstalledLitHostIdentity } from './build-installed-lit-host.js';
+import { createWorkDirectory, repoRoot } from './packed-consumer.js';
 
 // The application's browser pages (apps/lit-host) built outside the repository from the packed SDK
 // packages. This checks what that build consists of: where every module came from, what each page
@@ -89,5 +89,63 @@ describe('the application pages built from the packed SDK packages', () => {
       // Derived here from the bytes on disk (the requirement), not from the builder's own function.
       expect(createHash('sha256').update(fs.readFileSync(path.join(out, file))).digest('hex'), file).toBe(hash);
     }
+  });
+
+  it('builds the same pages when the temporary root is a symlink, as /var -> /private/var is on macOS', async () => {
+    // Vite reports resolved module paths, so a consumer directory named through a symlinked root must still match them.
+    const realRoot = path.join(work, 'real-tmp');
+    const linkedRoot = path.join(work, 'linked-tmp');
+    fs.mkdirSync(realRoot);
+    fs.symlinkSync(realRoot, linkedRoot, 'dir');
+    const previous = process.env.TMPDIR;
+    process.env.TMPDIR = linkedRoot;
+    try {
+      const linked = await buildInstalledLitHost(path.join(work, 'dist-installed-linked'));
+      for (const { config, provenance } of linked.pages) expect(provenance.unexpected, config).toEqual([]);
+      expect(linked.pages.map((one) => [one.config, one.provenance.installedSdkFiles])).toEqual(identity.pages.map((one) => [one.config, one.provenance.installedSdkFiles]));
+      expect(linked.builtFilesSha256).toEqual(identity.builtFilesSha256);
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+    }
+  }, 300_000);
+});
+
+describe('classifying a build\'s modules by canonical path', () => {
+  const root = createWorkDirectory('saga-installed-classify-test-');
+  afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+  const realConsumer = path.join(root, 'real', 'consumer');
+  const consumer = path.join(root, 'linked', 'consumer'); // the same directory, reached through a symlinked parent
+  const installed = path.join(realConsumer, 'node_modules', '@saga-a2ui', 'lit', 'src');
+
+  beforeAll(() => {
+    fs.mkdirSync(installed, { recursive: true });
+    fs.writeFileSync(path.join(installed, 'a.ts'), '');
+    fs.mkdirSync(path.join(realConsumer, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(realConsumer, 'src', 'app.ts'), '');
+    fs.symlinkSync(path.join(root, 'real'), path.join(root, 'linked'), 'dir');
+  });
+
+  it('accepts an installed SDK file and an application file reported by resolved path', () => {
+    const result = classifyModules(consumer, [path.join(installed, 'a.ts'), path.join(realConsumer, 'src', 'app.ts')]);
+    expect(result.installedSdkFiles).toEqual(['@saga-a2ui/lit/src/a.ts']);
+    expect(result.applicationModules).toBe(1);
+    expect(result.unexpected).toEqual([]);
+  });
+
+  it('still rejects a workspace SDK source and a workspace application file', () => {
+    const workspaceSdk = path.join(repoRoot, 'packages', 'lit', 'src', 'a2ui', 'app-element.ts');
+    const workspaceApplication = path.join(repoRoot, 'apps', 'lit-host', 'src', 'main.ts');
+    const result = classifyModules(consumer, [workspaceSdk, workspaceApplication]);
+    expect(result.installedSdkFiles).toEqual([]);
+    expect(result.unexpected.length).toBe(2);
+  });
+
+  it('rejects an installed SDK package that is a link to the workspace package', () => {
+    const aliased = path.join(realConsumer, 'node_modules', '@saga-a2ui', 'core');
+    fs.symlinkSync(path.join(repoRoot, 'packages', 'core'), aliased, 'dir');
+    const result = classifyModules(consumer, [path.join(aliased, 'src', 'platform.d.ts')]);
+    expect(result.installedSdkFiles).toEqual([]);
+    expect(result.unexpected.length).toBe(1);
   });
 });

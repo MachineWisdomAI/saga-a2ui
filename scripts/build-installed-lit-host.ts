@@ -108,21 +108,39 @@ function thirdPartyPackageName(file: string): string {
   return parts[0]!.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]!;
 }
 
-/** Classifies every module of one build against where an installed consumer may legitimately load it from. */
+/** The canonical form of an absolute path, so spellings of one location (a symlinked temporary root such as macOS's /var -> /private/var) compare equal. A path that does not exist is returned as given. */
+function canonical(file: string): string {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    return file;
+  }
+}
+
+/**
+ * Classifies every module of one build against where an installed consumer may legitimately load it from.
+ * Locations are compared by canonical filesystem path: Vite reports resolved module paths while the
+ * consumer directory is named through the platform's temporary root, and the two can spell one
+ * location differently. A workspace alias still resolves into `packages/` or the application's
+ * workspace sources and so is still unexpected.
+ */
 export function classifyModules(consumer: string, modules: readonly string[]): ModuleProvenance {
-  const installedRoot = path.join(consumer, 'node_modules', '@saga-a2ui') + path.sep;
+  const consumerRoot = canonical(consumer);
+  const installedRoot = path.join(consumerRoot, 'node_modules', '@saga-a2ui') + path.sep;
+  const repoModules = canonical(path.join(repoRoot, 'node_modules')) + path.sep;
   const installedSdkFiles: string[] = [];
   const thirdParty = new Set<string>();
   const unexpected: string[] = [];
   let applicationModules = 0;
   for (const id of new Set(modules)) {
-    const file = id.split('?')[0]!;
-    if (file.startsWith('\0') || !path.isAbsolute(file)) continue; // Vite's virtual helpers
+    const reported = id.split('?')[0]!;
+    if (reported.startsWith('\0') || !path.isAbsolute(reported)) continue; // Vite's virtual helpers
+    const file = canonical(reported);
     if (file.startsWith(installedRoot)) {
       installedSdkFiles.push(`@saga-a2ui/${file.slice(installedRoot.length).split(path.sep).join('/')}`);
-    } else if (file.startsWith(consumer + path.sep) && !file.includes(`${path.sep}node_modules${path.sep}`)) {
+    } else if (file.startsWith(consumerRoot + path.sep) && !file.includes(`${path.sep}node_modules${path.sep}`)) {
       applicationModules += 1;
-    } else if (file.startsWith(path.join(repoRoot, 'node_modules') + path.sep) && !file.includes(`${path.sep}@saga-a2ui${path.sep}`)) {
+    } else if (file.startsWith(repoModules) && !file.includes(`${path.sep}@saga-a2ui${path.sep}`)) {
       thirdParty.add(thirdPartyPackageName(file));
     } else {
       unexpected.push(file);
