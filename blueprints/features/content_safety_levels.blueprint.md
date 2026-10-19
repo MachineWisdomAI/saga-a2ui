@@ -1,6 +1,6 @@
 ---
 feature_name: content_safety_levels
-status: draft
+status: approved
 module_blueprints: [action_binding]
 dependencies: []
 date_added: 2026-10-15
@@ -10,7 +10,7 @@ date_added: 2026-10-15
 
 ## Status
 
-- Draft amendment, 2026-10-19: [Trusted embedded artwork](#trusted-embedded-artwork) proposes baseline `data:` and `blob:` image sources in both modes for [REACT3](https://github.com/MachineWisdomAI/saga-a2ui/issues/31), preserving the existing content rules. This replaces the earlier flag-based draft. It is not approved or implemented. The prior approved content-safety and lifetime contracts, and their design-to-code records below, remain current until human approval of this amendment.
+- Approved embedded-artwork amendment: the human owner approved [revision `c0a7bb9da091d16935e7743b8466c90f337a57e4`](https://github.com/MachineWisdomAI/saga-a2ui/blob/c0a7bb9da091d16935e7743b8466c90f337a57e4/blueprints/features/content_safety_levels.blueprint.md#trusted-embedded-artwork), including its diagrams, on 2026-10-19. It adds baseline `data:` and `blob:` image sources in both Standard and Strict; configured exact HTTPS origins extend rather than replace them. No new configuration flag is introduced, and existing content rules remain unchanged. This supersedes only the resource-image restriction described in [Trusted embedded artwork](#trusted-embedded-artwork); earlier approved contracts and design-to-code records remain intact. Implementation of this amendment is not started; [REACT3](https://github.com/MachineWisdomAI/saga-a2ui/issues/31) remains its implementation owner.
 
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/content_safety_levels.blueprint.md).
 - Implementation: partial overall. Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for POL1/POL2 at [`MachineWisdomAI/saga-a2ui@6d3916da15a6207a5a546f06a86f772fd31b9ce3`](https://github.com/MachineWisdomAI/saga-a2ui/commit/6d3916da15a6207a5a546f06a86f772fd31b9ce3) through [PR #70](https://github.com/MachineWisdomAI/saga-a2ui/pull/70) and [PR #72](https://github.com/MachineWisdomAI/saga-a2ui/pull/72). The [POL1 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/70#pullrequestreview-5555182721) and [POL2 review](https://github.com/MachineWisdomAI/saga-a2ui/pull/72#pullrequestreview-5555391827) record local source qualification, including actual browser requests and stale-control regressions.
