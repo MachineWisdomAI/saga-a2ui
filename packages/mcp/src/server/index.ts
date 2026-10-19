@@ -1,7 +1,9 @@
 export {
   BudgetConfigurationError,
   StageFailure,
+  assertBudgetSettings,
   createServerBudgets,
+  throwIfEnded,
   valueOrThrow,
   type BoundedScope,
   type BudgetSettings,

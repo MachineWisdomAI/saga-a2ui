@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify } from 'jose';
+import { throwIfEnded, valueOrThrow, type BoundedScope } from '@saga-a2ui/mcp/server';
 import { MEDIA_PROOF_TYP } from './media-proof.js';
 import { resolveRange } from './media-range.js';
 
@@ -14,7 +15,12 @@ export interface ProtectedMedia {
  * code path may reach it before the capability, the recipient's proof and the scope all check out.
  */
 export interface MediaStore {
-  read(episodeId: string): Promise<ProtectedMedia>;
+  /**
+   * `signal` aborts when the acquisition is abandoned (its budget, the request's deadline or the
+   * caller). A store that ignores it still cannot hold the request open, but one that honors it
+   * stops its own work. Bytes that arrive after the abort are never delivered.
+   */
+  read(episodeId: string, signal: AbortSignal): Promise<ProtectedMedia>;
 }
 
 /** What a capability is scoped to. The recipient is the view's key, not the person's name. */
@@ -59,9 +65,10 @@ export type EntitlementDecision = 'entitled' | 'denied';
  * The application's current answer to "may this account hear this episode?". It is also the
  * current revocation lookup: the service asks it on every fresh acquisition, with the account and
  * episode the capability was issued for, so a revoked entitlement refuses new bytes even though the
- * capability has not expired. A lookup that throws is a fault, not a revocation.
+ * capability has not expired. A lookup that throws is a fault, not a revocation. `signal` aborts
+ * when the lookup is abandoned; an answer that arrives after that changes nothing.
  */
-export type EntitlementLookup = (accountId: string, episodeId: string) => Promise<EntitlementDecision>;
+export type EntitlementLookup = (accountId: string, episodeId: string, signal: AbortSignal) => Promise<EntitlementDecision>;
 
 /**
  * The synthetic media service. It issues capabilities and decides every later acquisition.
@@ -81,8 +88,13 @@ export type EntitlementLookup = (accountId: string, episodeId: string) => Promis
  */
 export interface MediaService {
   issue(grant: CapabilityGrant): IssuedCapability;
-  /** Rejects only when the entitlement lookup or the storage read fails; the caller maps that to "try again". */
-  acquire(request: MediaRequest): Promise<MediaOutcome>;
+  /**
+   * Decides one acquisition inside `scope`, the request's acquisition budget. Rejects when the
+   * entitlement lookup or the storage read fails, or when the scope ends first (a `StageFailure`
+   * with the typed cause); the caller maps that to "try again". Once the scope has ended nothing
+   * more starts: no lookup, no storage read, and a late denial deletes no grant.
+   */
+  acquire(request: MediaRequest, scope: BoundedScope): Promise<MediaOutcome>;
 }
 
 export interface MediaServiceOptions {
@@ -123,7 +135,8 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       return { capability, expiresAt };
     },
 
-    async acquire(request) {
+    async acquire(request, scope) {
+      throwIfEnded(scope);
       const now = nowSeconds();
       forgetExpired(now);
       if (request.capability === undefined || request.proof === undefined) return REFUSED;
@@ -149,14 +162,21 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
         return REFUSED;
       }
 
-      if ((await options.entitlement(grant.accountId, grant.episodeId)) !== 'entitled') {
+      // The lookup and the storage read are bounded stages of this acquisition. An answer that loses
+      // the race is dropped by `run`, so it cannot reach the grant table or start the read below.
+      const decision = valueOrThrow(await scope.run('authorization', (stage) => options.entitlement(grant.accountId, grant.episodeId, stage.signal)));
+      throwIfEnded(scope);
+      if (decision !== 'entitled') {
         // A denial is final for this capability: access granted again later needs a new Play. A
-        // lookup that throws never reaches here, so a fault does not revoke anything.
+        // lookup that throws or is abandoned never reaches here, so a fault does not revoke anything,
+        // and a denial that arrives after the request ended is dropped: the grant stays until its
+        // own expiry and the next acquisition asks the lookup again.
         grants.delete(capabilityHash);
         return REFUSED;
       }
 
-      const media = await options.store.read(grant.episodeId);
+      const media = valueOrThrow(await scope.run('storage', (stage) => options.store.read(grant.episodeId, stage.signal)));
+      throwIfEnded(scope);
       const range = resolveRange(request.range, media.bytes.length);
       if (range.kind === 'whole') return { kind: 'delivered', media };
       if (range.kind === 'unsatisfiable') return { kind: 'unsatisfiable', total: media.bytes.length };

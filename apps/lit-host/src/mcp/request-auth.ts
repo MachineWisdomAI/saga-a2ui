@@ -28,7 +28,14 @@ export interface VerifiedIdentity {
 
 export type AuthDecision =
   | { readonly ok: true; readonly authInfo: AuthInfo }
-  | { readonly ok: false; readonly status: 401 | 403 | 500; readonly challenge?: string; readonly error: string };
+  | {
+      readonly ok: false;
+      readonly status: 401 | 403 | 500;
+      readonly challenge?: string;
+      readonly error: string;
+      /** Internal only: the verifier's own failure behind a 500, kept for the request's diagnostics. */
+      readonly fault?: unknown;
+    };
 
 const IdentityClaims = z.object({ accountId: z.string().min(1), signInId: z.string().min(1) });
 
@@ -67,11 +74,16 @@ function reject(requirement: AuthRequirement, status: 401 | 403, error: string, 
  * Checks the `Authorization` header: a bearer credential the verifier accepts, not expired,
  * carrying the endpoint's required scope, and naming an account. Anything else is refused with
  * the HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
+ *
+ * The verifier takes only the token, so it cannot be asked to stop: the caller bounds the wait and
+ * passes `gate`, which aborts when that wait is over. A verifier that answers after `gate` aborted is
+ * dropped before its result is examined or an authorization snapshot is made.
  */
 export async function authenticate(
   request: Pick<IncomingMessage, 'headers'>,
   verifier: OAuthTokenVerifier,
   requirement: AuthRequirement,
+  gate: AbortSignal,
   nowSeconds: () => number = () => Date.now() / 1000,
 ): Promise<AuthDecision> {
   const header = request.headers.authorization;
@@ -85,8 +97,9 @@ export async function authenticate(
     authInfo = await verifier.verifyAccessToken(match[1]);
   } catch (error) {
     if (OAuthError.isInstance(error) && error.code === OAuthErrorCode.InvalidToken) return reject(requirement, 401, 'invalid_token', 'Invalid credential');
-    return { ok: false, status: 500, error: 'server_error' };
+    return { ok: false, status: 500, error: 'server_error', fault: error };
   }
+  if (gate.aborted) return { ok: false, status: 500, error: 'server_error' }; // a late identity is dropped, never snapshotted
   if (typeof authInfo.expiresAt !== 'number' || authInfo.expiresAt <= nowSeconds()) {
     return reject(requirement, 401, 'invalid_token', 'Token has expired');
   }

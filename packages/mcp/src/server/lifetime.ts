@@ -20,7 +20,9 @@ export type Stage =
   | 'authorization'
   | 'storage'
   | 'acquisition'
-  | 'dependency';
+  | 'dependency'
+  /** Writing a response (or keeping a stream flowing) to the peer. */
+  | 'delivery';
 
 /** Whether the stage could already have changed something. Expiry proves no rollback either way. */
 export type Effect = 'none' | 'unknown';
@@ -53,6 +55,15 @@ export class StageFailure extends Error {
 export function valueOrThrow<T>(result: StageResult<T>): T {
   if (!result.ok) throw new StageFailure(result.cause);
   return result.value;
+}
+
+/**
+ * Throws the scope's cause if it has ended. Work that a late result could resume (an uncooperative
+ * lookup answering after its stage was abandoned) calls this before its next owned effect: the gate
+ * is checked by the code that would start the effect, not left to the callback stopping.
+ */
+export function throwIfEnded(scope: BoundedScope): void {
+  if (scope.signal.aborted) throw new StageFailure(scope.signal.reason as LifetimeCause); // only this module aborts a scope's signal, always with a cause
 }
 
 /** One or both budgets, as an application or route states them. Every supplied value is validated. */

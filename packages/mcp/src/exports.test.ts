@@ -48,9 +48,11 @@ describe('package subpath exports', () => {
       'BudgetConfigurationError',
       'OperationConfigurationError',
       'StageFailure',
+      'assertBudgetSettings',
       'createServerBudgets',
       'registerProtectedOperation',
       'registerPublicOperation',
+      'throwIfEnded',
       'valueOrThrow',
       'viewUriForHtml',
     ]);

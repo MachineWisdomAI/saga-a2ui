@@ -14,8 +14,6 @@ export const ANSWER_VIEW_URI = 'ui://saga-a2ui/answer-view.html';
 export const ANSWER_LIMITS = {
   maxQuestion: 500,
   maxAnswer: 2_000,
-  /** Finite wait for the application to produce an answer. */
-  answerBoundMs: 5_000,
 } as const;
 
 /** Tool failure: the application has no answer for that question. */
