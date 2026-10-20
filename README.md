@@ -1,5 +1,7 @@
 # SAGA A2UI
 
+React applications: follow [the React consumer dependency guide](docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
+
 Safe Agentic Generative Applications — by [Machine Wisdom](https://machine-wisdom.ai).
 
 TypeScript middleware for connecting existing services to assistant experiences, with renderer choice, explicit data-sharing rules, and server authorization hooks.
