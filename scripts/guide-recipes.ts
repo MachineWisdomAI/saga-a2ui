@@ -24,7 +24,6 @@ export const RECIPES_FILE = 'docs/attach-to-existing-backend.md';
 export const REQUIRED_SERVERS = ['node', 'express', 'hono', 'fastify', 'hapi'] as const;
 
 const OPEN_WORK: Readonly<Record<string, string>> = {
-  hono: 'The Hono template and its qualification are [#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63); its integration is still pending.',
   hapi: 'The Hapi bridge and its identity handoff are [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65). Hapi has no official adapter, and route authentication does not yet reach the bridge callback, so the identity handoff is work that issue owns.',
 };
 

@@ -14,6 +14,7 @@ Attaching SAGA to a backend you already run is an integration you make in your o
 | `lit-mcp` | `node` | [`lit-node`](../templates/lit-node/) | offered |
 | `lit-mcp` | `express` | [`lit-express`](../templates/lit-express/) | not offered |
 | `lit-mcp` | `fastify` | [`lit-fastify`](../templates/lit-fastify/) | not offered |
+| `lit-mcp` | `hono` | [`lit-hono`](../templates/lit-hono/) | not offered |
 <!-- /pairs -->
 
 A pair is listed only while CI qualifies it, and a qualified pair is not automatically offered by `saga init`: that command offers the pairs in its own list. A recipe is not a claim about any other pair, and no full matrix is claimed.
@@ -21,7 +22,6 @@ A pair is listed only while CI qualifies it, and a qualified pair is not automat
 ### Required servers without a recipe yet
 
 <!-- uncovered -->
-- `hono`: The Hono template and its qualification are [#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63); its integration is still pending.
 - `hapi`: The Hapi bridge and its identity handoff are [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65). Hapi has no official adapter, and route authentication does not yet reach the bridge callback, so the identity handoff is work that issue owns.
 <!-- /uncovered -->
 
@@ -270,3 +270,77 @@ attach: (view) => {
 },
 ```
 <!-- /recipe:lit-fastify -->
+
+<!-- recipe:lit-hono -->
+## `hono` with `lit-mcp`
+
+Template: [`templates/lit-hono`](../templates/lit-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Hand the verified identity to the transport
+
+From `templates/lit-hono/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth; no tool argument can name an account.
+const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
+if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
+return serve(c, () => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), decision.authInfo);
+```
+
+### Register a protected operation
+
+From `templates/lit-hono/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view: viewFor(html),
+      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-hono/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (view) => {
+  stopWatching.push(
+    view.watchById(CLEAR_ID, ActionButton, (handle) => {
+      bindings.push(handle.bindAction('activate', actions.clearNote));
+    }),
+  );
+},
+```
+<!-- /recipe:lit-hono -->
