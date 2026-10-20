@@ -146,7 +146,7 @@ Named-host receipts exist for a few specific flows and are recorded in [host com
 
 ## Actions
 
-The attachment above is the whole of what this guide teaches; [the action walkthrough (GUIDE2)](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) is where the details belong. This section only says where to look and what to expect.
+The attachment above is the whole of what this guide teaches. [Change a component and trace allowed and denied requests](actions.md) is where the details belong: it changes a component and its action, then traces input, prerequisites, verified identity, authorization, delivery and cleanup, with every case run. This section is the short version.
 
 The verified **non-playback** example is the notes application: `examples/pack1-consumer/src/notes-actions.ts` defines Archive once and `notes-view.ts` attaches it to each rendered row. The demonstration serves it behind the starter's own authentication, and its README shows each outcome:
 
@@ -198,6 +198,6 @@ These are recorded, not hidden, and none is a gate. No developer other than the 
 ## Where to go next
 
 - The attach recipes: [Attach SAGA to an existing backend](attach-to-existing-backend.md).
-- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [README](../README.md).
-- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and the README's "The action contract across the current codebase (ACT7)".
+- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [development reference](development-reference.md#creating-a-project-with-saga-init-cli1).
+- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and [The action contract across the current codebase (ACT7)](development-reference.md#the-action-contract-across-the-current-codebase-act7).
 - The design this guide implements: the [application setup Blueprint](../blueprints/features/application_setup.blueprint.md).

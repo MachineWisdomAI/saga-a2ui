@@ -50,6 +50,7 @@ Host support depends on the flow. See [observed host behavior and remaining limi
 ## Documentation and design
 
 - [Getting started](docs/getting-started.md): demo, starter and candidate installation.
+- [Change a component and trace requests](docs/actions.md): allowed, denied and unauthenticated action paths.
 - [Development reference](docs/development-reference.md#local-development): build, tests and detailed implementation notes.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
 - [Public installation status](docs/public-install.md): what remains before a public package recipe exists.

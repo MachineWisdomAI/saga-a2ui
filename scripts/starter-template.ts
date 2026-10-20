@@ -184,7 +184,7 @@ const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDir
  * another process may rename it away and put something else at the path. Before every file, at the
  * end and before any removal, the path is checked to still lead to that directory. Node has no
  * directory-relative file calls, so the check narrows the window between check and write to the
- * instant between two adjacent calls; it does not close it, and the README says so.
+ * instant between two adjacent calls; it does not close it, and docs/development-reference.md (CLI1) documents that limitation.
  */
 function* createDirectorySteps(destination: string, files: readonly OutputFile[]): Generator<void, string, void> {
   const target = path.resolve(destination);
