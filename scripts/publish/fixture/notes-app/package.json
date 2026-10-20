@@ -1,0 +1,10 @@
+{
+  "name": "notes-fixture-application",
+  "private": true,
+  "description": "A synthetic application used to qualify saga publish (CLI3). Its build is the committed build/view.html.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@saga-a2ui/core": "0.0.0-candidate.g0123456789ab",
+    "@saga-a2ui/mcp": "0.0.0-candidate.g0123456789ab"
+  }
+}

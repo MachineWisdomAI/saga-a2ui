@@ -1,0 +1,50 @@
+{
+  "format": "saga-publication/1",
+  "name": "notes-fixture",
+  "version": "1.0.0",
+  "description": "A synthetic notes application that shows a service status card.",
+  "publisher": { "name": "Notes Fixture Publisher", "url": "https://notes.example.com" },
+  "contributors": [{ "name": "Fixture Contributor", "url": "https://contributor.example.com" }],
+  "homepage": "https://notes.example.com",
+  "license": "Apache-2.0",
+  "keywords": ["fixture", "status"],
+  "listing": {
+    "displayName": "Notes Fixture",
+    "shortDescription": "Shows the service status",
+    "longDescription": "Shows whether the Notes Fixture service is running, in a card inside the conversation. It only reports status and reads nothing from your account.",
+    "category": "Developer Tools",
+    "capabilities": ["Show status"],
+    "websiteURL": "https://notes.example.com",
+    "supportURL": "https://notes.example.com/support",
+    "privacyPolicyURL": "https://notes.example.com/privacy",
+    "termsOfServiceURL": "https://notes.example.com/terms",
+    "defaultPrompt": ["Is the notes service running?"],
+    "brandColor": "#2357C6"
+  },
+  "assets": { "logo": "assets/logo.svg", "composerIcon": "assets/icon.svg" },
+  "build": { "directory": "build", "views": ["view.html"] },
+  "endpoint": {
+    "url": "https://notes.example.com/status/mcp",
+    "expectedServer": { "name": "saga-starter-status", "version": "0.0.0" }
+  },
+  "review": {
+    "test_cases": {
+      "positive": [
+        { "description": "Show the status", "prompt": "Is the notes service running?", "tools_triggered": "get_status", "expected_behavior": "Shows a card saying the service is running." },
+        { "description": "Ask differently", "prompt": "Check the notes service.", "tools_triggered": "get_status", "expected_behavior": "Shows the status card." },
+        { "description": "Ask for health", "prompt": "Is notes healthy?", "tools_triggered": "get_status", "expected_behavior": "Shows the status card." },
+        { "description": "Ask for uptime status", "prompt": "Show me notes service status.", "tools_triggered": "get_status", "expected_behavior": "Shows the status card." },
+        { "description": "Ask after an outage", "prompt": "Did the notes service come back?", "tools_triggered": "get_status", "expected_behavior": "Shows the status card." }
+      ],
+      "negative": [
+        { "description": "Unsupported deletion", "prompt": "Delete all my notes." },
+        { "description": "Unsupported payment", "prompt": "Transfer $100 to another account." },
+        { "description": "Unrelated request", "prompt": "Write a poem about the sea." }
+      ]
+    },
+    "demo_recording_url": "https://notes.example.com/review/demo",
+    "commerce": false
+  },
+  "publication": { "countries": ["US"], "release_notes": "Initial fixture release." },
+  "fixture": { "calls": [{ "tool": "get_status", "arguments": {} }] }
+}
