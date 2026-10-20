@@ -1,12 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import { inflateSync } from 'node:zlib';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/client/validators/ajv';
-import type { ReleaseInput } from './release-input.js';
-import { sha256, fail, pass, unknown, type Finding } from './record.js';
-import { readZip, ZipError, type ZipEntry } from './zip.js';
+import { readApplicationFile } from './application-files.js';
+import { iconProblem } from './images.js';
+import type { ChatgptReleaseInput, LoadedReleaseInput, ReleaseInput } from './release-input.js';
+import { ARCHIVE_FILES, sha256, fail, pass, unknown, type Finding, type HandoffItem } from './record.js';
+import { secretFinding, textEntries } from './secrets.js';
+import type { EndpointSnapshot } from './endpoint.js';
+import type { PublicationTarget } from './target.js';
+import { endpointUrlProblem, publishedUrlProblem } from './urls.js';
+import { readZip, writeZip, ZipError, type ZipEntry } from './zip.js';
 
 // The ChatGPT target of publication (CLI3 #66): what goes into the plugin ZIP and the rules the ZIP
 // is checked against. The format is the Agent Plugins 1.0.0 portable package that OpenAI documents
@@ -110,7 +114,7 @@ export interface AssembledPackage {
 }
 
 /** The files of the ChatGPT plugin ZIP for a release input. Nothing is validated here; `checkArchive` checks what was built. */
-export function assemblePackage(input: ReleaseInput, directory: string): AssembledPackage {
+export function assemblePackage(input: ChatgptReleaseInput, directory: string): AssembledPackage {
   const { listing } = input;
   const assetFields = { logo: input.assets.logo, composerIcon: input.assets.composerIcon, logoDark: input.assets.logoDark, composerIconDark: input.assets.composerIconDark };
   const entries: ZipEntry[] = [];
@@ -124,17 +128,10 @@ export function assemblePackage(input: ReleaseInput, directory: string): Assembl
       continue;
     }
     stored.set(entryPath, source);
-    try {
-      const file = path.resolve(directory, source);
-      if (fs.lstatSync(file).isSymbolicLink() || !fs.statSync(file).isFile()) throw new Error('It is not a regular file.');
-      // An asset is copied into a package that is published, so it must come from the application's own directory.
-      const root = fs.realpathSync(directory);
-      const real = fs.realpathSync(file);
-      if (!real.startsWith(`${root}${path.sep}`)) throw new Error('It is outside the directory of the release input.');
-      entries.push({ path: entryPath, data: fs.readFileSync(real) });
-    } catch (error) {
-      unreadableAssets.push({ source, reason: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'It does not exist.' : (error as Error).message });
-    }
+    // An asset is copied into a package that is published, so it must come from the application's own directory.
+    const read = readApplicationFile(directory, source);
+    if (read.ok) entries.push({ path: entryPath, data: read.data });
+    else unreadableAssets.push({ source, reason: read.reason });
   }
   const reference = (source: string | undefined): string | undefined => (source === undefined ? undefined : `./${assetEntryPath(source)}`);
   const withoutUndefined = <T extends Record<string, unknown>>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, inner]) => inner !== undefined)) as T;
@@ -186,38 +183,6 @@ export function assemblePackage(input: ReleaseInput, directory: string): Assembl
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** A problem with a URL a listing publishes, or `null`. */
-function publishedUrlProblem(label: string, value: unknown, maxLength: number): string | null {
-  if (typeof value !== 'string' || value === '') return `${label} is required.`;
-  if (value.length > maxLength) return `${label} is longer than ${maxLength} characters.`;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return `${label} is not an absolute URL.`;
-  }
-  if (url.protocol !== 'https:') return `${label} must use HTTPS.`;
-  if (url.username !== '' || url.password !== '') return `${label} must not contain credentials.`;
-  return null;
-}
-
-/** Whether a host name could be reached from outside the publisher's own network. IP literals are refused: the portal verifies a domain. */
-function isPublicHostName(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return false;
-  if (!host.includes('.') || host.endsWith('.')) return false;
-  return !['localhost', 'local', 'internal', 'lan', 'home.arpa', 'localdomain'].some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
-}
-
-/** `null` when the URL is a stable public HTTPS MCP endpoint, otherwise what is wrong with it. */
-export function endpointUrlProblem(value: string): string | null {
-  const problem = publishedUrlProblem('The endpoint URL', value, 2048);
-  if (problem !== null) return problem;
-  const url = new URL(value);
-  if (url.hash !== '') return 'The endpoint URL must not contain a fragment.';
-  if (!isPublicHostName(url.hostname)) return `The endpoint host ${url.hostname} is a local or testing address; ChatGPT submission needs a stable public HTTPS endpoint.`;
-  return null;
-}
 
 function relativeLuminance(hex: string): number {
   const channel = (offset: number): number => {
@@ -292,234 +257,6 @@ export function listingProblems(plugin: Record<string, unknown>): string[] {
   }
   return problems.filter((problem): problem is string => problem !== null);
 }
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MIN_ICON = 48;
-const MAX_RASTER = 4096;
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-
-function crc32(bytes: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-const PNG_CHANNELS: Readonly<Record<number, number>> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
-const PNG_DEPTHS: Readonly<Record<number, readonly number[]>> = { 0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16] };
-const ADAM7 = [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]] as const;
-
-interface PngHeader {
-  readonly width: number;
-  readonly height: number;
-  readonly bitDepth: number;
-  readonly colorType: number;
-  readonly interlaced: boolean;
-  readonly data: Buffer;
-}
-
-/**
- * The structure of a PNG, read the way a decoder does: the signature, every chunk's length and
- * CRC, one `IHDR` first with a legal combination of fields, a palette where the color type needs
- * one, contiguous `IDAT` data, and `IEND` last with nothing after it. A string is what is wrong.
- */
-function readPng(bytes: Buffer): PngHeader | string {
-  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return 'does not start with the PNG signature';
-  let offset = 8;
-  let header: Omit<PngHeader, 'data'> | undefined;
-  let sawPalette = false;
-  let sawData = false;
-  let dataEnded = false;
-  let ended = false;
-  const data: Buffer[] = [];
-  while (offset < bytes.length) {
-    if (ended) return 'has data after its IEND chunk';
-    if (offset + 12 > bytes.length) return 'is truncated inside a chunk header';
-    const length = bytes.readUInt32BE(offset);
-    const type = bytes.toString('latin1', offset + 4, offset + 8);
-    if (!/^[A-Za-z]{4}$/.test(type)) return 'has a chunk with an invalid type';
-    if (length > 0x7fffffff || offset + 12 + length > bytes.length) return `is truncated inside its ${type} chunk`;
-    const body = bytes.subarray(offset + 8, offset + 8 + length);
-    if (crc32(bytes.subarray(offset + 4, offset + 8 + length)) !== bytes.readUInt32BE(offset + 8 + length)) return `has a ${type} chunk whose checksum is wrong`;
-    if (header === undefined && type !== 'IHDR') return 'does not begin with an IHDR chunk';
-    if (type === 'IHDR') {
-      if (header !== undefined || length !== 13) return 'has an invalid IHDR chunk';
-      const width = body.readUInt32BE(0);
-      const height = body.readUInt32BE(4);
-      const [bitDepth, colorType, compression, filter, interlace] = [body[8]!, body[9]!, body[10]!, body[11]!, body[12]!];
-      if (width === 0 || height === 0 || width > 0x7fffffff || height > 0x7fffffff) return 'has an empty or oversized image';
-      if (PNG_DEPTHS[colorType]?.includes(bitDepth) !== true || compression !== 0 || filter !== 0 || (interlace !== 0 && interlace !== 1)) return 'has an IHDR chunk with an illegal combination of fields';
-      header = { width, height, bitDepth, colorType, interlaced: interlace === 1 };
-    } else if (type === 'PLTE') {
-      if (sawData || length === 0 || length % 3 !== 0 || length > 768) return 'has an invalid palette';
-      sawPalette = true;
-    } else if (type === 'IDAT') {
-      if (dataEnded) return 'has IDAT chunks that are not contiguous';
-      sawData = true;
-      data.push(Buffer.from(body));
-    } else {
-      if (sawData) dataEnded = true;
-      if (type === 'IEND') {
-        if (length !== 0) return 'has a non-empty IEND chunk';
-        ended = true;
-      } else if (type.charCodeAt(0) < 0x61) return `uses the critical chunk ${type}, which this check cannot verify`;
-    }
-    offset += 12 + length;
-  }
-  if (header === undefined) return 'has no IHDR chunk';
-  if (!ended) return 'is truncated: it has no IEND chunk';
-  if (!sawData) return 'has no image data (IDAT)';
-  if (header.colorType === 3 && !sawPalette) return 'needs a palette (PLTE) and has none';
-  return { ...header, data: Buffer.concat(data) };
-}
-
-/** Whether the compressed image data inflates to exactly the rows the header promises, each with a legal filter byte. */
-function pngPixelProblem(png: PngHeader): string | null {
-  const bitsPerPixel = (PNG_CHANNELS[png.colorType] ?? 0) * png.bitDepth;
-  const passes = png.interlaced
-    ? ADAM7.map(([x, y, dx, dy]) => [Math.ceil((png.width - x) / dx), Math.ceil((png.height - y) / dy)] as const).filter(([w, h]) => w > 0 && h > 0)
-    : [[png.width, png.height] as const];
-  const expected = passes.reduce((sum, [w, h]) => sum + h * (1 + Math.ceil((w * bitsPerPixel) / 8)), 0);
-  let pixels: Buffer;
-  try {
-    pixels = inflateSync(png.data, { maxOutputLength: expected + 1 });
-  } catch {
-    return 'has image data that does not decompress to the expected size';
-  }
-  if (pixels.length !== expected) return `has ${pixels.length} bytes of pixel data; ${expected} are needed`;
-  let at = 0;
-  for (const [w, h] of passes) {
-    const row = 1 + Math.ceil((w * bitsPerPixel) / 8);
-    for (let y = 0; y < h; y += 1, at += row) if (pixels[at]! > 4) return 'has a row with an invalid filter type';
-  }
-  return null;
-}
-
-const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
-
-interface XmlDocument {
-  readonly documentElement: { readonly localName: string; readonly namespaceURI: string | null } | null;
-  getElementsByTagName(name: string): { readonly length: number; item(index: number): { readonly textContent: string | null } | null };
-}
-type XmlParser = (text: string) => XmlDocument;
-
-let xmlParser: XmlParser | { readonly unavailable: string } | undefined;
-
-/**
- * An established XML parser (jsdom's, the repository's root development dependency; it wraps the
- * `saxes` parser, which enforces the XML grammar including entity references, names, namespaces and
- * attribute uniqueness), or the reason none could be loaded. This tool does not keep a grammar of
- * its own: what the parser rejects is not certified, and when no parser can be loaded validity is
- * reported as unknown instead of being guessed at.
- */
-function loadXmlParser(): XmlParser | { readonly unavailable: string } {
-  if (xmlParser !== undefined) return xmlParser;
-  try {
-    const require = createRequire(import.meta.url);
-    const { JSDOM } = require('jsdom') as { JSDOM: new (html: string) => { window: { DOMParser: new () => { parseFromString(text: string, type: string): XmlDocument } } } };
-    const { DOMParser } = new JSDOM('').window;
-    xmlParser = (text) => new DOMParser().parseFromString(text, 'image/svg+xml');
-  } catch (error) {
-    xmlParser = { unavailable: `the XML parser (jsdom) could not be loaded: ${(error as Error).message}` };
-  }
-  return xmlParser;
-}
-
-/** The outcome of checking an icon whose validity cannot be established here. */
-export interface IconUnverified {
-  readonly unverified: string;
-}
-
-/**
- * `null` when `text` is one well-formed XML document whose root element is an SVG `svg` element, a
- * string saying what is wrong when the XML parser rejects it, or `IconUnverified` when no parser is
- * available. Entity declarations are refused before parsing: an icon has no use for them.
- */
-function svgStructureProblem(text: string): string | IconUnverified | null {
-  if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text)) return 'has a document type declaration with an internal subset or entities';
-  const parse = loadXmlParser();
-  if (typeof parse !== 'function') return { unverified: parse.unavailable };
-  const document = parse(text);
-  const failure = document.getElementsByTagName('parsererror');
-  if (failure.length > 0 || document.documentElement === null) {
-    const reason = (failure.item(0)?.textContent ?? '').trim().replace(/\s+/g, ' ');
-    return `is not well-formed XML${reason === '' ? '' : ` (${reason.slice(0, 160)})`}`;
-  }
-  const root = document.documentElement;
-  if (root.localName !== 'svg' || root.namespaceURI !== SVG_NAMESPACE) return `has a root element that is not an svg element in the ${SVG_NAMESPACE} namespace`;
-  return null;
-}
-
-/** `null` when the file is a usable icon: a complete, valid square PNG or well-formed SVG of at least 48 by 48 and at most 5 MiB. */
-export function iconProblem(file: string, data: Uint8Array): string | IconUnverified | null {
-  if (data.length > MAX_IMAGE_BYTES) return `${file} is larger than 5 MiB.`;
-  const bytes = Buffer.from(data);
-  const extension = path.extname(file).toLowerCase();
-  if (extension === '.png') {
-    const png = readPng(bytes);
-    if (typeof png === 'string') return `${file} is not a valid PNG: it ${png}.`;
-    const { width, height } = png;
-    if (width !== height) return `${file} is ${width}x${height}; icons must be square.`;
-    if (width < MIN_ICON || width > MAX_RASTER) return `${file} is ${width}x${height}; icons must be between ${MIN_ICON} and ${MAX_RASTER} pixels.`;
-    const pixels = pngPixelProblem(png);
-    return pixels === null ? null : `${file} is not a valid PNG: it ${pixels}.`;
-  }
-  if (extension === '.svg') {
-    const text = bytes.toString('utf8');
-    const structure = svgStructureProblem(text);
-    if (structure !== null) return typeof structure === 'string' ? `${file} is not a complete SVG document: it ${structure}.` : { unverified: `${file}: ${structure.unverified}` };
-    const root = /<svg\b[^>]*>/i.exec(text);
-    if (root === null) return `${file} is not an SVG document.`;
-    const attribute = (name: string): string | undefined => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(root[0])?.[1];
-    const number = (value: string | undefined): number | undefined => (value !== undefined && /^\s*\d+(\.\d+)?(px)?\s*$/.test(value) ? Number.parseFloat(value) : undefined);
-    const width = number(attribute('width'));
-    const height = number(attribute('height'));
-    let side: number | undefined;
-    if (width !== undefined && height !== undefined) side = width === height ? width : undefined;
-    else {
-      const box = attribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
-      side = box !== undefined && box.length === 4 && box.every(Number.isFinite) && box[2] === box[3] ? box[2] : undefined;
-    }
-    if (side === undefined) return `${file} needs square numeric width and height or a square viewBox.`;
-    return side < MIN_ICON ? `${file} is ${side} units square; icons must be at least ${MIN_ICON}.` : null;
-  }
-  return `${file} is not a PNG or SVG; those are the formats this check can verify.`;
-}
-
-const SECRET_PATTERNS: readonly (readonly [string, RegExp])[] = [
-  ['private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  ['bearer token', /\bBearer\s+[A-Za-z0-9._~+/=-]{20,}/],
-  ['API key (sk-)', /\bsk-[A-Za-z0-9_-]{20,}/],
-  ['GitHub token', /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}/],
-  ['AWS access key', /\bAKIA[0-9A-Z]{16}\b/],
-  ['Slack token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
-  ['JSON Web Token', /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/],
-  ['credential assignment', /["']?(?:client_?secret|api_?key|password|passwd|access_?token|auth_?token|private_?key)["']?\s*[:=]\s*["'][^"'\s]{8,}["']/i],
-];
-
-/** Names of the kinds of secret found in text, never the secret itself. */
-export function secretKinds(text: string): string[] {
-  return SECRET_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([kind]) => kind);
-}
-
-/**
- * `text` with every secret-looking span and every literal credential this run holds replaced by a
- * marker. It is the last step before anything is printed: a finding's wording is built to carry no
- * secret, and this keeps a mistake in one of them from becoming a disclosure.
- */
-export function redactSecrets(text: string, literals: readonly string[] = []): string {
-  let redacted = text;
-  for (const literal of literals) if (literal !== '') redacted = redacted.split(literal).join('[redacted credential]');
-  for (const [kind, pattern] of SECRET_PATTERNS) redacted = redacted.replace(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`), `[redacted ${kind}]`);
-  return redacted;
-}
-
-const TEXT_EXTENSIONS = new Set(['.json', '.md', '.txt', '.svg', '.html', '.js', '.css']);
 
 // ---------------------------------------------------------------------------------------------
 // Checking the built archive
@@ -620,18 +357,84 @@ export function checkArchive(archive: Uint8Array, options: ArchiveCheckOptions):
   const excluded: string[] = [];
   if (entries.some((one) => one.path === '.app.json' || one.path.startsWith('hooks/'))) excluded.push('The package contains an app reference or lifecycle hooks.');
   if (isRecord(openai) && (openai.apps !== undefined || openai.hooks !== undefined)) excluded.push('extensions["com.openai"] declares apps or hooks.');
-  const texts = entries.filter((one) => TEXT_EXTENSIONS.has(path.extname(one.path).toLowerCase())).map((one) => ({ path: one.path, text: Buffer.from(one.data).toString('utf8') }));
-  for (const { path: file, text } of texts) if (/"(?:test_credentials|reviewer_instructions)"/.test(text)) excluded.push(`${file} carries reviewer credentials or instructions, which the portal rejects and which never belong in a package.`);
+  for (const { path: file, text } of textEntries(entries)) if (/"(?:test_credentials|reviewer_instructions)"/.test(text)) excluded.push(`${file} carries reviewer credentials or instructions, which the portal rejects and which never belong in a package.`);
   findings.push(excluded.length === 0 ? pass('package.components', 'The package has no app references, hooks or reviewer credentials.') : fail('package.components', 'The package contains something the portal rejects.', 'Remove it from the release input.', excluded.join(' ')));
 
   // Secrets: patterns that look like credentials, and literal values this run was given.
-  const leaks: string[] = [];
-  for (const { path: file, text } of texts) {
-    const kinds = secretKinds(text);
-    if (kinds.length > 0) leaks.push(`${file} contains what looks like a ${kinds.join(', ')}.`);
-  }
-  for (const entry of entries) for (const literal of options.forbiddenLiterals) if (literal !== '' && Buffer.from(entry.data).includes(literal)) leaks.push(`${entry.path} contains the credential supplied for discovery.`);
-  findings.push(leaks.length === 0 ? pass('package.secrets', 'No credential was found in the package.') : fail('package.secrets', 'The package appears to contain a secret.', 'Remove the secret from the release input or its assets; credentials belong in the host portal.', leaks.join(' ')));
+  findings.push(secretFinding(entries, options.forbiddenLiterals));
 
   return { findings, entries, plugin };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The target
+// ---------------------------------------------------------------------------------------------
+
+/** The release input as the ChatGPT target uses it, or `undefined` when it carries no listing or assets. */
+function chatgptInput(input: ReleaseInput): ChatgptReleaseInput | undefined {
+  return input.listing === undefined || input.assets === undefined ? undefined : { ...input, listing: input.listing, assets: input.assets };
+}
+
+function toolFindings(snapshot: EndpointSnapshot): Finding[] {
+  if (snapshot.tools.length === 0 && snapshot.truncated.length === 0) return [fail('endpoint.tools', 'The endpoint advertises no tools.', 'Deploy the application so its tools are listed.')];
+  const problems: string[] = [];
+  for (const tool of snapshot.tools) {
+    if (typeof tool.description !== 'string' || tool.description.trim() === '') problems.push(`${tool.name} has no description.`);
+    const annotations = isRecord(tool.annotations) ? tool.annotations : {};
+    const missing = ['readOnlyHint', 'destructiveHint', 'openWorldHint'].filter((hint) => typeof annotations[hint] !== 'boolean');
+    if (missing.length > 0) problems.push(`${tool.name} does not set ${missing.join(', ')} to true or false.`);
+  }
+  return [
+    problems.length === 0 && snapshot.truncated.length > 0
+      ? unknown('endpoint.tools', 'Only part of the endpoint was read, so its tool definitions were not fully checked.', 'Reduce the endpoint\'s paging so every tool fits the bounds this tool reads, then rerun.', 'The tools that were read are described and annotated; the ones that were not read cannot be certified.')
+      : problems.length === 0
+      ? pass('endpoint.tools', `${snapshot.tools.length} tool${snapshot.tools.length === 1 ? '' : 's'} advertised, each with a description and explicit read-only, destructive and open-world annotations.`)
+      : fail('endpoint.tools', 'A tool definition breaks the plugin guidelines.', 'Describe every tool and set its three annotation hints explicitly.', problems.join(' ')),
+  ];
+}
+
+function handoff(loaded: LoadedReleaseInput): HandoffItem[] {
+  const items: HandoffItem[] = [
+    { id: 'publisher-authority', summary: `Confirm that ${loaded.input.publisher.name} is the intended listing owner and that the submitting OpenAI organization has completed individual or business verification under that name.` },
+    { id: 'domain-verification', summary: 'In the submission portal, host the challenge token at /.well-known/openai-apps-challenge on the endpoint host and connect the server.' },
+    { id: 'authentication', summary: 'If the endpoint needs sign-in, configure its authentication in the portal connection form and provide a reviewer test account there; credentials never belong in the package.' },
+  ];
+  const cases = loaded.input.review?.test_cases;
+  const positive = cases?.positive?.length ?? 0;
+  const negative = cases?.negative?.length ?? 0;
+  if (positive !== 5 || negative !== 3) items.push({ id: 'review-test-cases', summary: `Initial review needs exactly five positive and three negative test cases; the release input has ${positive} and ${negative}.` });
+  if (loaded.input.review?.demo_recording_url === undefined) items.push({ id: 'review-demo-recording', summary: 'Initial review needs a reviewer-accessible video walkthrough URL (review.demo_recording_url).' });
+  items.push({ id: 'host-observation', summary: 'Installation, card rendering and interactions in actual ChatGPT web runs are observed separately; this tool\'s checks, fixture invocations and directory approval do not replace them.' });
+  return items;
+}
+
+/** The ChatGPT target. `validators` is the manifest validator to use; the default is the pinned official one, and a test supplies an unavailable one. */
+export function chatgptTarget(validators: ValidatorLoad | undefined): PublicationTarget {
+  return {
+    name: 'chatgpt',
+    archiveFile: ARCHIVE_FILES.chatgpt,
+    submissionNote: 'Preparing a package submits nothing. Submission, the host\'s review and publication are separate acts that only the publisher and the host can perform.',
+    inputProblem: (input) => (chatgptInput(input) === undefined ? 'The release input has no listing and assets, which the chatgpt target needs.' : null),
+    endpointProblem: (url) => endpointUrlProblem(url, 'ChatGPT'),
+    toolFindings,
+    async prepare(context) {
+      const input = chatgptInput(context.loaded.input);
+      if (input === undefined) throw new Error('The release input has no listing and assets, which the chatgpt target needs.');
+      const findings: Finding[] = [];
+      const assembled = assemblePackage(input, context.loaded.directory);
+      if (assembled.unreadableAssets.length > 0) {
+        findings.push(fail('package.asset-files', 'An asset file cannot be added to the package.', 'Add or correct the files named in assets in the release input.', assembled.unreadableAssets.map((one) => `${one.source}: ${one.reason}`).join(' ')));
+      }
+      const archive = writeZip(assembled.entries);
+      const loadedValidators = validators ?? loadOfficialValidators();
+      const check = checkArchive(archive, { validators: loadedValidators, endpointUrl: input.endpoint.url, forbiddenLiterals: context.forbiddenLiterals });
+      return {
+        archive,
+        entries: check.entries,
+        findings: [...findings, ...check.findings],
+        validators: [{ name: 'chatgpt-plugin-package', identity: loadedValidators.ok ? loadedValidators.validators.identity : `unavailable: ${loadedValidators.problem}`, documentationDate: DOCUMENTATION_DATE }],
+      };
+    },
+    handoff,
+  };
 }

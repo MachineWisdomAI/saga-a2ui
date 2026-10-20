@@ -5,12 +5,15 @@ import path from 'node:path';
 import type { FetchLike } from '@modelcontextprotocol/client';
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, sameDirectory, type OutputFile } from '../starter-template.js';
-import { DOCUMENTATION_DATE, assemblePackage, checkArchive, endpointUrlProblem, loadOfficialValidators, redactSecrets, secretKinds, type ValidatorLoad } from './chatgpt.js';
+import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
+import { claudeTarget } from './claude.js';
+import type { PluginValidator } from './claude-plugin.js';
 import { discoverEndpoint, invokeFixture, toolDigest, type Discovery, type EndpointSnapshot } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
 import {
-  ARCHIVE_FILE,
+  ARCHIVE_FILES,
   RECORD_FILE,
+  TARGET_NAMES,
   RECORD_FORMAT,
   canonicalDigest,
   fail,
@@ -20,14 +23,17 @@ import {
   verdictOf,
   type Finding,
   type FixtureInvocation,
-  type HandoffItem,
   type PublicationRecord,
+  type TargetName,
 } from './record.js';
 import { loadReleaseInput, type LoadedReleaseInput } from './release-input.js';
-import { writeZip } from './zip.js';
+import { redactSecrets, secretKinds } from './secrets.js';
+import type { Evidence, PublicationTarget } from './target.js';
 
-// `saga publish check|prepare` (CLI3 #66): validates a built application, its deployed endpoint and
-// the release input, and prepares the ChatGPT plugin package with a digest-bound findings record.
+// `saga publish check|prepare` (CLI3 #66, CLI4 #67): validates a built application, its deployed
+// endpoint and the release input, and prepares one host's materials (the ChatGPT plugin package, or
+// the Claude connector dossier) with a digest-bound findings record. What is the same for every host
+// is here; what differs is a `PublicationTarget` (target.ts).
 //
 // - `check` writes nothing. `prepare` writes `findings.json` and, when nothing failed, the package,
 //   into one new directory, or replaces a directory this tool generated earlier, only after the new
@@ -38,7 +44,6 @@ import { writeZip } from './zip.js';
 //   What only the owner or the host can do is listed as handoff, whatever the checks say.
 
 const MCP_APP_MIME = 'text/html;profile=mcp-app';
-const SUBMISSION_NOTE = 'Preparing a package submits nothing. Submission, the host\'s review and publication are separate acts that only the publisher and the host can perform.';
 
 export interface PublishRequest {
   readonly command: 'check' | 'prepare';
@@ -63,8 +68,10 @@ export interface PublishIo {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for the endpoint. Defaults to the platform's `fetch`. */
   readonly fetch?: FetchLike | undefined;
-  /** The manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
+  /** The ChatGPT manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
   readonly validators?: ValidatorLoad | undefined;
+  /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
+  readonly pluginValidator?: PluginValidator | undefined;
 }
 
 /** What `saga.ts` loads, only when a publication command runs. */
@@ -183,24 +190,6 @@ function declaredViewUri(tool: Readonly<Record<string, unknown>>): string | unde
   return typeof nested === 'string' ? nested : typeof flat === 'string' ? flat : undefined;
 }
 
-function toolFindings(snapshot: EndpointSnapshot): Finding[] {
-  if (snapshot.tools.length === 0 && snapshot.truncated.length === 0) return [fail('endpoint.tools', 'The endpoint advertises no tools.', 'Deploy the application so its tools are listed.')];
-  const problems: string[] = [];
-  for (const tool of snapshot.tools) {
-    if (typeof tool.description !== 'string' || tool.description.trim() === '') problems.push(`${tool.name} has no description.`);
-    const annotations = isRecord(tool.annotations) ? tool.annotations : {};
-    const missing = ['readOnlyHint', 'destructiveHint', 'openWorldHint'].filter((hint) => typeof annotations[hint] !== 'boolean');
-    if (missing.length > 0) problems.push(`${tool.name} does not set ${missing.join(', ')} to true or false.`);
-  }
-  return [
-    problems.length === 0 && snapshot.truncated.length > 0
-      ? unknown('endpoint.tools', 'Only part of the endpoint was read, so its tool definitions were not fully checked.', 'Reduce the endpoint\'s paging so every tool fits the bounds this tool reads, then rerun.', 'The tools that were read are described and annotated; the ones that were not read cannot be certified.')
-      : problems.length === 0
-      ? pass('endpoint.tools', `${snapshot.tools.length} tool${snapshot.tools.length === 1 ? '' : 's'} advertised, each with a description and explicit read-only, destructive and open-world annotations.`)
-      : fail('endpoint.tools', 'A tool definition breaks the plugin guidelines.', 'Describe every tool and set its three annotation hints explicitly.', problems.join(' ')),
-  ];
-}
-
 function viewFindings(snapshot: EndpointSnapshot, views: readonly BuiltView[]): Finding[] {
   const problems: string[] = [];
   const built = views.filter((view) => view.uri !== null);
@@ -259,25 +248,6 @@ function deploymentIdentity(loaded: LoadedReleaseInput, discovery: Discovery): {
 }
 
 // ---------------------------------------------------------------------------------------------
-// What only the owner or the host can do
-// ---------------------------------------------------------------------------------------------
-
-function handoffFor(loaded: LoadedReleaseInput): HandoffItem[] {
-  const items: HandoffItem[] = [
-    { id: 'publisher-authority', summary: `Confirm that ${loaded.input.publisher.name} is the intended listing owner and that the submitting OpenAI organization has completed individual or business verification under that name.` },
-    { id: 'domain-verification', summary: 'In the submission portal, host the challenge token at /.well-known/openai-apps-challenge on the endpoint host and connect the server.' },
-    { id: 'authentication', summary: 'If the endpoint needs sign-in, configure its authentication in the portal connection form and provide a reviewer test account there; credentials never belong in the package.' },
-  ];
-  const cases = loaded.input.review?.test_cases;
-  const positive = cases?.positive?.length ?? 0;
-  const negative = cases?.negative?.length ?? 0;
-  if (positive !== 5 || negative !== 3) items.push({ id: 'review-test-cases', summary: `Initial review needs exactly five positive and three negative test cases; the release input has ${positive} and ${negative}.` });
-  if (loaded.input.review?.demo_recording_url === undefined) items.push({ id: 'review-demo-recording', summary: 'Initial review needs a reviewer-accessible video walkthrough URL (review.demo_recording_url).' });
-  items.push({ id: 'host-observation', summary: 'Installation, card rendering and interactions in actual ChatGPT web runs are observed separately; this tool\'s checks, fixture invocations and directory approval do not replace them.' });
-  return items;
-}
-
-// ---------------------------------------------------------------------------------------------
 // Assessment
 // ---------------------------------------------------------------------------------------------
 
@@ -298,7 +268,7 @@ interface Assessment {
   readonly archive: Buffer | null;
 }
 
-async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: PublishIo): Promise<Assessment> {
+async function assess(request: PublishRequest, target: PublicationTarget, loaded: LoadedReleaseInput, io: PublishIo): Promise<Assessment> {
   const { input } = loaded;
   const findings: Finding[] = [pass('input.release', `The release input conforms to the saga-publication/1 format.`)];
 
@@ -315,7 +285,7 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
     findings.push(fail('endpoint.credential', 'The credential was not sent: the endpoint is not HTTPS.', 'Use the HTTPS endpoint, or omit --bearer-env.'));
     bearer = undefined;
   }
-  const urlProblem = endpointUrlProblem(input.endpoint.url);
+  const urlProblem = target.endpointProblem(input.endpoint.url);
   findings.push(urlProblem === null ? pass('endpoint.url', 'The endpoint is a public HTTPS URL.') : fail('endpoint.url', 'The endpoint cannot be submitted.', 'Set endpoint.url to the stable public HTTPS endpoint of the deployed application.', urlProblem));
 
   let discovery: Discovery;
@@ -329,7 +299,7 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
         ? pass('endpoint.discovery', 'The endpoint was read: initialize, tools/list, resources/list and resources/read. No tool was called.')
         : unknown('endpoint.discovery', 'The endpoint was only partly read: a bound on how much is read was reached.', 'Make the endpoint list its tools and views within the bounds this tool reads (20 pages of each list, 50 views), then rerun.', partial.join(' ')),
     );
-    findings.push(...toolFindings(discovery.snapshot), ...viewFindings(discovery.snapshot, build.views));
+    findings.push(...target.toolFindings(discovery.snapshot), ...viewFindings(discovery.snapshot, build.views));
   } else {
     findings.push(
       unknown(
@@ -343,15 +313,27 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
   const { identity, finding: identityFinding } = deploymentIdentity(loaded, discovery);
   findings.push(identityFinding);
 
-  // The package, built and then checked as the bytes that would be uploaded.
-  const assembled = assemblePackage(input, loaded.directory);
-  if (assembled.unreadableAssets.length > 0) {
-    findings.push(fail('package.asset-files', 'An asset file cannot be added to the package.', 'Add or correct the files named in assets in the release input.', assembled.unreadableAssets.map((one) => `${one.source}: ${one.reason}`).join(' ')));
-  }
-  const archive = writeZip(assembled.entries);
-  const validators = io.validators ?? loadOfficialValidators();
-  const archiveCheck = checkArchive(archive, { validators, endpointUrl: input.endpoint.url, forbiddenLiterals: bearer === undefined ? [] : [bearer] });
-  findings.push(...archiveCheck.findings);
+  // What the endpoint served, as the digests the record holds and the target's package carries.
+  const snapshot = discovery.kind === 'discovered' ? discovery.snapshot : undefined;
+  const tools = (snapshot?.tools ?? []).map((tool) => ({ name: tool.name, sha256: toolDigest(tool) })).sort((a, b) => (a.name < b.name ? -1 : 1));
+  const resources = (snapshot?.resources ?? []).map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, bytes: resource.bytes.length, metaSha256: resource.meta === null ? null : canonicalDigest(resource.meta) })).sort((a, b) => (a.uri < b.uri ? -1 : 1));
+  const instructionsSha256 = snapshot === undefined || snapshot.instructions === null ? null : sha256(snapshot.instructions);
+  const contractSha256 = snapshot === undefined ? null : canonicalDigest({ tools: snapshot.tools, instructions: snapshot.instructions, resources: snapshot.resources.map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, meta: resource.meta })).sort((a, b) => (a.uri < b.uri ? -1 : 1)) });
+  const source = sourceOf(loaded.directory);
+  const packages = sagaPackages(loaded);
+  const views = build.views.map(({ file, uri, sha256: digest, bytes }) => ({ file, uri, sha256: digest, bytes }));
+  const evidence: Evidence = {
+    source,
+    sagaPackages: packages,
+    releaseInputSha256: loaded.sha256,
+    views,
+    endpoint: { url: displayUrl(input.endpoint.url), server: snapshot?.server ?? null, deploymentIdentity: identity, contractSha256, instructionsSha256, tools, resources },
+    snapshot,
+  };
+
+  // The package, built and then checked as the bytes that would be handed over.
+  const prepared = await target.prepare({ loaded, evidence, forbiddenLiterals: bearer === undefined ? [] : [bearer], signal: io.signal });
+  findings.push(...prepared.findings);
 
   // Fixture invocation: only when asked, only what the release input declares.
   const declared = input.fixture?.calls ?? [];
@@ -373,18 +355,11 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
   }
 
   // The record.
-  const snapshot = discovery.kind === 'discovered' ? discovery.snapshot : undefined;
-  const tools = (snapshot?.tools ?? []).map((tool) => ({ name: tool.name, sha256: toolDigest(tool) })).sort((a, b) => (a.name < b.name ? -1 : 1));
-  const resources = (snapshot?.resources ?? []).map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, bytes: resource.bytes.length, metaSha256: resource.meta === null ? null : canonicalDigest(resource.meta) })).sort((a, b) => (a.uri < b.uri ? -1 : 1));
-  const instructionsSha256 = snapshot === undefined || snapshot.instructions === null ? null : sha256(snapshot.instructions);
-  const contractSha256 = snapshot === undefined ? null : canonicalDigest({ tools: snapshot.tools, instructions: snapshot.instructions, resources: snapshot.resources.map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, meta: resource.meta })).sort((a, b) => (a.uri < b.uri ? -1 : 1)) });
-
-  const source = sourceOf(loaded.directory);
   const draft = (extra: readonly Finding[], artifact: PublicationRecord['artifact']): PublicationRecord => {
     const all = [...findings, ...extra];
     return {
       format: RECORD_FORMAT,
-      target: 'chatgpt',
+      target: target.name,
       verdict: verdictOf(all),
       source,
       application: {
@@ -392,9 +367,9 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
         version: input.version,
         publisher: { name: input.publisher.name, url: input.publisher.url ?? null },
         contributors: (input.contributors ?? []).map((one) => ({ name: one.name, url: one.url ?? null })),
-        sagaPackages: sagaPackages(loaded),
+        sagaPackages: packages,
       },
-      inputs: { releaseInput: { sha256: loaded.sha256 }, views: build.views.map(({ file, uri, sha256: digest, bytes }) => ({ file, uri, sha256: digest, bytes })) },
+      inputs: { releaseInput: { sha256: loaded.sha256 }, views },
       endpoint: {
         url: displayUrl(input.endpoint.url),
         reached: snapshot !== undefined,
@@ -409,12 +384,10 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
       },
       fixture: { declared: declared.length, invoked: request.invokeFixture && invocations.length > 0, invocations },
       artifact,
-      validators: [
-        { name: 'chatgpt-plugin-package', identity: validators.ok ? validators.validators.identity : `unavailable: ${validators.problem}`, documentationDate: DOCUMENTATION_DATE },
-      ],
+      validators: prepared.validators,
       findings: all,
-      handoff: handoffFor(loaded),
-      submission: { state: 'not-submitted', note: SUBMISSION_NOTE },
+      handoff: target.handoff(loaded),
+      submission: { state: 'not-submitted', note: target.submissionNote },
     };
   };
 
@@ -423,7 +396,7 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
   const failedBeforeArtifact = findings.some((one) => one.status === 'fail');
   const artifact: PublicationRecord['artifact'] = failedBeforeArtifact
     ? null
-    : { file: ARCHIVE_FILE, sha256: sha256(archive), bytes: archive.length, files: archiveCheck.entries.map((entry) => ({ path: entry.path, sha256: sha256(entry.data), bytes: entry.data.length })).sort((a, b) => (a.path < b.path ? -1 : 1)) };
+    : { file: target.archiveFile, sha256: sha256(prepared.archive), bytes: prepared.archive.length, files: prepared.entries.map((entry) => ({ path: entry.path, sha256: sha256(entry.data), bytes: entry.data.length })).sort((a, b) => (a.path < b.path ? -1 : 1)) };
   const extra: Finding[] = [];
   if (request.against !== undefined) {
     const previous = readPreviousOutput(path.resolve(io.cwd, request.against));
@@ -446,7 +419,7 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
 
   const blocked = [...findings, ...extra].some((one) => one.status === 'fail');
   const record = draft(extra, blocked ? null : artifact);
-  return { record, archive: blocked ? null : archive };
+  return { record, archive: blocked ? null : prepared.archive };
 }
 
 function safeProtocol(value: string): string {
@@ -461,7 +434,7 @@ function safeProtocol(value: string): string {
 // Writing the output
 // ---------------------------------------------------------------------------------------------
 
-const GENERATED_FILES = new Set([RECORD_FILE, ARCHIVE_FILE]);
+const GENERATED_FILES = new Set<string>([RECORD_FILE, ...Object.values(ARCHIVE_FILES)]);
 
 /** Whether `directory` is something this tool generated: a real directory holding only its own files and a record in its format. */
 function isGeneratedOutput(directory: string): boolean {
@@ -553,7 +526,7 @@ const isSymlink = (file: string): boolean => {
 
 function report(record: PublicationRecord, request: PublishRequest): string {
   const mark = { pass: 'pass   ', fail: 'FAIL   ', unknown: 'unknown' } as const;
-  const lines = [`saga publish ${request.command} (chatgpt): ${record.verdict}`, ''];
+  const lines = [`saga publish ${request.command} (${record.target}): ${record.verdict}`, ''];
   for (const finding of record.findings) {
     lines.push(`  ${mark[finding.status]} ${finding.id}: ${finding.summary}`);
     if (finding.status !== 'pass') {
@@ -598,9 +571,16 @@ export const publicationTool: PublicationTool = {
   },
 };
 
+/** The target a request names, built with the seams this run was given, or `undefined` when no such target exists. */
+function targetFor(name: string, io: PublishIo): PublicationTarget | undefined {
+  const targets: Record<TargetName, () => PublicationTarget> = { chatgpt: () => chatgptTarget(io.validators), claude: () => claudeTarget(io.pluginValidator) };
+  return (TARGET_NAMES as readonly string[]).includes(name) ? targets[name as TargetName]() : undefined;
+}
+
 async function execute(request: PublishRequest, io: PublishIo): Promise<number> {
-  if (request.target !== 'chatgpt') {
-    io.stderr(`saga publish: the ${request.target} target is not supported by this version; the supported target is chatgpt.\n`);
+  const target = targetFor(request.target, io);
+  if (target === undefined) {
+    io.stderr(`saga publish: the ${request.target} target is not supported; the supported targets are ${TARGET_NAMES.join(' and ')}.\n`);
     return 2;
   }
   if (io.signal?.aborted) {
@@ -612,7 +592,12 @@ async function execute(request: PublishRequest, io: PublishIo): Promise<number> 
     io.stderr(`saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`);
     return EXIT_NOT_READY;
   }
-  const assessment = await assess(request, loaded.loaded, io);
+  const unusable = target.inputProblem(loaded.loaded.input);
+  if (unusable !== null) {
+    io.stderr(`saga publish: ${unusable}\nNothing was prepared; complete the release input and rerun.\n`);
+    return EXIT_NOT_READY;
+  }
+  const assessment = await assess(request, target, loaded.loaded, io);
   if (io.signal?.aborted) {
     io.stderr('saga publish: interrupted; nothing was written.\n');
     return EXIT_INTERRUPTED;
@@ -626,15 +611,15 @@ async function execute(request: PublishRequest, io: PublishIo): Promise<number> 
       io.stderr(leaked ? 'saga publish: nothing was written because the record would contain a secret.\n' : 'saga publish: prepare needs --out DIRECTORY.\n');
       return leaked ? EXIT_NOT_READY : 2;
     }
-    const target = path.resolve(io.cwd, request.out);
-    if (!fs.existsSync(path.dirname(target)) || !fs.statSync(path.dirname(target)).isDirectory()) {
-      io.stderr(`saga publish: the parent directory ${path.dirname(target)} does not exist; create it first or choose a path inside an existing directory.\n`);
+    const destination = path.resolve(io.cwd, request.out);
+    if (!fs.existsSync(path.dirname(destination)) || !fs.statSync(path.dirname(destination)).isDirectory()) {
+      io.stderr(`saga publish: the parent directory ${path.dirname(destination)} does not exist; create it first or choose a path inside an existing directory.\n`);
       return EXIT_NOT_READY;
     }
     const files: OutputFile[] = [{ path: RECORD_FILE, content: () => `${JSON.stringify(record, null, 2)}\n` }];
-    if (archive !== null) files.push({ path: ARCHIVE_FILE, content: () => archive });
+    if (archive !== null) files.push({ path: target.archiveFile, content: () => archive });
     try {
-      await writeOutput(target, files, io.signal);
+      await writeOutput(destination, files, io.signal);
     } catch (error) {
       if (error instanceof ExportInterrupted) {
         io.stderr(`saga publish: interrupted; ${error.removed ? 'the output this run was writing was removed and nothing that existed was changed' : 'the output path had been replaced during the write, so nothing there was removed'}.\n`);
@@ -643,7 +628,7 @@ async function execute(request: PublishRequest, io: PublishIo): Promise<number> 
       io.stderr(`saga publish: ${(error as Error).message}\n`);
       return EXIT_NOT_READY;
     }
-    io.stdout(`\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${ARCHIVE_FILE} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`);
+    io.stdout(`\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${target.archiveFile} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`);
   }
   io.stdout('Nothing was deployed, uploaded, submitted or published.\n');
   return record.verdict === 'ready' ? 0 : EXIT_NOT_READY;

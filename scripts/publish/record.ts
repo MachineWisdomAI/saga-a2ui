@@ -63,7 +63,10 @@ export const canonicalDigest = (value: unknown): string => sha256(canonicalJson(
 /** What the findings record is called on disk, and the format it declares. */
 export const RECORD_FILE = 'findings.json';
 export const RECORD_FORMAT = 'saga-publication-record/1';
-export const ARCHIVE_FILE = 'chatgpt-plugin.zip';
+/** The targets a release can be prepared for, and the one archive each produces beside the record. */
+export const ARCHIVE_FILES = { chatgpt: 'chatgpt-plugin.zip', claude: 'claude-connector-dossier.zip' } as const;
+export type TargetName = keyof typeof ARCHIVE_FILES;
+export const TARGET_NAMES = Object.keys(ARCHIVE_FILES) as readonly TargetName[];
 
 /** A tool as the endpoint advertised it and the digest of its whole definition. */
 export interface ToolSnapshot {
@@ -90,7 +93,7 @@ export interface FixtureInvocation {
 /** The durable record of one `prepare` (or `check`) of one target. It carries no timestamp, so unchanged inputs give identical bytes. */
 export interface PublicationRecord {
   readonly format: typeof RECORD_FORMAT;
-  readonly target: 'chatgpt';
+  readonly target: TargetName;
   readonly verdict: Verdict;
   readonly source: { readonly revision: string | null; readonly dirty: boolean | null };
   readonly application: {
@@ -131,7 +134,7 @@ export interface PublicationRecord {
   };
   readonly fixture: { readonly declared: number; readonly invoked: boolean; readonly invocations: readonly FixtureInvocation[] };
   readonly artifact: {
-    readonly file: typeof ARCHIVE_FILE;
+    readonly file: (typeof ARCHIVE_FILES)[TargetName];
     readonly sha256: string;
     readonly bytes: number;
     readonly files: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
