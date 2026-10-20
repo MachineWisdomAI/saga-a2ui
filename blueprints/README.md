@@ -18,6 +18,18 @@ blueprints/
 
 Use stable `snake_case` capability and module names. Codebase paths mirror the implementation's repository-relative path. Blueprint filenames have no date or edition suffix; dated research follows the separate convention in [CONTRIBUTING.md](../CONTRIBUTING.md). Link related Blueprints and use stable headings so tickets can reference the relevant requirements.
 
+## Find a design
+
+| If you are working on… | Start here |
+| --- | --- |
+| The Ansari FaithfulCard integration | [Ansari adoption](features/ansari_adoption.blueprint.md) and [content safety](features/content_safety_levels.blueprint.md) |
+| Server integration and request identity | [Reusable MCP connector](features/reusable_mcp_connector.blueprint.md) and [request/view lifetimes](features/request_view_lifetimes.blueprint.md) |
+| UI actions and rendering | [Action binding](modules/action_binding.blueprint.md) and [Lit adapter](features/reusable_lit_adapter.blueprint.md) |
+| Protected media | [Authorized playback](features/authorized_playback.blueprint.md) |
+| Project setup and future publishing | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
+
+Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication remains a design path, not an available command. For working setup instructions, use [Getting started](../docs/getting-started.md).
+
 ## Authoring
 
 Write a self-contained design for human readers: the problem, current behavior, responsibilities, interfaces, representative flow, rationale, failures, verification outcomes and open decisions. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`. Keep detailed worker instructions in implementation issues. Distinguish existing behavior from a proposal and preserve uncertainties that affect the design.

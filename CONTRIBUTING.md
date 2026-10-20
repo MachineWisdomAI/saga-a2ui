@@ -4,7 +4,7 @@ Work in a feature branch or dedicated worktree and open a pull request. Keep eac
 
 Read [AGENTS.md](AGENTS.md) for repository rules and [CODING_STANDARDS.md](CODING_STANDARDS.md) for package ownership, module interfaces, and TypeScript design. Use normal TypeScript and renderer tools. Record the checks actually run; package installation, local rendering and real-host behavior are separate evidence.
 
-Use README.md for current build, test and dependency commands. Do not publish placeholder packages. Follow [the version policy](docs/version-policy.md) when introducing an owned version and for every subsequent bump.
+Use [Getting started](docs/getting-started.md) for setup and the [development reference](docs/development-reference.md#local-development) for build and test commands. Do not publish placeholder packages. Follow [the version policy](docs/version-policy.md) when introducing an owned version and for every subsequent bump.
 
 Keep private customer material, credentials, business records and internal planning out of this repository, including its history. Contributions must have appropriate redistribution rights; retain third-party license obligations.
 
@@ -19,6 +19,12 @@ mw-git-guard.sh install --repo .
 ```
 
 GitHub branch protections apply independently of these local hooks.
+
+## Report a problem or propose a feature
+
+Use the [issue forms](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose). A bug report is most useful with a small reproduction, expected and actual behavior, the source commit or candidate version, and the host and renderer involved. Remove credentials and private user data from logs. Use [SECURITY.md](SECURITY.md) for vulnerabilities.
+
+For a feature, describe the application problem and a concrete use case. Discuss larger changes before implementing them so maintainers can confirm scope. Documentation fixes and small bug fixes can go straight to a PR. No private planning tools or commercial relationship are required to contribute; maintainer responses depend on availability.
 
 ## Review
 
