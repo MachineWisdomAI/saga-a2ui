@@ -28,7 +28,11 @@ For a feature, describe the application problem and a concrete use case. Discuss
 
 ## Review
 
-This repository owns SDK source, implementation issues, pull requests and contributor documentation. The separate private backstage repository holds internal planning and acceptance records; it is not a contributor destination. SDK issues and PRs must contain enough non-confidential context to implement and review the work without backstage access.
+This repository owns SDK source, code PRs, public Blueprints and diagrams, contributor documentation, and community bug reports and feature requests. Maintainers track all internal delivery work, including implementation tickets, in the private Backstage repository. Public reports remain here even when maintainers coordinate a fix privately.
+
+A public PR explains the problem, scope, design and verification independently. Link a community issue when one exists; an internal change does not need a public delivery ticket or a private-record link. Contributors can propose and review changes without Backstage access or Machine Wisdom tools.
+
+After an authorized merge, maintainers record the landed revision and applicable Blueprint evidence here, and acceptance in their private delivery record. Resolve a community report with a public explanation, PR link and any remaining limits. Use a closing keyword only when the PR fully resolves that public report; otherwise close it explicitly after verification. A code merge alone does not complete private host or human acceptance.
 
 Every code PR must meet [CODING_STANDARDS.md](CODING_STANDARDS.md) and pass relevant checks on the reviewed commit. Reviewers inspect the changed code and affected interfaces, not just test results. Material standards violations require a bounded correction before approval even when CI passes; stylistic preferences remain non-blocking. Refactoring belongs in the implementation's red–green–refactor cycle.
 

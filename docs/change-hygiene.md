@@ -2,7 +2,7 @@
 
 ## Describe the change
 
-Use a Conventional Commit title. Start the PR description with the concrete problem and resulting behavior; include a before/after example when useful. Explain the final implementation, why it solves the problem, checks actually run and material limits. Keep simple changes to a few sentences plus validation. Link the owning issue when one exists.
+Use a Conventional Commit title. Start the PR description with the concrete problem and resulting behavior; include a before/after example when useful. Explain the final implementation, why it solves the problem, checks actually run and material limits. Keep simple changes to a few sentences plus validation. Link the community issue when one exists. Internal delivery records link outward to this PR; do not expose private ticket links or create a public ticket solely for an internal change.
 
 Rewrite the title and description when scope changes. Remove abandoned approaches and drafting history unless they explain a tradeoff. Separate source readiness from installation, deployment and actual-host acceptance. State explicit merge holds. Report version updates under [the version policy](version-policy.md); a bump does not authorize publication.
 
