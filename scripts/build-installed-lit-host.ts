@@ -192,7 +192,7 @@ export const CARD2_PLAYBACK_SHA256 = '7ea1d8d0d696a20921896d1df45905cd22455f5f17
 export const INSTALLED_SERVER_ENTRY = 'src/mcp/serve.ts';
 
 /** The bare package names a bundle imports at run time. */
-function externalImportsOf(file: string): string[] {
+export function externalImportsOf(file: string): string[] {
   const code = fs.readFileSync(file, 'utf8');
   const found = new Set<string>();
   for (const match of code.matchAll(/(?:^|\n)\s*import\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {

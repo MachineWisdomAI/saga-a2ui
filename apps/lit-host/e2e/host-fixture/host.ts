@@ -94,7 +94,8 @@ window.mountView = async (resource, options) => {
   });
   // A remount replaces the view in this slot and leaves the views in other slots alone.
   [...document.querySelectorAll('iframe')].find((existing) => existing.dataset.slot === slot)?.remove();
-  document.body.append(frame);
+  // A page that hosts views among other content (the demonstration host) names where they go.
+  (document.querySelector('[data-view-area]') ?? document.body).append(frame);
   if (!frame.contentWindow) throw new Error('iframe has no window');
   await bridge.connect(new PostMessageTransport(frame.contentWindow, frame.contentWindow));
   await initialized;

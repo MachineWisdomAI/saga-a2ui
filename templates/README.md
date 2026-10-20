@@ -8,6 +8,8 @@ their snippets from these directories; they do not keep copies.
 | --- | --- | --- | --- |
 | [`lit-node`](lit-node/) | `lit-mcp` (Lit view, MCP delivery) | `node` (`@modelcontextprotocol/node` 2.1.1) | Qualified in CI: [`scripts/starter.test.ts`](../scripts/starter.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 
+The synthetic demonstration of this pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
+
 The `express`, `hono`, `fastify` and `hapi` server targets are separate required slices
 ([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62) to
 [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)). A pair is offered only while CI qualifies it.
