@@ -138,6 +138,29 @@ describe('saga init for the qualified pair', () => {
   });
 });
 
+describe.each(SUPPORTED_PAIRS)('saga init for $stack on $server', (pair) => {
+  it('creates exactly its maintained template, with its adapter and the SDK build pinned, and installs and runs nothing', async () => {
+    const cwd = workspace();
+    const run = await init(cwd, 'out', pair.stack, pair.server);
+
+    expect(run.code, run.err).toBe(0);
+    expect(run.err).toBe('');
+    expect(run.out).toContain(`Created a ${pair.stack} starter on ${pair.server} in out`);
+    expect(run.out).toContain('Nothing was installed and no command was run.');
+    const created = path.join(cwd, 'out');
+    const template = templateDirectory(pair.template);
+    const metadata = readTemplateMetadata(template);
+    const files = Object.keys(snapshot(created)).filter((file) => fs.statSync(path.join(created, file)).isFile()).sort();
+    expect(files).toEqual(templateFiles(template));
+    const manifest = JSON.parse(fs.readFileSync(path.join(created, 'package.json'), 'utf8')) as { name: string; dependencies: Record<string, string>; scripts: Record<string, string> };
+    expect(manifest.name).toBe(`saga-${pair.template}-starter`);
+    expect(manifest.dependencies[metadata.serverAdapter.package]).toBe(metadata.serverAdapter.version);
+    for (const sdk of metadata.sdkPackages) expect(manifest.dependencies[`@saga-a2ui/${sdk}`]).toBe(SDK_VERSION);
+    for (const hook of LIFECYCLE_HOOKS) expect(manifest.scripts[hook], hook).toBeUndefined();
+    expect(files.filter((file) => /node_modules|package-lock|fixtures|template\.json|^demo/.test(file))).toEqual([]);
+  });
+});
+
 describe('the pairs it offers', () => {
   it('lists only pairs whose template really is that stack and server', () => {
     expect(SUPPORTED_PAIRS.length).toBeGreaterThan(0);
@@ -147,8 +170,18 @@ describe('the pairs it offers', () => {
     }
   });
 
+  it('offers exactly Node, Express, Fastify and Hono for the qualified stack, each on its own maintained template', () => {
+    expect(SUPPORTED_PAIRS.map((pair) => `${pair.stack} on ${pair.server} from ${pair.template}`)).toEqual([
+      'lit-mcp on node from lit-node',
+      'lit-mcp on express from lit-express',
+      'lit-mcp on fastify from lit-fastify',
+      'lit-mcp on hono from lit-hono',
+    ]);
+  });
+
   it.each([
-    ['another server for the qualified stack', 'lit-mcp', 'express'],
+    ['a server with no qualified starter', 'lit-mcp', 'hapi'],
+    ['a qualified server for an unqualified stack', 'react-mcp', 'express'],
     ['another stack on the qualified server', 'react-mcp', 'node'],
     ['a stack without its delivery', 'lit', 'node'],
     ['a stack that names no renderer', 'mcp', 'node'],
