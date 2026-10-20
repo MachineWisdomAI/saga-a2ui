@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type FrameLocator, type Page } from '@playwright/test';
+import { expect, PLAYER_VIEW, test, type FrameLocator, type Page, type PlayerRenderer } from './player-renderer.js';
 import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { embedPolicy } from '../src/content/embedded-policy.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/dev-auth.js';
@@ -23,11 +23,17 @@ import type { HostedResource } from './host-fixture/host.js';
 // real HTTP. Audio is real Web Audio in Chromium; a wrapper records the contexts the view creates
 // so a test can observe the audio clock. This is not evidence for any actual chat host.
 
-const builtView = builtUrl('playback-view/playback.html');
 const OPENER = 'get_playable_episode';
 const PLAY = 'play_episode';
 
 let harness: PlaybackHarness | undefined;
+// The renderer of the project this test runs in. Tests in one file run serially in one worker, so
+// recording it before each test is enough for `mountPlayer`, which is not itself a fixture.
+let renderer: PlayerRenderer = 'lit';
+
+test.beforeEach(({ playerRenderer }) => {
+  renderer = playerRenderer;
+});
 
 test.afterEach(async () => {
   await harness?.listener.close();
@@ -64,7 +70,7 @@ interface MountedHost {
 }
 
 async function mountPlayer(page: Page, options: HostOptions = {}): Promise<MountedHost> {
-  const viewHtml = await readFile(builtView, 'utf8');
+  const viewHtml = await readFile(builtUrl(PLAYER_VIEW[renderer]), 'utf8');
   harness = await startPlaybackHarness(
     options.entitlements ?? { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: [] },
     { mediaBytes: toneWav(1), ...options.harness, viewHtml },
@@ -167,6 +173,14 @@ async function audioClocks(page: Page): Promise<{ state: string; time: number }[
 }
 
 test.describe('the built player for the entitled listener', () => {
+  test('is rendered by the renderer under test: the Lit element for the Lit view, a React root for the React view', async ({ page, playerRenderer }) => {
+    const host = await mountPlayer(page);
+    await host.open('ep-1');
+    await expect(button(host.view)).toBeVisible();
+    await expect(host.view.locator('saga-play-control')).toHaveCount(playerRenderer === 'lit' ? 1 : 0);
+    await expect(host.view.locator('#root')).toHaveCount(playerRenderer === 'react' ? 1 : 0);
+  });
+
   test('shows playing only once audio is audibly advancing, and fetched the protected bytes exactly once', async ({ page }) => {
     const host = await mountPlayer(page);
     await host.open('ep-1');
@@ -848,6 +862,7 @@ const description = (view: FrameLocator) => view.getByTestId('playback-descripti
 const cardContent = (view: FrameLocator) => description(view).getByTestId('card-content');
 
 test.describe('the built player with its description card', () => {
+  test.skip(({ playerRenderer }) => playerRenderer === 'react', 'the React player shows no description card: the card is a separate optional slice');
   test('shows the supplied description in order beside the title and Play, as text', async ({ page }) => {
     const host = await mountPlayer(page, { harness: WITH_DESCRIPTIONS });
     await host.open('ep-1');
@@ -1097,6 +1112,7 @@ async function observeImages(page: Page): Promise<string[]> {
 }
 
 test.describe('the built player with a Strict content policy embedded in its resource', () => {
+  test.skip(({ playerRenderer }) => playerRenderer === 'react', 'the React player shows no description card: the card is a separate optional slice');
   test('loads an image only after Show images, and a new selection ends that consent before it presents', async ({ page }) => {
     const requests = await observeImages(page);
     const host = await mountPlayer(page, { harness: WITH_IMAGES, contentPolicy: STRICT });

@@ -29,7 +29,7 @@ import {
 export const litHostSource = path.join(repoRoot, 'apps', 'lit-host');
 export const installedLitHostDist = path.join(litHostSource, 'dist-installed');
 
-/** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React, which no page built here uses). */
+/** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React; the only page built here that uses it, the React player, needs only the core and MCP packages, so `react` is a third-party dependency of the application, not an installed SDK package). */
 export const INSTALLED_SDK_PACKAGES = ['core', 'lit', 'components', 'mcp'] as const;
 
 /** The packages the application itself imports, besides the SDK packages, plus the build tooling its Vite configurations load. */
@@ -42,6 +42,8 @@ export const LIT_HOST_OWN_DEPENDENCIES = [
   '@modelcontextprotocol/node',
   'jose',
   'lit',
+  'react',
+  'react-dom',
   'vite',
   'vite-plugin-singlefile',
   'zod',
@@ -54,6 +56,7 @@ export const INSTALLED_PAGE_CONFIGS = [
   'vite.subscriptions-view.config.ts',
   'vite.answer-view.config.ts',
   'vite.playback-view.config.ts',
+  'vite.playback-react-view.config.ts',
   'vite.host-fixture.config.ts',
   'vite.catalog-isolation.config.ts',
   'vite.action-consumer.config.ts',

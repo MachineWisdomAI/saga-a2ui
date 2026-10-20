@@ -1,71 +1,8 @@
 import type { InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
 import { LitElement, css, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
+import { presentationFor, type PlayControlAction } from '../playback/play-presentation.js';
 import { PLAY_CONTROL_ID, PlayControl, type PlayControlEvents, type PlaybackViewState } from '../playback/playback-view.js';
-
-/** The event of this control a press delivers: the name of the action slot it feeds. */
-export type PlayControlAction = keyof PlayControlEvents;
-
-interface Presentation {
-  readonly status: string;
-  /** Absent when there is nothing the user can usefully press. */
-  readonly button?: { readonly label: string; readonly action: PlayControlAction };
-  /** Pending keeps the button in place and focusable, but a press does nothing. */
-  readonly busy?: boolean;
-}
-
-function presentationFor(state: PlaybackViewState): Presentation {
-  const title = 'episode' in state && state.episode ? state.episode.title : 'this episode';
-  switch (state.kind) {
-    case 'no-selection':
-      return { status: 'Waiting for an episode…' };
-    case 'ready':
-      return { status: `Ready to play ${title}.`, button: { label: 'Play', action: 'play' } };
-    case 'pending':
-      return { status: 'Checking access…', button: { label: 'Play', action: 'play' }, busy: true };
-    case 'playing':
-      return { status: `Playing ${title}.`, button: { label: 'Pause', action: 'pause' } };
-    case 'paused':
-      return { status: 'Paused.', button: { label: 'Resume', action: 'resume' } };
-    case 'resume-blocked':
-      // The audio is still paused where it stopped; another press, not a new authorization, retries.
-      return {
-        status: 'Your browser needs another press to continue the audio.',
-        button: { label: 'Resume', action: 'resume' },
-      };
-    case 'ended':
-      return { status: 'Finished playing.', button: { label: 'Play again', action: 'play' } };
-    case 'denied':
-      // Signing in again does not grant a subscription, so this offers a retry, not a sign-in.
-      return {
-        status: 'Playback denied: this account does not have access to this episode.',
-        button: { label: 'Try again', action: 'play' },
-      };
-    case 'expired':
-      return {
-        status: 'Playback access expired. Press Play to ask for access again.',
-        button: { label: 'Play', action: 'play' },
-      };
-    case 'unsupported':
-      return { status: 'Playback is not supported here.' };
-    case 'unavailable':
-      // The request may have reached the server and nothing says what it did, so pressing again is
-      // not offered: opening the episode again starts a fresh attempt with a fresh view of access.
-      if (state.requestOutcome === 'unknown') {
-        return { status: 'Playback could not be confirmed. Open this episode again to try playing it.' };
-      }
-      return { status: 'Playback is unavailable right now.', button: { label: 'Try again', action: 'play' } };
-    case 'media-failed':
-      return { status: 'The audio could not be played.', button: { label: 'Try again', action: 'play' } };
-    case 'gesture-needed':
-      return {
-        status: 'Your browser needs another press to start the audio.',
-        button: { label: 'Play', action: 'play' },
-      };
-    case 'session-changed':
-      return { status: 'Your session changed. Open a new view or reload to continue.' };
-  }
-}
 
 /**
  * The Play control: one button and one status line for the controller's current state.
