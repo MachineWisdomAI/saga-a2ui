@@ -31,9 +31,12 @@ npx tsx scripts/starter-snippets.ts                   # list the attach-to-an-ex
 npx tsx scripts/starter-snippets.ts --out DIR         # write them as files into a new directory
 ```
 
-`exportTemplate`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
+`exportTemplate`, `exportTemplateInterruptibly`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
 are the functions the CLI and guides call. Export writes only into a directory that does not exist,
-installs nothing and runs nothing.
+installs nothing and runs nothing. It removes only the directory it created, which it recognizes by the
+directory's identity and not by its path, and leaves a path that was replaced meanwhile as it found it.
+`exportTemplateInterruptibly` is the same export for a caller that must react to SIGINT or SIGTERM: it
+yields to the event loop between files, which a synchronous copy cannot do.
 
 ```sh
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair

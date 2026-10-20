@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { candidateVersion, sourceRevision } from './packed-consumer.js';
-import { TemplateError, exportTemplate, readTemplateMetadata, templateDirectory } from './starter-template.js';
+import { ExportInterrupted, TemplateError, exportTemplateInterruptibly, readTemplateMetadata, templateDirectory } from './starter-template.js';
 
 // The `saga` command (CLI1). It owns the command line, the list of pairs it offers and what it
 // prints; the files it writes are `exportTemplate`'s, from the one maintained template.
@@ -104,7 +104,7 @@ function nextSteps(directory: string, sdkVersion: string): string {
   return `Next:\n${steps.map((step) => `  ${step}`).join('\n')}\n${note}`;
 }
 
-function init(request: { readonly stack: string; readonly server: string; readonly directory: string }, environment: Environment): number {
+async function init(request: { readonly stack: string; readonly server: string; readonly directory: string }, environment: Environment): Promise<number> {
   const { stack, server, directory } = request;
   const pair = SUPPORTED_PAIRS.find((one) => one.stack === stack && one.server === server);
   if (pair === undefined) {
@@ -122,23 +122,23 @@ function init(request: { readonly stack: string; readonly server: string; readon
       throw new TemplateError(`The ${pair.template} template is for ${declared.stack} on ${declared.server}, not ${pair.stack} on ${pair.server}; the pair is not offered until they agree.`);
     }
     const sdkVersion = environment.sdkVersion();
-    const exported = exportTemplate(template, newDirectoryTarget(environment.cwd, directory), { sdkVersion });
-    // The copy is synchronous, so an interrupt is seen when it ends; the directory is this run's own.
-    if (environment.signal?.aborted) {
-      fs.rmSync(exported.directory, { recursive: true, force: true });
-      environment.stderr('saga init: interrupted; the directory this run created was removed.\n');
-      return EXIT_INTERRUPTED;
-    }
+    // The copy hands control back to the event loop between files, so a real SIGINT or SIGTERM is
+    // seen before the next write or before success is reported; the export removes what it created.
+    await exportTemplateInterruptibly(template, newDirectoryTarget(environment.cwd, directory), { sdkVersion, signal: environment.signal });
     environment.stdout(`Created a ${pair.stack} starter on ${pair.server} in ${directory} (SDK build ${sdkVersion}).\nNothing was installed and no command was run.\n\n${nextSteps(directory, sdkVersion)}`);
     return 0;
   } catch (error) {
+    if (error instanceof ExportInterrupted) {
+      environment.stderr(`saga init: interrupted; ${error.removed ? 'the directory this run created was removed' : 'the output path had been replaced during the copy, so nothing there was removed'}.\n`);
+      return EXIT_INTERRUPTED;
+    }
     environment.stderr(`saga init: ${(error as Error).message}\n`);
     return EXIT_REFUSED;
   }
 }
 
 /** Runs one command line and returns the process exit code: 0 done, 1 refused or failed, 2 not understood, 130 interrupted. */
-export function runCli(argv: readonly string[], environment: Environment): number {
+export async function runCli(argv: readonly string[], environment: Environment): Promise<number> {
   const command = parseCommandLine(argv);
   switch (command.kind) {
     case 'help':
@@ -154,8 +154,9 @@ export function runCli(argv: readonly string[], environment: Environment): numbe
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const interrupt = new AbortController();
-  for (const name of ['SIGINT', 'SIGTERM'] as const) process.once(name, () => interrupt.abort());
-  process.exitCode = runCli(process.argv.slice(2), {
+  // `on`, not `once`: a second Ctrl-C while the cleanup runs must not fall back to killing the process.
+  for (const name of ['SIGINT', 'SIGTERM'] as const) process.on(name, () => interrupt.abort());
+  void runCli(process.argv.slice(2), {
     cwd: process.cwd(),
     sdkVersion: () => {
       const { commit, dirty } = sourceRevision();
@@ -164,5 +165,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.reso
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
     signal: interrupt.signal,
+  }).then((code) => {
+    process.exitCode = code;
   });
 }
