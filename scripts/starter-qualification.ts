@@ -15,7 +15,8 @@ import type { QualifiedStarter } from './qualified-starters.js';
 
 // Qualifies a server pair of the `lit-mcp` stack: a maintained starter template (templates/lit-node
 // on the official `@modelcontextprotocol/node` adapter, templates/lit-express on the official
-// `@modelcontextprotocol/express` adapter). The starter is exported as a developer receives it, the
+// `@modelcontextprotocol/express` adapter, templates/lit-fastify on the official `@modelcontextprotocol/fastify`
+// adapter, templates/lit-hono on the official `@modelcontextprotocol/hono` adapter). The starter is exported as a developer receives it, the
 // SDK packages are installed into it from packed candidate tarballs (scripts/build-starter.ts), it is
 // type-checked and built with its own scripts' configuration, and then a real MCP client talks to it
 // over HTTP. Every template runs the same cases through the same listener interface; a template's
