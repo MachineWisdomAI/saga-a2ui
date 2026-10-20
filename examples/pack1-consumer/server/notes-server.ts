@@ -8,6 +8,7 @@ import {
   ArchiveInputSchema,
   ArchiveOutputSchema,
   LIST_TOOL,
+  NO_EFFECT_META,
   NotesOutputSchema,
   READ_ONLY,
   SESSION_TOOL,
@@ -61,6 +62,9 @@ const identityOf = (authInfo: AuthInfo | undefined): { readonly accountId: strin
 };
 
 const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text }] });
+
+/** A failure the server knows changed nothing; the view may tell the person so. Any other failure leaves the outcome unknown. */
+const refusal = (text: string): CallToolResult => ({ ...failure(text), _meta: { [NO_EFFECT_META]: true } });
 
 /** Builds the MCP server for one built notes page. `html` is the final document; its bytes name its resource. */
 export function createNotesServer(options: { readonly html: string; readonly backend: NotesBackend }): McpServer {
@@ -126,14 +130,16 @@ export function createNotesServer(options: { readonly html: string; readonly bac
     async ({ noteId }, ctx: ServerContext): Promise<CallToolResult> => {
       // Authorization is decided here, for this request, from the verified context alone.
       const identity = identityOf(ctx.http?.authInfo);
-      if (!identity) return failure(TEXT.signInRequired);
+      if (!identity) return refusal(TEXT.signInRequired);
       try {
         const archived = await backend.archive(identity.accountId, noteId, ctx.mcpReq.signal);
         // One sentence for an absent note, someone else's note and an archived one: nothing is disclosed.
-        if (archived === undefined) return failure(TEXT.cannotArchive);
+        if (archived === undefined) return refusal(TEXT.cannotArchive);
         const output = ArchiveOutputSchema.parse({ noteId, archivedAt: archived.archivedAt });
         return { content: [{ type: 'text', text: 'archived' }], structuredContent: output };
       } catch {
+        // An exception, or an output that failed validation after the write: the archive may have
+        // been applied, so this failure does not claim otherwise.
         return failure(TEXT.unavailable);
       }
     },

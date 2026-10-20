@@ -33,5 +33,16 @@ export const TEXT = {
   cannotArchive: 'This note cannot be archived.',
 } as const;
 
+/**
+ * `_meta` key a server sets on an `isError` archive reply that it knows changed nothing (nobody
+ * signed in, or the note cannot be archived by this account). A failure without it, such as a
+ * backend exception or an output the server could not validate after the write, says nothing
+ * about whether the archive was applied, so a view must treat it as an unknown outcome.
+ */
+export const NO_EFFECT_META = 'pack1/no-effect';
+
+export const declaresNoEffect = (reply: { readonly isError?: boolean; readonly _meta?: Record<string, unknown> }): boolean =>
+  reply.isError === true && reply._meta?.[NO_EFFECT_META] === true;
+
 export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 export const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;

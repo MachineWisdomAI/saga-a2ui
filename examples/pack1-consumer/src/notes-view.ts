@@ -91,15 +91,27 @@ export async function startNotesView(extension?: (app: App) => NotesExtension): 
     say(parsed?.success ? 'Your notes' : PROBLEM_TEXT);
   };
 
+  // The application's one way to end its view, for a host teardown and for the page going away
+  // alike. Removing the notes element disposes its bindings (local actions, the optional card)
+  // and cancels what is still undecided, so a retained button no longer does anything. Idempotent.
+  let retired = false;
+  const retire = (): void => {
+    if (retired) return;
+    retired = true;
+    element()?.remove();
+    say(CLOSED_TEXT);
+  };
+
   const connection = await connectToolResultView({
     app,
     transport: new PostMessageTransport(window.parent, window.parent),
     onToolResult: show,
-    // The host is closing this view: ending the notes element disposes its bindings and cancels what is still undecided.
-    onTeardown: () => {
-      element()?.remove();
-      say(CLOSED_TEXT);
-    },
+    // The host is closing this view; it ends the connection itself once it has the answer.
+    onTeardown: retire,
   });
-  addEventListener('pagehide', () => connection.dispose());
+  // The page is going away: end the application's bindings first, then the connection.
+  addEventListener('pagehide', () => {
+    retire();
+    connection.dispose();
+  });
 }

@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import { Action, prerequisite, proceed, refuse, type ServerTransport } from '@saga-a2ui/core/actions';
 import type { ActionButtonActivation } from '@saga-a2ui/lit/actions';
-import { ARCHIVE_TOOL, ArchiveOutputSchema, SESSION_TOOL } from './notes-contract.js';
+import { ARCHIVE_TOOL, ArchiveOutputSchema, SESSION_TOOL, declaresNoEffect } from './notes-contract.js';
 import type { RowHolds } from './row-holds.js';
 
 // The application's actions, each defined once. A definition holds no pending state, so the same
@@ -44,8 +44,11 @@ export function createNotesActions(environment: NotesEnvironment) {
     .before(requireSession)
     .run(async ({ params, call }) => {
       const reply = await call(ARCHIVE_TOOL, { noteId: params.noteId });
-      // A returned tool-level failure is a result, not an exception: this tool changes nothing when it sets isError.
-      if (reply.isError === true) throw new ArchiveDeclined('The server declined to archive the note');
+      // A returned tool-level failure is a result, not an exception. Only a refusal the server marked
+      // as having no effect is a known outcome; any other failure (a backend exception, an output the
+      // server could not validate after writing) may follow an applied archive, so it stays unknown.
+      if (declaresNoEffect(reply)) throw new ArchiveDeclined('The server declined to archive the note');
+      if (reply.isError === true) throw new Error('The archive request failed');
       return ArchiveOutputSchema.parse(reply.structuredContent);
     })
     .onSuccess(({ params, result, activation, current }) => {

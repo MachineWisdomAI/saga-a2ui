@@ -44,6 +44,8 @@ interface Environment {
   /** Makes every later call of that kind wait until the test releases it. */
   readonly hold: Record<Call, boolean>;
   readonly held: Record<Call, (() => void)[]>;
+  /** When set, an archive is applied and then the backend fails before it can answer. */
+  readonly fault: { failAfterArchive: boolean };
   readonly bytes: Buffer;
   readonly server: ServerModule;
 }
@@ -65,10 +67,14 @@ for (const consumer of ['own', 'card'] as const) {
     test.beforeEach(async () => {
       const hold: Record<Call, boolean> = { isSignedIn: false, archive: false };
       const held: Record<Call, (() => void)[]> = { isSignedIn: [], archive: [] };
+      const fault = { failAfterArchive: false };
       const backend = server.createFixtureBackend({
         before: async (call) => {
           if (call === 'notesFor' || !hold[call]) return;
           await new Promise<void>((resolve) => held[call].push(resolve));
+        },
+        afterArchive: () => {
+          if (fault.failAfterArchive) throw new Error('the backend failed after applying the archive');
         },
       });
       const host = await startTestHost({
@@ -76,7 +82,7 @@ for (const consumer of ['own', 'card'] as const) {
         buildServer: () => server.createNotesServer({ html: bytes.toString('utf8'), backend }),
         authenticate: (credential) => (credential === undefined ? undefined : AUTH[credential]),
       });
-      environment = { backend, host, alice: await host.connect('alice'), bob: await host.connect('bob'), anonymous: await host.connect(), hold, held, bytes, server };
+      environment = { backend, host, alice: await host.connect('alice'), bob: await host.connect('bob'), anonymous: await host.connect(), hold, held, fault, bytes, server };
     });
 
     test.afterEach(async () => {
@@ -332,6 +338,30 @@ for (const consumer of ['own', 'card'] as const) {
       expect(environment.backend.archived).toEqual([]);
     });
 
+    test('a failure that may follow an applied archive stays unknown, while a known refusal says nothing changed', async ({ page }) => {
+      const { view } = await open(page);
+      // The backend applies the archive, then throws: the server answers with a generic failure.
+      environment.fault.failAfterArchive = true;
+      await archiveButton(view, 0).click();
+      await expect(statusLine(view, 0)).toHaveText('Archive status unknown');
+      expect(environment.backend.archived).toEqual(['n-1']); // it was applied, and the view did not claim otherwise
+      await expect(view.getByTestId('holds-pending')).toHaveText('');
+      await expect(view.getByTestId('holds-confirmed')).toHaveText('');
+
+      // The generic failure carries no no-effect declaration, unlike a refusal.
+      environment.fault.failAfterArchive = false;
+      const refused = await environment.alice.callTool({ name: 'archive_note', arguments: { noteId: 'n-3' } });
+      expect(refused._meta).toMatchObject({ 'pack1/no-effect': true });
+
+      // Known success and a known refusal on the other row are unchanged.
+      await archiveButton(view, 1).click();
+      await expect(statusLine(view, 1)).toHaveText('Archived at 1002');
+      environment.backend.revoked.add('acct-alice');
+      await archiveButton(view, 0).click();
+      await expect(statusLine(view, 0)).toHaveText('The server declined; nothing changed');
+      expect(environment.backend.archived).toEqual(['n-1', 'n-2']);
+    });
+
     test('a late result does not present on another item after the item changes', async ({ page }) => {
       const { view } = await open(page);
       environment.hold.archive = true;
@@ -373,6 +403,26 @@ for (const consumer of ['own', 'card'] as const) {
       await page.waitForTimeout(200);
       await expect(view.getByText(/Archived at/)).toHaveCount(0);
       await expect(view.getByTestId('holds-confirmed')).toHaveText('');
+    });
+
+    test('the page going away ends the application bindings and the connection, and a retained button does nothing', async ({ page }) => {
+      const { view } = await open(page);
+      const markRead = view.getByRole('button', { name: 'Mark read' }).nth(0);
+      const archive = archiveButton(view, 0);
+      const retained = await Promise.all([markRead.elementHandle(), archive.elementHandle()]);
+      const callsBefore = { ...environment.backend.calls };
+
+      // pagehide, not the host's teardown request: the connection is disposed and the bindings must end with it.
+      await view.locator('body').evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      await expect(view.getByTestId('view-status')).toHaveText('This view was closed.');
+      await expect(view.locator('notes-app')).toHaveCount(0);
+
+      // The detached controls that were retained no longer act.
+      await Promise.all(retained.map((handle) => handle?.evaluate((button) => (button as HTMLElement).click())));
+      await page.waitForTimeout(200);
+      await expect(view.getByTestId('read-log')).toHaveText('');
+      expect(environment.backend.calls).toEqual(callsBefore);
+      expect(environment.backend.archived).toEqual([]);
     });
   });
 }

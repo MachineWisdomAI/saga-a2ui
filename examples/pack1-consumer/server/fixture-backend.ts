@@ -9,6 +9,8 @@ export const CANARY = 'PRIVATE-FIELD-CANARY';
 export interface BackendHooks {
   /** Awaited at the start of each backend call; a test holds a call open by returning a pending promise. */
   before?(call: 'notesFor' | 'isSignedIn' | 'archive', accountId: string, noteId?: string): Promise<void> | void;
+  /** Awaited after an archive was applied and before it answers; throwing here is a failure that follows a write. */
+  afterArchive?(accountId: string, noteId: string): Promise<void> | void;
 }
 
 export interface FixtureBackend extends NotesBackend {
@@ -69,6 +71,7 @@ export function createFixtureBackend(hooks: BackendHooks = {}, records: readonly
       if (!note || note.ownerAccountId !== accountId || revoked.has(accountId) || done.has(noteId)) return undefined;
       done.add(noteId);
       archived.push(noteId);
+      await hooks.afterArchive?.(accountId, noteId);
       return { archivedAt: 1_000 + archived.length };
     },
   };
