@@ -68,6 +68,17 @@ export const ARCHIVE_FILES = { chatgpt: 'chatgpt-plugin.zip', claude: 'claude-co
 export type TargetName = keyof typeof ARCHIVE_FILES;
 export const TARGET_NAMES = Object.keys(ARCHIVE_FILES) as readonly TargetName[];
 
+/**
+ * Where each target's materials are submitted, in the host's own documented flow (CLI5 #68). The
+ * guide is the documentation the maintainer follows; `portal` is the page it names, or `null` when
+ * the guide names no stable page that this tool may point to. Nothing here is an API: the
+ * submission is made by the publisher in the host's interface.
+ */
+export const HOST_DIRECTORIES = {
+  chatgpt: { name: 'ChatGPT plugin directory', guide: 'https://developers.openai.com/plugins/deploy/submission', portal: null },
+  claude: { name: 'Claude connector directory', guide: 'https://claude.com/docs/connectors/building/submission', portal: 'https://claude.ai/directory/manage' },
+} as const satisfies Record<TargetName, { readonly name: string; readonly guide: string; readonly portal: string | null }>;
+
 /** A tool as the endpoint advertised it and the digest of its whole definition. */
 export interface ToolSnapshot {
   readonly name: string;
@@ -145,3 +156,9 @@ export interface PublicationRecord {
   /** Preparing a package submits nothing and does not make anything live. */
   readonly submission: { readonly state: 'not-submitted'; readonly note: string };
 }
+
+/**
+ * What a handoff pins about a prepared release (CLI5 #68), and what a newer preparation is compared
+ * with to find stale evidence. Every `PublicationRecord` is one.
+ */
+export type ReleaseEvidence = Pick<PublicationRecord, 'target' | 'verdict' | 'source' | 'application' | 'inputs' | 'endpoint' | 'validators' | 'artifact' | 'handoff'>;

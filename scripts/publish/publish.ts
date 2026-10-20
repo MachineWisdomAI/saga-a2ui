@@ -8,6 +8,7 @@ import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, sameDir
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
 import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
+import { runHandoff, type HandoffRequest } from './handoff.js';
 import { discoverEndpoint, invokeFixture, toolDigest, type Discovery, type EndpointSnapshot } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
 import {
@@ -72,11 +73,15 @@ export interface PublishIo {
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
   readonly pluginValidator?: PluginValidator | undefined;
+  /** The clock a handoff record's times come from. Defaults to the system clock; a test supplies a fixed one. */
+  readonly now?: (() => Date) | undefined;
 }
 
 /** What `saga.ts` loads, only when a publication command runs. */
 export interface PublicationTool {
   run(request: PublishRequest, io: PublishIo): Promise<number>;
+  /** `saga publish handoff` (CLI5): the resumable record of a prepared release's manual submission. It reads local files only. */
+  handoff(request: HandoffRequest, io: PublishIo): Promise<number>;
 }
 
 const EXIT_NOT_READY = 1;
@@ -546,15 +551,15 @@ function report(record: PublicationRecord, request: PublishRequest): string {
  * error or a path, goes through it, so no reporting path can disclose a credential that an
  * endpoint echoed or an input carried, whatever wording produced it.
  */
-function withRedactedOutput(io: PublishIo, request: PublishRequest): PublishIo {
-  const supplied = request.bearerEnv === undefined ? undefined : io.environment[request.bearerEnv];
+function withRedactedOutput(io: PublishIo, bearerEnv: string | undefined): PublishIo {
+  const supplied = bearerEnv === undefined ? undefined : io.environment[bearerEnv];
   const literals = supplied === undefined || supplied === '' ? [] : [supplied];
   return { ...io, stdout: (text) => io.stdout(redactSecrets(text, literals)), stderr: (text) => io.stderr(redactSecrets(text, literals)) };
 }
 
 export const publicationTool: PublicationTool = {
   async run(request, unredacted) {
-    const io = withRedactedOutput(unredacted, request);
+    const io = withRedactedOutput(unredacted, request.bearerEnv);
     // Every failure, expected or not, is reported here through the redacted channels. An error is
     // never rethrown to the caller, whose own reporting is not redacted: a message can carry text
     // from an input (an asset name, a path) that holds a credential.
@@ -566,6 +571,16 @@ export const publicationTool: PublicationTool = {
         return EXIT_INTERRUPTED;
       }
       io.stderr(`saga publish: ${error instanceof Error ? error.message : String(error)}\nNothing was prepared; fix the problem named above and rerun.\n`);
+      return EXIT_NOT_READY;
+    }
+  },
+  async handoff(request, unredacted) {
+    const io = withRedactedOutput(unredacted, undefined);
+    // As for `run`: every failure is reported through the redacted channels and never rethrown.
+    try {
+      return await runHandoff(request, { cwd: io.cwd, stdout: io.stdout, stderr: io.stderr, signal: io.signal, now: io.now ?? (() => new Date()) });
+    } catch (error) {
+      io.stderr(`saga publish handoff ${request.action}: ${error instanceof Error ? error.message : String(error)}\nRead the record with \`handoff status\` before deciding again.\n`);
       return EXIT_NOT_READY;
     }
   },

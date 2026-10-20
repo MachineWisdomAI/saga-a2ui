@@ -50,6 +50,37 @@ export const editInput = (app: string, change: (input: Record<string, any>) => v
   fs.writeFileSync(file, JSON.stringify(input, null, 2));
 };
 
+/** The release input's Claude connector section: everything the portal asks for, as the application owner would supply it. */
+export const connector = (): Record<string, any> => ({
+  name: 'Notes Fixture',
+  oneLiner: 'Shows whether the Notes Fixture service is running.',
+  description: 'Shows whether the Notes Fixture service is running, in a card inside the conversation. It only reports status and reads nothing from your account.',
+  categories: ['Developer Tools'],
+  slug: 'notes-fixture',
+  documentationURL: 'https://notes.example.com/docs',
+  privacyPolicyURL: 'https://notes.example.com/privacy',
+  support: { email: 'support@notes.example.com', url: 'https://notes.example.com/support' },
+  icon: 'assets/icon.svg',
+  screenshots: [1, 2, 3].map((n) => ({ file: `screenshots/${n}.png`, prompt: `Is the notes service running? (${n})` })),
+  useCases: { primary: ['Check whether the notes service is running'], prerequisites: 'Nothing: the connector needs no account.', access: 'read' },
+  authentication: { mode: 'none' },
+  dataHandling: { apiOwnership: 'first-party', personalHealthData: false, sponsoredContent: false },
+  allowedLinkUris: ['https://notes.example.com'],
+  reviewContact: { name: 'Fixture Reviewer', email: 'review@notes.example.com' },
+});
+
+/** A copy of the fixture application with its Claude section and the three carousel screenshots the section names. */
+export function claudeApp(change: (connector: Record<string, any>, input: Record<string, any>) => void = () => undefined): string {
+  const app = copyFixture();
+  fs.mkdirSync(path.join(app, 'screenshots'));
+  for (const n of [1, 2, 3]) fs.writeFileSync(path.join(app, 'screenshots', `${n}.png`), png(600, 600, 1000));
+  editInput(app, (input) => {
+    input.claude = { connector: connector() };
+    change(input.claude.connector, input);
+  });
+  return app;
+}
+
 export interface Wire {
   /** Every JSON-RPC method the command sent to the endpoint, in order. */
   readonly methods: string[];
@@ -94,6 +125,8 @@ export interface Options {
   readonly environment?: Record<string, string>;
   readonly signal?: AbortSignal;
   readonly onOutput?: (text: string) => void;
+  /** The clock of a handoff record. */
+  readonly now?: () => Date;
 }
 
 export async function saga(args: readonly string[], options: Options = {}): Promise<Run> {
@@ -103,7 +136,7 @@ export async function saga(args: readonly string[], options: Options = {}): Prom
     cwd: options.cwd ?? workspace(),
     sdkVersion: () => '0.0.0-candidate.g0123456789ab',
     stageDemo: () => Promise.reject(new Error('publish builds no demonstration')),
-    publication: { load: async () => publicationTool, environment: options.environment ?? {}, fetch: (options.wire ?? wire()).fetch, validators: options.validators, pluginValidator: options.pluginValidator },
+    publication: { load: async () => publicationTool, environment: options.environment ?? {}, fetch: (options.wire ?? wire()).fetch, validators: options.validators, pluginValidator: options.pluginValidator, now: options.now },
     stdout: (text) => {
       out += text;
       options.onOutput?.(text);
