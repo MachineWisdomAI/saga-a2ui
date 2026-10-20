@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { candidateVersion, sourceRevision } from './packed-consumer.js';
 import type { StagedDemo } from './build-demo.js';
+import type { FetchLike } from '@modelcontextprotocol/client';
+import type { ValidatorLoad } from './publish/chatgpt.js';
+import type { PublicationTool, PublishRequest } from './publish/publish.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
 import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, exportTemplateInterruptibly, readTemplateMetadata, refuseExisting, templateDirectory } from './starter-template.js';
 
@@ -13,9 +16,13 @@ import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, exportT
 //
 //   npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app
 //   npx tsx scripts/saga.ts demo --a2ui-stack lit-mcp --server node ./my-demo
+//   npx tsx scripts/saga.ts publish prepare --target chatgpt --release saga-publication.json --out ./publication
 //
-// Each creates one new directory. Neither installs anything, runs a package manager, hook or script
-// of the output, or changes anything that already exists.
+// `init` and `demo` each create one new directory. Neither installs anything, runs a package manager,
+// hook or script of the output, or changes anything that already exists. `publish` (CLI3) is the
+// optional publication tooling: it is loaded only when that command runs (scripts/publish/), checks a
+// built application and its deployed endpoint, and prepares a host package and findings record. It
+// deploys, uploads and submits nothing.
 
 /** A stack and server target together with the maintained template that implements them. */
 export interface QualifiedPair {
@@ -46,6 +53,17 @@ export const SUPPORTED_PAIRS: readonly QualifiedPair[] = [
  */
 export const SUPPORTED_DEMO_PAIRS: readonly QualifiedPair[] = SUPPORTED_PAIRS.filter((pair) => pair.template === DEMO_TEMPLATE);
 
+/** The optional publication tooling (CLI3): loaded only when a `publish` command runs, so `init` and `demo` never depend on it. */
+export interface PublicationSupport {
+  readonly load: () => Promise<PublicationTool>;
+  /** Where `--bearer-env` reads a credential from. */
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  /** The network seam for endpoint discovery; the platform's `fetch` when absent. */
+  readonly fetch?: FetchLike | undefined;
+  /** The manifest validators; the pinned official schemas when absent. */
+  readonly validators?: ValidatorLoad | undefined;
+}
+
 export interface Environment {
   /** Where a relative directory is resolved from. */
   readonly cwd: string;
@@ -56,6 +74,8 @@ export interface Environment {
    * destination it may write. An aborted `signal` ends the build early with the abort error.
    */
   readonly stageDemo: (signal?: AbortSignal) => Promise<StagedDemo>;
+  /** The publication tooling for `saga publish`; a command line that asks for it without one is refused. */
+  readonly publication?: PublicationSupport | undefined;
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   /** Aborted by an interrupt. The command then leaves nothing behind that it created. */
@@ -70,6 +90,8 @@ const pairLines = (pairs: readonly QualifiedPair[]): string => pairs.map((pair) 
 
 const USAGE = `Usage: saga init --a2ui-stack <renderer>-mcp --server <target> <directory>
        saga demo --a2ui-stack <renderer>-mcp --server <target> <directory>
+       saga publish check --target chatgpt --release <saga-publication.json> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
+       saga publish prepare --target chatgpt --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
 
 init creates <directory>, which must not exist yet, from the maintained starter for the pair.
 demo creates it from the standalone demonstration of the pair: a local-only application with
@@ -80,6 +102,11 @@ ${pairLines(SUPPORTED_PAIRS)}
 
 Supported pairs for demo:
 ${pairLines(SUPPORTED_DEMO_PAIRS)}
+
+publish checks a built application, its deployed HTTPS MCP endpoint and the release input, then
+(prepare) writes the ChatGPT plugin package and a findings record into <directory>. It reads the
+endpoint without calling any tool unless --invoke-fixture is given, and it deploys, uploads and
+submits nothing. check writes nothing. A verdict other than ready exits 1.
 `;
 
 type Creation = 'init' | 'demo';
@@ -89,24 +116,68 @@ interface CreateRequest {
   readonly server: string;
   readonly directory: string;
 }
-type Command = { readonly kind: 'help' } | CreateRequest | { readonly kind: 'usage'; readonly message: string };
+type Command = { readonly kind: 'help' } | CreateRequest | { readonly kind: 'publish'; readonly request: PublishRequest } | { readonly kind: 'usage'; readonly message: string };
+
+/** The options only `publish` takes; `init` and `demo` refuse them instead of ignoring them. */
+const PUBLISH_OPTIONS = ['target', 'release', 'out', 'against', 'invoke-fixture', 'bearer-env'] as const;
 
 function parseCommandLine(argv: readonly string[]): Command {
   let parsed;
   try {
-    parsed = parseArgs({ args: [...argv], allowPositionals: true, strict: true, options: { 'a2ui-stack': { type: 'string' }, server: { type: 'string' }, help: { type: 'boolean' } } });
+    parsed = parseArgs({
+      args: [...argv],
+      allowPositionals: true,
+      strict: true,
+      options: {
+        'a2ui-stack': { type: 'string' },
+        server: { type: 'string' },
+        help: { type: 'boolean' },
+        target: { type: 'string' },
+        release: { type: 'string' },
+        out: { type: 'string' },
+        against: { type: 'string' },
+        'invoke-fixture': { type: 'boolean' },
+        'bearer-env': { type: 'string' },
+      },
+    });
   } catch (error) {
     return { kind: 'usage', message: (error as Error).message };
   }
   if (parsed.values.help) return { kind: 'help' };
   const [command, ...rest] = parsed.positionals;
-  if (command !== 'init' && command !== 'demo') return { kind: 'usage', message: command === undefined ? 'Say what to do: init or demo.' : `Unknown command "${command}"; the commands are init and demo.` };
+  if (command === 'publish') return parsePublish(parsed.values, rest);
+  if (command !== 'init' && command !== 'demo') return { kind: 'usage', message: command === undefined ? 'Say what to do: init, demo or publish.' : `Unknown command "${command}"; the commands are init, demo and publish.` };
+  const publishOnly = PUBLISH_OPTIONS.find((name) => parsed.values[name] !== undefined);
+  if (publishOnly !== undefined) return { kind: 'usage', message: `--${publishOnly} belongs to saga publish, not saga ${command}.` };
   const stack = parsed.values['a2ui-stack'];
   const server = parsed.values.server;
   if (stack === undefined) return { kind: 'usage', message: '--a2ui-stack is required.' };
   if (server === undefined) return { kind: 'usage', message: '--server is required.' };
   if (rest.length !== 1) return { kind: 'usage', message: rest.length === 0 ? 'Name the new directory.' : 'Name one new directory.' };
   return { kind: command, stack, server, directory: rest[0] as string };
+}
+
+interface ParsedValues {
+  readonly 'a2ui-stack'?: string | undefined;
+  readonly server?: string | undefined;
+  readonly target?: string | undefined;
+  readonly release?: string | undefined;
+  readonly out?: string | undefined;
+  readonly against?: string | undefined;
+  readonly 'invoke-fixture'?: boolean | undefined;
+  readonly 'bearer-env'?: string | undefined;
+}
+
+function parsePublish(values: ParsedValues, rest: readonly string[]): Command {
+  const [action, ...extra] = rest;
+  if (action !== 'check' && action !== 'prepare') return { kind: 'usage', message: action === undefined ? 'Say what to publish: check or prepare.' : `Unknown publish command "${action}"; the commands are check and prepare.` };
+  if (extra.length > 0) return { kind: 'usage', message: `saga publish ${action} takes options only, not "${extra[0]}".` };
+  if (values['a2ui-stack'] !== undefined || values.server !== undefined) return { kind: 'usage', message: '--a2ui-stack and --server belong to saga init and saga demo.' };
+  if (values.target === undefined) return { kind: 'usage', message: '--target is required (chatgpt).' };
+  if (values.release === undefined) return { kind: 'usage', message: '--release is required: the release input file.' };
+  if (action === 'prepare' && values.out === undefined) return { kind: 'usage', message: 'prepare needs --out, the directory to write.' };
+  if (action === 'check' && values.out !== undefined) return { kind: 'usage', message: 'check writes nothing; --out belongs to prepare.' };
+  return { kind: 'publish', request: { command: action, target: values.target, release: values.release, out: values.out, against: values.against, invokeFixture: values['invoke-fixture'] === true, bearerEnv: values['bearer-env'] } };
 }
 
 /** What a shell needs to read the path back as one word. */
@@ -216,7 +287,40 @@ async function create(request: CreateRequest, environment: Environment): Promise
   }
 }
 
-/** Runs one command line and returns the process exit code: 0 done, 1 refused or failed, 2 not understood, 130 interrupted. */
+/**
+ * `publish`: the optional publication tooling. It is loaded here, not at start, so a missing or broken
+ * tool affects only this command. A tool that cannot be loaded is refused, never treated as a pass.
+ */
+async function publish(request: PublishRequest, environment: Environment): Promise<number> {
+  const support = environment.publication;
+  if (support === undefined) {
+    environment.stderr('saga publish: the publication tooling is not available here, so nothing was checked or prepared.\n');
+    return EXIT_REFUSED;
+  }
+  let tool: PublicationTool;
+  try {
+    tool = await support.load();
+  } catch (error) {
+    environment.stderr(`saga publish: the publication tooling could not be loaded (${(error as Error).message}), so nothing was checked or prepared.\n`);
+    return EXIT_REFUSED;
+  }
+  try {
+    return await tool.run(request, {
+      cwd: environment.cwd,
+      stdout: environment.stdout,
+      stderr: environment.stderr,
+      signal: environment.signal,
+      environment: support.environment,
+      fetch: support.fetch,
+      validators: support.validators,
+    });
+  } catch (error) {
+    environment.stderr(`saga publish: ${(error as Error).message}\n`);
+    return EXIT_REFUSED;
+  }
+}
+
+/** Runs one command line and returns the process exit code: 0 done (a publish verdict of ready), 1 refused, failed or not ready, 2 not understood, 130 interrupted. */
 export async function runCli(argv: readonly string[], environment: Environment): Promise<number> {
   const command = parseCommandLine(argv);
   switch (command.kind) {
@@ -229,6 +333,8 @@ export async function runCli(argv: readonly string[], environment: Environment):
     case 'init':
     case 'demo':
       return create(command, environment);
+    case 'publish':
+      return publish(command.request, environment);
   }
 }
 
@@ -244,6 +350,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.reso
     },
     // The build tooling loads only for a command that builds the demonstration.
     stageDemo: async (signal) => (await import('./build-demo.js')).stageDemo(signal),
+    // The publication tooling loads only for `saga publish`.
+    publication: { load: async () => (await import('./publish/publish.js')).publicationTool, environment: process.env },
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
     signal: interrupt.signal,
