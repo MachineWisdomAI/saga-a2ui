@@ -101,7 +101,7 @@ export function extractSnippets(template: string): Snippet[] {
  */
 export function writeSnippets(template: string, destination: string): string[] {
   const target = path.resolve(destination);
-  if (fs.existsSync(target) || isSymlink(target)) throw new TemplateError(`${target} already exists; choose a new directory.`);
+  refuseExisting(target);
   const snippets = extractSnippets(template);
   fs.mkdirSync(target, { recursive: true });
   return snippets.map((snippet) => {
@@ -144,6 +144,12 @@ export interface ExportedStarter {
   readonly files: readonly string[];
 }
 
+/** One file of a directory to create: where it goes below that directory (forward slashes) and its content, read only when the file is written. */
+export interface OutputFile {
+  readonly path: string;
+  readonly content: () => string | Uint8Array;
+}
+
 const isSymlink = (file: string): boolean => {
   try {
     return fs.lstatSync(file).isSymbolicLink();
@@ -151,6 +157,11 @@ const isSymlink = (file: string): boolean => {
     return false;
   }
 };
+
+/** Refuses a path that is already taken: a file, a directory or a symbolic link, a dangling one included. Nothing is written or changed. */
+export function refuseExisting(target: string): void {
+  if (fs.existsSync(target) || isSymlink(target)) throw new TemplateError(`${target} already exists; choose a new directory.`);
+}
 
 /** An interrupt was seen during the export. `removed` is whether the directory this call created was taken away again. */
 export class ExportInterrupted extends Error {
@@ -163,9 +174,10 @@ export class ExportInterrupted extends Error {
 const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
 
 /**
- * The export itself, as a generator that suspends before each file and once more at the end. A
- * caller that can service interrupts resumes it from the event loop; a caller that cannot just
- * runs it through. Either way the writes, the ownership checks and the cleanup are these lines.
+ * Creating a new directory with the given files, as a generator that suspends before each file and
+ * once more at the end. A caller that can service interrupts resumes it from the event loop; a
+ * caller that cannot just runs it through. Either way the writes, the ownership checks and the
+ * cleanup are these lines, for every command that creates a directory (the starter and the demonstration).
  *
  * Only the directory this run creates is ever written into or removed, and "this run's directory"
  * is the directory made by the exclusive `mkdir` below (its device and inode), not the pathname:
@@ -174,11 +186,13 @@ const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDir
  * directory-relative file calls, so the check narrows the window between check and write to the
  * instant between two adjacent calls; it does not close it, and the README says so.
  */
-function* exportSteps(template: string, destination: string, options: { readonly sdkVersion: string }): Generator<void, ExportedStarter, void> {
-  readTemplateMetadata(template); // an unknown template fails before anything is written
+function* createDirectorySteps(destination: string, files: readonly OutputFile[]): Generator<void, string, void> {
   const target = path.resolve(destination);
-  if (fs.existsSync(target) || isSymlink(target)) throw new TemplateError(`${target} already exists; choose a new directory.`);
-  const files = templateFiles(template);
+  refuseExisting(target);
+  for (const file of files) {
+    const out = path.resolve(target, file.path);
+    if (path.isAbsolute(file.path) || !out.startsWith(`${target}${path.sep}`)) throw new TemplateError(`${file.path} is not inside the new directory; nothing was written.`);
+  }
   // The existence check above can be overtaken by another process, so the directory itself is
   // created without `recursive`, which fails if it exists.
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -196,7 +210,7 @@ function* exportSteps(template: string, destination: string, options: { readonly
       return false;
     }
   };
-  const replaced = new TemplateError(`${target} was replaced while the starter was being written; nothing at that path was changed or removed.`);
+  const replaced = new TemplateError(`${target} was replaced while the output was being written; nothing at that path was changed or removed.`);
   const removeIfOurs = (): boolean => {
     if (!stillOurs()) return false;
     fs.rmSync(target, { recursive: true, force: true });
@@ -206,12 +220,9 @@ function* exportSteps(template: string, destination: string, options: { readonly
     for (const file of files) {
       yield;
       if (!stillOurs()) throw replaced;
-      const out = path.join(target, file);
+      const out = path.join(target, file.path);
       fs.mkdirSync(path.dirname(out), { recursive: true });
-      const source = fs.readFileSync(path.join(template, file), 'utf8');
-      const text =
-        file === 'package.json' ? `${JSON.stringify(stampSdkVersion(JSON.parse(source) as Record<string, unknown>, options.sdkVersion), null, 2)}\n` : stripMarkers(source);
-      fs.writeFileSync(out, text, { flag: 'wx' });
+      fs.writeFileSync(out, file.content(), { flag: 'wx' });
     }
     yield;
     if (!stillOurs()) throw replaced;
@@ -221,7 +232,21 @@ function* exportSteps(template: string, destination: string, options: { readonly
     if (removed || error === replaced) throw error;
     throw new TemplateError(`${(error as Error).message} (${target} was replaced meanwhile, so nothing there was removed.)`);
   }
-  return { directory: target, files };
+  return target;
+}
+
+function* exportSteps(template: string, destination: string, options: { readonly sdkVersion: string }): Generator<void, ExportedStarter, void> {
+  readTemplateMetadata(template); // an unknown template fails before anything is written
+  const files = templateFiles(template);
+  const outputs = files.map((file): OutputFile => ({
+    path: file,
+    content: () => {
+      const source = fs.readFileSync(path.join(template, file), 'utf8');
+      return file === 'package.json' ? `${JSON.stringify(stampSdkVersion(JSON.parse(source) as Record<string, unknown>, options.sdkVersion), null, 2)}\n` : stripMarkers(source);
+    },
+  }));
+  const directory = yield* createDirectorySteps(destination, outputs);
+  return { directory, files };
 }
 
 /**
@@ -242,22 +267,35 @@ export function exportTemplate(template: string, destination: string, options: {
 /** Resumes the event loop twice, which runs a pending signal callback in between. */
 const letSignalsRun = (): Promise<void> => new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
 
+/** Runs the steps, handing control back to the event loop before each; an aborted `signal` is then seen before the next write or before the end is reported as done. */
+async function runInterruptibly<Result>(steps: Generator<void, Result, void>, signal: AbortSignal | undefined): Promise<Result> {
+  let step = steps.next();
+  while (!step.done) {
+    await letSignalsRun();
+    step = signal?.aborted ? steps.throw(new ExportInterrupted(false)) : steps.next();
+  }
+  return step.value;
+}
+
 /**
  * `exportTemplate` for a command that must react to an interrupt. A synchronous copy never lets
  * Node run a signal callback, so this one hands control back to the event loop before each file;
  * an aborted `signal` is then seen before the next write or before the export is reported as done,
  * the directory this call created is removed, and `ExportInterrupted` is thrown.
  */
-export async function exportTemplateInterruptibly(
+export function exportTemplateInterruptibly(
   template: string,
   destination: string,
   options: { readonly sdkVersion: string; readonly signal?: AbortSignal | undefined },
 ): Promise<ExportedStarter> {
-  const steps = exportSteps(template, destination, options);
-  let step = steps.next();
-  while (!step.done) {
-    await letSignalsRun();
-    step = options.signal?.aborted ? steps.throw(new ExportInterrupted(false)) : steps.next();
-  }
-  return step.value;
+  return runInterruptibly(exportSteps(template, destination, options), options.signal);
+}
+
+/**
+ * The same destination handling for a directory whose files are not a template's: a new directory
+ * holding exactly `files`, never over or into anything that exists, removed again (only if it is
+ * still the directory this call made) when a write fails or `signal` aborts. Returns the directory.
+ */
+export function createDirectoryInterruptibly(destination: string, files: readonly OutputFile[], options: { readonly signal?: AbortSignal | undefined } = {}): Promise<string> {
+  return runInterruptibly(createDirectorySteps(destination, files), options.signal);
 }

@@ -16,6 +16,10 @@ import { extractSnippets, readTemplateMetadata, templateDirectory, templateFiles
 
 const GUIDE = 'docs/getting-started.md';
 const read = (file: string): string => fs.readFileSync(path.join(repoRoot, file), 'utf8');
+/** The guide only runs `init`; a demo build here would be a defect, so asking for one fails the test. */
+const stageDemo = (): never => {
+  throw new Error('init must not build the demonstration');
+};
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-guide-'));
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
@@ -133,6 +137,7 @@ describe('the commands the guide tells a reader to type', () => {
       const code = await runCli(['init', '--a2ui-stack', stack as string, '--server', server as string, directory as string], {
         cwd,
         sdkVersion: () => '0.0.0-candidate.g0123456789ab',
+        stageDemo,
         stdout: (text) => (out += text),
         stderr: (text) => (err += text),
       });
@@ -176,7 +181,7 @@ describe('the commands the guide tells a reader to type', () => {
       }
     }
     let out = '';
-    await runCli(['init', '--a2ui-stack', 'lit-mcp', '--server', 'node', 'next-steps'], { cwd: fs.mkdtempSync(path.join(work, 'steps-')), sdkVersion: () => '0.0.0-candidate.g0123456789ab', stdout: (text) => (out += text), stderr: () => undefined });
+    await runCli(['init', '--a2ui-stack', 'lit-mcp', '--server', 'node', 'next-steps'], { cwd: fs.mkdtempSync(path.join(work, 'steps-')), sdkVersion: () => '0.0.0-candidate.g0123456789ab', stageDemo, stdout: (text) => (out += text), stderr: () => undefined });
     const printed = out.split('\n').filter((line) => /^ {2}(cd |npm )/.test(line)).map((line) => line.trim());
     expect(shown.filter((line) => line !== 'npm run typecheck')).toEqual(printed.map((line) => (line.startsWith('cd ') ? 'cd my-app' : line)));
   });
