@@ -1,5 +1,7 @@
 # SAGA A2UI
 
+New here: [Getting started](docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. There is no public release yet; the packages are private candidate builds.
+
 React applications: follow [the React consumer dependency guide](docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
 
 Safe Agentic Generative Applications — by [Machine Wisdom](https://machine-wisdom.ai).
@@ -1270,7 +1272,7 @@ Run it (the same commands CI runs through `npm run verify`):
 
 Mutations the checks catch (each reverted): creating the app without the adapter's Host and Origin validation fails both adapter cases, and holding the verified context in shared state instead of the request fails the rewritten-record case.
 
-**Limits, kept explicit.** This qualifies Fastify with the `lit-mcp` stack, not the matrix: `hono` and `hapi` ([#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63), [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)) are separate, and `express` ([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62)) is qualified in its own section. The pair is not yet registered with the supported-pair discovery the CLI ([#26](https://github.com/MachineWisdomAI/saga-a2ui/issues/26)) will own, and no guide consumes the snippets yet; both read the template's metadata when they exist. Because the starter's parsers are replaced for the whole app, a Fastify application that attaches SAGA to existing routes keeps its own parsers by registering the two MCP routes in a plugin of their own. No OAuth flow, actual assistant host, published package, registry install or deployment is involved, and the Fastify demonstration is not offered. Linux x64, Node 26.7.0, npm 12.0.2, Playwright 1.64.0 Chromium (CI pins Node 22.12.0); macOS and Windows runs are not claimed.
+**Limits, kept explicit.** This qualifies Fastify with the `lit-mcp` stack, not the matrix: `hono` and `hapi` ([#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63), [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)) are separate, and `express` ([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62)) is qualified in its own section. The pair is not registered with the supported-pair list the CLI ([#26](https://github.com/MachineWisdomAI/saga-a2ui/issues/26)) owns, so `saga init` does not offer it; the [generated existing-backend recipes](docs/attach-to-existing-backend.md) (GUIDE1, [#25](https://github.com/MachineWisdomAI/saga-a2ui/issues/25)) show its snippets from the template. Because the starter's parsers are replaced for the whole app, a Fastify application that attaches SAGA to existing routes keeps its own parsers by registering the two MCP routes in a plugin of their own. No OAuth flow, actual assistant host, published package, registry install or deployment is involved, and the Fastify demonstration is not offered. Linux x64, Node 26.7.0, npm 12.0.2, Playwright 1.64.0 Chromium (CI pins Node 22.12.0); macOS and Windows runs are not claimed.
 
 ### Creating a project with `saga init` (CLI1)
 
