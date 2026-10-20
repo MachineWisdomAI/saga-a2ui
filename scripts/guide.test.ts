@@ -316,9 +316,13 @@ describe('what the guide must explain', () => {
   });
 
   it('separates a local candidate install from a public registry release', () => {
-    expect(guide).toMatch(/there is no release/i);
-    expect(guide).toMatch(/unpublished/i);
+    for (const name of ['core', 'components', 'mcp', 'react']) {
+      expect(guide).toContain(`@saga-a2ui/${name}`);
+    }
+    expect(guide).toContain('published on public npm at `0.1.0-rc.1`');
+    expect(guide).toContain('`@saga-a2ui/lit`, which is not published on npm');
     expect(guide).toMatch(/not a public registry release/i);
+    expect(guide).not.toMatch(/there is no release|packages are private, unpublished and unversioned/i);
     expect(guide).toContain('candidate-update-and-rollback.md');
   });
 });

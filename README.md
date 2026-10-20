@@ -20,7 +20,7 @@ The [action guide](docs/actions.md) follows a notes application through these in
 
 ### Integration with your existing API platform
 
-Start with a Node, Express, Fastify or Hono backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md). A [Hapi starter](https://github.com/MachineWisdomAI/saga-a2ui/issues/65) is planned. Saga carries the verified request identity through to your application, where your server checks permissions and performs the operation.
+Start with a Node, Express, Fastify, Hono or Hapi backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md). Saga carries the verified request identity through to your application, where your server checks permissions and performs the operation.
 
 Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
 
@@ -75,7 +75,9 @@ My perspective on content safety comes from AMP and Gmail Add-ons, alongside fiv
 
 ## Work with Machine Wisdom AI
 
-[Machine Wisdom AI](https://machine-wisdom.ai) maintains Saga and offers production AI engineering and architecture engagements. If you are bringing an existing service to AI assistants and agents, [get in touch about your project](https://machine-wisdom.ai).
+saga is maintained by [Machine Wisdom AI](https://machine-wisdom.ai) for its clients.
+
+[Talk to Machine Wisdom AI](https://machine-wisdom.ai) about bringing your services to Alexa+, ChatGPT, Claude and more, or join saga-a2ui adopters by following the [Quick Start guide](docs/getting-started.md).
 
 We welcome fixes, reproducible bug reports, application examples and contributions to the A2UI and MCP Apps ecosystem. [Open an issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose) or read [Contributing](CONTRIBUTING.md). Report vulnerabilities through [Security](SECURITY.md).
 

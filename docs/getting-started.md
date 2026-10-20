@@ -2,7 +2,9 @@
 
 This guide takes a developer to a running starter or demonstration, or to a SAGA attachment on a backend they already run. It was written on 2026-10-20 against the repository's current source. Every command and snippet in it is checked by `scripts/guide.test.ts` against the tool, template or package it names, and the existing-backend snippets are generated from the maintained templates, not retyped.
 
-**Read this first: there is no release.** The SAGA packages are private, unpublished and unversioned. What a developer can install today is a *candidate*: a matched set of locally packed tarballs, built from one commit, with the prerelease version `0.0.0-candidate.g<12 hex>`. A candidate is not a public registry release, and nothing here asks you to `npm install @saga-a2ui/...` from a registry. When a release exists, its install command will be added here only after it has passed in a clean consumer ([public install](public-install.md)).
+The `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp` and `@saga-a2ui/react` packages are published on public npm at `0.1.0-rc.1`. Use those exact versions together for a registry-based application, with the [React consumer dependency configuration](react-consumers.md) when using React. The packages export TypeScript source for use with a bundler.
+
+The Lit starter and local demo below use matched candidate tarballs built from a source checkout, including `@saga-a2ui/lit`, which is not published on npm. Those candidates have versions of the form `0.0.0-candidate.g<12 hex>` and are not a public registry release. Their installation steps remain separate from the published four-package set. See [candidate installation and updates](candidate-update-and-rollback.md).
 
 Three things are separate throughout, and the guide keeps them apart: what is *implemented and qualified in source* (CI runs it), what has been *observed in a named host* (a few receipts, each for one flow), and what is only a *design sketch* in a Blueprint. A design sketch is never setup instructions.
 
@@ -38,7 +40,7 @@ The `bind-action` snippet in the [generated recipes](attach-to-existing-backend.
 
 ## Install the packages from a candidate
 
-The project `saga init` creates, and every recipe, depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` from a registry fails.
+The project `saga init` creates, and every recipe, depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` cannot resolve those commit-specific candidate versions from the public registry.
 
 Build the candidate from the checkout that ran `saga init`, then install the tarballs the project uses in one command:
 
@@ -55,7 +57,7 @@ The second line is needed because the root build still builds the retained Lynx 
 npm install ./PATH/candidate-out/packages/saga-a2ui-core-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-lit-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-mcp-VERSION.tgz
 ```
 
-Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A plain `npm install` stops with `E404` for `@saga-a2ui/core`, which is the expected result without the tarballs. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
+Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A plain `npm install` cannot retrieve these candidate versions from npm; install their tarballs instead. The published `0.1.0-rc.1` versions do not replace the matched candidate set required by this Lit starter. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
 
 ## Start from the demo
 
@@ -192,7 +194,7 @@ These are recorded, not hidden, and none is a gate. No developer other than the 
 - `saga init` prints a plain `npm install`, but the candidate pins it writes cannot be resolved from a registry, so the reader has to name the tarballs. Building the matching candidate takes a full `npm run build`.
 - Four server templates qualify, and `saga init` offers all four. The standalone demonstration is still the Node application only, so `saga demo` refuses `express`, `hono` and `fastify`.
 - The existing-backend snippets call starter files that are not shown inline (`server/authenticate.ts`, `server/identity.ts`, `server/verifier.ts`, `server/authorization.ts`). The reader must read them in the template.
-- There is no per-package README and no hosted demonstration download, so a developer works from a checkout.
+- The Lit starter and demonstration are built from a checkout. The four public packages include their own READMEs; their React integration recipe is in [Installing the React renderer with MCP](react-consumers.md).
 - Checking the demo commands needs the built download (`npm run build:demo`) to exist first.
 
 ## Where to go next
