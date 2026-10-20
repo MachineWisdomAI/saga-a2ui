@@ -2,7 +2,7 @@
 
 This guide follows [SAGA A2UI v0.1.0](https://github.com/MachineWisdomAI/saga-a2ui/tree/v0.1.0) (`dda384de`, 2026-10-18). The Lit demo lets a signed-in synthetic subscriber press Play to authorize and fetch a generated audio episode. The server checks entitlement on every Play and again on every media request. A capability is usable only with a proof from the requesting view's private key.
 
-The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). For setup and the complete delivery rules, see [PLAY1](../README.md#play-an-episode-only-after-a-fresh-entitlement-check-play1) and [PLAY2](../README.md#protected-media-expiry-and-delivery-constraints-play2).
+The design is the [authorized playback Blueprint](../blueprints/features/authorized_playback.blueprint.md). For setup and the complete delivery rules, see [PLAY1](development-reference.md#play-an-episode-only-after-a-fresh-entitlement-check-play1) and [PLAY2](development-reference.md#protected-media-expiry-and-delivery-constraints-play2).
 
 ## Where playback fits in v0.1.0
 

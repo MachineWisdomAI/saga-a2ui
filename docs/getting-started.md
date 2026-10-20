@@ -198,6 +198,6 @@ These are recorded, not hidden, and none is a gate. No developer other than the 
 ## Where to go next
 
 - The attach recipes: [Attach SAGA to an existing backend](attach-to-existing-backend.md).
-- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [README](../README.md).
-- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and the README's "The action contract across the current codebase (ACT7)".
+- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [development reference](development-reference.md#creating-a-project-with-saga-init-cli1).
+- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and [The action contract across the current codebase (ACT7)](development-reference.md#the-action-contract-across-the-current-codebase-act7).
 - The design this guide implements: the [application setup Blueprint](../blueprints/features/application_setup.blueprint.md).

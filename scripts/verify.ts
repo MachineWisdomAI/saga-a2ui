@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // Repository verification route. Receipts record the invocation and git state.
 // They do not record environment variables or command output. A run is
 // pristine-head only when the commit and tracked dirty state stay clean and
-// unchanged across every command boundary. See README.md.
+// unchanged across every command boundary. See docs/development-reference.md#repository-verification.
 
 const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
