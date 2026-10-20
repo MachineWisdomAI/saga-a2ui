@@ -4,8 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import type { FetchLike } from '@modelcontextprotocol/client';
+import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startListener, type Listener } from '../../templates/lit-node/server/listener.js';
+import { startListener, type Listener, type ListenerOptions } from '../../templates/lit-node/server/listener.js';
+import { buildStarter, prepareStarter, type BuiltStarter } from '../build-starter.js';
+import { createWorkDirectory } from '../packed-consumer.js';
 import { runCli, type Environment } from '../saga.js';
 import type { ValidatorLoad } from './chatgpt.js';
 import { publicationTool } from './publish.js';
@@ -54,15 +57,24 @@ interface Wire {
 }
 
 /** The network seam: routes the published URL to the local listener and records the methods sent. */
-function wire(rewrite?: (method: string, response: Response) => Promise<Response> | Response): Wire {
+function wire(rewrite?: (method: string, response: Response) => Promise<Response> | Response, options: { readonly ignoreCursors?: boolean } = {}): Wire {
   const methods: string[] = [];
   return {
     methods,
     fetch: async (_url, init) => {
       let method = init?.method ?? 'GET';
-      if (typeof init?.body === 'string') method = (JSON.parse(init.body) as { method?: string }).method ?? method;
+      let sent = init;
+      if (typeof init?.body === 'string') {
+        const request = JSON.parse(init.body) as { method?: string; params?: { cursor?: unknown } };
+        method = request.method ?? method;
+        // A server that offers pages forever is simulated by a listener that serves its one page whatever cursor it is given.
+        if (options.ignoreCursors === true && request.params?.cursor !== undefined) {
+          delete request.params.cursor;
+          sent = { ...init, body: JSON.stringify(request) };
+        }
+      }
       methods.push(method);
-      const response = await fetch(listener.statusUrl, init);
+      const response = await fetch(listener.statusUrl, sent);
       return rewrite === undefined ? response : rewrite(method, response);
     },
   };
@@ -109,8 +121,8 @@ const recordOf = (directory: string): PublicationRecord => JSON.parse(fs.readFil
 const status = (record: PublicationRecord, id: string): string | undefined => record.findings.find((finding) => finding.id === id)?.status;
 const listing = (directory: string): string[] => (fs.existsSync(directory) ? fs.readdirSync(directory).sort() : []);
 
-/** A square PNG of the given size, made without a library. */
-function png(size: number): Buffer {
+/** A square PNG of the given size, made without a library. `rows` is how many pixel rows the image data holds (the header always promises `size`). */
+function png(size: number, rows = size): Buffer {
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -134,8 +146,8 @@ function png(size: number): Buffer {
   header.writeUInt32BE(size, 4);
   header[8] = 8;
   header[9] = 2;
-  const rows = Buffer.concat(Array.from({ length: size }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, 0x23)])));
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+  const pixels = Buffer.concat(Array.from({ length: rows }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, 0x23)])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
 }
 
 describe('a ready application', () => {
@@ -179,7 +191,12 @@ describe('a ready application', () => {
     expect(record.endpoint.resources).toHaveLength(1);
     expect(record.inputs.views[0]?.sha256).toBe(sha256(viewHtml));
     expect(record.endpoint.resources[0]?.sha256).toBe(sha256(viewHtml));
-    expect(record.application.sagaPackages).toEqual({ '@saga-a2ui/core': '0.0.0-candidate.g0123456789ab', '@saga-a2ui/mcp': '0.0.0-candidate.g0123456789ab' });
+    // The fixture declares placeholder versions and installs nothing: declared and installed are different facts.
+    expect(record.application.sagaPackages).toEqual({
+      declared: { '@saga-a2ui/core': '0.0.0-candidate.g0123456789ab', '@saga-a2ui/mcp': '0.0.0-candidate.g0123456789ab' },
+      installed: { '@saga-a2ui/core': null, '@saga-a2ui/mcp': null },
+    });
+    expect(record.endpoint.complete).toBe(true);
     expect(record.application.publisher.name).toBe('Notes Fixture Publisher');
     expect(record.application.contributors.map((one) => one.name)).toEqual(['Fixture Contributor']);
 
@@ -331,6 +348,56 @@ describe('inputs that must prevent a ready claim', () => {
     fs.writeFileSync(outside, '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"></svg>');
     const { record } = await blocked((app) => editInput(app, (input) => (input.assets.logo = path.relative(app, outside))), 'package.asset-files');
     expect(record.findings.find((finding) => finding.id === 'package.asset-files')?.detail).toMatch(/outside the directory of the release input/);
+  });
+
+  describe('an icon that is not a complete, valid image', () => {
+    const withLogo = (name: string, data: Buffer | string) => (app: string): void => {
+      fs.writeFileSync(path.join(app, 'assets', name), data);
+      editInput(app, (input) => (input.assets.logo = `assets/${name}`));
+    };
+    const whole = png(64);
+
+    it('a PNG cut off after its header', async () => {
+      const { record } = await blocked(withLogo('logo.png', whole.subarray(0, 24)), 'package.assets');
+      expect(record.findings.find((finding) => finding.id === 'package.assets')?.detail).toMatch(/logo\.png is not a valid PNG: it is truncated/);
+    });
+
+    it('a PNG without its IEND chunk', async () => {
+      await blocked(withLogo('logo.png', whole.subarray(0, whole.length - 12)), 'package.assets');
+    });
+
+    it('a PNG with a damaged chunk', async () => {
+      const damaged = Buffer.from(whole);
+      damaged[damaged.length - 20] = damaged[damaged.length - 20]! ^ 0xff;
+      const { record } = await blocked(withLogo('logo.png', damaged), 'package.assets');
+      expect(record.findings.find((finding) => finding.id === 'package.assets')?.detail).toMatch(/checksum is wrong/);
+    });
+
+    it('a PNG with data after its end', async () => {
+      await blocked(withLogo('logo.png', Buffer.concat([whole, Buffer.from('trailing')])), 'package.assets');
+    });
+
+    it('a PNG whose image data is shorter than its header promises', async () => {
+      const { record } = await blocked(withLogo('logo.png', png(64, 10)), 'package.assets');
+      expect(record.findings.find((finding) => finding.id === 'package.assets')?.detail).toMatch(/bytes of pixel data/);
+    });
+
+    it('an SVG whose root element is never closed', async () => {
+      const { record } = await blocked(withLogo('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64"/>'), 'package.assets');
+      expect(record.findings.find((finding) => finding.id === 'package.assets')?.detail).toMatch(/not a complete SVG document/);
+    });
+
+    it('an SVG with a malformed tag or mismatched elements', async () => {
+      await blocked(withLogo('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><g></svg>'), 'package.assets');
+      await blocked(withLogo('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width=64/></svg>'), 'package.assets');
+    });
+
+    it('a complete SVG with comments, a prolog and nested elements is accepted', async () => {
+      const app = copyFixture();
+      withLogo('logo.svg', '<?xml version="1.0"?>\n<!-- logo -->\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g><rect width="64" height="64" fill="#2357C6"/></g></svg>\n')(app);
+      const run = await check(app);
+      expect(run.code, run.out).toBe(0);
+    });
   });
 
   it('a symbolic link as a view', async () => {
@@ -607,6 +674,315 @@ describe('the output directory', () => {
     expect(run.code).toBe(130);
     expect(listing(cwd)).toEqual(['publication']);
     expect(Object.fromEntries(listing(path.join(cwd, 'publication')).map((file) => [file, fs.readFileSync(path.join(cwd, 'publication', file)).toString('base64')]))).toEqual(before);
+  });
+});
+
+// One complete, built application: the qualified `lit-node` starter, exported as a developer receives
+// it, installed from the packed candidate tarballs and built with its own configuration
+// (scripts/build-starter.ts, the same preparation the starter qualification uses). Its built page is
+// served by its own built server entry, and the release input points at its real build directory.
+// This is a bounded integration case: one preparation, one prepare run. It does not repeat the
+// starter's headless or browser qualification and creates no harness of its own.
+describe('a complete built application (the qualified lit-node starter)', () => {
+  const work = createWorkDirectory('saga-publish-built-');
+  let built: BuiltStarter;
+  let running: Listener;
+  let html: string;
+  afterAll(async () => {
+    await running?.close();
+    fs.rmSync(work, { recursive: true, force: true });
+  });
+
+  beforeAll(async () => {
+    built = await buildStarter(prepareStarter(work, 'lit-node'));
+    html = fs.readFileSync(built.view, 'utf8');
+    const entry = (await import(pathToFileURL(built.qualificationServer).href)) as { startListener(options: ListenerOptions): Promise<Listener> };
+    running = await entry.startListener({ html, verifier: { verifyAccessToken: () => Promise.reject(new Error('this application is read without an account')) }, authorize: async () => true, port: 0 });
+  }, 300_000);
+
+  it('is read from its own build, with the installed @saga-a2ui versions observed and kept apart from the declared ones', async () => {
+    // The release input sits in the installed application, so its node_modules is the application's own.
+    const application = built.consumer;
+    fs.cpSync(path.join(FIXTURE, 'assets'), path.join(application, 'assets'), { recursive: true });
+    const input = JSON.parse(fs.readFileSync(path.join(FIXTURE, 'saga-publication.json'), 'utf8')) as Record<string, any>;
+    input.build = { directory: 'dist', views: ['index.html'] };
+    fs.writeFileSync(path.join(application, 'saga-publication.json'), JSON.stringify(input, null, 2));
+
+    const methods: string[] = [];
+    const seen: Wire = {
+      methods,
+      fetch: async (_url, init) => {
+        if (typeof init?.body === 'string') methods.push((JSON.parse(init.body) as { method?: string }).method ?? '');
+        return fetch(running.statusUrl, init);
+      },
+    };
+    const cwd = workspace();
+    const run = await prepare(application, 'publication', { cwd, wire: seen });
+
+    expect(run.code, run.out + run.err).toBe(0);
+    expect(methods).not.toContain('tools/call');
+    const record = recordOf(path.join(cwd, 'publication'));
+    expect(record.verdict).toBe('ready');
+    expect(record.inputs.views).toEqual([{ file: 'index.html', uri: expect.stringMatching(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/), sha256: sha256(html), bytes: Buffer.byteLength(html) }]);
+    expect(record.endpoint.resources.map((one) => one.sha256)).toEqual([sha256(html)]);
+    expect(record.endpoint.deploymentIdentity.status).toBe('established');
+
+    // What the application declares, from its own package.json; and what is actually installed, from its node_modules.
+    const manifest = JSON.parse(fs.readFileSync(path.join(application, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
+    const declared = Object.fromEntries(Object.entries(manifest.dependencies).filter(([name]) => name.startsWith('@saga-a2ui/')));
+    const installed = Object.fromEntries(Object.keys(declared).map((name) => [name, (JSON.parse(fs.readFileSync(path.join(application, 'node_modules', name, 'package.json'), 'utf8')) as { version: string }).version]));
+    expect(Object.keys(declared).length).toBeGreaterThan(0);
+    expect(record.application.sagaPackages).toEqual({ declared, installed });
+    for (const version of Object.values(record.application.sagaPackages.installed)) expect(version).toBe(built.sdk.version);
+  }, 120_000);
+});
+
+/** A network seam that edits the JSON-RPC result of one method. */
+const editing = (target: string, edit: (result: Record<string, any>) => void, options: { readonly ignoreCursors?: boolean } = {}): Wire =>
+  wire(async (method, response) => {
+    if (method !== target) return response;
+    const body = JSON.parse(await response.text()) as { result: Record<string, any> };
+    edit(body.result);
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  }, options);
+
+describe('a credential an endpoint echoes', () => {
+  const bearer = 'Bearer synthetic0123456789abcdefghij';
+  const supplied = 'discovery-credential-0123456789';
+
+  it.each([
+    ['a failing connection that quotes the Authorization header', { methods: [], fetch: () => Promise.reject(new Error(`upstream rejected "Authorization: ${bearer}"`)) } as Wire],
+    ['a refusal whose message quotes the credential that was supplied', { methods: [], fetch: () => Promise.reject(new Error(`unexpected token ${supplied} in request`)) } as Wire],
+    ['an error answer whose body quotes the header', { methods: [], fetch: async () => new Response(`bad request: Authorization: ${bearer} / ${supplied}`, { status: 400 }) } as Wire],
+  ])('never reaches the console report or the record: %s', async (_name, failing) => {
+    const app = copyFixture();
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd, wire: failing, environment: { NOTES_TOKEN: supplied } }, ['--bearer-env', 'NOTES_TOKEN']);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/unknown\s+endpoint\.discovery/);
+    for (const text of [run.out, run.err]) {
+      expect(text).not.toContain('synthetic0123456789abcdefghij');
+      expect(text).not.toContain(supplied);
+    }
+    const written = fs.readFileSync(path.join(cwd, 'publication', RECORD_FILE), 'utf8');
+    expect(written).not.toContain('synthetic0123456789abcdefghij');
+    expect(written).not.toContain(supplied);
+    // Only a safe diagnostic kind is kept.
+    expect(recordOf(path.join(cwd, 'publication')).findings.find((finding) => finding.id === 'endpoint.discovery')?.detail).toMatch(/^The (endpoint|request)/);
+  });
+
+  it('is redacted from the report even when the input itself carries it, while the secret check still refuses to write', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => (input.listing.longDescription += ` ${bearer}`));
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(run.code).toBe(1);
+    expect(run.out).not.toContain('synthetic0123456789abcdefghij');
+    expect(run.err).not.toContain('synthetic0123456789abcdefghij');
+    expect(listing(path.join(cwd, 'publication'))).toEqual([RECORD_FILE]);
+    expect(fs.readFileSync(path.join(cwd, 'publication', RECORD_FILE), 'utf8')).not.toContain('synthetic0123456789abcdefghij');
+  });
+});
+
+describe('an endpoint that is only partly read', () => {
+  const methodCount = (seen: Wire, method: string): number => seen.methods.filter((one) => one === method).length;
+
+  it('a tools/list that always offers another page is unknown, not ready', async () => {
+    const seen = editing('tools/list', (result) => (result.nextCursor = 'more'), { ignoreCursors: true });
+    const cwd = workspace();
+    const run = await prepare(copyFixture(), 'publication', { cwd, wire: seen });
+
+    expect(methodCount(seen, 'tools/list')).toBe(20);
+    expect(run.code).toBe(1);
+    expect(run.out).toContain('saga publish prepare (chatgpt): incomplete');
+    expect(run.out).toMatch(/unknown\s+endpoint\.discovery/);
+    expect(run.out).toMatch(/tools\/list still offered another page after 20 pages/);
+    const record = recordOf(path.join(cwd, 'publication'));
+    expect(record.verdict).toBe('incomplete');
+    expect(record.endpoint.complete).toBe(false);
+    expect(status(record, 'endpoint.tools')).toBe('unknown');
+    expect(status(record, 'endpoint.views')).toBe('unknown');
+  });
+
+  it('a resources/list that always offers another page is unknown, not ready', async () => {
+    const seen = editing('resources/list', (result) => (result.nextCursor = 'more'), { ignoreCursors: true });
+    const run = await check(copyFixture(), { wire: seen });
+
+    expect(methodCount(seen, 'resources/list')).toBe(20);
+    expect(run.code).toBe(1);
+    expect(run.out).toContain('saga publish check (chatgpt): incomplete');
+    expect(run.out).toMatch(/resources\/list still offered another page/);
+  });
+
+  it('more view resources than are read is unknown, not ready', async () => {
+    const seen = editing('resources/list', (result) => (result.resources = Array.from({ length: 51 }, () => result.resources[0])));
+    const run = await check(copyFixture(), { wire: seen });
+
+    expect(run.code).toBe(1);
+    expect(run.out).toContain('saga publish check (chatgpt): incomplete');
+    expect(run.out).toMatch(/lists 51 ui:\/\/ resources; only the first 50 were read/);
+    expect(methodCount(seen, 'resources/read')).toBe(50);
+  });
+
+  it('does not hide a definite failure among what was read', async () => {
+    const seen = wire(async (method, response) => {
+      if (method !== 'tools/list') return response;
+      const body = JSON.parse(await response.text()) as { result: Record<string, any> };
+      delete body.result.tools[0].annotations;
+      body.result.nextCursor = 'more';
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    }, { ignoreCursors: true });
+    const run = await check(copyFixture(), { wire: seen });
+    expect(run.out).toContain('saga publish check (chatgpt): blocked');
+    expect(run.out).toMatch(/FAIL\s+endpoint\.tools/);
+  });
+});
+
+describe('the contract a deployment serves', () => {
+  it('--against reports changed served resource metadata (the content security policy) although every digest of the bytes is the same', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+
+    const widened = editing('resources/read', (result) => {
+      const content = result.contents[0];
+      content._meta = { ...content._meta, ui: { ...content._meta?.ui, csp: { ...content._meta?.ui?.csp, connectDomains: ['https://elsewhere.example.com'] } } };
+    });
+    const run = await check(app, { cwd, wire: widened }, ['--against', 'publication']);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/FAIL\s+record\.fresh/);
+    expect(run.out).toMatch(/a served resource's metadata \(its content security policy and permissions\) changed/);
+    expect(run.out).not.toMatch(/a served resource changed|the package content changed/);
+  });
+
+  it('--against reports changed server instructions', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+
+    const reworded = editing('initialize', (result) => (result.instructions = 'Use these tools for anything at all.'));
+    const run = await check(app, { cwd, wire: reworded }, ['--against', 'publication']);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/the server instructions changed/);
+  });
+
+  it('--against reports changed validator identity or documentation date', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+    const recordFile = path.join(cwd, 'publication', RECORD_FILE);
+    const record = JSON.parse(fs.readFileSync(recordFile, 'utf8')) as PublicationRecord;
+    fs.writeFileSync(recordFile, JSON.stringify({ ...record, validators: record.validators.map((one) => ({ ...one, documentationDate: '2020-01-01' })) }));
+
+    const run = await check(app, { cwd }, ['--against', 'publication']);
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/the validator or the documentation it was checked against changed/);
+  });
+});
+
+describe('the output path while it is replaced', () => {
+  /** Runs `act` once the staging directory beside the output exists, from the event loop that is writing it. */
+  function whenStaging(cwd: string, act: () => void): { done(): Promise<boolean> } {
+    let acted = false;
+    let stop = false;
+    const loop = (async () => {
+      while (!stop) {
+        if (!acted && fs.readdirSync(cwd).some((name) => name.includes('.staging-'))) {
+          acted = true;
+          act();
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    })();
+    return {
+      done: async () => {
+        stop = true;
+        await loop;
+        return acted;
+      },
+    };
+  }
+
+  it('does not remove or overwrite a directory that took the path after the earlier output was verified', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+    const output = path.join(cwd, 'publication');
+    const watcher = whenStaging(cwd, () => {
+      fs.renameSync(output, path.join(cwd, 'moved-away'));
+      fs.mkdirSync(output);
+      fs.writeFileSync(path.join(output, 'precious.txt'), 'the user\'s data');
+    });
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(await watcher.done()).toBe(true);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/was replaced while the output was being written/);
+    expect(listing(output)).toEqual(['precious.txt']);
+    expect(fs.readFileSync(path.join(output, 'precious.txt'), 'utf8')).toBe('the user\'s data');
+    // The directory that was moved away is untouched, and neither staging nor previous output is left behind.
+    expect(listing(path.join(cwd, 'moved-away'))).toEqual([ARCHIVE_FILE, RECORD_FILE]);
+    expect(listing(cwd)).toEqual(['moved-away', 'publication']);
+  });
+
+  it('does not touch a directory that replaced the path with a file or a link either', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+    const output = path.join(cwd, 'publication');
+    const elsewhere = fs.mkdtempSync(path.join(root, 'elsewhere-'));
+    fs.writeFileSync(path.join(elsewhere, 'precious.txt'), 'kept');
+    const watcher = whenStaging(cwd, () => {
+      fs.renameSync(output, path.join(cwd, 'moved-away'));
+      fs.symlinkSync(elsewhere, output);
+    });
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(await watcher.done()).toBe(true);
+    expect(run.code).toBe(1);
+    expect(fs.lstatSync(output).isSymbolicLink()).toBe(true);
+    expect(listing(elsewhere)).toEqual(['precious.txt']);
+    expect(listing(cwd)).toEqual(['moved-away', 'publication']);
+  });
+
+  it('an interrupt once staging has begun leaves the earlier output as it was and no staging directory', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+    const output = path.join(cwd, 'publication');
+    const before = Object.fromEntries(listing(output).map((file) => [file, fs.readFileSync(path.join(output, file)).toString('base64')]));
+    const controller = new AbortController();
+    const watcher = whenStaging(cwd, () => controller.abort());
+    const run = await prepare(app, 'publication', { cwd, signal: controller.signal });
+
+    expect(await watcher.done()).toBe(true);
+    expect(run.code).toBe(130);
+    expect(listing(cwd)).toEqual(['publication']);
+    expect(Object.fromEntries(listing(output).map((file) => [file, fs.readFileSync(path.join(output, file)).toString('base64')]))).toEqual(before);
+  });
+
+  it('an interrupt once staging has begun, with the path replaced meanwhile, removes nothing that is not this run\'s', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    expect((await prepare(app, 'publication', { cwd })).code).toBe(0);
+    const output = path.join(cwd, 'publication');
+    const controller = new AbortController();
+    const watcher = whenStaging(cwd, () => {
+      fs.renameSync(output, path.join(cwd, 'moved-away'));
+      fs.mkdirSync(output);
+      fs.writeFileSync(path.join(output, 'precious.txt'), 'kept');
+      controller.abort();
+    });
+    const run = await prepare(app, 'publication', { cwd, signal: controller.signal });
+
+    expect(await watcher.done()).toBe(true);
+    expect(run.code).toBe(130);
+    expect(listing(output)).toEqual(['precious.txt']);
+    expect(listing(path.join(cwd, 'moved-away'))).toEqual([ARCHIVE_FILE, RECORD_FILE]);
   });
 });
 

@@ -45,7 +45,17 @@ portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 Any failed check leaves only `findings.json`: no package that could be mistaken for a complete one.
 The output is a new directory, or a directory this tool generated earlier, replaced only after the
 new output is fully written beside it. An interrupt (SIGINT or SIGTERM) leaves nothing new and the
-earlier output unchanged.
+earlier output unchanged. Ownership is the directory, not the path: the earlier output is verified
+by device and inode (the rule `saga init` uses for the directory it creates), and every rename and
+removal acts only on a directory that is still that one. If another process puts its own directory
+at the output path while the new output is being written, nothing there is changed or removed and
+the run fails saying so. Node has no directory-relative calls, so the check narrows the window to
+the instant between two adjacent calls; it does not close it.
+
+Everything the command prints passes through a redactor first: secret-looking spans and the
+credential given with `--bearer-env` are replaced by a marker. What an endpoint or a proxy says
+about a failure is never printed or recorded; only a fixed diagnostic kind is (authentication
+challenge, timeout, HTTP status, network error, unusable answer).
 
 ## What is checked
 
@@ -68,8 +78,15 @@ is `unknown`, and any `unknown` makes the verdict `incomplete`; any `fail` makes
   `mcp.json` schemas (below), exactly one `streamable-http` server at the declared endpoint with no
   headers, OpenAI's listing limits and URL rules, the logo and composer icon (square PNG or SVG, at
   least 48 px, at most 5 MiB), no app references, hooks or reviewer credentials, and no secret.
+  The logo and icons are read as images, not just recognised by a header: a PNG must have every
+  chunk complete with a correct checksum, one `IHDR` first, `IEND` last with nothing after it, and
+  image data that inflates to exactly the rows the header promises; an SVG must be one complete,
+  well-formed document (balanced elements, quoted attributes, no entities or text outside the root).
   The secret scan looks for credential patterns and for the literal discovery credential; findings
   name the kind, never the value.
+- Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
+  discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
+  not read is not certified. A definite failure among what was read still blocks.
 - Fixture invocation (`--invoke-fixture`): only the declared calls, and only to a tool that
   advertises `readOnlyHint: true`; others are refused without a call. Only a digest of each result
   is kept, and it is labelled fixture evidence, separate from real-host observations.
@@ -91,6 +108,18 @@ is `unknown`, and any `unknown` makes the verdict `incomplete`; any `fail` makes
   and "defines no OAuth configuration". The package follows the schema; the publisher configures
   authentication in the portal's connection form. If OpenAI or the schema changes this, update
   `assemblePackage` and the pinned digests together.
+- **Declared and installed versions are different facts.** `application.sagaPackages.declared` is
+  what the application's `package.json` asks for; `installed` is the version found in the
+  `node_modules` that serves it (`null` when none). A placeholder or a range that was declared says
+  nothing about what was built. The record of a complete built application, the qualified
+  `lit-node` starter installed from packed candidate tarballs, is exercised by
+  [`publish.test.ts`](publish.test.ts).
+- **Evidence goes stale with the contract the deployment serves.** `--against` compares the release
+  input, each built view, each tool definition, each served resource and its metadata (where a
+  view's content security policy and so the origins it may reach are declared), the server
+  instructions, the deployment identity, the declared and installed packages, the validator and
+  documentation date, how much of the endpoint could be read, and the package content, and names
+  each change.
 - **Deployment identity** is supplied by the release input and compared with the endpoint's own
   report; there is no mechanism that asks the host.
 

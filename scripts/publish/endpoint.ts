@@ -44,6 +44,8 @@ export interface EndpointSnapshot {
   readonly resources: readonly ServedResource[];
   /** Listed resources that could not be read, with the reason; a view that cannot be read cannot be compared. */
   readonly unreadable: readonly { readonly uri: string; readonly reason: string }[];
+  /** Bounds that were hit while reading, in words. Empty when everything the endpoint offered was read; otherwise the snapshot is partial. */
+  readonly truncated: readonly string[];
 }
 
 export type Discovery =
@@ -67,11 +69,22 @@ async function connect(url: string, options: DiscoveryOptions): Promise<Client> 
   return client;
 }
 
+/**
+ * Why a request failed, as a safe diagnostic kind and never as the failure's own text. An endpoint
+ * (or a proxy in front of it) controls what an error message says, and one may echo the
+ * `Authorization` header it was sent; what this returns is fixed wording plus at most an HTTP
+ * status number, so nothing the remote side wrote reaches the console report or the record.
+ */
 function describeFailure(error: unknown): { reason: string; authenticationRequired: boolean } {
   const message = error instanceof Error ? error.message : String(error);
   const name = error instanceof Error ? error.name : '';
   const authenticationRequired = name === 'UnauthorizedError' || /\b(401|403)\b|unauthori[sz]ed|forbidden/i.test(message);
-  return { reason: message, authenticationRequired };
+  if (authenticationRequired) return { reason: 'The endpoint answered with an authentication challenge.', authenticationRequired };
+  if (name === 'AbortError' || name === 'TimeoutError' || /\b(timed out|timeout|aborted)\b/i.test(message)) return { reason: 'The request timed out or was aborted.', authenticationRequired };
+  const status = /\b([45]\d\d)\b/.exec(message)?.[1];
+  if (status !== undefined) return { reason: `The endpoint answered with HTTP ${status}.`, authenticationRequired };
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|fetch failed|network|socket|certificate/i.test(message)) return { reason: 'The endpoint could not be reached (a network error).', authenticationRequired };
+  return { reason: 'The endpoint\'s answer could not be used (an unexpected response).', authenticationRequired };
 }
 
 function bytesOfContents(contents: { text?: unknown; blob?: unknown }): Uint8Array | undefined {
@@ -80,32 +93,52 @@ function bytesOfContents(contents: { text?: unknown; blob?: unknown }): Uint8Arr
   return undefined;
 }
 
+/** Reads at most `maxPages` pages of a paginated list. `more` is whether the server still offered another page when the bound was reached. */
+async function walkPages<T>(maxPages: number, fetchPage: (cursor: string | undefined) => Promise<{ readonly items: readonly T[]; readonly nextCursor?: string | undefined }>): Promise<{ items: T[]; more: boolean }> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const read = await fetchPage(cursor);
+    items.push(...read.items);
+    cursor = read.nextCursor;
+    if (cursor === undefined) return { items, more: false };
+  }
+  return { items, more: true };
+}
+
 export async function discoverEndpoint(url: string, options: DiscoveryOptions = {}): Promise<Discovery> {
   let client: Client | undefined;
   try {
     client = await connect(url, options);
     const signal = budget(options);
+    // The bounds stay, but a bound that was hit is said so: what was not read is not certified.
+    // Pages are requested one at a time by this function. The SDK's own list methods, called without a
+    // cursor, walk the pages themselves under their own cap and end a walk on a repeated page, so a
+    // server that never stops offering pages would look complete.
+    const truncated: string[] = [];
     const tools: AdvertisedTool[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      const listed = await client.listTools(cursor === undefined ? {} : { cursor }, { signal });
-      tools.push(...(listed.tools as unknown as AdvertisedTool[]));
-      cursor = listed.nextCursor;
-      if (cursor === undefined) break;
+    if (client.getServerCapabilities()?.tools !== undefined) {
+      const walked = await walkPages(MAX_PAGES, async (cursor) => {
+        const page = await client!.request({ method: 'tools/list', params: cursor === undefined ? {} : { cursor } }, { signal });
+        return { items: page.tools as unknown as AdvertisedTool[], nextCursor: page.nextCursor };
+      });
+      tools.push(...walked.items);
+      if (walked.more) truncated.push(`tools/list still offered another page after ${MAX_PAGES} pages, so some tool definitions were not read.`);
     }
     const listedResources: { uri: string; mimeType?: string | undefined }[] = [];
     if (client.getServerCapabilities()?.resources !== undefined) {
-      cursor = undefined;
-      for (let page = 0; page < MAX_PAGES; page += 1) {
-        const listed = await client.listResources(cursor === undefined ? {} : { cursor }, { signal });
-        listedResources.push(...listed.resources);
-        cursor = listed.nextCursor;
-        if (cursor === undefined) break;
-      }
+      const walked = await walkPages(MAX_PAGES, async (cursor) => {
+        const page = await client!.request({ method: 'resources/list', params: cursor === undefined ? {} : { cursor } }, { signal });
+        return { items: page.resources, nextCursor: page.nextCursor };
+      });
+      listedResources.push(...walked.items);
+      if (walked.more) truncated.push(`resources/list still offered another page after ${MAX_PAGES} pages, so some resources were not listed.`);
     }
     const resources: ServedResource[] = [];
     const unreadable: { uri: string; reason: string }[] = [];
-    for (const listed of listedResources.filter((resource) => resource.uri.startsWith('ui://')).slice(0, MAX_RESOURCES)) {
+    const viewResources = listedResources.filter((resource) => resource.uri.startsWith('ui://'));
+    if (viewResources.length > MAX_RESOURCES) truncated.push(`The endpoint lists ${viewResources.length} ui:// resources; only the first ${MAX_RESOURCES} were read.`);
+    for (const listed of viewResources.slice(0, MAX_RESOURCES)) {
       try {
         const read = await client.readResource({ uri: listed.uri }, { signal });
         const contents = read.contents.find((one) => one.uri === listed.uri) ?? read.contents[0];
@@ -131,6 +164,7 @@ export async function discoverEndpoint(url: string, options: DiscoveryOptions = 
         tools,
         resources,
         unreadable,
+        truncated,
       },
     };
   } catch (error) {

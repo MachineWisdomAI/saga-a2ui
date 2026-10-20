@@ -77,6 +77,8 @@ export interface ResourceSnapshot {
   readonly mimeType: string | null;
   readonly sha256: string;
   readonly bytes: number;
+  /** The digest of the served `_meta`, where a view declares its content security policy and so the hosts and origins it may reach. */
+  readonly metaSha256: string | null;
 }
 
 export interface FixtureInvocation {
@@ -97,7 +99,16 @@ export interface PublicationRecord {
     /** Who the listing belongs to. Never the operator who ran the tool, and never the SDK's npm publisher. */
     readonly publisher: { readonly name: string; readonly url: string | null };
     readonly contributors: readonly { readonly name: string; readonly url: string | null }[];
-    readonly sagaPackages: Readonly<Record<string, string>>;
+    /**
+     * The `@saga-a2ui/*` packages of the application. `declared` is what its `package.json` asks for;
+     * `installed` is the version found in the `node_modules` that serves the application, or `null` when
+     * none was found there. The two are different facts and are never merged: a range or a placeholder
+     * that was declared says nothing about what was built.
+     */
+    readonly sagaPackages: {
+      readonly declared: Readonly<Record<string, string>>;
+      readonly installed: Readonly<Record<string, string | null>>;
+    };
   };
   readonly inputs: {
     readonly releaseInput: { readonly sha256: string };
@@ -106,9 +117,13 @@ export interface PublicationRecord {
   readonly endpoint: {
     readonly url: string;
     readonly reached: boolean;
+    /** Whether everything the endpoint offered was read. `false` when a bound was hit; what was not read is not evidence. */
+    readonly complete: boolean;
     readonly server: { readonly name: string; readonly version: string } | null;
     readonly deploymentIdentity: { readonly status: 'established' | 'unknown' | 'mismatch'; readonly basis: string };
+    /** The digest of the whole served contract: tool definitions, instructions and each resource with its metadata. */
     readonly contractSha256: string | null;
+    readonly instructionsSha256: string | null;
     readonly tools: readonly ToolSnapshot[];
     readonly resources: readonly ResourceSnapshot[];
     /** `tools/call` requests made while discovering. Always 0; fixture invocations are listed apart. */

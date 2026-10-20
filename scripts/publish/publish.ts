@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FetchLike } from '@modelcontextprotocol/client';
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
-import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, type OutputFile } from '../starter-template.js';
-import { DOCUMENTATION_DATE, assemblePackage, checkArchive, endpointUrlProblem, loadOfficialValidators, secretKinds, type ValidatorLoad } from './chatgpt.js';
+import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, sameDirectory, type OutputFile } from '../starter-template.js';
+import { DOCUMENTATION_DATE, assemblePackage, checkArchive, endpointUrlProblem, loadOfficialValidators, redactSecrets, secretKinds, type ValidatorLoad } from './chatgpt.js';
 import { discoverEndpoint, invokeFixture, toolDigest, type Discovery, type EndpointSnapshot } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
 import {
@@ -125,19 +125,38 @@ function readBuild(loaded: LoadedReleaseInput): { readonly views: BuiltView[]; r
   return { views, findings };
 }
 
-/** The `@saga-a2ui/*` versions the application declares, from the build directory's or application's `package.json`. */
-function declaredSagaPackages(loaded: LoadedReleaseInput): Record<string, string> {
+/**
+ * The `@saga-a2ui/*` packages of the application, kept as two facts: what its `package.json` declares
+ * (the build directory's, else the release input's directory) and what is installed in the
+ * `node_modules` that serves that directory (the first one found walking up from it), or `null`
+ * when a declared package is not installed there.
+ */
+function sagaPackages(loaded: LoadedReleaseInput): PublicationRecord['application']['sagaPackages'] {
   for (const directory of [path.resolve(loaded.directory, loaded.input.build.directory), loaded.directory]) {
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
       const declared = { ...manifest.devDependencies, ...manifest.dependencies };
-      const saga = Object.entries(declared).filter(([name]) => name.startsWith('@saga-a2ui/'));
-      if (saga.length > 0) return Object.fromEntries(saga.sort(([a], [b]) => (a < b ? -1 : 1)));
+      const saga = Object.entries(declared).filter(([name]) => name.startsWith('@saga-a2ui/')).sort(([a], [b]) => (a < b ? -1 : 1));
+      if (saga.length === 0) continue;
+      return { declared: Object.fromEntries(saga), installed: Object.fromEntries(saga.map(([name]) => [name, installedVersion(directory, name)])) };
     } catch {
       // try the next location
     }
   }
-  return {};
+  return { declared: {}, installed: {} };
+}
+
+/** The version in the nearest `node_modules/<name>/package.json` above `directory`, or `null`. */
+function installedVersion(directory: string, name: string): string | null {
+  for (let current = directory; ; current = path.dirname(current)) {
+    try {
+      const version = (JSON.parse(fs.readFileSync(path.join(current, 'node_modules', name, 'package.json'), 'utf8')) as { version?: unknown }).version;
+      return typeof version === 'string' ? version : null;
+    } catch {
+      // not here; look one level up
+    }
+    if (path.dirname(current) === current) return null;
+  }
 }
 
 function sourceOf(directory: string): PublicationRecord['source'] {
@@ -165,7 +184,7 @@ function declaredViewUri(tool: Readonly<Record<string, unknown>>): string | unde
 }
 
 function toolFindings(snapshot: EndpointSnapshot): Finding[] {
-  if (snapshot.tools.length === 0) return [fail('endpoint.tools', 'The endpoint advertises no tools.', 'Deploy the application so its tools are listed.')];
+  if (snapshot.tools.length === 0 && snapshot.truncated.length === 0) return [fail('endpoint.tools', 'The endpoint advertises no tools.', 'Deploy the application so its tools are listed.')];
   const problems: string[] = [];
   for (const tool of snapshot.tools) {
     if (typeof tool.description !== 'string' || tool.description.trim() === '') problems.push(`${tool.name} has no description.`);
@@ -174,7 +193,9 @@ function toolFindings(snapshot: EndpointSnapshot): Finding[] {
     if (missing.length > 0) problems.push(`${tool.name} does not set ${missing.join(', ')} to true or false.`);
   }
   return [
-    problems.length === 0
+    problems.length === 0 && snapshot.truncated.length > 0
+      ? unknown('endpoint.tools', 'Only part of the endpoint was read, so its tool definitions were not fully checked.', 'Reduce the endpoint\'s paging so every tool fits the bounds this tool reads, then rerun.', 'The tools that were read are described and annotated; the ones that were not read cannot be certified.')
+      : problems.length === 0
       ? pass('endpoint.tools', `${snapshot.tools.length} tool${snapshot.tools.length === 1 ? '' : 's'} advertised, each with a description and explicit read-only, destructive and open-world annotations.`)
       : fail('endpoint.tools', 'A tool definition breaks the plugin guidelines.', 'Describe every tool and set its three annotation hints explicitly.', problems.join(' ')),
   ];
@@ -183,10 +204,13 @@ function toolFindings(snapshot: EndpointSnapshot): Finding[] {
 function viewFindings(snapshot: EndpointSnapshot, views: readonly BuiltView[]): Finding[] {
   const problems: string[] = [];
   const built = views.filter((view) => view.uri !== null);
+  // When the read was partial, a view that was not seen is not proved absent; the partial read is reported as unknown by the caller.
+  const partial = snapshot.truncated.length > 0;
   for (const view of built) {
     const served = snapshot.resources.find((resource) => resource.uri === view.uri);
-    if (served === undefined) problems.push(`The endpoint does not serve ${view.file} (${view.uri}); the deployed application is not this build, or this build is not deployed.`);
-    else if (served.sha256 !== view.sha256) problems.push(`The endpoint serves ${served.uri} with different bytes than ${view.file}.`);
+    if (served === undefined) {
+      if (!partial) problems.push(`The endpoint does not serve ${view.file} (${view.uri}); the deployed application is not this build, or this build is not deployed.`);
+    } else if (served.sha256 !== view.sha256) problems.push(`The endpoint serves ${served.uri} with different bytes than ${view.file}.`);
   }
   for (const tool of snapshot.tools) {
     const uri = declaredViewUri(tool);
@@ -200,9 +224,11 @@ function viewFindings(snapshot: EndpointSnapshot, views: readonly BuiltView[]): 
     if (!isRecord(ui?.csp)) problems.push(`${resource.uri} declares no content security policy.`);
   }
   for (const missed of snapshot.unreadable) problems.push(`${missed.uri} could not be read: ${missed.reason}`);
-  if (snapshot.resources.length === 0 && built.length > 0 && problems.length === 0) problems.push('The endpoint serves no view resources.');
+  if (snapshot.resources.length === 0 && built.length > 0 && problems.length === 0 && !partial) problems.push('The endpoint serves no view resources.');
   return [
-    problems.length === 0
+    problems.length === 0 && partial
+      ? unknown('endpoint.views', 'Only part of the endpoint was read, so the deployed views were not fully checked.', 'Reduce the endpoint\'s paging so every tool and view fits the bounds this tool reads, then rerun.', 'Nothing seen contradicts the build, but the views and tool definitions that were not read cannot be certified.')
+      : problems.length === 0
       ? pass('endpoint.views', `The endpoint serves every built view byte-for-byte as ${MCP_APP_MIME} with a declared content security policy, and each tool points to one of them.`)
       : fail('endpoint.views', 'The deployed views do not match the build.', 'Redeploy the build the release input names (or rebuild), then rerun.', problems.join(' ')),
   ];
@@ -297,7 +323,12 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
   if (!discoverable) discovery = { kind: 'not-discovered', reason: 'The endpoint is not an HTTP or HTTPS URL.', authenticationRequired: false };
   else discovery = await discoverEndpoint(input.endpoint.url, { fetch: io.fetch, signal: io.signal, bearer });
   if (discovery.kind === 'discovered') {
-    findings.push(pass('endpoint.discovery', 'The endpoint was read: initialize, tools/list, resources/list and resources/read. No tool was called.'));
+    const partial = discovery.snapshot.truncated;
+    findings.push(
+      partial.length === 0
+        ? pass('endpoint.discovery', 'The endpoint was read: initialize, tools/list, resources/list and resources/read. No tool was called.')
+        : unknown('endpoint.discovery', 'The endpoint was only partly read: a bound on how much is read was reached.', 'Make the endpoint list its tools and views within the bounds this tool reads (20 pages of each list, 50 views), then rerun.', partial.join(' ')),
+    );
     findings.push(...toolFindings(discovery.snapshot), ...viewFindings(discovery.snapshot, build.views));
   } else {
     findings.push(
@@ -344,8 +375,9 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
   // The record.
   const snapshot = discovery.kind === 'discovered' ? discovery.snapshot : undefined;
   const tools = (snapshot?.tools ?? []).map((tool) => ({ name: tool.name, sha256: toolDigest(tool) })).sort((a, b) => (a.name < b.name ? -1 : 1));
-  const resources = (snapshot?.resources ?? []).map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, bytes: resource.bytes.length })).sort((a, b) => (a.uri < b.uri ? -1 : 1));
-  const contractSha256 = snapshot === undefined ? null : canonicalDigest({ tools: snapshot.tools, instructions: snapshot.instructions, resources: resources.map((one) => ({ ...one, meta: snapshot.resources.find((resource) => resource.uri === one.uri)?.meta ?? null })) });
+  const resources = (snapshot?.resources ?? []).map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, bytes: resource.bytes.length, metaSha256: resource.meta === null ? null : canonicalDigest(resource.meta) })).sort((a, b) => (a.uri < b.uri ? -1 : 1));
+  const instructionsSha256 = snapshot === undefined || snapshot.instructions === null ? null : sha256(snapshot.instructions);
+  const contractSha256 = snapshot === undefined ? null : canonicalDigest({ tools: snapshot.tools, instructions: snapshot.instructions, resources: snapshot.resources.map((resource) => ({ uri: resource.uri, mimeType: resource.mimeType, sha256: resource.sha256, meta: resource.meta })).sort((a, b) => (a.uri < b.uri ? -1 : 1)) });
 
   const source = sourceOf(loaded.directory);
   const draft = (extra: readonly Finding[], artifact: PublicationRecord['artifact']): PublicationRecord => {
@@ -360,15 +392,17 @@ async function assess(request: PublishRequest, loaded: LoadedReleaseInput, io: P
         version: input.version,
         publisher: { name: input.publisher.name, url: input.publisher.url ?? null },
         contributors: (input.contributors ?? []).map((one) => ({ name: one.name, url: one.url ?? null })),
-        sagaPackages: declaredSagaPackages(loaded),
+        sagaPackages: sagaPackages(loaded),
       },
       inputs: { releaseInput: { sha256: loaded.sha256 }, views: build.views.map(({ file, uri, sha256: digest, bytes }) => ({ file, uri, sha256: digest, bytes })) },
       endpoint: {
         url: displayUrl(input.endpoint.url),
         reached: snapshot !== undefined,
+        complete: snapshot !== undefined && snapshot.truncated.length === 0,
         server: snapshot?.server ?? null,
         deploymentIdentity: identity,
         contractSha256,
+        instructionsSha256,
         tools,
         resources,
         toolCallsDuringDiscovery: 0,
@@ -452,24 +486,58 @@ async function writeOutput(target: string, files: readonly OutputFile[], signal:
     await createDirectoryInterruptibly(target, files, { signal });
     return;
   }
-  if (!isGeneratedOutput(target)) throw new TemplateError(`${target} exists and is not a directory this command generated; choose a new directory.`);
+  // Ownership is the directory (device and inode) that was verified to be this tool's earlier
+  // output, not the pathname: staging is asynchronous, so another process may rename that
+  // directory away and put its own at `target` before the swap. Every rename and every removal
+  // below is conditional on the directory it is about to act on still being the one verified here,
+  // the same rule createDirectoryInterruptibly follows for the directory it creates. Node has no
+  // directory-relative calls, so the check narrows the window to the instant between two adjacent
+  // calls and does not close it.
+  const earlier = statDirectory(target);
+  if (earlier === undefined || !isGeneratedOutput(target) || !isSameDirectory(statDirectory(target), earlier)) {
+    throw new TemplateError(`${target} exists and is not a directory this command generated; choose a new directory.`);
+  }
+  const replaced = (): TemplateError => new TemplateError(`${target} was replaced while the output was being written; nothing at that path was changed or removed, and the new output was discarded.`);
   const staging = path.join(path.dirname(target), `.${path.basename(target)}.staging-${randomBytes(6).toString('hex')}`);
   await createDirectoryInterruptibly(staging, files, { signal });
-  if (signal?.aborted) {
+  const staged = statDirectory(staging);
+  const discardStaging = (): boolean => {
+    if (!isSameDirectory(statDirectory(staging), staged)) return false;
     fs.rmSync(staging, { recursive: true, force: true });
-    throw new ExportInterrupted(true);
+    return true;
+  };
+  if (signal?.aborted) throw new ExportInterrupted(discardStaging());
+  if (staged === undefined || !isSameDirectory(statDirectory(target), earlier) || !isGeneratedOutput(target)) {
+    discardStaging();
+    throw replaced();
   }
   const previous = path.join(path.dirname(target), `.${path.basename(target)}.previous-${randomBytes(6).toString('hex')}`);
   fs.renameSync(target, previous);
+  if (!isSameDirectory(statDirectory(previous), earlier)) {
+    // What was moved aside is not what was verified: put it back if the path is free, and leave it named otherwise.
+    if (!fs.existsSync(target) && !isSymlink(target)) fs.renameSync(previous, target);
+    discardStaging();
+    throw replaced();
+  }
   try {
     fs.renameSync(staging, target);
   } catch (error) {
-    fs.renameSync(previous, target);
-    fs.rmSync(staging, { recursive: true, force: true });
+    if (!fs.existsSync(target) && !isSymlink(target)) fs.renameSync(previous, target);
+    discardStaging();
     throw error;
   }
-  fs.rmSync(previous, { recursive: true, force: true });
+  if (isSameDirectory(statDirectory(previous), earlier)) fs.rmSync(previous, { recursive: true, force: true });
 }
+
+const statDirectory = (directory: string): fs.BigIntStats | undefined => {
+  try {
+    return fs.lstatSync(directory, { bigint: true });
+  } catch {
+    return undefined;
+  }
+};
+
+const isSameDirectory = (a: fs.BigIntStats | undefined, b: fs.BigIntStats | undefined): boolean => a !== undefined && b !== undefined && sameDirectory(a, b);
 
 const isSymlink = (file: string): boolean => {
   try {
@@ -499,8 +567,21 @@ function report(record: PublicationRecord, request: PublishRequest): string {
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * The same `io` whose two output channels pass everything through `redactSecrets` first, with the
+ * credential supplied for discovery as a literal. Every line this command prints, a finding, an
+ * error or a path, goes through it, so no reporting path can disclose a credential that an
+ * endpoint echoed or an input carried, whatever wording produced it.
+ */
+function withRedactedOutput(io: PublishIo, request: PublishRequest): PublishIo {
+  const supplied = request.bearerEnv === undefined ? undefined : io.environment[request.bearerEnv];
+  const literals = supplied === undefined || supplied === '' ? [] : [supplied];
+  return { ...io, stdout: (text) => io.stdout(redactSecrets(text, literals)), stderr: (text) => io.stderr(redactSecrets(text, literals)) };
+}
+
 export const publicationTool: PublicationTool = {
-  async run(request, io) {
+  async run(request, unredacted) {
+    const io = withRedactedOutput(unredacted, request);
     if (request.target !== 'chatgpt') {
       io.stderr(`saga publish: the ${request.target} target is not supported by this version; the supported target is chatgpt.\n`);
       return 2;

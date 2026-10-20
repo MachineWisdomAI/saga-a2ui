@@ -171,7 +171,7 @@ export class ExportInterrupted extends Error {
   }
 }
 
-const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
+export const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
 
 /**
  * Creating a new directory with the given files, as a generator that suspends before each file and

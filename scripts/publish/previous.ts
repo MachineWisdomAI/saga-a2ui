@@ -38,8 +38,18 @@ export function staleness(previous: PublicationRecord, current: PublicationRecor
   if (previous.inputs.releaseInput.sha256 !== current.inputs.releaseInput.sha256) changes.push('the release input changed');
   if (!same(previous.inputs.views, current.inputs.views)) changes.push('a built view changed');
   if (!same(previous.endpoint.tools, current.endpoint.tools)) changes.push('the tool definitions changed');
-  if (!same(previous.endpoint.resources, current.endpoint.resources)) changes.push('a served resource changed');
+  // Resources are compared with their metadata: a view's content security policy lives there, and a
+  // change to the origins it may reach changes what the host permits without changing a byte of the view.
+  const withoutMeta = (resources: PublicationRecord['endpoint']['resources']): unknown => resources.map(({ metaSha256: _meta, ...rest }) => rest);
+  if (!same(withoutMeta(previous.endpoint.resources), withoutMeta(current.endpoint.resources))) changes.push('a served resource changed');
+  if (!same(previous.endpoint.resources.map((one) => one.metaSha256), current.endpoint.resources.map((one) => one.metaSha256))) changes.push('a served resource\'s metadata (its content security policy and permissions) changed');
+  if (previous.endpoint.instructionsSha256 !== current.endpoint.instructionsSha256) changes.push('the server instructions changed');
+  if (previous.endpoint.contractSha256 !== current.endpoint.contractSha256 && changes.length === 0) changes.push('the served contract changed');
   if (!same(previous.endpoint.server, current.endpoint.server) || previous.endpoint.deploymentIdentity.status !== current.endpoint.deploymentIdentity.status) changes.push('the deployment identity changed');
+  if (!same(previous.application.sagaPackages, current.application.sagaPackages)) changes.push('the declared or installed @saga-a2ui packages changed');
+  // The evidence is only as good as the validators and the documentation it was judged by.
+  if (!same(previous.validators, current.validators)) changes.push('the validator or the documentation it was checked against changed');
+  if (previous.endpoint.complete !== current.endpoint.complete) changes.push('how much of the endpoint could be read changed');
   if (previous.artifact?.sha256 !== current.artifact?.sha256) changes.push('the package content changed');
   return changes;
 }
