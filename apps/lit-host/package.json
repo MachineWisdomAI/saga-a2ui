@@ -20,6 +20,7 @@
     "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/express": "2.0.2",
     "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
@@ -28,6 +29,7 @@
     "@saga-a2ui/lit": "*",
     "@saga-a2ui/mcp": "*",
     "@saga-a2ui/react": "*",
+    "express": "5.3.0",
     "jose": "6.2.12",
     "lit": "^3.3.3",
     "react": "19.3.1",
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@types/express": "5.0.6",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
