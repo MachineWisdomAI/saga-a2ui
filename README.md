@@ -1009,6 +1009,68 @@ The local host fixture used to mount one iframe and replace it on remount, so it
 
 **Still open, with their owners.** None of these is closed or narrowed by local checks: the CORE3 and VIEW2 acceptance records are reused as they stand; actual-host gesture, cancellation-forwarding and rollback behavior stay unobserved (STATE2 and CORE2 receipts bound what was seen); full React parity (E15), the optional Lit card integration (CARD1 [#19](https://github.com/MachineWisdomAI/saga-a2ui/issues/19)) and passive React packed-consumer harness (#120) have their separate acceptance records, and ACT7 neither duplicates nor adopts a renderer choice for them; React is required work and not a selected reference renderer; the packaging gates (PACK1 [#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21)) are untouched; event-turn environment tagging stays open with its existing owner, because it concerns Lynx threads that are no longer a current requirement and ACT7 does not close it. No package is published, no host submission was made and nothing was deployed.
 
+### Installing the SDK and the Lit example from packed artifacts (PACK1)
+
+PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21)) is the packaging join of the delivered pieces: the action runtime (ACT1 to ACT7), the request contract (CORE3), the installed Lit application (VIEW2) and the optional FaithfulCard (CARD1, CARD2). It installs the actual tarballs outside the repository, in two separately installed consumers of one synthetic notes application (`examples/pack1-consumer`, outside the npm workspace like the other examples), and qualifies the packages and both consumers. It adds no runtime, registry, export, dependency or package, and the existing harness (`scripts/packed-consumer.ts`) is reused unchanged. The packages stay private, unversioned and unpublished: a packed tarball carries a throwaway `0.0.0-packed-test` version that exists only in a scratch copy, so nothing here is a release, an npm availability claim, host acceptance or permission to publish.
+
+**The two consumers** (`scripts/build-pack1-consumers.ts`; each is built in its own clean directory from its own `npm pack` tarballs, with only the third-party packages those manifests declare linked in):
+
+| | `own` | `card` |
+| --- | --- | --- |
+| Installed SDK packages | `core`, `lit`, `mcp` | `core`, `lit`, `components`, `mcp` |
+| Catalog | the application's own `Line`, upstream `Column`, `Row`, `List` and SAGA's `ActionButton` | the same, plus `faithfulCardEntry` for each note's body |
+| Page and server | `own.html`, `server.mjs` | `card.html`, `server.mjs` |
+| Excluded by construction | the components package, the Markdown parser, the card element and catalog entry, and the file that uses them | the first consumer's entry file |
+
+Both pages and both servers come from the same application source. The two bundled servers are byte for byte the same apart from the comments naming their scratch directories, so one authorization and disclosure boundary serves both, and the shared packages (`core`, `lit`, `mcp`) have the same tarball digest in both installs. The application's server (`examples/pack1-consumer/server`) declares `list_notes` through `registerProtectedOperation`, and `check_session` and `archive_note` as app-only tools; it will not start without the built page (`ViewArtifactMissing`), and the page's identity is the SHA-256 of the exact bytes it serves.
+
+**Version, peer, resource and catalog relationships** (asserted by `scripts/pack1.test.ts` against the packed manifests, so a change to any of them is a reviewed change to this table):
+
+| Relationship | Declared |
+| --- | --- |
+| Upstream A2UI | `@a2ui/web_core` 0.13.0 in `core`, `lit`, `components` and `react`; `@a2ui/lit` 0.13.0 in `lit`; `@a2ui/react` 0.13.0 in `react` |
+| Zod | Zod 3 only as core's `zod3` alias (`npm:zod@3.25.76`, for A2UI catalog schemas); Zod 4.6.7 in `components` and `mcp` |
+| MCP set | `@modelcontextprotocol/client`, `core`, `server` 2.3.1 and `ext-apps` 2.0.3, all in `mcp` and nowhere else |
+| Between SDK packages | range `*`, resolved by installing the packed copy; any other form (`workspace:`, `file:`, `link:`, a path, a URL) fails |
+| Optional components | `lit` and `react` name `@saga-a2ui/components` only as an optional peer (`*`); `core`, `mcp` and `components` name no renderer; `markdown-it` 15.0.2 belongs to `components` alone |
+| React | peers `react` and `react-dom` 19.3.1 exactly; `./faithful-card.css` is a named export, not a file path |
+| Resources | every `exports` target is a shipped file; every relative import and resource in shipped source resolves inside its own tarball; every bare import is a declared dependency or peer, or a public export of an owned package; no test or support file ships |
+
+The test also fails if a dependency of the MCP-UI, CopilotKit, AG-UI or Ora stacks appears in a manifest or a consumer graph. The only overlap with those products is shared standards (MCP, MCP Apps, A2UI).
+
+**What each entry point may load** (`scripts/pack1.test.ts`, built from the installed copies; "runs" means the bundle was executed):
+
+- *Server imports without renderer code:* `@saga-a2ui/mcp/server`, `/policy` and `@saga-a2ui/core/actions` bundle for Node with no Lit, upstream renderer, React, components or Markdown parser, and run with no `document`, `window` or `HTMLElement`.
+- *Browser imports without Node or server code:* the view side (`main-own.ts`) bundles with the view connection only: no `mcp/server` or `mcp/policy` module, no `@modelcontextprotocol/server` or `node`, no Node built-in import, no backend or credential marker.
+- *Neutral components without MCP, renderer or DOM:* the FaithfulCard reader, policy and consent scope, and the action runtime with a local action bound to an instance, bundle and run in plain Node with no MCP package, no renderer and no DOM.
+- *Optional catalog behavior:* the `own` page's graph holds no components module, no FaithfulCard element, catalog entry or parser; the `card` page's graph holds all three.
+
+**The browser flow** (`apps/lit-host/e2e/pack1-consumers.spec.ts`, once for each consumer, Chromium through Playwright). The page under test is the one that consumer's own server serves over a real Streamable HTTP MCP connection, mounted by the local host fixture in its sandboxed iframe (`sandbox="allow-scripts"`, opaque origin) under the CSP the server declared (a closed view). Its `tools/call` requests go through the fixture's real `AppBridge` to the same server.
+
+- *Resource and policy.* The tool result links the SHA-256 URI of the built bytes; `resources/read` returns those bytes; the two view-only tools are `visibility: ['app']`. Allowed: results arrive and the view calls the server over the bridge. Denied: from inside the frame a `fetch` to another origin, an image from another origin and `new Function` are each blocked and each reports a `securitypolicyviolation` for `connect-src`, `img-src` and `script-src`. The body of a note, which carries a tracking image and a link, fetches nothing in either consumer; in `card` the link leaves only as the host's `ui/open-link` request, in `own` it is text.
+- *Authorization and disclosure.* Private backend fields (a canary) reach neither the wire nor the DOM; another account's note is never shown; an unauthenticated call gets the sign-in sentence and no data. The server decides every `archive_note` itself: after the session check passed, withdrawing the account's permission still gets a refusal; an absent note and another account's note get one identical sentence, so nothing tells them apart; an account named in the arguments is rejected.
+- *One definition, two rendered instances.* `archiveNote` is built once and bound with `watchById`/`bindAction` to each row's own `ActionButton` instance; the layout names no action. Both rows pending at once make two session requests and two protected requests, count apart, and each row's result, status and hold arrive on its own row whichever answers first. A press while a row is pending sends nothing. A local action (`mark-read`) on the same rows sends no request.
+- *Prerequisite, item change, disposal.* An asynchronous session prerequisite that refuses leaves the protected request count at zero. When the list is replaced so a row shows another note, the in-flight archive is canceled, the server still applies it (so it is reported to nobody on that row) and the row shows nothing; the row then archives its new note. Tearing the view down while a request is pending removes the notes element, gives the hold back, and a late reply presents nowhere.
+- *Application-owned resource.* The archive takes a hold (`row-holds.ts`) in `atActivation` with `scope.own`; the scope gives it back on every non-success end, and `onSuccess` hands it to the application's owner with `transfer`. The page shows both lists.
+
+Mutations of the source that the checks catch (each reverted): a `file:` range for a SAGA dependency in the Lit manifest fails the leak check, and binding the archive without its `subject` lets the late result present on the new item and fails the item-change case for both consumers. Removing the success hook's own `current()` check changes nothing, because the runtime does not call `onSuccess` for an invocation it already canceled; the check is a second guard and not what the case depends on.
+
+Run it (the same commands CI runs through `npm run verify`):
+
+    nvm use && npm ci
+    npx playwright install chromium
+    npm run build                                  # includes npm run build:pack1-consumers (apps/lit-host/dist/pack1, with identity.json)
+    npx vitest run --config vitest.config.ts scripts/pack1.test.ts
+    npm exec -w @saga-a2ui/lit-host-app -- playwright test e2e/pack1-consumers.spec.ts
+
+`apps/lit-host/dist/pack1/identity.json` (ignored) records the source commit (and whether tracked files were dirty), platform, Node and npm versions, each tarball's SHA-256 and each built page's and server's SHA-256. Quote it with the PR head in an acceptance record rather than committing it.
+
+**Environments.** Reproduced on Linux x64 (Node 26.7.0, npm 12.0.2, Playwright 1.64.0 with Chromium revision 1248), and by the Linux CI job (`ubuntu-latest`, `npm run verify`), which now builds the consumers, runs `scripts/pack1.test.ts` and the browser specification. **macOS has not been run**: the worker that built this had no macOS host, so no macOS result is claimed. The harness compares module locations as the build reports them and the earlier harness canonicalizes the `/var` to `/private/var` spelling, but that is not a result. Windows is not claimed.
+
+**Reused, not repeated.** The runtime's exhaustive matrices (ACT1 to ACT7, CORE3's transport and failure map, CARD2's reading and zoom cases) keep their own suites and acceptance records; PACK1 adds one representative case of each integration seam through public imports and does not copy them. The earlier packed own-catalog check (`e2e/own-catalog-consumer/packed-consumer.test.ts`), the answer consumer, the installed Lit application set (`dist-installed`, VIEW2) and the React packed consumer are unchanged and still run.
+
+**Limits, kept explicit.** The local host fixture is not ChatGPT, Claude or Alexa+; no actual host was run, and nothing here is gesture, cancellation-forwarding or rollback evidence (the STATE2 and CORE2 receipts bound that). The hosting is the test's Streamable HTTP listener with a header-based test authenticator, not the application listener or a verified OAuth flow. The backend is synthetic, with no real account or Patreon access. The installed set is a Lit qualification: it says nothing about React or Lynx attachment (the React packed consumer and the Ansari adoption are separate owners, #117 to #120), native retirement or host support. Lynx is not part of this. The packages remain private and unversioned, so a registry install, version-skew behavior and a rollback recipe remain for the first release. The browser specification was written after the example existed and passed on its first complete run apart from one wrong expectation of mine about the order of the page's hold list; the mutations above were run to show it can fail.
+
 ### MCP Apps 2 recipe (MCPV2)
 
 The browse and Play paths run on one peer-complete MCP Apps 2 recipe. It replaces the earlier `@modelcontextprotocol/sdk` 1.32.1 / `ext-apps` 1.7.5 / Zod 3 set; nothing of the old set remains installed or imported, and there is no compatibility layer. This is **local qualification** of the candidate that actual-host mapping (MAP1) will measure. It is not host evidence: the local `AppBridge` fixture does not stand in for ChatGPT web or Claude web, and the open recipient-mapping question in the [connector Blueprint](blueprints/features/reusable_mcp_connector.blueprint.md) stays open.

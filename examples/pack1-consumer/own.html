@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      No Content-Security-Policy here: the host applies the one the server publishes with this
+      resource (a closed view: no network, no external resource).
+    -->
+    <title>Notes (own catalog)</title>
+  </head>
+  <body>
+    <p role="status" data-testid="view-status"></p>
+    <p data-testid="read-log"></p>
+    <p data-testid="holds-pending"></p>
+    <p data-testid="holds-confirmed"></p>
+    <notes-app></notes-app>
+    <script type="module" src="./src/main-own.ts"></script>
+  </body>
+</html>
