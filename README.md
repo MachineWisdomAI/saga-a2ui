@@ -1097,6 +1097,8 @@ Run it (the same commands CI runs through `npm run verify`):
 
 ### Release candidate, update and rollback (PACK2)
 
+The bounded candidate-preparation scope is accepted at [PR #158](https://github.com/MachineWisdomAI/saga-a2ui/pull/158), actual merge `06aa486e6b8f4d99990d235a0c6177e5c8f14a32`. The [lifecycle record](blueprints/features/reusable_lit_adapter.blueprint.md#status) maps all seven criteria, exact repair review, 35 headless/two original CLI regressions and 60 rebuilt application stage observations, with first-version and publication limits.
+
 [#22](https://github.com/MachineWisdomAI/saga-a2ui/issues/22) turns the packed installs of PACK1 into an auditable **candidate**: the five packages, the views and servers built from them, and the record that ties them together. It adds no runtime, export, registry or package. Nothing is published, tagged, deployed or made public, no access changed, and the packages stay private and unversioned. The maintainer guide is [docs/candidate-update-and-rollback.md](docs/candidate-update-and-rollback.md); this section records what the change did and found.
 
 What changed in the code:
