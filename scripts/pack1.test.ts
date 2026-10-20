@@ -3,7 +3,7 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { PACK1_CONSUMERS, PACK1_OWN_DEPENDENCIES, preparePack1Consumer, type Pack1Consumer } from './build-pack1-consumers.js';
+import { NOTES_CONSUMERS, installedVersionsOf, preparePack1Consumer, type NotesConsumer } from './build-pack1-consumers.js';
 import {
   bundleConsumerEntry,
   bundleConsumerServer,
@@ -18,10 +18,10 @@ import {
 } from './packed-consumer.js';
 
 // PACK1: what installing the SDK from its packed artifacts consists of, checked from the tarballs
-// and from builds outside the repository. The browser behavior of the two installed consumers is
+// and from builds outside the repository. The browser behavior of the installed consumers (two Lit, one React) is
 // qualified by apps/lit-host/e2e/pack1-consumers.spec.ts; this file checks the packages
-// themselves: what they declare, what they ship, what each entry point may load, and that the two
-// consumers differ only where the optional components are installed.
+// themselves: what they declare, what they ship, what each entry point may load, and that the
+// consumers differ only where their renderer or the optional components are installed.
 //
 // Everything is local: tarballs are made with `npm pack` from a copy that carries the candidate
 // prerelease identity (scripts/release-candidate.ts), and nothing is published, uploaded or
@@ -278,32 +278,42 @@ describe('what an entry point may load, from the installed copies', () => {
   }, 180_000);
 });
 
-describe('the two installed consumers', () => {
-  const prepared = {} as Record<Pack1Consumer, ReturnType<typeof preparePack1Consumer>>;
-  for (const name of Object.keys(PACK1_CONSUMERS) as Pack1Consumer[]) prepared[name] = preparePack1Consumer(path.join(work, `consumer-${name}`), name);
-  const built: Partial<Record<Pack1Consumer, { modules: string[]; code: string; server: { file: string; modules: string[] } }>> = {};
+describe('the installed consumers', () => {
+  const prepared = {} as Record<NotesConsumer, ReturnType<typeof preparePack1Consumer>>;
+  for (const name of Object.keys(NOTES_CONSUMERS) as NotesConsumer[]) prepared[name] = preparePack1Consumer(path.join(work, `consumer-${name}`), name);
+  const built: Partial<Record<NotesConsumer, { modules: string[]; code: string; server: { file: string; modules: string[] } }>> = {};
 
-  async function buildOf(name: Pack1Consumer) {
+  async function buildOf(name: NotesConsumer) {
     const consumer = prepared[name].consumer;
-    built[name] ??= { ...(await bundleConsumerEntry(consumer, PACK1_CONSUMERS[name].entry)), server: await bundleConsumerServer(consumer, 'server/index.ts') };
+    built[name] ??= { ...(await bundleConsumerEntry(consumer, NOTES_CONSUMERS[name].entry)), server: await bundleConsumerServer(consumer, 'server/index.ts') };
     return built[name]!;
   }
 
-  it('are installed apart, each from its own tarballs, and the first has no optional components installed', () => {
+  it('are installed apart, each from its own tarballs; the first and the React consumer have no optional components installed, and the React consumer no Lit', () => {
     expect(Object.keys(prepared.own.sdk.manifests).sort()).toEqual(['core', 'lit', 'mcp']);
     expect(Object.keys(prepared.card.sdk.manifests).sort()).toEqual(['components', 'core', 'lit', 'mcp']);
+    expect(Object.keys(prepared.react.sdk.manifests).sort()).toEqual(['core', 'mcp', 'react']);
     expect(prepared.own.consumer).not.toBe(prepared.card.consumer);
+    expect(prepared.react.consumer).not.toBe(prepared.own.consumer);
     expect(fs.existsSync(installedDir(prepared.own.consumer, 'components'))).toBe(false);
     expect(fs.existsSync(path.join(prepared.own.consumer, 'node_modules', 'markdown-it'))).toBe(false);
     expect(fs.existsSync(installedDir(prepared.card.consumer, 'components'))).toBe(true);
-    // The same bytes for the packages both install.
+    expect(fs.existsSync(installedDir(prepared.react.consumer, 'components'))).toBe(false);
+    expect(fs.existsSync(installedDir(prepared.react.consumer, 'lit'))).toBe(false);
+    for (const lit of ['lit', '@lit', '@a2ui/lit', 'markdown-it']) expect(fs.existsSync(path.join(prepared.react.consumer, 'node_modules', lit)), lit).toBe(false);
+    // The same bytes for the packages they install in common.
     for (const shared of ['core', 'lit', 'mcp']) expect(prepared.own.sdk.tarballSha256[shared], shared).toBe(prepared.card.sdk.tarballSha256[shared]);
+    for (const shared of ['core', 'mcp']) expect(prepared.react.sdk.tarballSha256[shared], shared).toBe(prepared.own.sdk.tarballSha256[shared]);
     // Each copy of the source holds only the files its own build uses.
     expect(fs.existsSync(path.join(prepared.own.consumer, 'src', 'main-card.ts'))).toBe(false);
     expect(fs.existsSync(path.join(prepared.own.consumer, 'card.html'))).toBe(false);
     expect(fs.existsSync(path.join(prepared.card.consumer, 'src', 'main-own.ts'))).toBe(false);
-    // Only public exports and the consumer's own files are imported, by anything in either copy.
-    for (const name of ['own', 'card'] as const) {
+    for (const lit of ['own', 'card'] as const) {
+      for (const react of ['react.html', 'src/main-react.tsx', 'src/notes-react-view.tsx', 'src/notes-react-catalog.tsx']) expect(fs.existsSync(path.join(prepared[lit].consumer, react)), `${lit}: ${react}`).toBe(false);
+    }
+    for (const lit of ['own.html', 'card.html', 'src/main-own.ts', 'src/main-card.ts', 'src/notes-view.ts', 'src/notes-catalog.ts']) expect(fs.existsSync(path.join(prepared.react.consumer, lit)), `react: ${lit}`).toBe(false);
+    // Only public exports and the consumer's own files are imported, by anything in any copy.
+    for (const name of ['own', 'card', 'react'] as const) {
       const consumer = prepared[name].consumer;
       for (const file of filesUnder(consumer).filter((one) => /\.tsx?$/.test(one) && !one.includes(`${path.sep}node_modules${path.sep}`))) {
         for (const specifier of specifiersOf(fs.readFileSync(file, 'utf8'))) {
@@ -314,23 +324,37 @@ describe('the two installed consumers', () => {
             expect(owner, `${name}: ${specifier} is not installed`).toBeDefined();
             expect(Object.keys(owner?.exports ?? {}), `${name}: ${specifier}`).toContain(`.${specifier.slice(packageNameOf(specifier).length)}`);
           } else {
-            expect([...PACK1_OWN_DEPENDENCIES, 'vite'].includes(packageNameOf(specifier)), `${name}: ${specifier}`).toBe(true);
+            expect([...NOTES_CONSUMERS[name].ownDependencies, 'vite'].includes(packageNameOf(specifier)), `${name}: ${specifier}`).toBe(true);
           }
         }
       }
     }
   });
 
+  it('install the React consumer on the pinned upstream pair: @a2ui/react and @a2ui/web_core 0.13.0, React and React DOM 19.3.1, not the 0.14.0 the proposal inspected', () => {
+    const versions = installedVersionsOf(prepared.react.consumer, NOTES_CONSUMERS.react.ownDependencies);
+    expect(versions).toMatchObject({ '@a2ui/react': '0.13.0', '@a2ui/web_core': '0.13.0', react: '19.3.1', 'react-dom': '19.3.1' });
+    // The packed react package declares the same upstream pair and the same React peers, so a consumer cannot resolve another.
+    const manifest = prepared.react.sdk.manifests.react!;
+    expect(manifest.dependencies).toMatchObject({ '@a2ui/react': '0.13.0', '@a2ui/web_core': '0.13.0' });
+    expect(manifest.peerDependencies).toMatchObject({ react: '19.3.1', 'react-dom': '19.3.1' });
+    expect(manifest.peerDependenciesMeta?.['@saga-a2ui/components']?.optional).toBe(true);
+  });
+
   it('build from the installed copies alone, and only the second carries the optional parser, catalog entry and element', async () => {
     const own = await buildOf('own');
     const card = await buildOf('card');
-    for (const [name, one] of [['own', own], ['card', card]] as const) {
+    const react = await buildOf('react');
+    for (const [name, one] of [['own', own], ['card', card], ['react', react]] as const) {
       expect(one.modules.filter((id) => id.startsWith(path.join(repoRoot, 'packages')) || id.startsWith(path.join(repoRoot, 'apps'))), name).toEqual([]);
-      expect(one.modules.some((id) => id.includes(`/consumer-${name}/consumer/node_modules/@saga-a2ui/lit/src/actions/`)), name).toBe(true);
+      const renderer = name === 'react' ? 'react' : 'lit';
+      expect(one.modules.some((id) => id.includes(`/consumer-${name}/consumer/node_modules/@saga-a2ui/${renderer}/src/actions/`)), name).toBe(true);
       expect(one.modules.some((id) => id.includes(`/consumer-${name}/consumer/node_modules/@saga-a2ui/core/src/actions/`)), name).toBe(true);
       expect(one.modules.some((id) => /\/consumer\/src\/row-holds\.ts$/.test(id)), name).toBe(true);
       expect(one.code, name).not.toMatch(NODE_IMPORT);
-      for (const marker of ['StreamableHTTP', 'process.env', 'PRIVATE-FIELD-CANARY']) expect(one.code, `${name}: ${marker}`).not.toContain(marker);
+      // React's own build flag (`process.env.NODE_ENV`) is replaced when an application builds; any other use is Node code.
+      const code = one.code.replaceAll('process.env.NODE_ENV', '');
+      for (const marker of ['StreamableHTTP', 'process.env', 'PRIVATE-FIELD-CANARY']) expect(code, `${name}: ${marker}`).not.toContain(marker);
     }
     // First consumer: no optional component, no parser, no card element, no catalog entry.
     expect(own.modules.filter((id) => /\/@saga-a2ui\/components\/|\/faithful-card\/|node_modules\/(markdown-it|mdurl|uc\.micro|linkify-it|entities|punycode)/.test(id))).toEqual([]);
@@ -342,18 +366,37 @@ describe('the two installed consumers', () => {
     }
     expect(card.modules.some((id) => id.includes('node_modules/markdown-it/'))).toBe(true);
     expect(card.code).toContain('saga-faithful-card');
-    // Neither reaches for the stacks this SDK does not use.
-    for (const one of [own, card]) expect(one.modules.filter((id) => /node_modules\/(@?mcp-ui|@?copilotkit|@?ag-ui|@?ora)\//.test(id))).toEqual([]);
+    // React consumer: the application's React catalog over the installed react package, with the shared
+    // contract, controller and actions, and none of the other renderer, the optional components or the parser.
+    for (const needle of ['/@saga-a2ui/react/src/actions/action-button.tsx', '/@saga-a2ui/react/src/actions/instance-host.tsx', '/consumer/src/notes-react-view.tsx', '/consumer/src/notes-controller.ts', 'node_modules/react-dom/']) {
+      expect(react.modules.some((id) => id.includes(needle)), needle).toBe(true);
+    }
+    expect(react.modules.filter((id) => /node_modules\/(@a2ui\/lit|markdown-it)\/|\/@saga-a2ui\/(lit|components)\/|\/faithful-card\/|\/consumer\/src\/(notes-view|notes-catalog)\.ts$/.test(id))).toEqual([]);
+    for (const marker of ['FaithfulCard', 'saga-faithful-card', 'html_block']) expect(react.code, marker).not.toContain(marker);
+    // Lit's runtime is in the React graph, but not through SAGA or the application: upstream `@a2ui/react` 0.13.0 imports
+    // `@a2ui/web_core/v0_9/basic_catalog`, which loads web_core's Lit-based markdown directive. Nothing owned imports it.
+    const litRuntime = react.modules.filter((id) => /node_modules\/(lit|lit-html|@lit)\//.test(id));
+    expect(litRuntime.length).toBeGreaterThan(0);
+    expect(react.modules.some((id) => id.endsWith('/@a2ui/web_core/src/universal/basic_catalog/directives/markdown.js'))).toBe(true);
+    const owned = react.modules.filter((id) => id.includes('/consumer/src/') || id.includes('/node_modules/@saga-a2ui/'));
+    expect(owned.length).toBeGreaterThan(0);
+    for (const id of owned) expect(fs.readFileSync(id, 'utf8'), id).not.toMatch(/from\s+['"](?:lit|@lit)[/'"]/);
+    // The Lit consumers hold no React.
+    for (const one of [own, card]) expect(one.modules.filter((id) => /node_modules\/(react|react-dom)\/|\/@saga-a2ui\/react\/|\/@a2ui\/react\//.test(id))).toEqual([]);
+    // None reaches for the stacks this SDK does not use.
+    for (const one of [own, card, react]) expect(one.modules.filter((id) => /node_modules\/(@?mcp-ui|@?copilotkit|@?ag-ui|@?ora)\//.test(id))).toEqual([]);
   }, 240_000);
 
   it('serve with the identical server: one authorization and disclosure boundary, and no renderer or optional package in it', async () => {
     const own = await buildOf('own');
     const card = await buildOf('card');
-    // Same application source, same packed mcp tarball: the bundled servers are byte for byte the same.
-    // (They differ only in the comment that names each scratch directory.)
+    const react = await buildOf('react');
+    // Same application source, same packed mcp tarball: the bundled servers are byte for byte the same,
+    // whichever renderer the consumer's view uses. (They differ only in the comment that names each scratch directory.)
     const withoutRegionComments = (file: string) => fs.readFileSync(file, 'utf8').replace(/^\/\/#(?:end)?region.*$/gm, '');
     expect(withoutRegionComments(own.server.file)).toBe(withoutRegionComments(card.server.file));
-    for (const one of [own, card]) {
+    expect(withoutRegionComments(react.server.file)).toBe(withoutRegionComments(own.server.file));
+    for (const one of [own, card, react]) {
       expect(one.server.modules.filter((id) => /node_modules\/(lit|lit-html|@lit|@a2ui|markdown-it|react)\/|\/@saga-a2ui\/(lit|components|react|core)\//.test(id))).toEqual([]);
       expect(one.server.modules.filter((id) => id.startsWith(path.join(repoRoot, 'packages')) || id.startsWith(path.join(repoRoot, 'apps')))).toEqual([]);
       for (const needle of ['/@saga-a2ui/mcp/src/server/operation.ts', '/consumer/server/notes-server.ts']) expect(one.server.modules.some((id) => id.includes(needle)), needle).toBe(true);

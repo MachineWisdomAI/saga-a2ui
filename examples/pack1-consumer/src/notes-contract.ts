@@ -33,6 +33,34 @@ export const TEXT = {
   cannotArchive: 'This note cannot be archived.',
 } as const;
 
+/** What the page says about itself, in fixed sentences. The view and its browser specification read them from here. */
+export const VIEW_TEXT = {
+  waiting: 'Waiting for your notes…',
+  notes: 'Your notes',
+  problem: 'Your notes could not be shown.',
+  /**
+   * A successful result this view's contract does not accept comes from a server of another build.
+   * Nothing of it is shown; the person is told to reopen, and the maintainer to update both together.
+   */
+  mismatch:
+    'Your notes could not be shown: this view and its server are from different builds. Reopen the notes; if this continues, the maintainer must update the server and the view together.',
+  closed: 'This view was closed.',
+} as const;
+
+/**
+ * What a view shows for one `list_notes` result, whatever renders it: the notes to display (none
+ * for an error or for a result this contract does not accept, so nothing of such a result appears)
+ * and the status sentence that says which of the three it was.
+ */
+export function readNotesResult(result: { readonly isError?: boolean; readonly structuredContent?: unknown }): {
+  readonly notes: readonly PublicNote[];
+  readonly status: string;
+} {
+  if (result.isError === true) return { notes: [], status: VIEW_TEXT.problem };
+  const parsed = NotesOutputSchema.safeParse(result.structuredContent);
+  return parsed.success ? { notes: parsed.data.notes, status: VIEW_TEXT.notes } : { notes: [], status: VIEW_TEXT.mismatch };
+}
+
 /**
  * `_meta` key a server sets on an `isError` archive reply that it knows changed nothing (nobody
  * signed in, or the note cannot be archived by this account). A failure without it, such as a

@@ -1,19 +1,13 @@
 import { A2uiLitElement, basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { CommonSchemas } from '@a2ui/web_core/v0_9';
-import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { actionButtonEntry } from '@saga-a2ui/lit/actions';
 import { html, nothing } from 'lit';
+import { LineApi } from './notes-line.js';
 
-// The application-owned catalog. `Line` is the application's own component: it shows supplied text
-// as text, never as markup, in one of three roles. Layout, rows and lists come from upstream's
-// basic catalog; `ActionButton` is SAGA's opt-in control. Nothing else is in the catalog, and in
-// particular no SAGA optional component: the second consumer adds one (main-card.ts) and this file
-// stays as it is.
-
-const LineApi = {
-  name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString, kind: z.enum(['title', 'body', 'status']) }).strict(),
-};
+// The application-owned catalog of the Lit consumers. `Line` is the application's own component:
+// its contract (notes-line.ts) is shared with the React catalog. Layout, rows and lists come from
+// upstream's basic catalog; `ActionButton` is SAGA's opt-in control. Nothing else is in the
+// catalog, and in particular no SAGA optional component: the second consumer adds one
+// (main-card.ts) and this file stays as it is.
 
 class LineElement extends A2uiLitElement<typeof LineApi> {
   protected readonly api = LineApi;

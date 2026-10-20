@@ -317,7 +317,7 @@ describe('the notes endpoint shares one request deadline across authentication, 
     const { port } = server.address() as AddressInfo;
     const allowedHosts = [`127.0.0.1:${port}`];
     const created = createServerBudgets(budgets);
-    server.on('request', (req, res) => void serveNotes({ html: '<notes-app></notes-app>', backend, verifier, allowedHosts }, req, res, created.startRequest()).catch(() => res.destroy()));
+    server.on('request', (req, res) => void serveNotes({ html: '<p data-testid="view-status"></p><notes-app></notes-app>', backend, verifier, allowedHosts }, req, res, created.startRequest()).catch(() => res.destroy()));
     return `http://127.0.0.1:${port}/`;
   }
 

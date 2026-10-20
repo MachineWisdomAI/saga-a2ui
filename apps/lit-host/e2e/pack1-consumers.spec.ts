@@ -56,7 +56,11 @@ interface Environment {
 // rebuilt for one stage of an install, update or rollback; otherwise these are the PACK1 build.
 const pack1Dist = process.env.SAGA_PACK1_DIR === undefined ? new URL('../dist/pack1/', import.meta.url) : pathToFileURL(`${resolve(process.env.SAGA_PACK1_DIR)}/`);
 
-for (const consumer of ['own', 'card'] as const) {
+// The candidate rehearsal rebuilds the combinations a candidate records, the two Lit consumers; the
+// React consumer (REACT1) is not a recorded combination yet, so a rehearsal's directory has none.
+const consumers = process.env.SAGA_PACK1_DIR === undefined ? (['own', 'card', 'react'] as const) : (['own', 'card'] as const);
+
+for (const consumer of consumers) {
   const page_ = new URL(`${consumer}/${consumer}.html`, pack1Dist);
   const server_ = new URL(`${consumer}/server.mjs`, pack1Dist);
 
@@ -217,8 +221,8 @@ for (const consumer of ['own', 'card'] as const) {
     test('shows the body the way the installed catalog provides it, and a hostile body does nothing', async ({ page }) => {
       const { view, requests, opened } = await open(page);
       const body = view.getByTestId('line-body');
-      if (consumer === 'own') {
-        // Only the application's own component is installed: the body is text, markup characters included.
+      if (consumer !== 'card') {
+        // Only the application's own component is installed (in either renderer): the body is text, markup characters included.
         await expect(view.locator('saga-faithful-card')).toHaveCount(0);
         await expect(body.filter({ hasText: 'First **note** with a [link](https://docs.example.com/alpha).' })).toHaveCount(1);
         await expect(view.getByRole('button', { name: /link/ })).toHaveCount(0);
@@ -309,7 +313,9 @@ for (const consumer of ['own', 'card'] as const) {
       expect(environment.backend.archived).toEqual(['n-2', 'n-1']);
     });
 
-    test('a layout that names an action or a handler is refused by the installed catalog, and a press sends nothing', async ({ page }) => {
+    // The Lit app element offers `ingest`; the React page offers no such handle, and its strict
+    // control schema is checked on the real React runtime in packages/react (actions.test.ts).
+    if (consumer !== 'react') test('a layout that names an action or a handler is refused by the installed catalog, and a press sends nothing', async ({ page }) => {
       // A resource that routed actions by name would need the layout to carry one. The installed
       // control accepts none, so such a layout is rejected whole, before anything is evaluated.
       const { view } = await open(page);
@@ -462,7 +468,7 @@ for (const consumer of ['own', 'card'] as const) {
       // pagehide, not the host's teardown request: the connection is disposed and the bindings must end with it.
       await view.locator('body').evaluate(() => window.dispatchEvent(new Event('pagehide')));
       await expect(view.getByTestId('view-status')).toHaveText('This view was closed.');
-      await expect(view.locator('notes-app')).toHaveCount(0);
+      await expect(view.getByTestId('line-title')).toHaveCount(0);
 
       // The detached controls that were retained no longer act.
       await Promise.all(retained.map((handle) => handle?.evaluate((button) => (button as HTMLElement).click())));

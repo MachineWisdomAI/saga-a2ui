@@ -1,12 +1,15 @@
 import type { CallToolResult } from '@modelcontextprotocol/client';
-import { Action, prerequisite, proceed, refuse, type ServerTransport } from '@saga-a2ui/core/actions';
-import type { ActionButtonActivation } from '@saga-a2ui/lit/actions';
+import { Action, prerequisite, proceed, refuse, type InstanceEvent, type ServerTransport } from '@saga-a2ui/core/actions';
 import { ARCHIVE_TOOL, ArchiveOutputSchema, SESSION_TOOL, declaresNoEffect } from './notes-contract.js';
 import type { RowHolds } from './row-holds.js';
 
 // The application's actions, each defined once. A definition holds no pending state, so the same
 // one is bound to every rendered row; each binding keeps its own state. The application binds
-// them to rendered instances (notes-view.ts); no markup names them.
+// them to rendered instances (notes-view.ts for Lit, notes-react-view.tsx for React); no markup
+// names them. The definitions are renderer-neutral: both renderers' `ActionButton` deliver the
+// same event (the instance's data scope plus the DOM click), which is what they are typed on.
+
+type ActionButtonActivation = InstanceEvent<Event>;
 
 export interface NotesEnvironment {
   /** The MCP Apps `App` itself, or a double with its shape. */
