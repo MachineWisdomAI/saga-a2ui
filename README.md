@@ -1,28 +1,38 @@
 # saga a2ui
 
-**Framework for building agentic apps with A2UI and MCP Apps.**
+**Bring your services to AI assistants and agents, including Alexa+, ChatGPT, Claude and more, with less engineering work.**
 
-Safe AGentic Apps — by [Machine Wisdom AI](https://machine-wisdom.ai).
+Saga combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom AI](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform. It is a framework for building agentic apps with A2UI and MCP Apps.
 
-Saga helps teams build and maintain agentic apps around their existing services. It brings together UI rendering, user interactions and backend actions, so you can spend more time on what your application does.
+## Build the experience your customers need
 
-Saga builds on Google's open [A2UI project](https://github.com/a2ui-project/a2ui). A2UI describes the interface and its updates; MCP Apps connects it to the assistant host. Your application supplies the data and decides who can use it.
+Your team knows what customers should be able to do with your service. Saga provides the application foundations for turning those tasks into interactive experiences, from browsing content to taking an action through an existing API. The aim is to give your team a head start and reduce the custom application code it has to maintain as these experiences evolve.
+
+A2UI describes the interface, its data bindings and updates. Saga connects that model to rendered components, user actions and the application's lifecycle, with MCP Apps providing the connection to the host. You can build on that foundation while keeping your own services, authentication and business rules. The [host compatibility guide](docs/2026-10-19_host-compatibility-observations_v1.md) describes the workflows tested in individual assistants.
 
 ## What Saga provides
 
-**Interactive interfaces built on A2UI.** Render messages from your application, update the view as data changes, and connect buttons to typed actions. Saga manages the view lifecycle and action bindings.
+### Interfaces and actions built on A2UI
 
-**Actions connected to your services.** Handle an interaction locally or send it to your backend. Carry the verified request identity through to the server, where your application checks permissions and performs the operation. The same application contract can serve multiple views.
+Render an interface from A2UI messages and update it as application data changes. Bind a button to a typed action that runs locally or calls your backend. Saga manages the action's connection to the view, including what happens when a result arrives after the view has changed or closed.
 
-**MCP Apps integration.** Serve application resources and connect the server and view to an assistant host. Start with a Node, Express, Fastify or Hono backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md).
+The [action guide](docs/actions.md) follows a notes application through these interactions, showing how the same application contract serves different views.
 
-**Answer cards with sources.** The optional FaithfulCard displays answer text with its attribution. You choose which links can open and which image hosts are allowed. A stricter display option keeps links inactive and lets the reader choose whether to load images.
+### Integration with your existing API platform
 
-The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [components](https://www.npmjs.com/package/@saga-a2ui/components) packages are available on npm at `0.1.0-rc.1`. They export TypeScript source for applications that use a bundler. The Lit renderer powers the demo and starter templates; React provides action controls and FaithfulCard. See [package responsibilities](packages/README.md) and the [React integration guide](docs/react-consumers.md) for the available APIs.
+Start with a Node, Express, Fastify or Hono backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md). Saga carries the verified request identity through to your application, where your server checks permissions and performs the operation.
+
+Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
+
+### Content controls for the application you are building
+
+Saga's [FaithfulCard component](docs/react-consumers.md) presents Markdown in a styled card, preserving the supplied answer and its source attribution. It renders that answer directly, without asking the host LLM to paraphrase it for display.
+
+Your application chooses which links may open and which image hosts are allowed. For content that needs more restrictive handling, links can remain inactive and images can wait until the reader chooses to load them. These settings let you adapt the presentation to where your content comes from and what readers should be able to do with it.
 
 ## Try the podcast demo
 
-The Patreon-style subscriptions and podcast demo shows browsing, content controls and protected playback with **synthetic accounts and media**. It does not connect to Patreon or access anyone's subscriptions. The local host lets you switch accounts, deny access, expire a playback grant and recover with a fresh request. A notes example shows the same action contract outside playback.
+Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
 From a source checkout, with Node 22.12.0 or newer and npm:
 
@@ -34,35 +44,38 @@ npm install --omit=dev
 npm start
 ```
 
-Open the `Open the demo host page:` address printed by the server. This builds a self-contained Lit/Node demo from local candidate packages. It uses a local fixture host; it does not establish playback support in ChatGPT, Claude or Alexa+. See [demo controls and limitations](demo/lit-node/README.md).
+Open the `Open the demo host page:` address printed by the server. The demo includes its own local host, so you can explore the application without deploying it or connecting an assistant. See the [podcast demo guide](demo/lit-node/README.md) for its controls and setup.
 
-To build your own application, follow [Getting started](docs/getting-started.md). For a browser walkthrough of actions and their source code, try the [interactive notes tour](demo/tour/README.md). The [host compatibility guide](docs/2026-10-19_host-compatibility-observations_v1.md) covers deployment behavior in different assistants.
+For a browser walkthrough of actions and their implementation, try the [interactive notes tour](demo/tour/README.md). It runs against a simulated server and links each explanation to the source.
 
-## Documentation and design
+## Build your application
 
-- [Getting started](docs/getting-started.md): demo, starter and candidate installation.
-- [Change a component and trace requests](docs/actions.md): allowed, denied and unauthenticated action paths.
-- [Static source-linked tour](demo/tour/README.md): try allowed, denied and obsolete action outcomes in a browser against a simulated server, with each explanation linked to its source; no backend to run.
-- [Development reference](docs/development-reference.md#local-development): build, tests and detailed implementation notes.
+Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates; the React integration provides action controls and FaithfulCard.
+
+The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [components](https://www.npmjs.com/package/@saga-a2ui/components) packages are available on npm at `0.1.0-rc.1`. They export TypeScript source for applications that use a bundler. See the [React integration guide](docs/react-consumers.md) for imports and dependency configuration.
+
+- [Action guide](docs/actions.md): connect interactions to application behavior.
+- [Development reference](docs/development-reference.md#local-development): build and test the SDK.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
-- [Release packages](docs/release-packages.md): package exports, dependencies and installation requirements.
-- [Blueprints](blueprints/README.md#find-a-design): architecture, contracts and their implementation status.
-- [Adopters](ADOPTERS.md): meet the teams building with Saga.
+- [Blueprints](blueprints/README.md#find-a-design): explore the architecture and component contracts.
+- [Building with Saga](ADOPTERS.md): IASER's Ansari integration and how to share your application.
 
 ## Why I built Saga
 
 *Younes Abouelnagah, founder of Machine Wisdom AI*
 
-Working on Headspace for Alexa+ inspired Saga. Getting the production integration working took attention away from the application itself, and the player remained bespoke. I wanted a reusable application foundation for the next team building inside an assistant. I chose A2UI for its UI structure, bindings and updates, with MCP Apps providing host integration.
+Working on Headspace for Alexa+ inspired Saga. Getting the production integration working took attention away from the application itself, and the player remained bespoke. I evaluated other approaches, but couldn't find one that fit our existing API platform and the dependency-review requirements we worked within. We built the integration in-house.
 
-That work followed earlier Gmail Add-on and Apps Script experience, and five years as a Principal Engineer in Roblox Trust and Safety. Those experiences inform how I approach application behavior and its safety boundaries.
+I wanted robust application foundations that another team could adopt within the platform it already operated. I chose A2UI for its application model and the engineering behind it, with MCP Apps providing host integration. Saga brings those pieces together with the application behavior I wanted to reuse on the next project.
 
-Amazon has publicly named Headspace among the brands building Alexa+ experiences with MCP. [Amazon’s announcement](https://developer.amazon.com/zh/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences) describes that integration program; Headspace is not a Saga adopter or endorser.
+My perspective on content safety comes from AMP and Gmail Add-ons, alongside five years as a Principal Engineer in Roblox Trust and Safety. That experience informs how Saga handles displayed content and the choices it leaves with the application developer.
 
-## Machine Wisdom AI and community
+[Amazon's announcement of Headspace's Alexa+ integration](https://developer.amazon.com/zh/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences) describes the project that inspired this work.
 
-[Machine Wisdom AI](https://machine-wisdom.ai) maintains Saga and offers paid production AI engineering and architecture engagements. For help with a project, see the [current engagement options and contact form](https://machine-wisdom.ai).
+## Work with Machine Wisdom AI
 
-We welcome small fixes, reproducible bug reports, application examples and improvements to the emerging A2UI and MCP Apps ecosystem. [Open an issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose) or read [Contributing](CONTRIBUTING.md). Report vulnerabilities through [Security](SECURITY.md).
+[Machine Wisdom AI](https://machine-wisdom.ai) maintains Saga and offers production AI engineering and architecture engagements. If you are bringing an existing service to AI assistants and agents, [get in touch about your project](https://machine-wisdom.ai).
 
-SDK code is licensed under [Apache-2.0](LICENSE). Preserve [third-party notices](THIRD_PARTY_NOTICES.md).
+We welcome fixes, reproducible bug reports, application examples and contributions to the A2UI and MCP Apps ecosystem. [Open an issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose) or read [Contributing](CONTRIBUTING.md). Report vulnerabilities through [Security](SECURITY.md).
+
+SDK code is licensed under [Apache-2.0](LICENSE), with [third-party notices](THIRD_PARTY_NOTICES.md) for included work.
