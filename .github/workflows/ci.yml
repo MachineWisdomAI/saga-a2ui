@@ -21,6 +21,8 @@ jobs:
       # The Lynx fixture is its own project with its own lockfile, outside the SDK workspace (see README).
       - run: npm ci --prefix apps/lynx-fixture
       - run: npx playwright install --with-deps chromium
+      - run: npm install --global pnpm@10.33.0
+      - run: npm run test:pnpm-react
       - run: npm run verify
       # PACK2: pack, install and qualify the release candidate, then keep it as a workflow artifact.
       # Nothing is published: this job has contents: read and holds no registry credential.

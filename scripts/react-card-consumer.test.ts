@@ -42,8 +42,6 @@ describe('the React card consumer built from the packed SDK packages', () => {
     // Siblings, the brand stylesheets and the assets next to the source: never a path into a package.
     expect(own.every((specifier) => /^\.\/[a-z-]+\.js$|^\.\/brands\/[a-z]+\.css$|^\.\.\/assets\/[a-z-]+\.svg\?inline$|^\.\.\/src\/[a-z-]+\.js$|^\.\/card-view\.css$/.test(specifier))).toBe(true);
     expect([...new Set(specifiers.filter((specifier) => !specifier.startsWith('.')))].sort()).toEqual([
-      '@a2ui/react/v0_9',
-      '@a2ui/web_core/v0_9',
       '@modelcontextprotocol/ext-apps',
       '@modelcontextprotocol/server',
       '@saga-a2ui/components/faithful-card',
@@ -51,12 +49,15 @@ describe('the React card consumer built from the packed SDK packages', () => {
       '@saga-a2ui/mcp/policy',
       '@saga-a2ui/mcp/server',
       '@saga-a2ui/mcp/view',
+      '@saga-a2ui/react/a2ui',
       '@saga-a2ui/react/faithful-card',
       '@saga-a2ui/react/faithful-card.css',
       'react',
       'react-dom/client',
       'zod',
     ]);
+    const manifest = JSON.parse(fs.readFileSync(path.join(reactCardConsumerSource, 'package.json'), 'utf8'));
+    expect(Object.keys(manifest.dependencies).filter(name => name.startsWith('@a2ui/'))).toEqual([]);
     expect(fs.existsSync(path.join(reactCardConsumerSource, 'node_modules'))).toBe(false);
   });
 
@@ -68,7 +69,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
     }
     // Every public export the manifest names resolves to a file the tarball really carries.
     const exportsMap = (sdk.manifests.react as { exports?: Record<string, string> }).exports ?? {};
-    expect(Object.keys(exportsMap).sort()).toEqual(['./actions', './faithful-card', './faithful-card.css']);
+    expect(Object.keys(exportsMap).sort()).toEqual(['./a2ui', './actions', './faithful-card', './faithful-card.css']);
     for (const [subpath, target] of Object.entries(exportsMap)) {
       expect(sdk.files.react, subpath).toContain(target.replace(/^\.\//, ''));
       expect(fs.existsSync(path.join(consumer, 'node_modules', '@saga-a2ui', 'react', target)), subpath).toBe(true);
@@ -79,7 +80,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
 
   it('declares the card as an optional peer: the React package depends on no components package, parser, Lit or delivery code', () => {
     const react = sdk.manifests.react!;
-    expect(Object.keys(react.dependencies ?? {}).sort()).toEqual(['@a2ui/react', '@a2ui/web_core', '@saga-a2ui/core']);
+    expect(Object.keys(react.dependencies ?? {}).sort()).toEqual(['@a2ui/react', '@a2ui/web_core', '@saga-a2ui/core', 'zod']);
     expect(react.peerDependencies).toEqual({ '@saga-a2ui/components': sdk.version, react: '19.3.1', 'react-dom': '19.3.1' });
     expect(react.peerDependenciesMeta).toEqual({ '@saga-a2ui/components': { optional: true } });
     const components = sdk.manifests.components!;

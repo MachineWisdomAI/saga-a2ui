@@ -7,7 +7,8 @@
   "exports": {
     "./actions": "./src/actions/index.ts",
     "./faithful-card": "./src/faithful-card/index.ts",
-    "./faithful-card.css": "./src/faithful-card/faithful-card.css"
+    "./faithful-card.css": "./src/faithful-card/faithful-card.css",
+    "./a2ui": "./src/a2ui.ts"
   },
   "files": [
     "src",
@@ -20,7 +21,8 @@
   "dependencies": {
     "@a2ui/react": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "*"
+    "@saga-a2ui/core": "*",
+    "zod": "3.25.76"
   },
   "peerDependencies": {
     "@saga-a2ui/components": "*",
