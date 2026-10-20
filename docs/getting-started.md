@@ -146,7 +146,7 @@ Named-host receipts exist for a few specific flows and are recorded in [host com
 
 ## Actions
 
-The attachment above is the whole of what this guide teaches; [the action walkthrough (GUIDE2)](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) is where the details belong. This section only says where to look and what to expect.
+The attachment above is the whole of what this guide teaches. [Change a component and trace allowed and denied requests](actions.md) is where the details belong: it changes a component and its action, then traces input, prerequisites, verified identity, authorization, delivery and cleanup, with every case run. This section is the short version.
 
 The verified **non-playback** example is the notes application: `examples/pack1-consumer/src/notes-actions.ts` defines Archive once and `notes-view.ts` attaches it to each rendered row. The demonstration serves it behind the starter's own authentication, and its README shows each outcome:
 

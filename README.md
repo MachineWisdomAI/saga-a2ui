@@ -1,6 +1,6 @@
 # SAGA A2UI
 
-New here: [Getting started](docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. There is no public release yet; the packages are private candidate builds.
+New here: [Getting started](docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. There is no public release yet; the packages are private candidate builds. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](docs/actions.md).
 
 React applications: follow [the React consumer dependency guide](docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
 
