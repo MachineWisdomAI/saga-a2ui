@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import {
   TemplateError,
   exportTemplate,
@@ -10,6 +11,7 @@ import {
   stampSdkVersion,
   templateDirectory,
   templateFiles,
+  templatesRoot,
   writeSnippets,
 } from './starter-template.js';
 
@@ -78,37 +80,59 @@ describe('exporting a starter', () => {
   });
 });
 
-describe('the maintained template says what it is', () => {
-  it('declares the server adapter and the SDK packages it actually depends on', () => {
-    const metadata = readTemplateMetadata(template);
-    const manifest = JSON.parse(fs.readFileSync(path.join(template, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
+describe('the maintained templates say what they are', () => {
+  it('are exactly the templates whose pair CI qualifies: none is offered without its evidence, none qualified is missing', () => {
+    const directories = fs
+      .readdirSync(templatesRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(directories).toEqual([...QUALIFIED_STARTERS].sort());
+  });
+
+  it.each(QUALIFIED_STARTERS)('%s declares the server adapter and the SDK packages it actually depends on', (name) => {
+    const directory = templateDirectory(name);
+    const metadata = readTemplateMetadata(directory);
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
 
     expect(manifest.dependencies[metadata.serverAdapter.package]).toBe(metadata.serverAdapter.version);
     const declaredSdk = Object.keys(manifest.dependencies)
-      .filter((name) => name.startsWith('@saga-a2ui/'))
-      .map((name) => name.slice('@saga-a2ui/'.length))
+      .filter((dependency) => dependency.startsWith('@saga-a2ui/'))
+      .map((dependency) => dependency.slice('@saga-a2ui/'.length))
       .sort();
     expect(declaredSdk).toEqual([...metadata.sdkPackages].sort());
+  });
+
+  it('give each pair its own stack and server, so one pair is never offered twice', () => {
+    const pairs = QUALIFIED_STARTERS.map((name) => {
+      const { stack, server } = readTemplateMetadata(templateDirectory(name));
+      return `${stack}/${server}`;
+    });
+    expect(new Set(pairs).size).toBe(pairs.length);
   });
 });
 
 describe('snippets', () => {
-  it('are exactly the lines the exported starter contains, and every declared snippet exists', () => {
-    const metadata = readTemplateMetadata(template);
-    const snippets = extractSnippets(template);
+  it.each(QUALIFIED_STARTERS)('%s: are exactly the lines the exported starter contains, and every declared snippet exists', (name) => {
+    const directory = templateDirectory(name);
+    const metadata = readTemplateMetadata(directory);
+    const snippets = extractSnippets(directory);
     expect(snippets.map((snippet) => snippet.name).sort()).toEqual([...metadata.snippets].sort());
 
-    const exported = exportTemplate(template, path.join(work, 'for-snippets'), { sdkVersion: SDK_VERSION });
+    const exported = exportTemplate(directory, path.join(work, `for-snippets-${name}`), { sdkVersion: SDK_VERSION });
     for (const snippet of snippets) {
       expect(snippet.text.trim(), snippet.name).not.toBe('');
       expect(fs.readFileSync(path.join(exported.directory, snippet.file), 'utf8'), snippet.name).toContain(snippet.text);
     }
   });
 
-  it('carry the identity handoff and the direct attachment a developer is meant to copy', () => {
-    const byName = Object.fromEntries(extractSnippets(template).map((snippet) => [snippet.name, snippet.text]));
+  it.each([
+    ['lit-node', 'auth: decision.authInfo'],
+    ['lit-express', 'req.auth = decision.authInfo'],
+  ] as const)('%s: carry the identity handoff and the direct attachment a developer is meant to copy', (name, handoff) => {
+    const byName = Object.fromEntries(extractSnippets(templateDirectory(name)).map((snippet) => [snippet.name, snippet.text]));
     expect(byName['identity-handoff']).toContain('authenticate(');
-    expect(byName['identity-handoff']).toContain('auth: decision.authInfo');
+    expect(byName['identity-handoff']).toContain(handoff);
     expect(byName['bind-action']).toContain("bindAction('activate'");
     expect(byName['register-protected-operation']).toContain('registerProtectedOperation(');
   });
