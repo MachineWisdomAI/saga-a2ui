@@ -204,7 +204,8 @@ describe('packed candidates', () => {
 
   // The command a maintainer runs, through its real entry point: argument parsing, the combination
   // it names, the findings it prints and the exit code a script would act on.
-  describe('candidate:verify', () => {
+  // Each case starts the command in a new process (a TypeScript runtime start-up, twice for some).
+  describe('candidate:verify', { timeout: 60_000 }, () => {
     const tsx = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
     const record = (packed: readonly PackedPackage[]) => ({
       version: packed[0]!.version,
