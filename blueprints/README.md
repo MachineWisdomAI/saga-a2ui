@@ -32,13 +32,13 @@ Each design's Status section separates its approved scope, implemented slices an
 
 ## Authoring
 
-Write a self-contained design for human readers: the problem, current behavior, responsibilities, interfaces, representative flow, rationale, failures, verification outcomes and open decisions. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`. Keep detailed worker instructions in implementation issues. Distinguish existing behavior from a proposal and preserve uncertainties that affect the design.
+Write a self-contained design for human readers: the problem, current behavior, responsibilities, interfaces, representative flow, rationale, failures, verification outcomes and open decisions. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`. Keep internal delivery tickets and detailed worker instructions in private maintainer records. Distinguish existing behavior from a proposal and preserve uncertainties that affect the design.
 
 Make verification outcomes concrete: state the input or condition, expected observable result and boundary being exercised. For example, an image-policy contract could require empty input to produce `img-src 'none'`, populated input to preserve permitted origins, and a mounted frame to load a permitted image while blocking an unlisted origin. The directive and browser behavior are separate claims requiring different evidence.
 
 Use `diagram` when an illustration clarifies the architecture or flow. Store editable sources and rendered SVG/PNG outputs in the repository's `diagrams/` directory, embed the relevant output and inspect it before review. Follow [change hygiene](../docs/change-hygiene.md) for retained artifacts and Git LFS.
 
-Blueprints and linked implementation issues must be usable without private planning context. Keep internal discussion and human approval provenance in the private planning records; publish the approved revision, scope and implementation evidence here. User documentation draws on these designs together with verified implementation and release behavior.
+Blueprints, public PRs and their verification evidence must be usable without private planning context. Community reports may link to them; internal implementation tickets live in Backstage and link outward to public evidence. Do not require a public delivery ticket or a private link to understand a design or its implementation. Keep internal discussion and human approval provenance in the private planning records; publish the approved revision, scope and implementation evidence here. User documentation draws on these designs together with verified implementation and release behavior.
 
 ## Lifecycle and revision records
 

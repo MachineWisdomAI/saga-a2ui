@@ -47,4 +47,4 @@ date_added: YYYY-MM-DD
 
 ## References
 
-<!-- Link public-safe source contracts and existing implementation issues. Private audit history and approval provenance stay in the existing private epic. -->
+<!-- Link public source contracts, community reports where relevant, and code PRs or verification evidence. Internal delivery tickets link outward from private records. Private audit history and approval provenance stay in the existing private epic. -->
