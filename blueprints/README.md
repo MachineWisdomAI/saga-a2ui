@@ -28,7 +28,7 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 | Protected media | [Authorized playback](features/authorized_playback.blueprint.md) |
 | Project setup and future publishing | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
 
-Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication remains a design path, not an available command. For working setup instructions, use [Getting started](../docs/getting-started.md).
+Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication has a working ChatGPT preparation command; Claude materials and submission handoff remain unfinished, and preparation never establishes publication. For working setup instructions, use [Getting started](../docs/getting-started.md).
 
 ## Authoring
 
