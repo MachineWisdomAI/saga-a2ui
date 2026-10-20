@@ -163,7 +163,7 @@ function assemble(context: TargetContext): Assembled {
   }
 
   const screenshots: ConnectorDossier['listing']['screenshots'][number][] = [];
-  (connector.screenshots ?? []).slice(0, MAX_SCREENSHOTS).forEach((shot, index) => {
+  (connector.screenshots ?? []).forEach((shot, index) => {
     if (path.extname(shot.file).toLowerCase() !== '.png') {
       unreadable.push({ source: shot.file, reason: 'A screenshot must be a PNG file; video and GIF are not accepted.' });
       return;
@@ -619,6 +619,8 @@ export function claudeTarget(pluginValidator: PluginValidator | undefined): Publ
       if (context.loaded.input.claude?.connector === undefined) {
         findings.push(fail('claude.materials', 'The release input has no claude.connector section, so there is nothing to submit.', 'Add claude.connector (the portal\'s listing, use-case, authentication and data-handling fields) to the release input.'));
       }
+      const supplied = context.loaded.input.claude?.connector?.screenshots.length ?? 0;
+      if (supplied > MAX_SCREENSHOTS) findings.push(fail('claude.screenshot-count', `The release input supplies ${supplied} carousel screenshots; at most ${MAX_SCREENSHOTS} are accepted.`, `Remove ${supplied - MAX_SCREENSHOTS} screenshot${supplied - MAX_SCREENSHOTS === 1 ? '' : 's'} from claude.connector.screenshots in the release input; the publisher chooses which to keep.`));
       if (assembled.unreadable.length > 0) findings.push(fail('package.asset-files', 'A file cannot be added to the dossier.', 'Add or correct the files named in claude.connector in the release input.', assembled.unreadable.map((one) => `${one.source}: ${one.reason}`).join(' ')));
       const archive = writeZip(assembled.entries);
       const check = checkArchive(archive, { endpointUrl: context.loaded.input.endpoint.url, forbiddenLiterals: context.forbiddenLiterals });

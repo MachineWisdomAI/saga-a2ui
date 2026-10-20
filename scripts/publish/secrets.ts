@@ -34,11 +34,18 @@ export function redactSecrets(text: string, literals: readonly string[] = []): s
   return redacted;
 }
 
-const TEXT_EXTENSIONS = new Set(['.json', '.md', '.txt', '.svg', '.html', '.js', '.css']);
+// Raster and font formats that are binary by construction. Everything else an archive carries is
+// scanned: a bundled skill tree can hold any file (.py, .env, a file with no extension, a LICENSE),
+// and a credential in one of them must not ride in a ready archive. A file with one of these
+// extensions is skipped only when it really is binary (it holds a NUL byte); a text file merely
+// named like an image is scanned.
+const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.otf', '.zip']);
+
+const isBinaryEntry = (entry: ZipEntry): boolean => BINARY_EXTENSIONS.has(path.extname(entry.path).toLowerCase()) && Buffer.from(entry.data).includes(0);
 
 /** The entries of an archive that are text, decoded: what the secret scan reads. */
 export function textEntries(entries: readonly ZipEntry[]): { readonly path: string; readonly text: string }[] {
-  return entries.filter((one) => TEXT_EXTENSIONS.has(path.extname(one.path).toLowerCase())).map((one) => ({ path: one.path, text: Buffer.from(one.data).toString('utf8') }));
+  return entries.filter((one) => !isBinaryEntry(one)).map((one) => ({ path: one.path, text: Buffer.from(one.data).toString('utf8') }));
 }
 
 /**

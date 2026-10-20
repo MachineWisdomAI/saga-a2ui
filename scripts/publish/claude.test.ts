@@ -283,6 +283,33 @@ describe('materials that are missing are findings, not a ready claim', () => {
     await blocked((c) => (c.screenshots[1].prompt = ' '), 'package.images', /screenshots\/02\.png has no prompt/);
   });
 
+  it('more than five screenshots is refused and reported, not silently reduced', async () => {
+    const app = claudeApp();
+    for (const n of [4, 5, 6]) fs.writeFileSync(path.join(app, 'screenshots', `${n}.png`), png(600, 600, 1000));
+    editInput(app, (input) => {
+      input.claude.connector.screenshots = [1, 2, 3, 4, 5, 6].map((n) => ({ file: `screenshots/${n}.png`, prompt: `Is the notes service running? (${n})` }));
+    });
+    const checked = await check(app, { cwd: workspace() });
+    expect(checked.code, checked.out).toBe(1);
+    expect(checked.out).toMatch(/FAIL\s+claude\.screenshot-count[\s\S]*supplies 6 carousel screenshots; at most 5/);
+    expect(checked.out).toMatch(/needs 3 to 5 carousel screenshots; the dossier has 6/);
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out).toBe(1);
+    expect(listing(path.join(cwd, 'publication'))).toEqual([RECORD_FILE]);
+  });
+
+  it('an unreadable sixth screenshot does not hide the excess', async () => {
+    const app = claudeApp();
+    for (const n of [4, 5]) fs.writeFileSync(path.join(app, 'screenshots', `${n}.png`), png(600, 600, 1000));
+    editInput(app, (input) => {
+      input.claude.connector.screenshots = [1, 2, 3, 4, 5, 6].map((n) => ({ file: `screenshots/${n}.png`, prompt: `Is the notes service running? (${n})` }));
+    });
+    const run = await check(app, { cwd: workspace() });
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toMatch(/FAIL\s+claude\.screenshot-count[\s\S]*supplies 6/);
+  });
+
   it('a screenshot that only has a PNG name, and a missing icon file', async () => {
     const app = claudeApp();
     fs.writeFileSync(path.join(app, 'screenshots', '1.png'), Buffer.from('GIF89a not a png'));
@@ -553,6 +580,29 @@ describe('the optional plugin bundle', () => {
     expect(run.out + run.err).not.toContain(token);
     expect(run.err).toContain('[redacted API key (sk-)]');
     expect(listing(cwd)).toEqual([]);
+  });
+
+  it.each([
+    ['settings.py', 'api_key = "synthetic-credential-0001"\n'],
+    ['.env', 'password="synthetic-credential-0002"\n'],
+    ['credentials', 'client_secret: "synthetic-credential-0003"\n'],
+  ])('a credential in the skill file %s is found and nothing is released', async (name, content) => {
+    const cwd = workspace();
+    const app = withBundle(claudeApp(), (skill) => fs.writeFileSync(path.join(skill, name), content));
+    const run = await prepare(app, 'publication', { cwd, pluginValidator: validator(accepted) });
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toMatch(new RegExp(`FAIL\\s+package\\.secrets[\\s\\S]*skills/notes-status/${name.replace('.', '\\.')} contains what looks like a credential assignment`));
+    expect(run.out + run.err).not.toContain('synthetic-credential');
+    expect(listing(path.join(cwd, 'publication'))).toEqual([RECORD_FILE]);
+  });
+
+  it('a credential in the bundled license is found', async () => {
+    const cwd = workspace();
+    const app = withBundle(claudeApp());
+    fs.writeFileSync(path.join(app, 'BUNDLE_LICENSE'), 'Apache License 2.0\napi_key = "synthetic-credential-0004"\n');
+    const run = await prepare(app, 'publication', { cwd, pluginValidator: validator(accepted) });
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toMatch(/FAIL\s+package\.secrets[\s\S]*plugin\/LICENSE contains what looks like a credential assignment/);
   });
 
   it('a link inside a skill is refused', async () => {
