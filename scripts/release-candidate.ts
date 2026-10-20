@@ -462,6 +462,7 @@ export function candidateSummary(record: Record<string, unknown>): string {
   const recipe = record.recipe as { node: { testedHere: string; minimum: string; ciPinned: string }; npm: string; platform: string };
   const source = record.source as { commit: string; dirty: boolean };
   const probe = (record.versionMismatch as { installProbe: { refused: boolean } }).installProbe;
+  const local = (record.carriedEvidence as { localResult: { commit: string; validationLabel: string; exitCode: number; commands: { name: string; exitCode: number | null }[] } | null }).localResult;
   const lines = [
     `# SAGA A2UI candidate ${String(record.version)}`,
     '',
@@ -501,6 +502,9 @@ export function candidateSummary(record: Record<string, unknown>): string {
     `- Clean-directory \`npm install\` of the tarballs: ${(record.recipe as { consumerInstall: { ok: boolean; treeValid: boolean } }).consumerInstall.ok ? 'accepted' : 'FAILED'}; \`npm ls --all\` ${(record.recipe as { consumerInstall: { treeValid: boolean } }).consumerInstall.treeValid ? 'reports no missing or invalid dependency or peer' : 'REPORTS A PROBLEM'}.`,
     `- A set mixing two builds: ${probe.refused ? 'refused by npm' : 'NOT REFUSED'}.`,
     `- An application needs these root overrides, or a fresh install stops with ERESOLVE: ${JSON.stringify((record.recipe as { consumerOverrides: unknown }).consumerOverrides)}.`,
+    local === null
+      ? '- No `npm run verify` receipt was found on this tree, so this record carries no local result.'
+      : `- Last \`npm run verify\` on this tree: ${local.validationLabel} at ${local.commit}, exit ${local.exitCode}${local.commands.filter((one) => one.exitCode !== 0).length > 0 ? `; failing: ${local.commands.filter((one) => one.exitCode !== 0).map((one) => one.name).join(', ')}` : ''}.`,
     '- Check an installed set with `npm run candidate:verify`; see docs/candidate-update-and-rollback.md for the update and rollback sequence, the obligations the candidate implements and what stays open.',
     '',
   ];
