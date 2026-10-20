@@ -11,18 +11,36 @@ date_added: 2026-10-16
 ## Status
 
 - Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
-- Implementation: not started. No completed implementation or verification of this contract is recorded.
+- Implementation: partial. The ChatGPT preparation slice (CLI3) is implemented and independently verified; Claude connector materials (CLI4) and resumable submission handoff (CLI5) remain separate unfinished scopes.
 - Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions.
 
 ## Problem and current behavior
 
 A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service, and nothing in this proposal deploys it. A directory listing is the host's own review and publication of the application, which only the host can grant.
 
-The current [workspace scripts](../../package.json) build and test the Lit prototype. Two planned tickets, [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29), own the planned SAGA CLI's init/demo commands and renderer matrix, described in [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md). Publication preparation would extend that single CLI. No CLI, `@saga-a2ui/publish` package or publication configuration schema is implemented today.
+The existing single SAGA CLI provides init and demo commands. CLI3 now adds `saga publish check` and `saga publish prepare` through optional workspace publication tooling. It prepares a ChatGPT artifact and evidence record; it does not deploy an application, submit it or establish a live directory listing. No separately published `@saga-a2ui/publish` package is claimed.
+
+## CLI3 implementation and acceptance — 20 October 2026
+
+Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for the ChatGPT preparation slice at `MachineWisdomAI/saga-a2ui@373f467761251d34c621d5d83ba2a321c22308d7` ([PR186](https://github.com/MachineWisdomAI/saga-a2ui/pull/186)). Independent approval [5588900817](https://github.com/MachineWisdomAI/saga-a2ui/pull/186#pullrequestreview-5588900817) covers exact head `9ccd7f70b133c03418c4f2b6dd7851d738a85c83`; [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761155) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761231) passed.
+
+The five [SDK66 criteria](https://github.com/MachineWisdomAI/saga-a2ui/issues/66) map to the following accepted behavior:
+
+| Criterion | Accepted scope and evidence |
+| --- | --- |
+| Release inputs, records and supported validators | The implementation pins portable manifest schemas with source/license/digest attribution, records validator identities, and keeps the OpenAI authorization extension as an explicit portal handoff rather than silently accepting it under a closed schema. Official requirements were checked during independent review. |
+| Complete application and identity validation | Qualification reuses the existing packed starter build and listener, serves its actual built Lit resource, and records observed installed package versions separately from declarations. Build/resource correspondence, tool/resource definitions, assets and publisher/contributor attribution are checked. Declared endpoint name/version equality is bounded evidence, not proof of publisher or domain authority; unresolved deployment identity stays explicit. |
+| No-effect discovery and secret boundaries | Default discovery invokes no application tools; fixture invocation requires explicit opt-in. Sanitized output includes unexpected errors escaping assessment, with synthetic-token regressions covering stdout/stderr as well as artifacts. |
+| Readiness, determinism and interruption | Missing/invalid inputs, unavailable validators and truncated discovery prevent readiness. Contract metadata/instructions and validator changes invalidate affected freshness. Repeated unchanged inputs retain content digests. Directory identity checks preserve replacement user data and staged interruption tests prevent an apparently complete partial artifact. PNG structure and SVG XML validation reject malformed assets; unavailable XML validation remains unknown. |
+| Single optional CLI, preparation only | Commands reuse the existing parser and output-ownership safety. No deployment, directory submission, runtime extension implementation or package publication is performed. |
+
+Independent verification retained 81 passing publication/original-regression checks, then ran 18 affected checks for the final reporting/XML repairs. The final integration changed synchronized version values and prepared-version prose only; those accepted runtime checks were reused. The original broader run passed 137 of 139 cases; the two unrelated framework typechecks lacked adapters in the reused review dependency tree and were not represented as passing. Existing qualified framework evidence remains separate. No new host matrix or live application effects were needed for this preparation scope.
+
+CLI3 source acceptance is complete; SDK66 remains open until this lifecycle record is reviewed and merged. CLI4 and CLI5 retain their own acceptance criteria. Application-owner authority, authorized submission, platform review, actual listing installation and named-host evidence are not supplied by generating a ZIP or a ready preparation record.
 
 ## Proposed behavior
 
-An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. Command names and configuration remain design proposals.
+An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. The ChatGPT commands and release-input format are implemented by CLI3; Claude artifacts and resumable submission behavior below remain the approved remaining design.
 
 By default, checking reads local artifacts and performs read-only endpoint discovery. It does not invoke application tools, change remote state or fabricate host acceptance. Executing test cases requires an explicitly selected test fixture and authorized credentials. Preparation proceeds automatically through checks and generation; missing information produces specific findings without stopping unrelated preparation.
 
