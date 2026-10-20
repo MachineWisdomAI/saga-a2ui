@@ -6,6 +6,7 @@ import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import {
   ExportInterrupted,
   TemplateError,
+  createDirectoryInterruptibly,
   exportTemplate,
   exportTemplateInterruptibly,
   extractSnippets,
@@ -134,6 +135,34 @@ describe('exporting a starter', () => {
     }
     expect(fs.existsSync(target)).toBe(false);
     expect(writes).toBeLessThan(templateFiles(template).length);
+  });
+
+  it('creates a directory of any files through the same destination handling, and writes through nothing that exists', async () => {
+    const target = path.join(work, 'plain-files');
+    const files = [
+      { path: 'a.txt', content: () => 'a' },
+      { path: 'nested/b.bin', content: () => new Uint8Array([0, 255, 7]) },
+    ];
+
+    expect(await createDirectoryInterruptibly(target, files)).toBe(target);
+    expect(fs.readFileSync(path.join(target, 'a.txt'), 'utf8')).toBe('a');
+    expect([...fs.readFileSync(path.join(target, 'nested', 'b.bin'))]).toEqual([0, 255, 7]);
+
+    fs.symlinkSync(path.join(work, 'nowhere'), path.join(work, 'dangling-link'));
+    for (const taken of [target, path.join(work, 'dangling-link')]) {
+      await expect(createDirectoryInterruptibly(taken, files)).rejects.toThrow(/already exists/);
+    }
+    expect(fs.existsSync(path.join(work, 'nowhere'))).toBe(false);
+    expect(fs.readdirSync(target).sort()).toEqual(['a.txt', 'nested']);
+  });
+
+  it.each([['../outside.txt'], ['/etc/outside.txt'], ['nested/../../outside.txt']])('refuses the file path %s before creating anything', async (escaping) => {
+    const target = path.join(work, `escape-${escaping.replaceAll(/\W/g, '-')}`);
+
+    await expect(createDirectoryInterruptibly(target, [{ path: 'ok.txt', content: () => 'ok' }, { path: escaping, content: () => 'no' }])).rejects.toThrow(/not inside the new directory/);
+
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.existsSync(path.join(work, 'outside.txt'))).toBe(false);
   });
 
   it('rejects an SDK range other than "*" rather than rewriting it', () => {

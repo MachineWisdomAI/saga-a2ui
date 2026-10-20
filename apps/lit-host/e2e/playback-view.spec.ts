@@ -610,6 +610,7 @@ test.describe('revocation and expiry through the built player', () => {
       },
     });
     await host.open('ep-1');
+    await expect(button(host.view)).toBeVisible(); // open() resolves on the host notification, not the view's commit
 
     await page.keyboard.press('Tab');
     await expect(button(host.view)).toBeFocused();
