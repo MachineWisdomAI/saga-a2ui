@@ -1,12 +1,12 @@
-# saga a2ui
+<h1><img src="assets/brand/readme-banner.svg" alt="saga a2ui" width="100%"></h1>
 
 **Framework for building agentic apps with A2UI and MCP Apps.**
 
-Safe AGentic Apps — by [Machine Wisdom AI](https://machine-wisdom.ai).
+Safe AGentic Apps — by [Machine Wisdom AI](https://machine-wisdom.ai). An app built with saga a2ui is a Saga.
 
 [Quick start](#try-the-podcast-demo) · [Documentation](docs/getting-started.md) · [Blueprints](blueprints/README.md) · **[Adopters](ADOPTERS.md)** · [Contribute](CONTRIBUTING.md)
 
-Build an assistant application around your existing services: render A2UI interfaces, attach local and server actions, and carry verified request identity to the backend. Saga builds on Google's open [A2UI project](https://github.com/a2ui-project/a2ui); MCP Apps provides the integration with the assistant host. Your application owns its data, authentication and authorization.
+Build an assistant application around your existing services: render A2UI interfaces, attach local and server actions, and carry verified request identity to the backend. saga a2ui builds on Google's open [A2UI project](https://github.com/a2ui-project/a2ui); MCP Apps provides the integration with the assistant host. Your application owns its data, authentication and authorization.
 
 ## Try the podcast demo
 
@@ -26,12 +26,12 @@ Open the `Open the demo host page:` address printed by the server. This builds a
 
 **There is no public npm release yet.** The four-package release set (`core`, `components`, `mcp` and `react`) has versioned manifests prepared for publication; it has not been published. Lit remains a private candidate package. Source builds produce matched candidate tarballs. For your own application, follow [Getting started](docs/getting-started.md) to create a starter or [attach to an existing backend](docs/attach-to-existing-backend.md). Use the exact candidate dependency set, not registry install commands for unreleased packages.
 
-## What Saga provides
+## What saga a2ui provides
 
 | Responsibility | Owner |
 | --- | --- |
-| A2UI message validation, rendering integration, action binding and view lifecycle | Saga, building on upstream A2UI |
-| MCP Apps resources, server/view integration and explicit data-sharing controls | Saga |
+| A2UI message validation, rendering integration, action binding and view lifecycle | saga a2ui, building on upstream A2UI |
+| MCP Apps resources, server/view integration and explicit data-sharing controls | saga a2ui |
 | Account verification, domain permissions, backend calls and authoritative effects | Your application |
 | App presentation, tool routing and supported host APIs | The assistant host |
 
@@ -56,21 +56,22 @@ Host support depends on the flow. See [observed host behavior and remaining limi
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
 - [Public installation status](docs/public-install.md): what remains before a public package recipe exists.
 - [Blueprints](blueprints/README.md#find-a-design): architecture, contracts and their implementation status.
-- [Adopters](ADOPTERS.md): applications using Saga and their current status.
+- [Adopters](ADOPTERS.md): applications built with saga a2ui and their current status.
+- [Brand](docs/brand.md): names, logo files and how to use them.
 
-## Why I built Saga
+## Why I built saga a2ui
 
 *Younes Abouelnagah, founder of Machine Wisdom AI*
 
-Working on Headspace for Alexa+ inspired Saga. Getting the production integration working took attention away from the application itself, and the player remained bespoke. I wanted a reusable application foundation for the next team building inside an assistant. I chose A2UI for its UI structure, bindings and updates, with MCP Apps providing host integration.
+Working on Headspace for Alexa+ inspired saga a2ui. Getting the production integration working took attention away from the application itself, and the player remained bespoke. I wanted a reusable application foundation for the next team building inside an assistant. I chose A2UI for its UI structure, bindings and updates, with MCP Apps providing host integration.
 
 That work followed earlier Gmail Add-on and Apps Script experience, and five years as a Principal Engineer in Roblox Trust and Safety. Those experiences inform how I approach application behavior and its safety boundaries.
 
-Amazon has publicly named Headspace among the brands building Alexa+ experiences with MCP. [Amazon’s announcement](https://developer.amazon.com/zh/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences) describes that integration program; Headspace is not a Saga adopter or endorser.
+Amazon has publicly named Headspace among the brands building Alexa+ experiences with MCP. [Amazon’s announcement](https://developer.amazon.com/zh/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences) describes that integration program; Headspace is not a saga a2ui adopter or endorser.
 
 ## Machine Wisdom AI and community
 
-[Machine Wisdom AI](https://machine-wisdom.ai) maintains Saga and offers paid production AI engineering and architecture engagements. For help with a project, see the [current engagement options and contact form](https://machine-wisdom.ai). The company site describes availability; this repository makes no support-response commitment.
+[Machine Wisdom AI](https://machine-wisdom.ai) maintains saga a2ui and offers paid production AI engineering and architecture engagements. For help with a project, see the [current engagement options and contact form](https://machine-wisdom.ai). The company site describes availability; this repository makes no support-response commitment.
 
 We welcome small fixes, reproducible bug reports, application examples and improvements to the emerging A2UI and MCP Apps ecosystem. [Open an issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose) or read [Contributing](CONTRIBUTING.md). Report vulnerabilities through [Security](SECURITY.md).
 
