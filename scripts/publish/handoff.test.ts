@@ -344,6 +344,68 @@ describe('an uncertain submission', () => {
     expect(fs.readdirSync(path.join(cwd, 'handoff-made'))).toEqual([]);
   });
 
+  /**
+   * A signal that, when it is read after the event was staged and before it is linked, replaces the
+   * handoff path at that moment: the original is
+   * moved aside and the other directory holds a file of the same name as the staged temporary file.
+   */
+  const replacingAfterStaging = (cwd: string): AbortSignal => {
+    let done = false;
+    return {
+      get aborted(): boolean {
+        // Read earlier too, before anything is staged: act only once the temporary file exists.
+        const staged = done ? [] : fs.readdirSync(path.join(cwd, HANDOFF)).filter((name) => name.includes('.tmp-'));
+        if (staged.length > 0) {
+          done = true;
+          replaceHandoff(cwd, 'handoff-original');
+          fs.writeFileSync(path.join(cwd, HANDOFF, staged[0] as string), 'somebody else');
+        }
+        return false;
+      },
+    } as AbortSignal;
+  };
+
+  it('never cleans a replacement when the system names no open directory: a path replaced after staging is refused and a same-named file there stays', async () => {
+    const { s, out } = await begun();
+    const real = fs.existsSync;
+    const noProc = vi.spyOn(fs, 'existsSync').mockImplementation((target) => (String(target).startsWith('/proc/self/fd/') ? false : real(target)));
+    let run: Run;
+    try {
+      run = await s.run(['attempt', '--handoff', HANDOFF, '--prepared', out], { signal: replacingAfterStaging(s.cwd) });
+    } finally {
+      noProc.mockRestore();
+    }
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/handoff directory was replaced while this command was running, so nothing was recorded/);
+    expect(files(s.cwd).sort()).toEqual(expect.arrayContaining(['foreign.txt']));
+    expect(files(s.cwd)).toHaveLength(2);
+    const [other] = files(s.cwd).filter((name) => name !== 'foreign.txt');
+    expect(fs.readFileSync(path.join(s.cwd, HANDOFF, other as string), 'utf8')).toBe('somebody else');
+    expect(fs.readFileSync(path.join(s.cwd, HANDOFF, 'foreign.txt'), 'utf8')).toBe('not a record');
+    // No event anywhere; this command's own temporary file may stay in the directory that was moved, ignored.
+    expect(fs.readdirSync(path.join(s.cwd, 'handoff-original')).filter((name) => !name.startsWith('.'))).toEqual(['000001.json']);
+
+    fs.rmSync(path.join(s.cwd, HANDOFF), { recursive: true });
+    fs.renameSync(path.join(s.cwd, 'handoff-original'), path.join(s.cwd, HANDOFF));
+    expect((await statusOf(s)).code).toBe(0);
+    expect((await s.run(['attempt', '--handoff', HANDOFF, '--prepared', out])).code).toBe(0);
+    expect(types(s.cwd)).toEqual(['begin', 'submission-attempt']);
+  });
+
+  it.skipIf(!fs.existsSync('/proc/self/fd'))('cleans its own staged file through the open directory when the path was replaced after staging, and touches nothing at the path', async () => {
+    const { s, out } = await begun();
+    const run = await s.run(['attempt', '--handoff', HANDOFF, '--prepared', out], { signal: replacingAfterStaging(s.cwd) });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/handoff directory was replaced while this command was running, so nothing was recorded/);
+    expect(files(s.cwd)).toHaveLength(2);
+    const [other] = files(s.cwd).filter((name) => name !== 'foreign.txt');
+    expect(fs.readFileSync(path.join(s.cwd, HANDOFF, other as string), 'utf8')).toBe('somebody else');
+    // Through the open directory the command removed its own file from the directory that was moved.
+    expect(fs.readdirSync(path.join(s.cwd, 'handoff-original'))).toEqual(['000001.json']);
+  });
+
   it('is unaffected by the remains of an interrupted write, and refuses a record that was altered', async () => {
     const { s } = await begun();
     fs.writeFileSync(path.join(s.cwd, HANDOFF, '.000002.json.tmp-abc123'), '{"half":');

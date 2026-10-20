@@ -190,7 +190,10 @@ const OPEN_DIRECTORY = fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) |
  * directory is opened and compared with the identity the caller read (or made), and where the
  * system names an open directory (`/proc/self/fd`) staging, link and cleanup all go through that
  * handle, so a path replaced afterwards cannot receive the event. The path is compared again
- * before the staged event is linked, and a replacement is refused with nothing recorded.
+ * before the staged event is linked, and a replacement is refused with nothing recorded. Without
+ * such a name (macOS) the temporary file is removed only while its name still shows the file that
+ * was written, so a replacement is never cleaned; at worst this command's own ignored temporary
+ * file stays behind.
  */
 function appendEvent(directory: string, bound: fs.BigIntStats, previous: { readonly seq: number; readonly tipSha256: string | null }, body: EventBody, now: Date, signal: AbortSignal | undefined): void {
   let handle: number;
@@ -205,7 +208,14 @@ function appendEvent(directory: string, bound: fs.BigIntStats, previous: { reado
     const seq = previous.seq + 1;
     const event = { format: HANDOFF_FORMAT, seq, previousSha256: previous.tipSha256, recordedAt: now.toISOString(), ...body };
     const staged = path.join(through, `.${eventFile(seq)}.tmp-${randomBytes(6).toString('hex')}`);
-    fs.writeFileSync(staged, `${JSON.stringify(event, null, 2)}\n`, { flag: 'wx' });
+    const written = fs.openSync(staged, 'wx');
+    let ours: fs.BigIntStats;
+    try {
+      fs.writeFileSync(written, `${JSON.stringify(event, null, 2)}\n`);
+      ours = fs.fstatSync(written, { bigint: true });
+    } finally {
+      fs.closeSync(written);
+    }
     try {
       if (signal?.aborted) throw new Interrupted();
       if (!isDirectoryAt(directory, bound)) throw new Replaced();
@@ -216,11 +226,32 @@ function appendEvent(directory: string, bound: fs.BigIntStats, previous: { reado
         throw error;
       }
     } finally {
-      fs.rmSync(staged, { force: true });
+      removeStaged(staged, ours, through !== directory);
     }
   } finally {
     fs.closeSync(handle);
   }
+}
+
+/**
+ * Removes the temporary file this command staged, and only that file. Through the open directory
+ * (`/proc/self/fd`) the name cannot lead anywhere else. Through the path, the directory may have been
+ * renamed or replaced since the file was written, and the same name may now be somebody else's file:
+ * it is removed only while the name still shows the very file that was written. Where that cannot be
+ * shown the file is left behind; a leftover temporary file has a leading dot and is ignored.
+ */
+function removeStaged(staged: string, ours: fs.BigIntStats, throughHandle: boolean): void {
+  if (throughHandle) {
+    fs.rmSync(staged, { force: true });
+    return;
+  }
+  let named: fs.BigIntStats;
+  try {
+    named = fs.lstatSync(staged, { bigint: true });
+  } catch {
+    return;
+  }
+  if (named.isFile() && named.dev === ours.dev && named.ino === ours.ino) fs.rmSync(staged, { force: true });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -682,7 +713,7 @@ function failedAppend(error: unknown, io: HandoffIo, action: string): number {
     return EXIT_INTERRUPTED;
   }
   if (error instanceof Replaced) {
-    io.stderr(`saga publish handoff ${action}: the handoff directory was replaced while this command was running, so nothing was recorded and nothing in the directory now at that path was changed. Read the record with \`handoff status\` and decide again.\n`);
+    io.stderr(`saga publish handoff ${action}: the handoff directory was replaced while this command was running, so nothing was recorded and no file in the directory now at that path was changed or removed. Read the record with \`handoff status\` and decide again.\n`);
     return EXIT_REFUSED;
   }
   if (error instanceof Raced) {

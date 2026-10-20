@@ -203,7 +203,9 @@ is refused: an event is created whole with a hard link, which fails when its num
 lost or doubled, and an interrupt before the link leaves no event (a leftover temporary file, named with a
 leading dot, is ignored). An event is also written only into the directory that was read: the command holds that
 directory by its identity, and a path replaced or renamed under it is refused with nothing recorded and
-nothing changed in the directory now at the path. A record that was altered, has a missing event or holds other files is refused and
+nothing changed or removed in the directory now at the path. Where the system names no open directory (macOS),
+the command's temporary file is removed only while its name still shows the file it wrote; after a replacement
+it can stay behind, in the directory that was moved, as an ignored dot-file. A record that was altered, has a missing event or holds other files is refused and
 never repaired.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
