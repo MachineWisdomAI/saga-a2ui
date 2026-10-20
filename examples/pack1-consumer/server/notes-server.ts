@@ -49,10 +49,11 @@ export class ViewArtifactMissing extends Error {
   }
 }
 
-const VIEW_ROOT = '<notes-app';
+// The status line every notes page carries, whichever renderer built it.
+const VIEW_MARKER = 'data-testid="view-status"';
 
 function requireViewArtifact(html: unknown): string {
-  if (typeof html !== 'string' || !html.includes(VIEW_ROOT)) throw new ViewArtifactMissing();
+  if (typeof html !== 'string' || !html.includes(VIEW_MARKER)) throw new ViewArtifactMissing();
   return html;
 }
 

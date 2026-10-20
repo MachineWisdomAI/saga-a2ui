@@ -3,6 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { PACK1_CONSUMERS } from './build-pack1-consumers.js';
 import { externalImportsOf, classifyModules } from './build-installed-lit-host.js';
 import {
   buildConsumerFromConfig,
@@ -88,9 +89,9 @@ export function prepareDemo(work: string): PreparedDemo {
       filter: (from) => notDependencies(from) && !isTest(from),
     });
   }
-  // The example's own-catalog consumer: the card consumer and the file that uses the optional component stay out.
+  // The example's own-catalog consumer: the card consumer, the file that uses the optional component and the React consumer stay out.
   const example = path.join(root, 'examples', 'pack1-consumer');
-  const skipped = ['card.html', 'src/main-card.ts'].map((file) => path.join(repoRoot, 'examples', 'pack1-consumer', file));
+  const skipped = PACK1_CONSUMERS.own.leaveOut.map((file) => path.join(repoRoot, 'examples', 'pack1-consumer', file));
   fs.cpSync(path.join(repoRoot, 'examples', 'pack1-consumer'), example, { recursive: true, filter: (from) => notDependencies(from) && !skipped.includes(from) });
 
   const exported = exportTemplate(templateDirectory(DEMO_TEMPLATE), path.join(root, 'templates', DEMO_TEMPLATE), { sdkVersion: sdk.version });

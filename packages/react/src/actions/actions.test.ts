@@ -23,6 +23,7 @@ import {
   type ReactNode,
 } from 'react';
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActionButton, type ActionButtonActivation, type ActionButtonEvents } from './action-button.js';
 import { columnHooks, mount, openSession, SURFACE_ID, surfaceView, type Mounted, type Session } from './fixture.test-support.js';
@@ -416,6 +417,55 @@ describe('teardown', () => {
     expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([true, true, true]);
     expect(() => captured?.getById('mark-a', ActionButton)).toThrow(/has ended/);
     expect(() => captured?.watchById('mark-a', ActionButton, () => undefined)).toThrow(/has ended/);
+  });
+});
+
+describe('teardown between a commit’s layout and passive effects', () => {
+  it('an unmount queued after the commit that opened the controls retires every instance and binding that commit left', async () => {
+    // Outside `act`, React commits in one task and runs that commit's passive effects in a later
+    // one. The Column's layout effect runs after its children's, i.e. after the controls' instances
+    // opened; the unmount is queued from there, so it lands before the commit's passive effects.
+    // React runs a pending passive effect before it processes the next update, so on 19.3.1 the
+    // setup still discovers and binds the instances, and the unmount then disposes those bindings.
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    log.length = 0;
+    const session = openSession();
+    sessions.push(session);
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const seen = recorder();
+    const errors: unknown[] = [];
+
+    let queued = false;
+    columnHooks.afterLayout = () => {
+      if (queued || container.querySelector('button') === null) return;
+      queued = true;
+      queueMicrotask(() => root.unmount());
+    };
+    try {
+      root.render(
+        surfaceView({
+          surface: session.surface,
+          setup: (setupView) => setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a'))),
+          onSetupError: (error) => void errors.push(error),
+        }),
+      );
+      await vi.waitFor(() => expect(container.querySelector('button')).toBeNull(), { timeout: 2_000 });
+      // Let any passive effect React still held run before judging what is left.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      columnHooks.afterLayout = undefined;
+      container.remove();
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    }
+
+    expect(queued).toBe(true);
+    expect(errors).toEqual([]);
+    // Whatever was bound before the unmount took effect is disposed, and nothing can bind again.
+    expect(seen.bindings.filter((binding) => binding.state.phase !== 'disposed')).toEqual([]);
+    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual(seen.delivered.map(() => true));
+    expect(log).toEqual([]);
   });
 });
 
