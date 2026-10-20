@@ -9,8 +9,10 @@ import {
   bundleConsumerServer,
   createWorkDirectory,
   installPackedSdk,
+  installPackedTarballs,
   linkDeclaredDependencies,
   repoRoot,
+  type PackedPackage,
   type PackedSdk,
   type SdkPackage,
 } from './packed-consumer.js';
@@ -67,12 +69,24 @@ export interface PreparedPack1 {
 }
 
 /** Copies the source for one consumer into `work` and installs exactly that consumer's packed SDK packages beside it. */
-export function preparePack1Consumer(work: string, name: Pack1Consumer): PreparedPack1 {
+export function preparePack1Consumer(work: string, name: Pack1Consumer, candidate?: readonly PackedPackage[]): PreparedPack1 {
   const recipe = PACK1_CONSUMERS[name];
   const consumer = path.join(work, 'consumer');
   const skipped = new Set(recipe.leaveOut.map((file) => path.join(pack1Source, file)));
   fs.cpSync(pack1Source, consumer, { recursive: true, filter: (from) => !from.includes('node_modules') && !skipped.has(from) });
-  const sdk = installPackedSdk(work, consumer, recipe.packages);
+  // Without a chosen candidate the packages are packed from this tree; with one (an update or a
+  // rollback), exactly that candidate's tarballs for this consumer are installed.
+  const sdk =
+    candidate === undefined
+      ? installPackedSdk(work, consumer, recipe.packages)
+      : installPackedTarballs(
+          consumer,
+          recipe.packages.map((package_) => {
+            const one = candidate.find((packed) => packed.name === package_);
+            if (one === undefined) throw new Error(`The candidate has no @saga-a2ui/${package_}, which the ${name} consumer installs.`);
+            return one;
+          }),
+        );
   linkDeclaredDependencies(consumer, sdk, PACK1_OWN_DEPENDENCIES);
   return { consumer, sdk, recipe };
 }
@@ -86,11 +100,20 @@ export interface Pack1ConsumerIdentity {
   readonly builtServer: { readonly path: string; readonly sha256: string };
 }
 
+export interface BuildPack1Options {
+  /** Install this candidate's tarballs instead of packing the tree (see `preparePack1Consumer`). */
+  readonly candidate?: readonly PackedPackage[];
+  /** Called with the installed consumer before anything is built, so a caller can refuse a set it does not accept. */
+  readonly beforeBuild?: (prepared: PreparedPack1) => void;
+}
+
 /** Builds one consumer into `outDir`: its page and its server. Each consumer gets a work directory of its own. */
-export async function buildPack1Consumer(name: Pack1Consumer, outDir: string): Promise<Pack1ConsumerIdentity> {
+export async function buildPack1Consumer(name: Pack1Consumer, outDir: string, options: BuildPack1Options = {}): Promise<Pack1ConsumerIdentity> {
   const work = createWorkDirectory(`saga-pack1-${name}-`);
   try {
-    const { consumer, sdk, recipe } = preparePack1Consumer(work, name);
+    const prepared = preparePack1Consumer(work, name, options.candidate);
+    options.beforeBuild?.(prepared);
+    const { consumer, sdk, recipe } = prepared;
     fs.rmSync(outDir, { recursive: true, force: true });
     await buildConsumerApplication(consumer, outDir, [viteSingleFile()], { page: recipe.page });
     const server = await bundleConsumerServer(consumer, 'server/index.ts');

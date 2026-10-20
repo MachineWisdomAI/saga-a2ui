@@ -27,7 +27,8 @@ import {
 //
 //   npm run build                                  # builds the consumers whose identities are checked
 //   npm run candidate:pack -- --out DIR            # DIR/candidate.json, DIR/CANDIDATE.md, DIR/packages/*.tgz
-//   npm run candidate:verify -- --candidate DIR/candidate.json --modules PATH/node_modules [--page FILE --combination own|card]
+//   npm run candidate:verify -- --candidate DIR/candidate.json --modules PATH/node_modules --combination own|card [--page FILE]
+//   npm run candidate:rehearse -- --candidate DIR/candidate.json   # install, update and roll back as built applications (candidate-rehearsal.ts)
 
 export const SDK_PACKAGES: readonly SdkPackage[] = ['core', 'lit', 'components', 'mcp', 'react'];
 
@@ -35,7 +36,16 @@ export const SDK_PACKAGES: readonly SdkPackage[] = ['core', 'lit', 'components',
 // Checking an installed set against a candidate
 // ---------------------------------------------------------------------------------------------
 
-export type FindingCode = 'version-mismatch' | 'range-mismatch' | 'missing-dependency' | 'not-in-candidate' | 'resource-mismatch' | 'unreadable-package' | 'floor-missing';
+export type FindingCode =
+  | 'version-mismatch'
+  | 'range-mismatch'
+  | 'missing-dependency'
+  | 'missing-package'
+  | 'modules-missing'
+  | 'not-in-candidate'
+  | 'resource-mismatch'
+  | 'unreadable-package'
+  | 'floor-missing';
 
 /** One reason an installed set is not the candidate, with the repair a maintainer can act on. */
 export interface Finding {
@@ -64,14 +74,37 @@ function reinstall(expected: ExpectedCombination, name: string): string {
 /**
  * Compares the `@saga-a2ui/*` packages installed under `modulesDirectory` with a candidate. An
  * installed set is the candidate only when every package carries the candidate version, names only
- * siblings at that version and has the siblings it requires. Anything else is reported before the
- * application serves a view or renders data from a mixed set, with the tarball to reinstall.
+ * siblings at that version, has the siblings it requires and contains every package in `required`
+ * (the claimed combination's package set; every package of the candidate when not given, so an
+ * incomplete set is never accepted by omission). Anything else is reported before the application
+ * serves a view or renders data from a mixed set, with the tarball to reinstall.
  */
-export function checkInstalledCombination(modulesDirectory: string, expected: ExpectedCombination): Finding[] {
+export function checkInstalledCombination(modulesDirectory: string, expected: ExpectedCombination, required: readonly string[] = Object.keys(expected.packages)): Finding[] {
   const scope = path.join(modulesDirectory, '@saga-a2ui');
   const installed = fs.existsSync(scope) ? fs.readdirSync(scope).sort() : [];
+  if (installed.length === 0) {
+    return [
+      {
+        code: 'modules-missing',
+        expected: scope,
+        guidance: `No @saga-a2ui package is installed at ${scope}${fs.existsSync(modulesDirectory) ? '' : ` (${modulesDirectory} does not exist)`}. Point --modules at the node_modules directory of the application, or install the candidate's tarballs there first (${required.map((name) => expected.packages[name]?.tarball ?? `@saga-a2ui/${name}`).join(', ')}). ${AFTER_REINSTALL}`,
+      },
+    ];
+  }
   const findings: Finding[] = [];
   const present = new Set(installed);
+  for (const name of required) {
+    if (present.has(name)) continue;
+    findings.push({
+      code: 'missing-package',
+      package: name,
+      expected: expected.version,
+      guidance:
+        expected.packages[name] === undefined
+          ? `The combination requires @saga-a2ui/${name}, which candidate ${expected.version} does not contain; the candidate record and the combination disagree.`
+          : `@saga-a2ui/${name} is part of this combination but is not installed. ${reinstall(expected, name)}`,
+    });
+  }
   for (const name of installed) {
     let manifest: PackedManifest & { version?: string };
     try {
@@ -129,7 +162,7 @@ export interface CarriedCase {
   readonly obligation: string;
 }
 
-const PACK1_SPEC = 'apps/lit-host/e2e/pack1-consumers.spec.ts';
+export const PACK1_SPEC = 'apps/lit-host/e2e/pack1-consumers.spec.ts';
 const LISTENER_TEST = 'scripts/installed-listener.test.ts';
 
 /**
@@ -593,6 +626,57 @@ function expectedFrom(record: { version: string; packages: { name: string; tarba
   return { version: record.version, packages: Object.fromEntries(record.packages.map((one) => [one.name.replace('@saga-a2ui/', ''), { tarball: one.tarball, sha256: one.sha256 }])) };
 }
 
+const USAGE = 'usage: release-candidate.ts pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
+
+interface VerifiedRecord {
+  readonly version: string;
+  readonly packages: { name: string; tarball: string; sha256: string }[];
+  readonly combinations: CombinationRecord[];
+  readonly carriedEvidence?: { cases?: { file: string; title: string }[] };
+}
+
+/** The combination a maintainer names: `own` and `card` are the notes application's, anything else must be an exact id. */
+export function resolveCombination(record: Pick<VerifiedRecord, 'combinations'>, selector: string): CombinationRecord {
+  const found = record.combinations.find((one) => one.id === selector || one.id === `notes-${selector}`);
+  if (found === undefined) throw new Error(`The candidate has no combination "${selector}". It records: ${record.combinations.map((one) => one.id).join(', ')}.`);
+  return found;
+}
+
+export interface VerifyOutcome {
+  readonly exitCode: number;
+  readonly summary: string;
+  readonly errors: readonly string[];
+}
+
+/**
+ * `candidate:verify`: whether the installed set under `--modules` is the claimed combination of the
+ * candidate in `--candidate`. The combination is named (`--combination`), and its recorded package set
+ * must be installed, at the candidate version, beside the siblings they require; an optional package
+ * the combination does not record (for example the FaithfulCard components under `own`) is not
+ * required. A usage problem (no such combination, an unreadable record) is exit 2.
+ */
+export function verifyCommand(argv: readonly string[]): VerifyOutcome {
+  try {
+    const record = readJson<VerifiedRecord>(path.resolve(required(argv, '--candidate')));
+    const combination = resolveCombination(record, required(argv, '--combination'));
+    const findings = checkInstalledCombination(path.resolve(required(argv, '--modules')), expectedFrom(record), combination.packages);
+    findings.push(...floorFindings(record));
+    const page = option(argv, '--page');
+    if (page !== undefined) {
+      const [resource, ...others] = combination.resources;
+      if (resource === undefined || others.length > 0) throw new Error(`--page compares one built view, and ${combination.id} records ${combination.resources.length}; check its views with their own builds.`);
+      findings.push(...checkPagePairing(fs.readFileSync(path.resolve(page)), resource.uri));
+    }
+    return {
+      exitCode: findings.length === 0 ? 0 : 1,
+      summary: findings.length === 0 ? `installed set matches candidate ${record.version} (${combination.id}: ${combination.packages.join(', ')})` : `${findings.length} mismatch(es) against candidate ${record.version} (${combination.id})`,
+      errors: findings.map((finding) => `${finding.code}${finding.package ? ` @saga-a2ui/${finding.package}` : ''}: ${finding.guidance}`),
+    };
+  } catch (error) {
+    return { exitCode: 2, summary: USAGE, errors: [error instanceof Error ? error.message : String(error)] };
+  }
+}
+
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
   if (command === 'pack') {
@@ -607,23 +691,12 @@ function main(argv: string[]): number {
     return 0;
   }
   if (command === 'verify') {
-    const candidatePath = path.resolve(required(rest, '--candidate'));
-    const record = readJson<{ version: string; packages: { name: string; tarball: string; sha256: string }[]; combinations: CombinationRecord[]; carriedEvidence?: { cases?: { file: string; title: string }[] } }>(candidatePath);
-    const findings = checkInstalledCombination(path.resolve(required(rest, '--modules')), expectedFrom(record));
-    findings.push(...floorFindings(record));
-    const page = option(rest, '--page');
-    if (page !== undefined) {
-      const id = required(rest, '--combination');
-      const combination = record.combinations.find((one) => one.id === `notes-${id}`);
-      const uri = combination?.resources[0]?.uri;
-      if (uri === undefined) throw new Error(`The candidate has no combination notes-${id}.`);
-      findings.push(...checkPagePairing(fs.readFileSync(path.resolve(page)), uri));
-    }
-    for (const finding of findings) console.error(`${finding.code}${finding.package ? ` @saga-a2ui/${finding.package}` : ''}: ${finding.guidance}`);
-    console.log(findings.length === 0 ? `installed set matches candidate ${record.version}` : `${findings.length} mismatch(es) against candidate ${record.version}`);
-    return findings.length === 0 ? 0 : 1;
+    const result = verifyCommand(rest);
+    for (const line of result.errors) console.error(line);
+    console.log(result.summary);
+    return result.exitCode;
   }
-  console.error('usage: release-candidate.ts pack --out DIR | verify --candidate FILE --modules DIR [--page FILE --combination own|card]');
+  console.error(USAGE);
   return 2;
 }
 

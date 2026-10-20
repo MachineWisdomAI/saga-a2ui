@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +16,7 @@ import {
   resolvedExclusions,
   type ExpectedCombination,
 } from './release-candidate.js';
-import { CANDIDATE_REGISTRY, candidateManifest, candidateVersion, createWorkDirectory, packSdkPackages, unpackIntoConsumer, type PackedPackage } from './packed-consumer.js';
+import { CANDIDATE_REGISTRY, candidateManifest, candidateVersion, createWorkDirectory, packSdkPackages, repoRoot, unpackIntoConsumer, type PackedPackage } from './packed-consumer.js';
 
 // PACK2: what a release candidate is, what it refuses, and how an installed set is updated and
 // restored. Everything is local and offline: the tarballs are real `npm pack` output, but nothing is
@@ -125,10 +126,28 @@ describe('packed candidates', () => {
       expect(checkInstalledCombination(modules(consumer), expectation(a))).toEqual([]);
     });
 
-    it('is the candidate without the optional components package', () => {
+    it('is the candidate without the optional components package, when the combination does not include it', () => {
       const consumer = path.join(work, 'own-catalog');
       install(consumer, a, ['core', 'lit', 'mcp']);
-      expect(checkInstalledCombination(modules(consumer), expectation(a))).toEqual([]);
+      expect(checkInstalledCombination(modules(consumer), expectation(a), ['core', 'lit', 'mcp'])).toEqual([]);
+    });
+
+    it('is incomplete, and says which package to reinstall, when a package the combination requires is absent', () => {
+      const consumer = path.join(work, 'no-components');
+      install(consumer, a, ['core', 'lit', 'mcp']);
+      const findings = checkInstalledCombination(modules(consumer), expectation(a), ['core', 'lit', 'components', 'mcp']);
+      expect(findings.map((finding) => `${finding.code}:${finding.package}`)).toEqual(['missing-package:components']);
+      expect(findings[0]?.guidance).toContain(path.basename(named(a, 'components').tarball));
+      // With no combination named, the whole candidate is required: a set is never accepted by omission.
+      expect(checkInstalledCombination(modules(consumer), expectation(a)).map((finding) => finding.package)).toEqual(['components', 'react']);
+    });
+
+    it('reports a modules location that does not exist or holds no SDK package, with where to install', () => {
+      const missing = checkInstalledCombination(path.join(work, 'nowhere', 'node_modules'), expectation(a), ['core']);
+      expect(missing.map((finding) => finding.code)).toEqual(['modules-missing']);
+      expect(missing[0]?.guidance).toMatch(/does not exist.*--modules.*install the candidate's tarballs/);
+      fs.mkdirSync(path.join(work, 'empty', 'node_modules', '@saga-a2ui'), { recursive: true });
+      expect(checkInstalledCombination(path.join(work, 'empty', 'node_modules'), expectation(a), ['core']).map((finding) => finding.code)).toEqual(['modules-missing']);
     });
 
     it('updates as one complete set, and a half-updated set is reported with the tarball to reinstall', () => {
@@ -167,7 +186,7 @@ describe('packed candidates', () => {
     it('reports a missing sibling the installed package requires, but not an absent optional peer', () => {
       const consumer = path.join(work, 'missing');
       install(consumer, a, ['lit', 'components']);
-      const findings = checkInstalledCombination(modules(consumer), expectation(a));
+      const findings = checkInstalledCombination(modules(consumer), expectation(a), ['lit', 'components']);
       expect(findings.map((finding) => `${finding.code}:${finding.package}:${finding.expected}`).sort()).toEqual(['missing-dependency:components:@saga-a2ui/core', 'missing-dependency:lit:@saga-a2ui/core']);
       expect(findings[0]?.guidance).toContain(path.basename(named(a, 'core').tarball));
     });
@@ -178,8 +197,73 @@ describe('packed candidates', () => {
       fs.mkdirSync(path.join(modules(consumer), '@saga-a2ui', 'lynx'), { recursive: true });
       fs.writeFileSync(path.join(modules(consumer), '@saga-a2ui', 'lynx', 'package.json'), '{}');
       fs.mkdirSync(path.join(modules(consumer), '@saga-a2ui', 'mcp'), { recursive: true });
-      const findings = checkInstalledCombination(modules(consumer), expectation(a));
+      const findings = checkInstalledCombination(modules(consumer), expectation(a), ['core']);
       expect(findings.map((finding) => `${finding.code}:${finding.package}`).sort()).toEqual(['not-in-candidate:lynx', 'unreadable-package:mcp']);
+    });
+  });
+
+  // The command a maintainer runs, through its real entry point: argument parsing, the combination
+  // it names, the findings it prints and the exit code a script would act on.
+  describe('candidate:verify', () => {
+    const tsx = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
+    const record = (packed: readonly PackedPackage[]) => ({
+      version: packed[0]!.version,
+      packages: packed.map((one) => ({ name: `@saga-a2ui/${one.name}`, tarball: path.basename(one.tarball), sha256: one.sha256 })),
+      combinations: [
+        { id: 'notes-own', packages: ['core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://sha256/own.html' }] },
+        { id: 'notes-card', packages: ['components', 'core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://sha256/card.html' }] },
+      ],
+      carriedEvidence: { cases: CARRIED_CASES.map(({ file, title }) => ({ file, title })) },
+    });
+    const run = (...args: string[]) => {
+      const result = spawnSync(tsx, [path.join(repoRoot, 'scripts', 'release-candidate.ts'), 'verify', ...args], { encoding: 'utf8' });
+      return { code: result.status, out: result.stdout, err: result.stderr };
+    };
+    const candidateFile = (): string => {
+      const file = path.join(work, 'verify-candidate.json');
+      fs.writeFileSync(file, JSON.stringify(record(a)));
+      return file;
+    };
+
+    it('accepts the installed set that is exactly the named combination, without the optional package for own', () => {
+      const consumer = path.join(work, 'cli-own');
+      install(consumer, a, ['core', 'lit', 'mcp']);
+      const result = run('--candidate', candidateFile(), '--modules', modules(consumer), '--combination', 'own');
+      expect(result).toMatchObject({ code: 0, err: '' });
+      expect(result.out).toContain(`installed set matches candidate ${VERSION_A}`);
+    });
+
+    it('refuses an incomplete set for the card combination, whichever page is passed', () => {
+      const consumer = path.join(work, 'cli-incomplete');
+      install(consumer, a, ['core', 'lit', 'mcp']);
+      const page = path.join(work, 'cli-card.html');
+      fs.writeFileSync(page, '<card-app></card-app>');
+      const result = run('--candidate', candidateFile(), '--modules', modules(consumer), '--combination', 'card', '--page', page);
+      expect(result.code).toBe(1);
+      expect(result.out).not.toContain('matches candidate');
+      expect(result.err).toMatch(/missing-package @saga-a2ui\/components: .*not installed.*Reinstall @saga-a2ui\/components from candidate tarball saga-a2ui-components-/);
+      // The page is reported too, rather than being the only thing checked.
+      expect(result.err).toMatch(/resource-mismatch/);
+    });
+
+    it('refuses a modules location that does not exist or holds no SDK package, and says where to install', () => {
+      const nowhere = run('--candidate', candidateFile(), '--modules', path.join(work, 'no-such', 'node_modules'), '--combination', 'own');
+      expect(nowhere.code).toBe(1);
+      expect(nowhere.out).not.toContain('matches candidate');
+      expect(nowhere.err).toMatch(/modules-missing: No @saga-a2ui package is installed .*does not exist.*--modules/);
+      fs.mkdirSync(path.join(work, 'cli-empty', 'node_modules'), { recursive: true });
+      expect(run('--candidate', candidateFile(), '--modules', modules(path.join(work, 'cli-empty')), '--combination', 'own').code).toBe(1);
+    });
+
+    it('does not guess a combination: a missing or unknown one is a usage error that lists what the candidate records', () => {
+      const consumer = path.join(work, 'cli-usage');
+      install(consumer, a, ['core', 'lit', 'mcp']);
+      const none = run('--candidate', candidateFile(), '--modules', modules(consumer));
+      expect(none).toMatchObject({ code: 2 });
+      expect(none.err).toMatch(/--combination is required/);
+      const unknown = run('--candidate', candidateFile(), '--modules', modules(consumer), '--combination', 'react');
+      expect(unknown.code).toBe(2);
+      expect(unknown.err).toMatch(/no combination "react".*notes-own, notes-card/);
     });
   });
 

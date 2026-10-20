@@ -175,8 +175,13 @@ export function unpackIntoConsumer(consumer: string, packed: PackedPackage): voi
  */
 export function installPackedSdk(work: string, consumer: string, packages: readonly SdkPackage[]): PackedSdk {
   const { commit, dirty } = sourceRevision();
-  const version = candidateVersion(commit, dirty);
-  const packed = packSdkPackages(work, packages, work, version);
+  return installPackedTarballs(consumer, packSdkPackages(work, packages, work, candidateVersion(commit, dirty)));
+}
+
+/** Unpacks already packed candidate artifacts as the installed dependencies of `consumer` (an update or a rollback installs a chosen set this way). */
+export function installPackedTarballs(consumer: string, packed: readonly PackedPackage[]): PackedSdk {
+  const version = packed[0]?.version;
+  if (version === undefined) throw new Error('Installing a candidate needs packages.');
   const manifests: Record<string, PackedManifest> = {};
   const files: Record<string, string[]> = {};
   const tarballSha256: Record<string, string> = {};

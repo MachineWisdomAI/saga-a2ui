@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Client } from '@modelcontextprotocol/client';
 import type { AuthInfo } from '@modelcontextprotocol/server';
@@ -51,9 +52,13 @@ interface Environment {
   readonly server: ServerModule;
 }
 
+// The candidate rehearsal (scripts/candidate-rehearsal.ts) points SAGA_PACK1_DIR at the consumers it
+// rebuilt for one stage of an install, update or rollback; otherwise these are the PACK1 build.
+const pack1Dist = process.env.SAGA_PACK1_DIR === undefined ? new URL('../dist/pack1/', import.meta.url) : pathToFileURL(`${resolve(process.env.SAGA_PACK1_DIR)}/`);
+
 for (const consumer of ['own', 'card'] as const) {
-  const page_ = new URL(`../dist/pack1/${consumer}/${consumer}.html`, import.meta.url);
-  const server_ = new URL(`../dist/pack1/${consumer}/server.mjs`, import.meta.url);
+  const page_ = new URL(`${consumer}/${consumer}.html`, pack1Dist);
+  const server_ = new URL(`${consumer}/server.mjs`, pack1Dist);
 
   test.describe(`${consumer} consumer, installed from packed artifacts`, () => {
     let server: ServerModule;

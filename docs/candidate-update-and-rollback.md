@@ -12,6 +12,7 @@ This guide is for a maintainer who prepares, updates to, or restores a **candida
 | `candidate.json` | The machine-readable record: versions, tarball digests, files, exports, exclusions, combinations, recipe, install results, the carried checks |
 | `CANDIDATE.md` | The same record for a maintainer to read |
 | `consumer-package-lock.json` | The lockfile of the clean-directory `npm install` of those tarballs: the resolved third-party tree |
+| `rehearsal.json` (and a section of `CANDIDATE.md`) | Written by the next CI step, `npm run candidate:rehearse -- --candidate candidate-out/candidate.json`: the installed-application rehearsal of an install, an update and a rollback (below) |
 
 The tarball digests, the built views and servers, and the consumer installs are tied together: `candidate:pack` fails unless every consumer build in `apps/lit-host/dist*` was installed from exactly these tarballs, at this revision.
 
@@ -27,7 +28,7 @@ The tarball digests, the built views and servers, and the consumer installs are 
 
 **Application overrides.** An application must carry `"overrides": { "@a2ui/markdown-it": "0.2.1" }` in its own `package.json`. Without it a fresh install resolves `@a2ui/markdown-it` 0.2.2, whose peer `@a2ui/web_core ^0.14.0` conflicts with the pinned 0.13.0, and npm stops with ERESOLVE. npm honors overrides of the root project only, so a package cannot carry this for its consumers. `candidate:pack` installs with the overrides taken from the workspace root, and `candidate.json` records them. Whether the packages should declare `@a2ui/markdown-it` themselves so that no override is needed is an open packaging decision for the owner; it would change the manifests, and this candidate does not.
 
-**Predecessor.** This is the first candidate. No SAGA package has been published, so there is no earlier release and no upgrade from a release was tested. The update and rollback sequence below is rehearsed between two *candidate* builds only (`scripts/release-candidate.test.ts` packs two builds, installs one, updates to the other, and restores the first byte for byte). The preceding accepted evidence is PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21), [#154](https://github.com/MachineWisdomAI/saga-a2ui/issues/154)); its consumers and checks are carried, not redone.
+**Predecessor.** This is the first candidate. No SAGA package has been published, so there is no earlier release and no upgrade from a release was tested. The update and rollback sequence below is rehearsed between two *candidate* builds only: `scripts/release-candidate.test.ts` packs two builds, installs one, updates to the other and restores the first byte for byte, and `npm run candidate:rehearse` (see [the rehearsal](#update-and-rollback-rehearsal)) installs, updates and restores them as built applications. The preceding accepted evidence is PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21), [#154](https://github.com/MachineWisdomAI/saga-a2ui/issues/154)); its consumers and checks are carried, not redone.
 
 ## Package contents and boundaries
 
@@ -55,7 +56,7 @@ Update every SDK package of the combination together. Do not update one package 
 
 1. Read the new `CANDIDATE.md`: version, tarballs, the resource digests and the carried checks. Confirm the recipe (Node, npm, overrides) matches your build.
 2. Install all the tarballs you use, from the same candidate, in one command (`npm install ./candidate/packages/saga-a2ui-core-….tgz ./…lit….tgz …`): each pins its siblings to the exact candidate version, which npm can satisfy only from the tarballs named beside it. Keep the `@a2ui/markdown-it` override in place and commit the lockfile.
-3. Check the installed set: `npm run candidate:verify -- --candidate candidate/candidate.json --modules PATH/node_modules`. Any mismatch is reported with the tarball to reinstall.
+3. Check the installed set: `npm run candidate:verify -- --candidate candidate/candidate.json --modules PATH/node_modules --combination own` (or `card`). The named combination's recorded packages must all be installed at the candidate version: for `own` that is `core`, `lit` and `mcp` (the optional `components` package is not required), for `card` it adds `components`. A missing package, a mismatched one, or a `--modules` location that does not exist or holds no `@saga-a2ui` package is reported with the tarball to reinstall, and the command exits 1; a missing or unknown `--combination` is a usage error (exit 2).
 4. Rebuild the view from that install (not from a cached build). With `--page FILE --combination own|card` the same command compares the example's built page with the recorded resource.
 5. Restart the server so it serves the rebuilt view; its tool result names the view by digest, so a host that kept the old view is pointed at the new one. Pair the server and resource: never run a server of one build with a view of another.
 6. Run the carried checks against the new combination (below), then refresh the tested host and repeat its observation if the contract you rely on changed.
@@ -67,8 +68,8 @@ If steps 3 to 5 are skipped, a view that meets a result it does not understand s
 Rollback restores a complete, previously tested combination: all the packages, the view built from them and the server that serves it. Never roll back one package.
 
 1. Pick a candidate record (`candidate.json`) from CI whose carried checks you accept.
-2. Run `candidate:verify -- --candidate OLD/candidate.json --modules …` first. Besides the set, it checks that the record lists every check this tree requires. A record that predates one (for example per-request authorization, or the late-result checks) is reported as `floor-missing`: restoring it would silently undo that fix. Choose a later candidate, or re-qualify the old one with the current checks.
-3. Reinstall its tarballs, rebuild the view, restart the server, run the carried checks, refresh the host. Reinstalling an earlier candidate restores its package manifests byte for byte (tested). Rebuilding the view from the same sources and lockfile should restore its digest; `candidate:verify --page` confirms it against the old record.
+2. Run `candidate:verify -- --candidate OLD/candidate.json --modules … --combination own|card` first. Besides the set, it checks that the record lists every check this tree requires. A record that predates one (for example per-request authorization, or the late-result checks) is reported as `floor-missing`: restoring it would silently undo that fix. Choose a later candidate, or re-qualify the old one with the current checks.
+3. Reinstall its tarballs, rebuild the view, restart the server, run the carried checks, refresh the host. Reinstalling an earlier candidate restores its package manifests byte for byte (tested). Rebuilding the view from the same sources and lockfile restores its digest (the rehearsal shows it); `candidate:verify --page` confirms it against the old record. A built server bundle names its scratch build directory in its region comments, so its raw digest differs between two builds of one install; the rehearsal compares it with that name normalized.
 4. Keep any authorization fix that landed in your application code or configuration; an SDK rollback does not touch it.
 
 ## Carried checks
@@ -80,6 +81,22 @@ Each claimed combination passes the same behavior, and a claim is only as old as
 - `scripts/installed-listener.test.ts` and `apps/lit-host/e2e/installed-listener.spec.ts`: the installed browse and Play listener and player.
 
 `candidate.json` lists these cases by file and exact title (`carriedEvidence.cases`) with the SHA-256 of each file, and a headless test fails if a listed title no longer exists, so a combination is never claimed on a renamed or removed check. An obsolete handler-name scheme cannot satisfy them: a resource whose actions are not bound to the pressed instance fails the two-row, item-change and disposal cases (README, PACK2 section, lists the mutations run).
+
+Listing a case by title is a claim, not a run. What ran for this candidate is in the rehearsal below.
+
+## Update and rollback rehearsal
+
+`npm run candidate:rehearse -- --candidate DIR/candidate.json` (CI runs it after `candidate:pack`, so it needs `npm run build` and Playwright Chromium) installs candidate **A**, updates to **B** and restores **A**, as applications that are built and run at each step, for both `own` and `card`:
+
+1. A is the candidate in `candidate.json`; the command packs this tree again and refuses to go on unless every tarball has the recorded digest. B is the same revision packed with `.update` after the version.
+2. For each stage, the consumer is installed from that stage's tarballs alone, the installed set is checked against the candidate for the consumer's combination (the stage stops if it is not that candidate), and the digests of the tarballs the build actually installed must be the stage's.
+3. The page and the server are rebuilt from that install. A real MCP client connects to the rebuilt server, reads the view its `list_notes` tool names and must receive exactly the rebuilt page, with the `ui://sha256/…` URI of its bytes.
+4. The representative cases of `pack1-consumers.spec.ts` (the ten listed in `CARRIED_CASES` for that file: disclosure, per-request authorization, known versus unknown effect, one definition on two rendered rows, prerequisite, subject freshness, disposal, page teardown, no handler-name routing, view and server of different builds) run in a real browser against that stage's rebuilt page and server. Each must run exactly once per consumer and pass; a case that did not run is a failure. The other broad suites are not repeated.
+5. After the rollback, the restored view must be the first install's view exactly, and its server bundle equal after the scratch directory name is normalized.
+
+`rehearsal.json` and the section it appends to `CANDIDATE.md` record, per stage and consumer: the installed packages and their tarball digests, the rebuilt view's URI and digest, the server bundle digests, whether the server serves the rebuilt view, the cases that ran with their outcome, and for each consumer whether the update changed the view and whether the rollback restored it.
+
+**What this does and does not show.** A and B are one source revision with different version strings, because there is no earlier candidate, so the rebuilt views are identical and the update changes nothing the application can observe. The rehearsal shows that the sequence works as a procedure, that each stage's application is built from, and only from, that stage's tarballs, and that the action input, instance attachment, outcome and disposal behavior holds in each rebuilt application over a real MCP connection. It does not show an upgrade between two different versions of the code, an upgrade from a published release (none exists), or behavior in an actual assistant host.
 
 ## Supported secure publication recipe (not performed)
 
