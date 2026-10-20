@@ -8,6 +8,7 @@ import {
   installPackedSdk,
   linkDeclaredDependencies,
   repoRoot,
+  unexpectedPackageFiles,
   type PackedSdk,
 } from '../../../../scripts/packed-consumer.js';
 
@@ -50,7 +51,7 @@ describe('an own-catalog consumer built from the packed SDK packages', () => {
 
   it('ships source only: no tests and nothing outside the public exports', () => {
     for (const [name, packed] of Object.entries(installed.files)) {
-      expect(packed.filter((file) => file !== 'package.json' && !file.startsWith('src/')), name).toEqual([]);
+      expect(unexpectedPackageFiles(name, packed), name).toEqual([]);
       expect(packed.filter((file) => /\.test\.ts$/.test(file)), name).toEqual([]);
     }
   });

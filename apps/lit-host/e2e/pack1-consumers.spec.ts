@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Client } from '@modelcontextprotocol/client';
 import type { AuthInfo } from '@modelcontextprotocol/server';
@@ -34,6 +35,7 @@ const TEXT = {
   cannotArchive: 'This note cannot be archived.',
   signInRequired: 'Sign in to see your notes.',
 };
+const MISMATCH_TEXT = 'Your notes could not be shown: this view and its server are from different builds. Reopen the notes; if this continues, the maintainer must update the server and the view together.';
 
 interface Environment {
   readonly backend: Pack1Server.FixtureBackend;
@@ -50,9 +52,13 @@ interface Environment {
   readonly server: ServerModule;
 }
 
+// The candidate rehearsal (scripts/candidate-rehearsal.ts) points SAGA_PACK1_DIR at the consumers it
+// rebuilt for one stage of an install, update or rollback; otherwise these are the PACK1 build.
+const pack1Dist = process.env.SAGA_PACK1_DIR === undefined ? new URL('../dist/pack1/', import.meta.url) : pathToFileURL(`${resolve(process.env.SAGA_PACK1_DIR)}/`);
+
 for (const consumer of ['own', 'card'] as const) {
-  const page_ = new URL(`../dist/pack1/${consumer}/${consumer}.html`, import.meta.url);
-  const server_ = new URL(`../dist/pack1/${consumer}/server.mjs`, import.meta.url);
+  const page_ = new URL(`${consumer}/${consumer}.html`, pack1Dist);
+  const server_ = new URL(`${consumer}/server.mjs`, pack1Dist);
 
   test.describe(`${consumer} consumer, installed from packed artifacts`, () => {
     let server: ServerModule;
@@ -187,6 +193,27 @@ for (const consumer of ['own', 'card'] as const) {
       for (const secret of [environment.server.CANARY, 'Gamma', 'acct-']) expect(shown, secret).not.toContain(secret);
     });
 
+    test('a result from a server of another build is refused with guidance and renders none of it', async ({ page }) => {
+      // The view and its server must be updated together. A server of another build answers with a
+      // shape this view's contract does not know (a renamed list, an added field); the view reads
+      // nothing from it, shows the repair, and the fields it does recognize do not appear either.
+      const { view } = await open(page, { deliver: false });
+      const strange = {
+        content: [{ type: 'text', text: '2 notes' }],
+        structuredContent: { notes: [{ id: 'n-1', title: 'Alpha from another build', body: 'body', privateMemo: 'MEMO-CANARY' }], schemaVersion: 2 },
+      };
+      await deliver(page, strange);
+      await expect(view.getByTestId('view-status')).toHaveText(MISMATCH_TEXT);
+      await expect(view.getByTestId('line-title')).toHaveCount(0);
+      const shown = await view.locator('body').innerText();
+      for (const leaked of ['Alpha from another build', 'MEMO-CANARY']) expect(shown, leaked).not.toContain(leaked);
+
+      // The view is not left broken: a result of its own server's build still shows.
+      await deliver(page, await toolResult());
+      await expect(view.getByTestId('view-status')).toHaveText('Your notes');
+      await expect(view.getByTestId('line-title')).toHaveText(['Alpha', 'Beta']);
+    });
+
     test('shows the body the way the installed catalog provides it, and a hostile body does nothing', async ({ page }) => {
       const { view, requests, opened } = await open(page);
       const body = view.getByTestId('line-body');
@@ -280,6 +307,26 @@ for (const consumer of ['own', 'card'] as const) {
       await expect(view.getByTestId('holds-pending')).toHaveText('');
       await expect(view.getByTestId('holds-confirmed')).toHaveText('n-1,n-2'); // in the order the holds began, not the order the server answered
       expect(environment.backend.archived).toEqual(['n-2', 'n-1']);
+    });
+
+    test('a layout that names an action or a handler is refused by the installed catalog, and a press sends nothing', async ({ page }) => {
+      // A resource that routed actions by name would need the layout to carry one. The installed
+      // control accepts none, so such a layout is rejected whole, before anything is evaluated.
+      const { view } = await open(page);
+      const named = (control: Record<string, unknown>) => [
+        { version: 'v0.9', updateComponents: { surfaceId: 'notes', components: [{ id: 'row-archive', component: 'ActionButton', child: 'row-archive-label', ...control }] } },
+      ];
+      type Ingest = { ok: boolean; failure?: { message: string } };
+      const ingest = (messages: unknown[]) => view.locator('notes-app').evaluate((element, input) => (element as unknown as { ingest(i: unknown): Ingest }).ingest(input), messages);
+
+      const byEvent = await ingest(named({ action: { event: { name: 'archive_note' } } }));
+      expect(byEvent.ok).toBe(false);
+      expect(byEvent.failure?.message).toContain('action');
+      const byHandler = await ingest(named({ handler: 'archive_note' }));
+      expect(byHandler.ok).toBe(false);
+      expect(byHandler.failure?.message).toContain('handler');
+      expect(environment.backend.calls).toMatchObject({ isSignedIn: 0, archive: 0 });
+      expect(environment.backend.archived).toEqual([]);
     });
 
     test('a local action on the same rows sends no request', async ({ page }) => {

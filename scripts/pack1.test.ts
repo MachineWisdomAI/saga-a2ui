@@ -11,6 +11,7 @@ import {
   installPackedSdk,
   linkDeclaredDependencies,
   repoRoot,
+  unexpectedPackageFiles,
   type PackedManifest,
   type PackedSdk,
   type SdkPackage,
@@ -22,8 +23,9 @@ import {
 // themselves: what they declare, what they ship, what each entry point may load, and that the two
 // consumers differ only where the optional components are installed.
 //
-// Everything is local: tarballs are made with `npm pack` from a copy that carries a throwaway
-// version, and nothing is published, uploaded or installed from a registry.
+// Everything is local: tarballs are made with `npm pack` from a copy that carries the candidate
+// prerelease identity (scripts/release-candidate.ts), and nothing is published, uploaded or
+// installed from a registry.
 
 /** A Node built-in imported by a browser bundle. A property that merely happens to be named `node` is not one. */
 const NODE_IMPORT = /(?:from|import|require)\s*\(?\s*["']node:/;
@@ -63,22 +65,29 @@ describe('the five owned packages, packed', () => {
       expect(repoManifest(name).version, name).toBeUndefined();
       expect(sdk.manifests[name]?.name).toBe(`@saga-a2ui/${name}`);
       expect((sdk.manifests[name] as { license?: string }).license, name).toBe('Apache-2.0');
-      expect((sdk.manifests[name] as { version?: string }).version, name).toBe('0.0.0-packed-test'); // the throwaway pack-test version
+      // The staged copy carries the candidate prerelease identity (an unreleased build of one revision), never a release version.
+      expect((sdk.manifests[name] as { version?: string }).version, name).toBe(sdk.version);
+      expect(sdk.version).toMatch(/^0\.0\.0-candidate\.g[0-9a-f]{12}(\.dirty)?$/);
+      expect((sdk.manifests[name] as { private?: boolean }).private, `${name} stays unpublishable`).toBe(true);
       const shipped = sdk.files[name] ?? [];
-      expect(shipped.filter((file) => file !== 'package.json' && !file.startsWith('src/')), name).toEqual([]);
+      // Source, the manifest and the license obligations; the notices travel with the package that brings markdown-it into a consumer's view.
+      expect(unexpectedPackageFiles(name, shipped), name).toEqual([]);
+      expect(shipped, name).toContain('LICENSE');
+      expect(shipped.includes('THIRD_PARTY_NOTICES.md'), name).toBe(name === 'components');
       expect(shipped.filter((file) => /\.test(-support)?\.tsx?$|\.test-support\./.test(file)), name).toEqual([]);
     }
     expect(fs.readFileSync(path.join(repoRoot, 'THIRD_PARTY_NOTICES.md'), 'utf8')).toContain('markdown-it');
   });
 
-  it('declares no workspace, file, link, git or relative dependency, and every SDK-to-SDK range resolves to an installed copy', () => {
+  it('declares no workspace, file, link, git or relative dependency, and every SDK-to-SDK range is the exact candidate version of an installed copy', () => {
     const LEAK = /^(workspace:|file:|link:|portal:|git[+:]|github:|https?:|\.{1,2}\/|\/|~\/)/;
     for (const [name, manifest] of Object.entries(sdk.manifests)) {
       const m = manifest as PackedManifest & { optionalDependencies?: Record<string, string>; devDependencies?: Record<string, string> };
       for (const group of [m.dependencies, m.peerDependencies, m.optionalDependencies]) {
         for (const [dependency, range] of Object.entries(group ?? {})) {
           expect(range, `${name} -> ${dependency}`).not.toMatch(LEAK);
-          if (dependency.startsWith('@saga-a2ui/')) expect(range, `${name} -> ${dependency}`).toBe('*');
+          // Exactly the candidate version: a sibling from any other build is refused by the package manager before anything renders.
+          if (dependency.startsWith('@saga-a2ui/')) expect(range, `${name} -> ${dependency}`).toBe(sdk.version);
         }
       }
       // A packed manifest carries no development dependencies a consumer would need to resolve.
@@ -140,7 +149,7 @@ describe('the five owned packages, packed', () => {
     expect(range('components', 'dependencies', 'markdown-it')).toBe('15.0.2');
     // The optional component package is reachable from a renderer package only as an optional peer.
     for (const name of ['lit', 'react'] as const) {
-      expect(range(name, 'peerDependencies', '@saga-a2ui/components'), name).toBe('*');
+      expect(range(name, 'peerDependencies', '@saga-a2ui/components'), name).toBe(sdk.version);
       expect(sdk.manifests[name]?.peerDependenciesMeta?.['@saga-a2ui/components'], name).toEqual({ optional: true });
       expect(range(name, 'dependencies', '@saga-a2ui/components'), name).toBeUndefined();
     }

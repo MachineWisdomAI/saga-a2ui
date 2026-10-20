@@ -7,7 +7,7 @@ installed from a registry. Locally packed copies of them, including the optional
 `npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
 (see the README); `npm run build:pack1-consumers` installs the packed packages into two separate
 consumers (the application's own catalog alone, and the same catalog plus the card; see "PACK1" in the README).
-The two PACK1 consumers qualify notes and Archive; #154/#156 also qualifies the actual external authenticated browse/Play listener with matching installed resources, as recorded in the README. Those are development checks, not an installation recipe. This guide will name the tested package versions when the first release exists.
+The two PACK1 consumers qualify notes and Archive; #154/#156 also qualifies the actual external authenticated browse/Play listener with matching installed resources, as recorded in the README. Those are development checks, not an installation recipe. CI also packs the five packages as an unreleased **candidate** artifact (PACK2); [candidate contents, update, rollback and the publication recipe](candidate-update-and-rollback.md) describe it. A candidate's prerelease version is not a release version. This guide will name the tested package versions when the first release exists.
 
 ## Run the current source example
 

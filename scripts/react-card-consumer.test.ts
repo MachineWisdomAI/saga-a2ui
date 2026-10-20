@@ -8,7 +8,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { woff2Bytes } from '../apps/lit-host/e2e/asset-fixtures.js';
 import { startTestHost, type TestHost } from '../packages/mcp/src/server/http-host.test-support.js';
 import { prepareReactCardConsumer, REACT_CARD_BRANDS, reactCardConsumerSource } from './build-react-card-consumer.js';
-import { buildConsumerApplication, bundleConsumerEntry, bundleConsumerServer, createWorkDirectory, linkDeclaredDependencies, repoRoot } from './packed-consumer.js';
+import { buildConsumerApplication, bundleConsumerEntry, bundleConsumerServer, createWorkDirectory, linkDeclaredDependencies, repoRoot, unexpectedPackageFiles } from './packed-consumer.js';
 
 // An application outside this repository installs the packed core, components, mcp and react
 // packages and shows tool-result answers in the optional React FaithfulCard, as one self-contained
@@ -63,7 +63,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
   it('installs each package as a tarball with source and its manifest only, including the optional card and CSS exports', () => {
     expect(Object.keys(sdk.files).sort()).toEqual(['components', 'core', 'mcp', 'react']);
     for (const [name, packed] of Object.entries(sdk.files)) {
-      expect(packed.filter((file) => file !== 'package.json' && !file.startsWith('src/')), name).toEqual([]);
+      expect(unexpectedPackageFiles(name, packed), name).toEqual([]);
       expect(packed.filter((file) => /\.test(-support)?\.tsx?$/.test(file)), name).toEqual([]);
     }
     // Every public export the manifest names resolves to a file the tarball really carries.
@@ -80,7 +80,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
   it('declares the card as an optional peer: the React package depends on no components package, parser, Lit or delivery code', () => {
     const react = sdk.manifests.react!;
     expect(Object.keys(react.dependencies ?? {}).sort()).toEqual(['@a2ui/react', '@a2ui/web_core', '@saga-a2ui/core']);
-    expect(react.peerDependencies).toEqual({ '@saga-a2ui/components': '*', react: '19.3.1', 'react-dom': '19.3.1' });
+    expect(react.peerDependencies).toEqual({ '@saga-a2ui/components': sdk.version, react: '19.3.1', 'react-dom': '19.3.1' });
     expect(react.peerDependenciesMeta).toEqual({ '@saga-a2ui/components': { optional: true } });
     const components = sdk.manifests.components!;
     expect(Object.keys(components.dependencies ?? {}).sort()).toEqual(['@a2ui/web_core', '@saga-a2ui/core', 'markdown-it', 'zod']);
