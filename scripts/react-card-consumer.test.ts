@@ -15,7 +15,7 @@ import { buildConsumerApplication, bundleConsumerEntry, bundleConsumerServer, cr
 // resource per brand. This checks what that installation consists of, what the built artifacts hold
 // and what the consumer's own MCP server serves; the built resource itself is exercised in a browser
 // by apps/lit-host/e2e/react-card-consumer.spec.ts. Package installation is packed-tarball evidence:
-// the packages are private and unversioned, so none of this is a registry install or a release.
+// these commit-versioned candidate copies are private; this is not a registry install or release.
 
 const work = createWorkDirectory('saga-react-card-consumer-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));

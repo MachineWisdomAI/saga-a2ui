@@ -16,7 +16,7 @@ import {
   resolvedExclusions,
   type ExpectedCombination,
 } from './release-candidate.js';
-import { CANDIDATE_REGISTRY, candidateManifest, candidateVersion, createWorkDirectory, packSdkPackages, repoRoot, unpackIntoConsumer, type PackedPackage } from './packed-consumer.js';
+import { CANDIDATE_REGISTRY, candidateManifest, candidateVersion, createWorkDirectory, packSdkPackages, packReleasePackages, repoRoot, unpackIntoConsumer, type PackedPackage } from './packed-consumer.js';
 
 // PACK2: what a release candidate is, what it refuses, and how an installed set is updated and
 // restored. Everything is local and offline: the tarballs are real `npm pack` output, but nothing is
@@ -33,6 +33,24 @@ const work = createWorkDirectory('saga-candidate-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
 const sha256 = (file: string): string => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+it('packs only the four enrolled releases, preserving exact sibling pins, exports and license files', () => {
+  const releases = packReleasePackages(path.join(work, 'release'), path.join(work, 'release-tarballs'));
+  expect(releases.map(one => one.name)).toEqual(['core', 'components', 'mcp', 'react']);
+  const versions = Object.fromEntries(releases.map(one => [`@saga-a2ui/${one.name}`, one.version]));
+  for (const one of releases) {
+    const source = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', one.name, 'package.json'), 'utf8'));
+    expect(one.manifest).toMatchObject({ version: source.version, private: false, exports: source.exports, publishConfig: { access: 'public', tag: 'next' } });
+    const files = one.files.map(file => file.path);
+    expect(files).toContain('LICENSE');
+    expect(files).toContain('README.md');
+    if (one.name === 'components') expect(files).toContain('THIRD_PARTY_NOTICES.md');
+    for (const [name, range] of Object.entries({ ...one.manifest.dependencies, ...one.manifest.peerDependencies })) {
+      if (name.startsWith('@saga-a2ui/')) expect(range).toBe(versions[name]);
+    }
+    for (const file of Object.values(source.exports) as string[]) expect(files).toContain(file.replace(/^\.\//, ''));
+  }
+}, 120_000);
 
 describe('the candidate identity', () => {
   it('is a semver prerelease of 0.0.0 naming the revision, and marks a modified tree', () => {
@@ -63,6 +81,15 @@ describe('the candidate manifest', () => {
 
   it.each(['workspace:*', 'file:../core', '^1.0.0', 'latest'])('refuses a sibling declared as "%s" rather than rewriting it', (range) => {
     expect(() => candidateManifest({ ...repository, dependencies: { '@saga-a2ui/core': range } }, VERSION_A)).toThrow(/declared as "\*"/);
+  });
+
+  it('keeps candidates private after release enrollment and rewrites only a matching enrolled sibling', () => {
+    const enrolled = { ...repository, private: false, version: '0.1.0-rc.1', dependencies: { '@saga-a2ui/core': '0.1.0-rc.1' } };
+    const pinned = candidateManifest(enrolled, VERSION_A, [], { '@saga-a2ui/core': '0.1.0-rc.1' });
+    expect(pinned.private).toBe(true);
+    expect(pinned.dependencies).toEqual({ '@saga-a2ui/core': VERSION_A });
+    expect(pinned.publishConfig).toEqual({ registry: CANDIDATE_REGISTRY });
+    expect(() => candidateManifest(enrolled, VERSION_A, [], { '@saga-a2ui/core': '0.2.0' })).toThrow(/enrolled sibling/);
   });
 });
 

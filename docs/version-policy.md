@@ -1,32 +1,49 @@
-# Version policy
+# Repository version policy
 
-The workspace and private Lit host currently have no owned version. Keep them unversioned until a concrete application or SDK release needs an identity; do not introduce placeholder package versions. Document editions follow CONTRIBUTING.md.
+The updater needs Python 3.11 or newer and no third-party libraries. Select that
+interpreter explicitly if the system `python3` is older (for example,
+`python3.13 scripts/mw-version.py ...` on macOS).
 
-## Enroll the first owned version
+Every change PR updates affected versions before merge. Run the repository-local
+updater after your implementation and again after updating the branch from main:
 
-On a feature branch, introduce the intended initial version in its owning package. Preserve this pre-enrollment guide under ignored `.wise-agents/` and move it out of `docs/version-policy.md` before running the helper: enrollment generates that path and refuses to overwrite different guidance. Then run the MachineWisdom bootstrap and enroll each independently versioned component:
-
-```sh
-mw-repo-init.sh --path . --skip-fava
-python3 scripts/mw-version.py enroll --repo . --unit apps/lit-host
-```
-
-The second command is an example for a versioned Lit host; use the actual component path. The bootstrap discovers a versioned root; for a nested component with an unversioned root, use the installed toolkit helper `mw-version.py enroll --repo . --unit COMPONENT_PATH` first. Enrollment installs the repository-local updater, `.version-policy.json`, guidance and CI check. Review the generated files and reconcile this guide with the generated guidance instead of overwriting it blindly. Use Python 3.11+.
-
-Give each independently released package one version owner. Add lockfile entries and any runtime/resource identifiers that truly mirror that version to its unit. Keep protocol/answer contract versions independent of release versions. Captured artifacts and historical receipts are not mirrors. Never invent a workspace release merely to coordinate independent units.
-
-## Bump enrolled units per PR
-
-Use Conventional Commit titles and the actual PR title/body with the installed updater. One PR gets the largest applicable increment: features are minor; fixes, documentation, tests, CI, chores and dependency changes are patch. Breaking changes are major from 1.0 onward and minor before 1.0. A dependency's own major version alone does not make this project's change breaking.
-
-After implementation and again after updating from current main:
-
-```sh
+```bash
 git fetch origin main
-python3 scripts/mw-version.py update --base origin/main --title 'docs: clarify setup' --body-file /path/to/pr-body.md
-python3 scripts/mw-version.py check --base origin/main --title 'docs: clarify setup' --body-file /path/to/pr-body.md
+python3 scripts/mw-version.py update --base origin/main --title 'chore(deps): update transitive dependency'
+python3 scripts/mw-version.py check --base origin/main --title 'chore(deps): update transitive dependency'
 ```
 
-Replace the example with the actual PR intent. The updater calculates from the base revision rather than accumulating bumps across review rounds. Shared changes outside unit paths affect every enrolled unit unless the adopted policy explicitly excludes them. Run the generated version check for documentation-only PRs too. Make its passing check part of the protected merge requirements after adoption, with authority to configure protection; never claim enforcement before it is configured.
+Use the actual PR title. Supply `--body-file PATH` for its body, or `--event-file`
+with a GitHub pull-request event containing title/body. The updater also reads
+the PR branch's commits. One PR gets the largest applicable increment: features
+are minor; fixes and every other change (including chores, docs, tests, CI, and
+direct/transitive dependencies) are patch. `!`, `BREAKING CHANGE:`, or
+`BREAKING-CHANGE:` is major from 1.0 onward and minor before 1.0. A dependency's
+own major number does not establish a breaking change in this project.
 
-No software bump applies to the current unversioned tree. Introducing a version without enrollment is a review blocker. CI runs `python3 scripts/check-version-enrollment.py` to reject root or direct `apps/*` / `packages/*` npm versions without registered owners or mirrors and the updater/workflow files. Review the generated configuration and passing Version policy result as well; presence alone does not prove a correct bump. A version update never authorizes a tag, release, package publication or deployment.
+`.version-policy.json` lists version units, paths, and synchronized files. Changes
+outside all unit paths affect every unit, except configured `exclude_paths`.
+Root units use `**`. JSON mirrors can select a field with a `key` array; separate
+units may own different fields in the same workspace lockfile. Use `regex` mirrors
+with a named `version` capture and a `count` (default 1) for runtime constants or
+HTML markers. Each non-JSON mirror owns its file; use one counted regex pattern
+for repeated markers in that file. Changes to configured version values alone do not affect component
+selection. Lockfiles retain their resolved dependencies. Updating again
+uses the base version, so it does not accumulate bumps. Update your branch from
+current main before merging; the required check rejects a stale base.
+
+Prereleases advance the base and reset the counter: `0.1.0-rc.5` becomes
+`0.1.1-rc.1` for a patch. Python metadata serializes the same version as
+`0.1.1rc1`. Date prereleases retain that format and refresh the date; `--date`
+accepts YYYY-MM-DD for reproducible runs. CI accepts a valid date between the
+previous version's date and today, so an overnight review does not invalidate it.
+
+Explicit release promotion uses the exact title `chore(release): promote version`
+and changes only configured version values: `0.1.1-rc.1` becomes `0.1.1`, without
+another base increment. Existing release review and publication authority still
+apply. The updater never creates a tag, release, publication, or deployment.
+
+For a new versioned component, run the toolkit bootstrap again or run
+`python3 scripts/mw-version.py enroll --repo PATH --unit COMPONENT_PATH` from an
+installed copy. Review the generated configuration and add any runtime/plugin
+mirrors. Captured templates and vendored packages are not owned version units.

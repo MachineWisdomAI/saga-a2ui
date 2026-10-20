@@ -23,7 +23,8 @@
     "candidate:verify": "tsx scripts/release-candidate.ts verify",
     "candidate:rehearse": "tsx scripts/candidate-rehearsal.ts",
     "verify": "tsx scripts/verify.ts",
-    "test:pnpm-react": "tsx scripts/check-react-pnpm.ts"
+    "test:pnpm-react": "tsx scripts/check-react-pnpm.ts",
+    "release:pack": "tsx scripts/release-packages.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
