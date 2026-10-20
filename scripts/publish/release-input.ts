@@ -25,6 +25,48 @@ const testCase = z.strictObject({
   expected_output_url: z.string().optional(),
 });
 
+// What Claude's connector submission asks for, in the order of the developer portal's steps
+// (https://claude.com/docs/connectors/building/submission). Every field is optional here so that
+// a missing one is a finding that names the repair; only a value of the wrong shape is a parse error.
+const claudeConnector = z
+  .strictObject({
+    /** Server name (the portal allows 100 characters). */
+    name: z.string(),
+    oneLiner: z.string(),
+    description: z.string(),
+    categories: z.array(z.string()),
+    /** The listing page's URL slug. The portal makes it permanent once published. */
+    slug: z.string(),
+    documentationURL: z.string(),
+    privacyPolicyURL: z.string(),
+    support: z.strictObject({ email: z.string().optional(), url: z.string().optional() }),
+    /** The connector icon: PNG or SVG. */
+    icon: z.string(),
+    /** Carousel screenshots of the app response (MCP Apps), each with the prompt that produced it. */
+    screenshots: z.array(z.strictObject({ file: z.string(), prompt: z.string() })),
+    useCases: z.strictObject({ primary: z.array(z.string()), prerequisites: z.string(), access: z.enum(['read', 'write', 'read-write']) }),
+    /** How users authenticate. The credentials themselves are entered in the portal and never belong here. */
+    authentication: z.strictObject({ mode: z.enum(['oauth_dcr', 'oauth_cimd', 'oauth_anthropic_creds', 'custom_connection', 'none']) }),
+    dataHandling: z.strictObject({ apiOwnership: z.enum(['first-party', 'proxied-with-permission', 'third-party']), personalHealthData: z.boolean(), sponsoredContent: z.boolean() }),
+    /** Origins (`https://example.com`) and custom schemes (`myapp:`) the connector opens through `ui/open-link` without a prompt. */
+    allowedLinkUris: z.array(z.string()),
+    /** The primary contact for review updates. */
+    reviewContact: z.strictObject({ name: z.string(), email: z.string() }),
+  })
+  .partial();
+
+// The optional plugin bundle: only what the application supplies as onboarding or skills scope.
+// Nothing is invented for it; without this section no bundle is produced.
+const claudePluginBundle = z.strictObject({
+  /** The public GitHub repository the bundle will live in. The directory reads plugins from GitHub. */
+  repository: z.string(),
+  /** Directories that each hold a SKILL.md and the files it uses. */
+  skills: z.array(z.string()).min(1),
+  readme: z.string(),
+  /** The license text file. The directory requires a README and a license in the plugin folder. */
+  license: z.string(),
+});
+
 export const ReleaseInputSchema = z.strictObject({
   format: z.literal(RELEASE_INPUT_FORMAT),
   /** The plugin's stable identifier: lowercase letters, digits and single hyphens. */
@@ -39,22 +81,27 @@ export const ReleaseInputSchema = z.strictObject({
   repository: z.string().optional(),
   license: z.string().optional(),
   keywords: z.array(z.string()).optional(),
-  listing: z.strictObject({
-    displayName: z.string(),
-    shortDescription: z.string(),
-    longDescription: z.string(),
-    category: z.string(),
-    capabilities: z.array(z.string()).optional(),
-    websiteURL: z.string(),
-    supportURL: z.string(),
-    privacyPolicyURL: z.string(),
-    termsOfServiceURL: z.string(),
-    defaultPrompt: z.array(z.string()).optional(),
-    brandColor: z.string().optional(),
-    brandColorDark: z.string().optional(),
-  }),
-  /** PNG or SVG files, copied into the package under `assets/`. */
-  assets: z.strictObject({ logo: z.string(), composerIcon: z.string(), logoDark: z.string().optional(), composerIconDark: z.string().optional() }),
+  /** The ChatGPT listing. Needed to prepare the `chatgpt` target and ignored by the `claude` target. */
+  listing: z
+    .strictObject({
+      displayName: z.string(),
+      shortDescription: z.string(),
+      longDescription: z.string(),
+      category: z.string(),
+      capabilities: z.array(z.string()).optional(),
+      websiteURL: z.string(),
+      supportURL: z.string(),
+      privacyPolicyURL: z.string(),
+      termsOfServiceURL: z.string(),
+      defaultPrompt: z.array(z.string()).optional(),
+      brandColor: z.string().optional(),
+      brandColorDark: z.string().optional(),
+    })
+    .optional(),
+  /** The ChatGPT listing's PNG or SVG files, copied into the package under `assets/`. Needed with `listing`. */
+  assets: z.strictObject({ logo: z.string(), composerIcon: z.string(), logoDark: z.string().optional(), composerIconDark: z.string().optional() }).optional(),
+  /** The Claude connector submission. Needed to prepare the `claude` target; every field is a finding when it is missing, not a parse error. */
+  claude: z.strictObject({ connector: claudeConnector.optional(), pluginBundle: claudePluginBundle.optional() }).optional(),
   build: z.strictObject({
     /** The built application. */
     directory: z.string(),
@@ -88,6 +135,10 @@ export const ReleaseInputSchema = z.strictObject({
 });
 
 export type ReleaseInput = z.infer<typeof ReleaseInputSchema>;
+/** A release input that carries the ChatGPT listing and its assets, which the `chatgpt` target needs. */
+export type ChatgptReleaseInput = ReleaseInput & { readonly listing: NonNullable<ReleaseInput['listing']>; readonly assets: NonNullable<ReleaseInput['assets']> };
+export type ClaudeConnectorInput = z.infer<typeof claudeConnector>;
+export type ClaudePluginBundleInput = z.infer<typeof claudePluginBundle>;
 
 export interface LoadedReleaseInput {
   readonly input: ReleaseInput;

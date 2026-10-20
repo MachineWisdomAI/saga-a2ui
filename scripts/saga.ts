@@ -6,6 +6,7 @@ import { candidateVersion, sourceRevision } from './packed-consumer.js';
 import type { StagedDemo } from './build-demo.js';
 import type { FetchLike } from '@modelcontextprotocol/client';
 import type { ValidatorLoad } from './publish/chatgpt.js';
+import type { PluginValidator } from './publish/claude-plugin.js';
 import type { PublicationTool, PublishRequest } from './publish/publish.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
 import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, exportTemplateInterruptibly, readTemplateMetadata, refuseExisting, templateDirectory } from './starter-template.js';
@@ -17,9 +18,10 @@ import { ExportInterrupted, TemplateError, createDirectoryInterruptibly, exportT
 //   npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app
 //   npx tsx scripts/saga.ts demo --a2ui-stack lit-mcp --server node ./my-demo
 //   npx tsx scripts/saga.ts publish prepare --target chatgpt --release saga-publication.json --out ./publication
+//   npx tsx scripts/saga.ts publish prepare --target claude --release saga-publication.json --out ./publication
 //
 // `init` and `demo` each create one new directory. Neither installs anything, runs a package manager,
-// hook or script of the output, or changes anything that already exists. `publish` (CLI3) is the
+// hook or script of the output, or changes anything that already exists. `publish` (CLI3, CLI4) is the
 // optional publication tooling: it is loaded only when that command runs (scripts/publish/), checks a
 // built application and its deployed endpoint, and prepares a host package and findings record. It
 // deploys, uploads and submits nothing.
@@ -60,8 +62,10 @@ export interface PublicationSupport {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for endpoint discovery; the platform's `fetch` when absent. */
   readonly fetch?: FetchLike | undefined;
-  /** The manifest validators; the pinned official schemas when absent. */
+  /** The ChatGPT manifest validators; the pinned official schemas when absent. */
   readonly validators?: ValidatorLoad | undefined;
+  /** The validator of the optional Claude plugin bundle; Claude Code's `claude plugin validate` when absent. */
+  readonly pluginValidator?: PluginValidator | undefined;
 }
 
 export interface Environment {
@@ -90,8 +94,8 @@ const pairLines = (pairs: readonly QualifiedPair[]): string => pairs.map((pair) 
 
 const USAGE = `Usage: saga init --a2ui-stack <renderer>-mcp --server <target> <directory>
        saga demo --a2ui-stack <renderer>-mcp --server <target> <directory>
-       saga publish check --target chatgpt --release <saga-publication.json> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
-       saga publish prepare --target chatgpt --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
+       saga publish check --target <chatgpt|claude> --release <saga-publication.json> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
+       saga publish prepare --target <chatgpt|claude> --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
 
 init creates <directory>, which must not exist yet, from the maintained starter for the pair.
 demo creates it from the standalone demonstration of the pair: a local-only application with
@@ -104,9 +108,10 @@ Supported pairs for demo:
 ${pairLines(SUPPORTED_DEMO_PAIRS)}
 
 publish checks a built application, its deployed HTTPS MCP endpoint and the release input, then
-(prepare) writes the ChatGPT plugin package and a findings record into <directory>. It reads the
-endpoint without calling any tool unless --invoke-fixture is given, and it deploys, uploads and
-submits nothing. check writes nothing. A verdict other than ready exits 1.
+(prepare) writes the host's materials and a findings record into <directory>: the ChatGPT plugin
+package, or the Claude connector dossier (a plugin bundle only when the release input supplies its
+scope). It reads the endpoint without calling any tool unless --invoke-fixture is given, and it
+deploys, uploads and submits nothing. check writes nothing. A verdict other than ready exits 1.
 `;
 
 type Creation = 'init' | 'demo';
@@ -173,7 +178,7 @@ function parsePublish(values: ParsedValues, rest: readonly string[]): Command {
   if (action !== 'check' && action !== 'prepare') return { kind: 'usage', message: action === undefined ? 'Say what to publish: check or prepare.' : `Unknown publish command "${action}"; the commands are check and prepare.` };
   if (extra.length > 0) return { kind: 'usage', message: `saga publish ${action} takes options only, not "${extra[0]}".` };
   if (values['a2ui-stack'] !== undefined || values.server !== undefined) return { kind: 'usage', message: '--a2ui-stack and --server belong to saga init and saga demo.' };
-  if (values.target === undefined) return { kind: 'usage', message: '--target is required (chatgpt).' };
+  if (values.target === undefined) return { kind: 'usage', message: '--target is required (chatgpt or claude).' };
   if (values.release === undefined) return { kind: 'usage', message: '--release is required: the release input file.' };
   if (action === 'prepare' && values.out === undefined) return { kind: 'usage', message: 'prepare needs --out, the directory to write.' };
   if (action === 'check' && values.out !== undefined) return { kind: 'usage', message: 'check writes nothing; --out belongs to prepare.' };
@@ -313,6 +318,7 @@ async function publish(request: PublishRequest, environment: Environment): Promi
       environment: support.environment,
       fetch: support.fetch,
       validators: support.validators,
+      pluginValidator: support.pluginValidator,
     });
   } catch (error) {
     environment.stderr(`saga publish: ${(error as Error).message}\n`);

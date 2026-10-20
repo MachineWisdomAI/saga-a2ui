@@ -1,15 +1,17 @@
-# Publication tooling (`saga publish`, CLI3)
+# Publication tooling (`saga publish`, CLI3 and CLI4)
 
 Optional developer tooling in the single `saga` CLI ([`scripts/saga.ts`](../saga.ts)). It checks a
-built application, its already deployed HTTPS MCP endpoint and a release input, and prepares the
-ChatGPT plugin package with a findings record. It deploys, uploads and submits nothing, and a
-prepared package is never reported as live. Design:
-[host publication Blueprint](../../blueprints/features/host_publication.blueprint.md). Only the
-ChatGPT target exists; the Claude dossier is a later slice.
+built application, its already deployed HTTPS MCP endpoint and a release input, and prepares one
+host's materials with a findings record: the ChatGPT plugin package (CLI3) or the Claude connector
+dossier (CLI4). Both targets read the same release input, the same endpoint and the same evidence
+record. It deploys, uploads and submits nothing, and a prepared package is never reported as live.
+Design: [host publication Blueprint](../../blueprints/features/host_publication.blueprint.md).
 
 ```sh
 npx tsx scripts/saga.ts publish check   --target chatgpt --release path/to/saga-publication.json
 npx tsx scripts/saga.ts publish prepare --target chatgpt --release path/to/saga-publication.json --out ./publication
+npx tsx scripts/saga.ts publish check   --target claude  --release path/to/saga-publication.json
+npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-publication.json --out ./publication
 ```
 
 Options: `--against DIR` compares with an earlier output and fails when its evidence is stale;
@@ -28,7 +30,13 @@ PNG or SVG `assets`, the `build` directory and its view files, the `endpoint`, a
 credential; reviewer credentials, authentication and publisher verification stay in the host's
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
-## What is produced
+`listing` and `assets` (with `review` and `publication`) belong to the ChatGPT target, and a `claude`
+section belongs to the Claude target. Each target needs only its own: a release input for Claude alone
+has no `listing`, and the `chatgpt` target says so and prepares nothing when `listing` or `assets` is
+missing. `claude` is the one section whose missing fields are findings instead of a parse error
+(below), so a maintainer sees every missing piece at once.
+
+## What is produced (ChatGPT)
 
 `prepare --out DIR` writes, after everything is checked:
 
@@ -59,11 +67,86 @@ challenge, timeout, HTTP status, network error, unusable answer).
 The same holds for a failure nobody anticipated: every error the command raises is caught and
 reported through that redactor (exit code 1), never rethrown to a caller that prints it raw.
 
+## The Claude connector dossier (CLI4)
+
+Claude's directory takes a remote MCP server as a *connector*, submitted by its URL in the developer
+portal (<https://claude.ai/directory/manage>, Submit new, then MCP connector). There is no connector
+package to build, so `--target claude` prepares the materials for that submission, in the portal's
+own order, bound to the same release evidence as the ChatGPT package. Rules were checked against
+Anthropic's documentation as of 2026-10-20 (`DOCUMENTATION_DATE` in [`claude.ts`](claude.ts)):
+[publishing](https://claude.com/docs/directory/publish),
+[submission](https://claude.com/docs/connectors/building/submission),
+[review criteria](https://claude.com/docs/connectors/building/review-criteria),
+[authentication](https://claude.com/docs/connectors/building/authentication),
+[`ui.domain`](https://claude.com/docs/connectors/building/mcp-apps/getting-started) and
+[plugin submission](https://claude.com/docs/plugins/submit).
+
+`prepare --target claude --out DIR` writes `claude-connector-dossier.zip` and `findings.json`
+(same record, same rules for unknown and failed). The ZIP holds, stored uncompressed in sorted order
+so unchanged inputs reproduce the same digest:
+
+- `connector-dossier.json` (`saga-claude-connector-dossier/1`): the connection URL, the exact tools
+  (name, title, read-only or write, definition digest), served resources (URI, digest, metadata
+  digest), the listing, use cases, company, authentication, data handling, allowed link URIs, and
+  the evidence the record holds (source revision, release input digest, built views, served contract
+  digest, deployment identity, declared and installed `@saga-a2ui` packages). Its `distribution` section
+  says `webDistribution: not-established`.
+- `SUBMISSION.md`: the same, as the ten portal steps to follow.
+- `assets/icon.*` and `screenshots/01.png` to `05.png`, with the prompt that produced each.
+- `plugin/`: only when the release input supplies `claude.pluginBundle` (below).
+
+The `claude.connector` section of the release input carries what the portal asks for: `name` (100
+characters), `oneLiner` (200), `description` (2,000), one to five `categories`, `slug`,
+`documentationURL`, `privacyPolicyURL`, `support`, `icon`, three to five `screenshots` (PNG, at least
+1,000 pixels wide, each with its `prompt`), `useCases`, `authentication.mode`, `dataHandling`,
+optional `allowedLinkUris`, and a `reviewContact`. The application publisher is the company; the
+operator and the SDK's npm publisher are never substituted for it. Test-account credentials,
+OAuth client secrets and the seven policy acknowledgments belong to the owner in the portal and are
+never accepted here.
+
+Checked, as findings that name the repair: the listing limits and links; the company (publisher
+name, website and a contact); that use cases, authentication and data handling are complete and that
+a declared `read` connector has only read-only tools; every tool has a title, a description, a name of
+at most 64 characters and `readOnlyHint: true` or an explicit `destructiveHint`; the allowed link
+URIs are HTTPS origins or custom schemes; the icon and screenshots are real images (the PNG and SVG
+checks below); a served view that declares `_meta.ui.domain` declares exactly the value Claude computes
+for the connector URL (optional, so no declaration is fine); no secret; and no local packaging. All
+of it is read back from the ZIP bytes.
+
+**Local packaging is not web distribution.** Claude Desktop extensions (`.mcpb`) are no longer
+accepted by the directory, and installing in Claude Code is not the web directory. None is produced,
+the dossier states it, and a `.mcpb`/`.dxt` file, a Desktop config or an MCPB `manifest.json` carried
+into the ZIP is a failure (`package.distribution`).
+
+**There is no offline validator for a connector submission.** The record says so
+(`claude-connector-requirements`) instead of reporting a pass: the portal's Tools step and its
+automated policy scan are the check of record, and running every tool through the MCP Inspector and as
+a custom connector in Claude is the owner's to confirm. Reviewers also judge what a check cannot
+(description accuracy and prompt-injection patterns, whether reads and writes are separate tools,
+first-party API ownership); the report lists those as pending handoff.
+
+### The optional plugin bundle
+
+A bundle exists only when the application supplies its scope in `claude.pluginBundle`: the public
+GitHub `repository` it will live in, the `skills` directories (each with a `SKILL.md`), a `readme` and
+a `license` file. Nothing is invented: no sidebar, onboarding flow, command, agent or hook, and no
+skill the application did not write. The bundle is `plugin/.claude-plugin/plugin.json`,
+`plugin/.mcp.json` (one server: the connector's own endpoint, as the directory advises so people see
+one set of tools), the README, the license and the skills, checked with Claude Code's own
+`claude plugin validate`. Where Claude Code is not installed, or the validator cannot run, the bundle
+finding is `unknown` and the verdict `incomplete`. The bundle is a separate submission from GitHub
+(public before it goes live, with push access for the submitting account); the report lists that as
+pending handoff.
+
 ## What is checked
 
 `pass` is only the result of a check that ran and held. A check that could not run or conclude
 (an unreachable or protected endpoint, an unavailable validator, an undeclared deployment identity)
 is `unknown`, and any `unknown` makes the verdict `incomplete`; any `fail` makes it `blocked`.
+The build, endpoint, deployment identity, image, secret and stale-evidence rules below hold for both
+targets; the package rules are the ChatGPT target's (the Claude target's are above). A target's own
+tool rules differ: ChatGPT asks for three explicit hints, Claude for a title and a read-only or
+destructive annotation.
 
 - The build: every view exists inside the build directory, is a regular file, and has a
   content-addressed `ui://sha256/…` identity.
@@ -130,7 +213,8 @@ is `unknown`, and any `unknown` makes the verdict `incomplete`; any `fail` makes
 
 ## Not covered here
 
-Portal automation and submission, upload retries, Claude, a real ChatGPT web run, and the
-owner-only steps listed under "Pending handoff" in every report (publisher verification and
-authority, domain verification, reviewer credentials, the review walkthrough). Local validators and
-fixture runs do not replace actual-host observation.
+Portal automation and submission, upload retries, resumable submission records (SDK68), a real
+ChatGPT or Claude web run, and the owner-only steps listed under "Pending handoff" in every report
+(publisher verification and authority, domain verification, reviewer accounts and credentials, the
+review walkthrough, the Claude policy acknowledgments). Local validators and fixture runs do not
+replace actual-host observation.

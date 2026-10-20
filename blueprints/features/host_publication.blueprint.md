@@ -11,14 +11,14 @@ date_added: 2026-10-16
 ## Status
 
 - Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
-- Implementation: partial. The ChatGPT preparation slice (CLI3) is implemented and independently verified; Claude connector materials (CLI4) and resumable submission handoff (CLI5) remain separate unfinished scopes.
+- Implementation: partial. ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified; resumable submission handoff (CLI5) remains unfinished.
 - Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions.
 
 ## Problem and current behavior
 
 A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service, and nothing in this proposal deploys it. A directory listing is the host's own review and publication of the application, which only the host can grant.
 
-The existing single SAGA CLI provides init and demo commands. CLI3 now adds `saga publish check` and `saga publish prepare` through optional workspace publication tooling. It prepares a ChatGPT artifact and evidence record; it does not deploy an application, submit it or establish a live directory listing. No separately published `@saga-a2ui/publish` package is claimed.
+The existing single SAGA CLI provides init and demo commands. CLI3 now adds `saga publish check` and `saga publish prepare` through optional workspace publication tooling. It prepares ChatGPT artifacts or a Claude connector dossier with the shared evidence record; it does not deploy an application, submit it or establish a live directory listing. No separately published `@saga-a2ui/publish` package is claimed.
 
 ## CLI3 implementation and acceptance — 20 October 2026
 
@@ -36,11 +36,24 @@ The five [SDK66 criteria](https://github.com/MachineWisdomAI/saga-a2ui/issues/66
 
 Independent verification retained 81 passing publication/original-regression checks, then ran 18 affected checks for the final reporting/XML repairs. The final integration changed synchronized version values and prepared-version prose only; those accepted runtime checks were reused. The original broader run passed 137 of 139 cases; the two unrelated framework typechecks lacked adapters in the reused review dependency tree and were not represented as passing. Existing qualified framework evidence remains separate. No new host matrix or live application effects were needed for this preparation scope.
 
-CLI3 source acceptance is complete; SDK66 remains open until this lifecycle record is reviewed and merged. CLI4 and CLI5 retain their own acceptance criteria. Application-owner authority, authorized submission, platform review, actual listing installation and named-host evidence are not supplied by generating a ZIP or a ready preparation record.
+CLI3 source acceptance and its reviewed lifecycle record are complete; SDK66 is closed. CLI4 and CLI5 retain their own acceptance criteria. Application-owner authority, authorized submission, platform review, actual listing installation and named-host evidence are not supplied by generating a ZIP or a ready preparation record.
+
+## CLI4 implementation and acceptance — 20 October 2026
+
+Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for Claude connector preparation at `MachineWisdomAI/saga-a2ui@63e857ea6ca9326735657caa0dc2b75622d1082a` ([PR189](https://github.com/MachineWisdomAI/saga-a2ui/pull/189)). Final head `0c149400c07b7c437fdc7938e3bcf895c55115d9` received [independent approval 5590281447](https://github.com/MachineWisdomAI/saga-a2ui/pull/189#pullrequestreview-5590281447); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128657) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128672) passed.
+
+| SDK67 criterion | Accepted scope and evidence |
+| --- | --- |
+| Shared records, validators and deterministic generation | `saga publish --target claude` reuses CLI3 release inputs, record identities, output ownership/interruption safety and target-aware prior-artifact checks. The locally available official Claude plugin validator passed; unavailable validation remains an explicit finding. |
+| Connector-specific identity without distribution claims | The dossier records the declared endpoint and exact tool/resource/release evidence, including the documented UI-domain calculation. Official submission/authentication/MCP Apps guidance was inspected during review. Local well-formedness and dossier preparation do not establish directory approval, Desktop/Code installation or web distribution. |
+| Optional bundle requires supplied scope | Bundle assembly uses only supplied skills, README and license scope and points to the declared endpoint. No sidebar, invented onboarding capability or runtime extension is created. Excess screenshot input is rejected explicitly rather than silently truncated; the independently checked official constraint was three to five screenshots. |
+| No effects, safe outputs and honest missing inputs | Default discovery against the qualified synthetic Node listener makes no application-tool calls. Supported bundled text, extensionless files and LICENSE content are scanned for recognized credentials; original public-command credential regressions pass after repair. Missing publisher authority, materials and validators remain explicit findings. |
+
+Independent verification passed 122 supplied Claude/shared publication checks and root TypeScript. After two verified output-validation repairs, 21 affected Claude/independent regression cases and 11 affected shared cases passed; unchanged evidence was reused. Final main integration imported only the accepted TOUR1 record and preserved the reviewed runtime and version outputs. No package installation, named-host tests, deployment, submission or publication was performed. SDK67 remains open until this final lifecycle record is independently reviewed and merged; CLI5 retains the separate resumable-handoff scope.
 
 ## Proposed behavior
 
-An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. The ChatGPT commands and release-input format are implemented by CLI3; Claude artifacts and resumable submission behavior below remain the approved remaining design.
+An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. ChatGPT preparation and the release-input format are implemented by CLI3, and Claude artifacts by CLI4; resumable submission behavior below remains the approved remaining design.
 
 By default, checking reads local artifacts and performs read-only endpoint discovery. It does not invoke application tools, change remote state or fabricate host acceptance. Executing test cases requires an explicitly selected test fixture and authorized credentials. Preparation proceeds automatically through checks and generation; missing information produces specific findings without stopping unrelated preparation.
 

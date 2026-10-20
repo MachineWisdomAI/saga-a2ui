@@ -1,6 +1,6 @@
 import { crc32, inflateRawSync } from 'node:zlib';
 
-// The ZIP the ChatGPT portal receives (CLI3 #66). The writer stores every entry uncompressed, in
+// The ZIP a host's portal work starts from (CLI3 #66, CLI4 #67): the ChatGPT package or the Claude dossier. The writer stores every entry uncompressed, in
 // sorted order, with one fixed timestamp and fixed attributes, so the same files always produce the
 // same bytes and therefore the same digest; a compressor's output can change with its version.
 // The reader is what the validators use: they check the archive that would be uploaded, not the
