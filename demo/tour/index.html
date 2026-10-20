@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>SAGA tour: explore the synthetic notes workflow (simulated server)</title>
+    <style>
+      :root {
+        --page: #ffffff;
+        --text: #1b1b1f;
+        --muted: #4a4a55;
+        --border: #767680;
+        --panel: #f4f4f7;
+        --link: #0b4fa8;
+        --button: #e8e8ee;
+        --focus: #0b4fa8;
+        --accent: #7a1f00;
+        color-scheme: light;
+      }
+      :root[data-theme='dark'] {
+        --page: #121214;
+        --text: #ececf1;
+        --muted: #b8b8c4;
+        --border: #8a8a96;
+        --panel: #1c1c21;
+        --link: #8ab4ff;
+        --button: #2a2a31;
+        --focus: #8ab4ff;
+        color-scheme: dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --page: #121214;
+          --text: #ececf1;
+          --muted: #b8b8c4;
+          --border: #8a8a96;
+          --panel: #1c1c21;
+          --link: #8ab4ff;
+          --button: #2a2a31;
+          --focus: #8ab4ff;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--page); color: var(--text); font: 1rem/1.5 system-ui, sans-serif; }
+      a { color: var(--link); }
+      :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+      .banner { margin: 0; padding: 0.75rem 1rem; background: var(--accent); color: #ffffff; font-size: 1.15rem; font-weight: 700; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); }
+      .toolbar p { margin: 0; color: var(--muted); }
+      main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; padding: 1rem; max-width: 72rem; margin: 0 auto; }
+      h1 { margin: 0; font-size: 1.5rem; line-height: 1.25; }
+      h2 { margin: 0 0 0.5rem; font-size: 1.15rem; line-height: 1.3; }
+      h3 { margin: 0.75rem 0 0.25rem; font-size: 1rem; }
+      section { min-width: 0; border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1rem; background: var(--panel); }
+      fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 0.35rem; }
+      legend { padding: 0; font-weight: 600; margin-bottom: 0.25rem; }
+      .toolbar legend { float: left; margin: 0 0.5rem 0 0; }
+      label { display: flex; gap: 0.5rem; align-items: flex-start; }
+      input[type='radio'] { margin-top: 0.3rem; flex: none; }
+      .hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0; }
+      .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+      button { font: inherit; color: var(--text); background: var(--button); border: 1px solid var(--border); border-radius: 0.35rem; padding: 0.35rem 0.75rem; min-height: 2.25rem; cursor: pointer; }
+      .limit { margin: 0.5rem 0 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--accent); background: var(--page); }
+      .limit strong { white-space: nowrap; }
+      ul, ol { margin: 0.25rem 0; padding-left: 1.4rem; }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 1rem; margin: 0.5rem 0 0; }
+      dt { color: var(--muted); }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      pre { margin: 0.25rem 0 0.75rem; padding: 0.5rem 0.75rem; overflow-x: auto; background: var(--page); border: 1px solid var(--border); border-radius: 0.35rem; font-size: 0.85rem; }
+      code { font-family: ui-monospace, monospace; }
+      #tour-log { margin: 0; max-height: 14rem; overflow: auto; font-family: ui-monospace, monospace; font-size: 0.85rem; padding-left: 1.6rem; }
+      [data-view-area] iframe { width: 100%; height: 30rem; border: 2px solid var(--border); margin-top: 0.5rem; background: #ffffff; }
+      #tour-notice { margin: 0.5rem 0 0; font-weight: 600; min-height: 1.5rem; }
+      @media (max-width: 40rem) {
+        main { padding: 0.5rem; }
+        section { padding: 0.6rem; }
+        dl { grid-template-columns: 1fr; }
+        button { flex: 1 1 auto; }
+      }
+      @media (forced-colors: active) {
+        .banner, .limit { border: 2px solid CanvasText; }
+      }
+    </style>
+  </head>
+  <body>
+    <p class="banner" role="note" data-testid="synthetic-banner">Synthetic example — server checks simulated</p>
+    <div class="toolbar">
+      <p>Nothing here connects to a server, a live account or a production credential.</p>
+      <fieldset class="row" data-testid="theme">
+        <legend>Theme</legend>
+      </fieldset>
+    </div>
+    <main>
+      <h1>Explore the notes workflow: allowed, denied and obsolete actions</h1>
+      <p>
+        This is the notes example from the SAGA demonstration, running its real view, action definitions and renderer in your browser. There is <strong>no backend</strong>: a small simulated server in this page answers the
+        view’s three tool calls from synthetic data and from the situation you choose. Every scenario links to the source it uses.
+      </p>
+      <ul data-testid="simulation-boundary">
+        <li><strong>Real here:</strong> the notes view, its layout messages, its action definitions, the action runtime and the renderer.</li>
+        <li><strong>Simulated here:</strong> who is asking, the session check, the server’s decision and its backend. Their answers are local data you select.</li>
+        <li><strong>Not in this tour:</strong> episode descriptions and protected Play. They need the demonstration’s real server, so they are not offered here; <a data-guide="demo" href="#">run the local demonstration</a> to try them.</li>
+      </ul>
+
+      <section aria-labelledby="scenario-heading">
+        <h2 id="scenario-heading">1. Choose a scenario</h2>
+        <fieldset data-testid="scenarios">
+          <legend>Scenario</legend>
+        </fieldset>
+      </section>
+
+      <section aria-labelledby="renderer-heading">
+        <h2 id="renderer-heading">2. Choose a renderer preview</h2>
+        <fieldset data-testid="renderers">
+          <legend>Renderer</legend>
+        </fieldset>
+        <p class="hint" data-testid="renderer-evidence"></p>
+        <p class="hint">Only previews that work in this tour are offered. Changing the renderer starts the scenario again.</p>
+      </section>
+
+      <section aria-labelledby="try-heading" data-testid="scenario-detail">
+        <h2 id="try-heading">3. Try it</h2>
+        <h3 data-testid="scenario-title"></h3>
+        <p data-testid="scenario-summary"></p>
+        <h3>What to press</h3>
+        <ol data-testid="scenario-steps"></ol>
+        <h3>What you will see</h3>
+        <p data-testid="scenario-expect"></p>
+        <p class="limit" data-testid="scenario-limit"></p>
+        <p data-testid="scenario-links"></p>
+        <div class="row">
+          <button type="button" data-testid="open-view">Open the view</button>
+          <button type="button" data-testid="close-view">Close the view</button>
+          <button type="button" data-testid="refresh-view">Refresh the open view</button>
+          <button type="button" data-testid="restart">Start this scenario again</button>
+        </div>
+        <p id="tour-notice" role="status" data-testid="tour-notice"></p>
+        <ul class="hint" data-testid="standing-limits">
+          <li>A simulated session check does not authenticate anyone.</li>
+          <li>A simulated denial does not prove that any server enforces anything.</li>
+          <li>Local cancellation does not prove that a remote effect was undone.</li>
+        </ul>
+        <h3>The notes view (mounted by a local stand-in host, in a sandboxed frame)</h3>
+        <div data-view-area></div>
+      </section>
+
+      <section aria-labelledby="backend-heading">
+        <h2 id="backend-heading">4. The simulated backend</h2>
+        <p class="hint">These stand in for a real backend changing while a view is open. They change Alice’s synthetic account only. Your choices are local to this page.</p>
+        <fieldset data-testid="people">
+          <legend>Who is asking (simulated; authenticates nobody)</legend>
+        </fieldset>
+        <p class="hint" data-testid="person-effect"></p>
+        <h3>Change the backend</h3>
+        <div class="row" data-testid="controls"></div>
+        <h3>Simulated backend state</h3>
+        <dl data-testid="server-state"></dl>
+      </section>
+
+      <section aria-labelledby="log-heading">
+        <h2 id="log-heading">Request log</h2>
+        <ol id="tour-log" role="log" aria-label="Simulated request log" data-testid="tour-log"></ol>
+      </section>
+
+      <section aria-labelledby="source-heading">
+        <h2 id="source-heading">Where this is in the source</h2>
+        <p class="hint" data-testid="source-identity"></p>
+        <div data-testid="sources"></div>
+        <h3>Guides</h3>
+        <ul data-testid="guides"></ul>
+      </section>
+
+      <section aria-labelledby="limits-heading">
+        <h2 id="limits-heading">What this tour does not show</h2>
+        <ul data-testid="tour-limits">
+          <li>No real authentication, OAuth flow or identity provider, and no run in ChatGPT, Claude or Alexa+. The host here is a local stand-in, not an assistant host.</li>
+          <li>No protected media, no Patreon access and no playback. This tour plays nothing.</li>
+          <li>React has bounded evidence: direct action attachment and the notes application in a local fixture host. It is not renderer parity, and there is no React starter, template or CLI pair.</li>
+          <li>The SDK is an unpublished candidate. The packages are private and this page is built from locally packed candidate tarballs, not from a registry.</li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="./src/tour.ts"></script>
+  </body>
+</html>
