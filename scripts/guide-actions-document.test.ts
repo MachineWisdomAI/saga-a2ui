@@ -100,9 +100,10 @@ describe('the commands the guide tells a reader to type', () => {
     }
   });
 
-  it('never tell a reader to install a registry package: there is no release', () => {
+  it('keeps the Lit tutorial on its matched candidate packages', () => {
     expect(guide).not.toMatch(/npm (install|i|add) [^\n]*@saga-a2ui/);
-    expect(guide).toMatch(/there is no release/i);
+    expect(guide).toContain('unpublished Lit renderer');
+    expect(guide).not.toMatch(/there is no release/i);
     expect(guide).toContain('candidate-update-and-rollback.md');
   });
 });
