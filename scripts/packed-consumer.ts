@@ -68,8 +68,8 @@ function link(name: string, into: string): void {
 
 /**
  * The prerelease version a candidate build carries: `0.0.0-candidate.g<first 12 hex of the commit>`,
- * with `.dirty` appended when tracked files differ from that commit. The packages themselves stay
- * unversioned (docs/version-policy.md): this identity exists only in the staged copy that is packed,
+ * with `.dirty` appended when tracked files differ from that commit. This identity exists only in
+ * the staged candidate copy, independently of enrolled release versions (docs/version-policy.md),
  * so it names a build of one revision and is never a release, a tag or an npm availability claim.
  * The leading `g` keeps an all-digit commit prefix a valid semver identifier.
  */
@@ -92,29 +92,29 @@ const SHIPS_THIRD_PARTY_NOTICES: readonly SdkPackage[] = ['components'];
 
 /** The files of a candidate tarball that are neither source, the manifest nor a license obligation: expected to be none. */
 export function unexpectedPackageFiles(name: SdkPackage | string, files: readonly string[]): string[] {
-  const obligations = ['package.json', 'LICENSE', ...(SHIPS_THIRD_PARTY_NOTICES.includes(name as SdkPackage) ? ['THIRD_PARTY_NOTICES.md'] : [])];
+  const obligations = ['package.json', 'README.md', 'LICENSE', ...(SHIPS_THIRD_PARTY_NOTICES.includes(name as SdkPackage) ? ['THIRD_PARTY_NOTICES.md'] : [])];
   return files.filter((file) => !obligations.includes(file) && !file.startsWith('src/'));
 }
 
 /**
  * The manifest a candidate tarball carries: the repository manifest with the candidate version, every
  * SDK-to-SDK dependency and peer range pinned to exactly that version, and the notice files listed.
- * The repository ranges must be `*` (an SDK package is resolved by installing its sibling); any
- * other form is rejected rather than rewritten. `private` is kept, and `publishConfig.registry` names
+ * Repository ranges must be `*` or the sibling
+ * package's enrolled version; other forms are rejected. `private` is forced true, and `publishConfig.registry` names
  * a host that cannot resolve (`.invalid`, RFC 6761), so passing the artifact to `npm publish` aims
  * it at nothing instead of the public registry. npm 12.0.2 accepts a private manifest in
  * `publish --dry-run`, so neither field is relied on alone: publication is a separate, authorized
  * act, and no CI job holds a publish credential.
  */
-export function candidateManifest(manifest: Record<string, unknown>, version: string, extraFiles: readonly string[] = []): Record<string, unknown> {
-  const pinned: Record<string, unknown> = { ...manifest, version, publishConfig: { registry: CANDIDATE_REGISTRY } };
+export function candidateManifest(manifest: Record<string, unknown>, version: string, extraFiles: readonly string[] = [], siblingVersions: Readonly<Record<string, string>> = {}): Record<string, unknown> {
+  const pinned: Record<string, unknown> = { ...manifest, private: true, version, publishConfig: { registry: CANDIDATE_REGISTRY } };
   for (const field of ['dependencies', 'peerDependencies', 'devDependencies'] as const) {
     const group = manifest[field] as Record<string, string> | undefined;
     if (group === undefined) continue;
     pinned[field] = Object.fromEntries(
       Object.entries(group).map(([name, range]) => {
         if (!name.startsWith('@saga-a2ui/')) return [name, range];
-        if (range !== '*') throw new Error(`${String(manifest.name)} ${field}.${name} is "${range}"; an SDK package is declared as "*" in the repository.`);
+        if (range !== '*' && range !== siblingVersions[name]) throw new Error(`${String(manifest.name)} ${field}.${name} is "${range}"; an SDK package is declared as "*" or its enrolled sibling version in the repository.`);
         return [name, version];
       }),
     );
@@ -131,6 +131,36 @@ export function candidateManifest(manifest: Record<string, unknown>, version: st
  * report an array.
  */
 export function packSdkPackages(work: string, packages: readonly SdkPackage[], destination: string, version: string): PackedPackage[] {
+  const siblingVersions = Object.fromEntries(
+    fs.readdirSync(path.join(repoRoot, 'packages')).flatMap((name) => {
+      const file = path.join(repoRoot, 'packages', name, 'package.json');
+      if (!fs.existsSync(file)) return [];
+      const manifest = JSON.parse(fs.readFileSync(file, 'utf8')) as { name: string; version?: string };
+      return manifest.version === undefined ? [] : [[manifest.name, manifest.version]];
+    }),
+  );
+  return packPackages(work, packages, destination, (manifest, notices) => candidateManifest(manifest, version, notices, siblingVersions));
+}
+
+/** Pack enrolled release manifests unchanged except for license-file inclusion. Never publishes. */
+export function packReleasePackages(work: string, destination: string): PackedPackage[] {
+  const packages: readonly SdkPackage[] = ['core', 'components', 'mcp', 'react'];
+  const versions = Object.fromEntries(packages.map((name) => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', name, 'package.json'), 'utf8')) as Record<string, unknown>;
+    if (manifest.private !== false || typeof manifest.version !== 'string') throw new Error(`${name} must have an enrolled public release manifest.`);
+    return [`@saga-a2ui/${name}`, manifest.version];
+  }));
+  return packPackages(work, packages, destination, (manifest, notices) => {
+    for (const field of ['dependencies', 'peerDependencies'] as const) {
+      for (const [name, range] of Object.entries((manifest[field] ?? {}) as Record<string, string>)) {
+        if (name.startsWith('@saga-a2ui/') && range !== versions[name]) throw new Error(`${String(manifest.name)} must pin ${name} to its release version.`);
+      }
+    }
+    return { ...manifest, files: [...((manifest.files as string[] | undefined) ?? []), ...notices] };
+  });
+}
+
+function packPackages(work: string, packages: readonly SdkPackage[], destination: string, prepare: (manifest: Record<string, unknown>, notices: string[]) => Record<string, unknown>): PackedPackage[] {
   fs.mkdirSync(destination, { recursive: true });
   return packages.map((name) => {
     const staged = path.join(work, 'staged', name);
@@ -140,7 +170,8 @@ export function packSdkPackages(work: string, packages: readonly SdkPackage[], d
     for (const notice of notices) fs.copyFileSync(path.join(repoRoot, notice), path.join(staged, notice));
     const manifestPath = path.join(staged, 'package.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
-    fs.writeFileSync(manifestPath, JSON.stringify(candidateManifest(manifest, version, notices)));
+    const prepared = prepare(manifest, notices);
+    fs.writeFileSync(manifestPath, JSON.stringify(prepared));
     const report = JSON.parse(
       execFileSync('npm', ['pack', '--json', '--silent', '--pack-destination', destination], { cwd: staged, encoding: 'utf8' }),
     ) as Record<string, PackedTarball> | PackedTarball[];
@@ -149,7 +180,7 @@ export function packSdkPackages(work: string, packages: readonly SdkPackage[], d
     const bytes = fs.readFileSync(tarball);
     return {
       name,
-      version,
+      version: prepared.version as string,
       tarball,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       integrity: packed.integrity,

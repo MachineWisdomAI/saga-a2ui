@@ -1,7 +1,7 @@
 # Installing SAGA A2UI
 
 SAGA A2UI does not yet have a public npm release. The current repository contains
-a runnable Lit example and private, unreleased SDK packages under `packages/` that cannot be
+a runnable Lit example and unreleased SDK packages under `packages/` that cannot yet be
 installed from a registry. Locally packed copies of them, including the optional
 `@saga-a2ui/components` FaithfulCard, are built into an external example by
 `npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
@@ -30,7 +30,7 @@ does not establish compatibility with a conversational host.
 
 ## First public npm release
 
-The first distribution uses public npm packages under `@saga-a2ui`. Only packages
+The first distribution uses public npm packages under `@saga-a2ui`. The [four-package prerelease preparation](release-packages.md) records proposed versions and exact artifact commands; it does not establish registry availability. Only packages
 with implemented, reviewed public exports and passing release checks will be
 published. The workspace root and runnable application remain private npm
 workspaces; their `private` setting is independent of GitHub repository visibility.
