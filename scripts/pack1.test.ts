@@ -57,12 +57,16 @@ describe('the five owned packages, packed', () => {
   const sdk: PackedSdk = installPackedSdk(work, consumer, ALL_PACKAGES);
   const repoManifest = (name: string) => JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', name, 'package.json'), 'utf8')) as Record<string, unknown>;
 
-  it('packs exactly the owned packages, each private and unversioned in the repository, Apache-2.0, with source and its manifest only', () => {
+  it('packs exactly the owned packages as private candidates with source, metadata and license obligations', () => {
     expect(fs.readdirSync(path.join(repoRoot, 'packages')).filter((name) => fs.existsSync(path.join(repoRoot, 'packages', name, 'package.json'))).sort()).toEqual([...ALL_PACKAGES].sort());
     for (const name of ALL_PACKAGES) {
-      // A package that has no version cannot be published: producing the artifact is not publishing it.
-      expect(repoManifest(name).private, name).toBe(true);
-      expect(repoManifest(name).version, name).toBeUndefined();
+      if (name === 'lit') {
+        expect(repoManifest(name).private, name).toBe(true);
+        expect(repoManifest(name).version, name).toBeUndefined();
+      } else {
+        expect(repoManifest(name).private, name).toBe(false);
+        expect(repoManifest(name).version, name).toMatch(/^\d+\.\d+\.\d+/);
+      }
       expect(sdk.manifests[name]?.name).toBe(`@saga-a2ui/${name}`);
       expect((sdk.manifests[name] as { license?: string }).license, name).toBe('Apache-2.0');
       // The staged copy carries the candidate prerelease identity (an unreleased build of one revision), never a release version.
