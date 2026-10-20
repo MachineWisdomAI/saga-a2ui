@@ -5,7 +5,9 @@ a runnable Lit example and private, unreleased SDK packages under `packages/` th
 installed from a registry. Locally packed copies of them, including the optional
 `@saga-a2ui/components` FaithfulCard, are built into an external example by
 `npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
-(see the README); those are development checks, not an installation recipe. This guide will name the tested package versions when the first release exists.
+(see the README); `npm run build:pack1-consumers` installs the packed packages into two separate
+consumers (the application's own catalog alone, and the same catalog plus the card; see "PACK1" in the README).
+Those are development checks, not an installation recipe. This guide will name the tested package versions when the first release exists.
 
 ## Run the current source example
 
