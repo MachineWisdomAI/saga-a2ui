@@ -187,6 +187,8 @@ interface MountOptions {
   readonly limits?: { deadlineMs?: number; hookMs?: number };
   /** Binds the guide's guarded archive (confirmation and audit after the session check) instead of the example's. */
   readonly guard?: Guarded.GuardEnvironment;
+  /** Replaces what the transport returns for a request, after the server handled it (a lossy or foreign intermediary). */
+  readonly reply?: (request: { readonly name: string }, reply: CallToolResult) => CallToolResult;
 }
 
 function mount(client: Client, paths: readonly string[], options: MountOptions = {}): Mounted {
@@ -199,8 +201,10 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
     published.confirmed = [...confirmed];
   });
   const transport: ServerTransport<CallToolResult> = {
-    callServerTool: async (request, requestOptions) =>
-      (await client.callTool({ name: request.name, arguments: { ...request.arguments } }, requestOptions?.signal === undefined ? {} : { signal: requestOptions.signal })) as CallToolResult,
+    callServerTool: async (request, requestOptions) => {
+      const reply = (await client.callTool({ name: request.name, arguments: { ...request.arguments } }, requestOptions?.signal === undefined ? {} : { signal: requestOptions.signal })) as CallToolResult;
+      return options.reply === undefined ? reply : options.reply(request, reply);
+    },
   };
   const actions = entry.actions.createNotesActions({
     transport,
@@ -210,7 +214,12 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
   });
 
   const archiveAction =
-    options.guard === undefined ? actions.archiveNote : entry.guarded.createGuardedArchive({ transport, requireSession: entry.actions.createSessionPrerequisite(transport), environment: options.guard });
+    options.guard === undefined ? actions.archiveNote : entry.guarded.createGuardedArchive({
+            transport,
+            requireSession: entry.actions.createSessionPrerequisite(transport),
+            environment: options.guard,
+            parseArchived: (reply) => entry.contract.ArchiveOutputSchema.parse(reply.structuredContent),
+          });
   const Archive = entry.componentKind<RowEvents>('ActionButton');
   const host = entry.createInstanceHost({ onSetupError: (error) => void errors.push(error), ...(options.limits === undefined ? {} : { limits: options.limits }) });
   const bindings = new Map<string, ActionBinding>();
@@ -479,6 +488,31 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     expect(guard.asked).toEqual([]);
     expect(guard.audit.size).toBe(0);
     expect(backend.calls).toMatchObject({ isSignedIn: 1, archive: 0 });
+    rows.close();
+  });
+
+  it('a reply that is not an error but carries no valid acknowledgement leaves the audit entry unknown, without a retry', async () => {
+    const { alice, backend } = await start();
+    const guard = trace();
+    // The server archived; what came back is an empty, structure-less success.
+    const rows = mount(alice, ['/notes/0'], { guard: guard.environment, reply: (request, reply) => (request.name === 'archive_note' ? { content: [] } : reply) });
+    await rows.press('/notes/0');
+    expect(backend.calls.archive).toBe(1); // one protected request, never repeated
+    expect(backend.archived).toEqual(['n-1']); // the write did happen: only the acknowledgement was lost
+    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'unknown' }]);
+    rows.close();
+  });
+
+  it('a malformed acknowledgement of the wrong shape is unknown too', async () => {
+    const { alice, backend } = await start();
+    const guard = trace();
+    const rows = mount(alice, ['/notes/0'], {
+      guard: guard.environment,
+      reply: (request, reply) => (request.name === 'archive_note' ? { content: [], structuredContent: { noteId: 'n-1', archivedAt: 'yesterday' } } : reply),
+    });
+    await rows.press('/notes/0');
+    expect(backend.calls.archive).toBe(1);
+    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'unknown' }]);
     rows.close();
   });
 

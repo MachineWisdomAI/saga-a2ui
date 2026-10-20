@@ -246,11 +246,11 @@ return Action.server<InstanceEvent<unknown>, Reply>('archive-note-guarded', tran
   .run(async ({ params, call }) => {
     const reply = await call('archive_note', { noteId: params.noteId });
     if (reply.isError === true) throw new Error('The archive request failed');
-    return reply;
+    return parseArchived(reply); // a reply is not an acknowledgement until the application has validated it
   })
 ```
 
-`provided.auditId` reaches the handler and every later hook as a typed value, and the compiler rejects an ordering in which a prerequisite needs a value nothing provided yet. The traced test runs this chain:
+`provided.auditId` reaches the handler and every later hook as a typed value, and the compiler rejects an ordering in which a prerequisite needs a value nothing provided yet. `parseArchived` is the application's own validation of the acknowledgement (the test passes the notes example's `ArchiveOutputSchema.parse`): a reply that is not an error is not yet proof that the archive happened, and a reply that fails validation fails the handler, so the audit entry settles as `unknown`, as for any other unreadable outcome, with no retry. The traced test runs this chain:
 
 | Case | Observed |
 | --- | --- |
@@ -258,6 +258,7 @@ return Action.server<InstanceEvent<unknown>, Reply>('archive-note-guarded', tran
 | The person declines | No audit entry, no protected request. Only the session check's own request was made. |
 | The audit store is down | The press is refused as `audit-unavailable`; no protected request |
 | The session is invalid | The person is not asked and nothing is audited: prerequisites stop at the first refusal |
+| Every prerequisite proceeds, the archive is applied, but the reply carries no valid acknowledgement (`{ content: [] }`, or a wrong shape) | One protected request, never repeated; the audit entry stays `unknown`, not `archived` |
 | Every prerequisite proceeds, the permission was withdrawn | The server still refuses; the audit entry stays `unknown`, because this handler treats every failed reply alike (the notes example separates the server's declared refusals with `declaresNoEffect`) |
 
 A prerequisite is not the control's appearance. A spinner or a disabled button is the **presentation of binding state**: `binding.state.phase` is `idle`, `running`, `settling` or `disposed`, and `binding.subscribe` calls a listener after each change. What `before` means is only "must finish first, and may refuse". A disabled button does not stop a press that reaches the callable, and a prerequisite does not draw anything.
