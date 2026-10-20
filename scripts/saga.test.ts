@@ -282,7 +282,9 @@ describe('an output path that is replaced while the copy runs', () => {
    * `fail` makes that write fail; otherwise it completes and the swap happens after it.
    */
   function replaceOnWrite(cwd: string, nth: number, fail: boolean, after?: () => void): { writes: () => number } {
-    const target = path.join(cwd, 'app');
+    // The CLI writes under the real location of the working directory (newDirectoryTarget resolves
+    // it), which differs from the lexical one where the temporary directory is a link (macOS /var).
+    const target = path.join(fs.realpathSync(cwd), 'app');
     const write = fs.writeFileSync.bind(fs);
     let writes = 0;
     let swapped = false;
