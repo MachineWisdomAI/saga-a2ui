@@ -1,4 +1,4 @@
-import { A2uiSurface } from '@a2ui/react/v0_9';
+import { A2uiSurface } from '@saga-a2ui/react/a2ui';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { HostLinks } from '@saga-a2ui/components/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';

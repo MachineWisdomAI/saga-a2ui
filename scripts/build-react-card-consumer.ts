@@ -35,8 +35,6 @@ export const REACT_CARD_SDK_PACKAGES = ['core', 'components', 'mcp', 'react'] as
 
 /** The packages the consumer imports itself, besides the SDK packages. */
 export const REACT_CARD_OWN_DEPENDENCIES = [
-  '@a2ui/react',
-  '@a2ui/web_core',
   '@modelcontextprotocol/ext-apps',
   '@modelcontextprotocol/server',
   'react',
