@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+  padding: 0.5rem;
+  font-family: system-ui, sans-serif;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.saga-play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 100%;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+.saga-play button {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.saga-play button[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.saga-play button:focus-visible,
+.saga-play-status:focus-visible {
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}
+
+.saga-play-status {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
