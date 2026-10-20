@@ -22,3 +22,12 @@ jobs:
       - run: npm ci --prefix apps/lynx-fixture
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
+      # PACK2: pack, install and qualify the release candidate, then keep it as a workflow artifact.
+      # Nothing is published: this job has contents: read and holds no registry credential.
+      - run: npm run candidate:pack -- --out candidate-out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saga-a2ui-candidate-${{ github.sha }}
+          path: candidate-out/
+          if-no-files-found: error
+          retention-days: 14

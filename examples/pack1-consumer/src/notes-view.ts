@@ -25,6 +25,12 @@ export interface NotesExtension {
 }
 
 export const PROBLEM_TEXT = 'Your notes could not be shown.';
+/**
+ * A successful result this view's contract does not accept comes from a server of another build.
+ * Nothing of it is shown; the person is told to reopen, and the maintainer to update both together.
+ */
+export const MISMATCH_TEXT =
+  'Your notes could not be shown: this view and its server are from different builds. Reopen the notes; if this continues, the maintainer must update the server and the view together.';
 export const CLOSED_TEXT = 'This view was closed.';
 const WAITING_TEXT = 'Waiting for your notes…';
 
@@ -88,7 +94,7 @@ export async function startNotesView(extension?: (app: App) => NotesExtension): 
   const show = (result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void => {
     const parsed = result.isError === true ? undefined : NotesOutputSchema.safeParse(result.structuredContent);
     element()?.ingest(notesData(parsed?.success ? parsed.data.notes : []));
-    say(parsed?.success ? 'Your notes' : PROBLEM_TEXT);
+    say(parsed === undefined ? PROBLEM_TEXT : parsed.success ? 'Your notes' : MISMATCH_TEXT);
   };
 
   // The application's one way to end its view, for a host teardown and for the page going away

@@ -8,7 +8,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { CLOSED_VIEW_CSP } from '../packages/mcp/src/policy/index.js';
 import { startTestHost, type TestHost } from '../packages/mcp/src/server/http-host.test-support.js';
 import { answerConsumerSource, prepareAnswerConsumer } from './build-answer-consumer.js';
-import { buildConsumerApplication, bundleConsumerEntry, bundleConsumerServer, createWorkDirectory, repoRoot } from './packed-consumer.js';
+import { buildConsumerApplication, bundleConsumerEntry, bundleConsumerServer, createWorkDirectory, repoRoot, unexpectedPackageFiles } from './packed-consumer.js';
 
 // An application outside this repository installs the packed core, Lit and optional components
 // packages and renders a FaithfulCard. This checks what that installation consists of; the built
@@ -46,7 +46,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
   it('installs each package as a tarball with source and its manifest only', () => {
     expect(Object.keys(sdk.files).sort()).toEqual(['components', 'core', 'lit', 'mcp']);
     for (const [name, packed] of Object.entries(sdk.files)) {
-      expect(packed.filter((file) => file !== 'package.json' && !file.startsWith('src/')), name).toEqual([]);
+      expect(unexpectedPackageFiles(name, packed), name).toEqual([]);
       expect(packed.filter((file) => /\.test(-support)?\.ts$/.test(file)), name).toEqual([]);
     }
     expect(sdk.files.components).toContain('src/faithful-card/index.ts');
@@ -60,7 +60,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(components.peerDependencies ?? {}).toEqual({});
     const lit = sdk.manifests.lit!;
     expect(Object.keys(lit.dependencies ?? {})).not.toContain('@saga-a2ui/components');
-    expect(lit.peerDependencies).toEqual({ '@saga-a2ui/components': '*' });
+    expect(lit.peerDependencies).toEqual({ '@saga-a2ui/components': sdk.version });
     expect(lit.peerDependenciesMeta?.['@saga-a2ui/components']).toEqual({ optional: true });
   });
 
