@@ -7,7 +7,7 @@ import { relativePosix, repositoryRoot, walkFiles } from './authored-tree.js';
 // Compares authored headless *.test.ts files with Vitest's own file list, and
 // authored *.spec.ts files with Playwright's own list. The two inventories are
 // separate. This does not copy either runner's include glob, and it does not
-// exclude fixture or e2e tests. See README.md.
+// exclude fixture or e2e tests. See docs/development-reference.md#repository-verification.
 
 const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const vitestBin = path.join(toolRoot, 'node_modules', '.bin', 'vitest');

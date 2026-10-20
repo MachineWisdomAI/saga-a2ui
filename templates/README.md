@@ -57,8 +57,9 @@ yields to the event loop between files, which a synchronous copy cannot do.
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
 ```
 
-`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here. When a pair is
-qualified, its owner adds one row there; while it fails, the row is removed.
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all four
+templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`) are offered, each with `--a2ui-stack lit-mcp` and its
+own `--server`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
 
 `saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the
 standalone demonstration (`demo/lit-node`, DEMO1) of the pair `DEMO_TEMPLATE` names. Its synthetic accounts and

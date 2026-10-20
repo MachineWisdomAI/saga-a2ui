@@ -5,9 +5,9 @@ a runnable Lit example and unreleased SDK packages under `packages/` that cannot
 installed from a registry. Locally packed copies of them, including the optional
 `@saga-a2ui/components` FaithfulCard, are built into an external example by
 `npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
-(see the README); `npm run build:pack1-consumers` installs the packed packages into two separate
-consumers (the application's own catalog alone, and the same catalog plus the card; see "PACK1" in the README).
-The two PACK1 consumers qualify notes and Archive; #154/#156 also qualifies the actual external authenticated browse/Play listener with matching installed resources, as recorded in the README. Those are development checks, not an installation recipe. CI also packs the five packages as an unreleased **candidate** artifact (PACK2); [candidate contents, update, rollback and the publication recipe](candidate-update-and-rollback.md) describe it. A candidate's prerelease version is not a release version. This guide will name the tested package versions when the first release exists. To run the demonstration, create a project from a qualified starter or attach SAGA to an existing backend from a candidate build, follow [Getting started](getting-started.md).
+(see the [development reference](development-reference.md)); `npm run build:pack1-consumers` installs the packed packages into two separate
+consumers (the application's own catalog alone, and the same catalog plus the card; see "PACK1" in the [development reference](development-reference.md)).
+The two PACK1 consumers qualify notes and Archive; #154/#156 also qualifies the actual external authenticated browse/Play listener with matching installed resources, as recorded in the [development reference](development-reference.md). Those are development checks, not an installation recipe. CI also packs the five packages as an unreleased **candidate** artifact (PACK2); [candidate contents, update, rollback and the publication recipe](candidate-update-and-rollback.md) describe it. A candidate's prerelease version is not a release version. This guide will name the tested package versions when the first release exists. To run the demonstration, create a project from a qualified starter or attach SAGA to an existing backend from a candidate build, follow [Getting started](getting-started.md).
 
 ## Run the current source example
 
@@ -24,7 +24,7 @@ npm start
 ```
 
 The example's development credentials and content are synthetic. The
-[README](../README.md) describes its MCP listener, authenticated browsing and
+[development reference](development-reference.md) describes its MCP listener, authenticated browsing and
 playback recipes, and the limits of its local host fixture. Running it locally
 does not establish compatibility with a conversational host.
 

@@ -80,7 +80,7 @@ Each claimed combination passes the same behavior, and a claim is only as old as
 - `apps/lit-host/e2e/pack1-consumers.spec.ts`, once for `own` and once for `card`: the page and server the consumer's own build produced, over a real Streamable HTTP connection: action input, one definition bound to two rendered instances, session prerequisite, server-side authorization after a withdrawn permission, known-refusal versus unknown outcome, late result after an item change, disposal, and the mismatch case.
 - `scripts/installed-listener.test.ts` and `apps/lit-host/e2e/installed-listener.spec.ts`: the installed browse and Play listener and player.
 
-`candidate.json` lists these cases by file and exact title (`carriedEvidence.cases`) with the SHA-256 of each file, and a headless test fails if a listed title no longer exists, so a combination is never claimed on a renamed or removed check. An obsolete handler-name scheme cannot satisfy them: a resource whose actions are not bound to the pressed instance fails the two-row, item-change and disposal cases (README, PACK2 section, lists the mutations run).
+`candidate.json` lists these cases by file and exact title (`carriedEvidence.cases`) with the SHA-256 of each file, and a headless test fails if a listed title no longer exists, so a combination is never claimed on a renamed or removed check. An obsolete handler-name scheme cannot satisfy them: a resource whose actions are not bound to the pressed instance fails the two-row, item-change and disposal cases (the [development reference’s PACK2 section](development-reference.md#release-candidate-update-and-rollback-pack2) lists the mutations run).
 
 Listing a case by title is a claim, not a run. What ran for this candidate is in the rehearsal below.
 

@@ -95,13 +95,13 @@ npm start
 
 ### Unqualified pairs are refused
 
-`saga init` offers only the pairs CI qualifies and that its own list names. Asking for another pair exits with status 1 before anything is written, and the message lists the supported ones:
+`saga init` offers only the pairs CI qualifies and that its own list names: `lit-mcp` on `node`, `express`, `fastify` and `hono`. Asking for another pair exits with status 1 before anything is written, and the message lists the four supported ones:
 
 ```sh repository
 npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server node ./my-app
 ```
 
-A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today. React has no starter, template or `saga init` pair.
+A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today (all four). `hapi` has no qualified template, and React has no starter, template or `saga init` pair.
 
 ## Attach to an existing backend
 
@@ -146,7 +146,7 @@ Named-host receipts exist for a few specific flows and are recorded in [host com
 
 ## Actions
 
-The attachment above is the whole of what this guide teaches; [the action walkthrough (GUIDE2)](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) is where the details belong. This section only says where to look and what to expect.
+The attachment above is the whole of what this guide teaches. [Change a component and trace allowed and denied requests](actions.md) is where the details belong: it changes a component and its action, then traces input, prerequisites, verified identity, authorization, delivery and cleanup, with every case run. This section is the short version.
 
 The verified **non-playback** example is the notes application: `examples/pack1-consumer/src/notes-actions.ts` defines Archive once and `notes-view.ts` attaches it to each rendered row. The demonstration serves it behind the starter's own authentication, and its README shows each outcome:
 
@@ -168,7 +168,7 @@ Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 secon
 | Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
 | Lit | The full renderer, installed from packed tarballs; the starter, demonstration and notes example | Windows |
 | React | **Direct action attachment** (`@saga-a2ui/react/actions`, ACT2) and the optional FaithfulCard text and image-consent slices, from the same tarballs; the notes browse and Play run through React in a local fixture host | **Installed parity** (E15): no React starter, template, CLI pair, demonstration or authenticated-recipe is claimed |
-| Server targets | `node`, `express`, `hono`, `fastify` qualified with `lit-mcp` | `hapi`; no full matrix; `saga init` offers `node` only |
+| Server targets | `node`, `express`, `hono`, `fastify` qualified with `lit-mcp` | `hapi`; no full matrix; `saga init` offers `node`, `express`, `fastify` and `hono`; the standalone demonstration is the Node application only |
 | Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |
 
 A renderer is qualified by running its own lifecycle, not by declaring that it could: a type declaration that compiles is not a working setup claim, and no renderer is forced through a Lit-specific lifecycle (custom elements and `createA2uiAppElement`). React attaches through its own provider and hook; the shared contract is renderer-neutral.
@@ -190,7 +190,7 @@ import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react
 These are recorded, not hidden, and none is a gate. No developer other than the author has followed this guide yet; non-author availability is not a new acceptance requirement.
 
 - `saga init` prints a plain `npm install`, but the candidate pins it writes cannot be resolved from a registry, so the reader has to name the tarballs. Building the matching candidate takes a full `npm run build`.
-- Four server templates qualify, and `saga init` offers one. A reader who sees a template for `express`, `hono` or `fastify` must read the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) to learn that they cannot create it with the command.
+- Four server templates qualify, and `saga init` offers all four. The standalone demonstration is still the Node application only, so `saga demo` refuses `express`, `hono` and `fastify`.
 - The existing-backend snippets call starter files that are not shown inline (`server/authenticate.ts`, `server/identity.ts`, `server/verifier.ts`, `server/authorization.ts`). The reader must read them in the template.
 - There is no per-package README and no hosted demonstration download, so a developer works from a checkout.
 - Checking the demo commands needs the built download (`npm run build:demo`) to exist first.
@@ -198,6 +198,6 @@ These are recorded, not hidden, and none is a gate. No developer other than the 
 ## Where to go next
 
 - The attach recipes: [Attach SAGA to an existing backend](attach-to-existing-backend.md).
-- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [README](../README.md).
-- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and the README's "The action contract across the current codebase (ACT7)".
+- The command that creates a project, and its safety rules: `scripts/saga.ts` and the "Creating a project with `saga init` (CLI1)" section of the [development reference](development-reference.md#creating-a-project-with-saga-init-cli1).
+- The action contract in depth: the [action binding design](../blueprints/modules/action_binding.blueprint.md) and [The action contract across the current codebase (ACT7)](development-reference.md#the-action-contract-across-the-current-codebase-act7).
 - The design this guide implements: the [application setup Blueprint](../blueprints/features/application_setup.blueprint.md).

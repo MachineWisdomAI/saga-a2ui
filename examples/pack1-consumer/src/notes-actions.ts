@@ -29,14 +29,20 @@ function requireNoteId(value: unknown): string {
   return value;
 }
 
-export function createNotesActions(environment: NotesEnvironment) {
-  // An asynchronous session prerequisite. It sends a request of its own (`check_session`), which
-  // the server counts apart from the protected `archive_note`, and it authorizes nothing: the
-  // server decides again for every protected request.
-  const requireSession = prerequisite('session', async ({ signal }) => {
-    const reply = await environment.transport.callServerTool({ name: SESSION_TOOL, arguments: {} }, { signal });
+/**
+ * An asynchronous session prerequisite, reusable by any action that needs a valid session. It sends
+ * a request of its own (`check_session`), which the server counts apart from the protected
+ * `archive_note`, and it authorizes nothing: the server decides again for every protected request.
+ */
+export function createSessionPrerequisite(transport: ServerTransport<CallToolResult>) {
+  return prerequisite('session', async ({ signal }) => {
+    const reply = await transport.callServerTool({ name: SESSION_TOOL, arguments: {} }, { signal });
     return reply.isError === true ? refuse('sign-in-required') : proceed({ signedIn: true as const });
   });
+}
+
+export function createNotesActions(environment: NotesEnvironment) {
+  const requireSession = createSessionPrerequisite(environment.transport);
 
   /** The archive-note flow: one server action, reusable on every row. */
   const archiveNote = Action.server<ActionButtonActivation, CallToolResult>('archive-note', environment.transport)
