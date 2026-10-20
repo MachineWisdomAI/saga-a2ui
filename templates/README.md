@@ -7,11 +7,14 @@ their snippets from these directories; they do not keep copies.
 | Template | Stack | Server | Status |
 | --- | --- | --- | --- |
 | [`lit-node`](lit-node/) | `lit-mcp` (Lit view, MCP delivery) | `node` (`@modelcontextprotocol/node` 2.1.1) | Qualified in CI: [`scripts/starter.test.ts`](../scripts/starter.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
+| [`lit-hono`](lit-hono/) | `lit-mcp` (Lit view, MCP delivery) | `hono` (`@modelcontextprotocol/hono` 2.0.2 with `hono` 4.13.13 and `@hono/node-server` 1.19.17) | Qualified in CI: [`scripts/starter-hono.test.ts`](../scripts/starter-hono.test.ts) and [`apps/lit-host/e2e/starter-hono.spec.ts`](../apps/lit-host/e2e/starter-hono.spec.ts) |
 
-The synthetic demonstration of this pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
+The synthetic demonstration of the `lit-node` pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
 
-The `express`, `hono`, `fastify` and `hapi` server targets are separate required slices
-([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62) to
+`lit-hono` is `lit-node` with only the server adapter files replaced (`server/listener.ts`, `server/authenticate.ts`, `package.json` and its README); a test fails if any other file differs.
+
+The `express`, `fastify` and `hapi` server targets are separate required slices
+([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62), [#64](https://github.com/MachineWisdomAI/saga-a2ui/issues/64) and
 [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)). A pair is offered only while CI qualifies it.
 
 ## A template's files
@@ -27,8 +30,10 @@ The `express`, `hono`, `fastify` and `hapi` server targets are separate required
 
 ```sh
 npx tsx scripts/build-starter.ts                      # export, install packed candidate tarballs, build; apps/lit-host/dist/starter
+npx tsx scripts/build-starter-hono.ts                 # the same for lit-hono; apps/lit-host/dist/starter-hono
 npx tsx scripts/starter-snippets.ts                   # list the attach-to-an-existing-backend snippets
 npx tsx scripts/starter-snippets.ts --out DIR         # write them as files into a new directory
+npx tsx scripts/starter-snippets.ts --template lit-hono   # choose another template (default lit-node)
 ```
 
 `exportTemplate`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
