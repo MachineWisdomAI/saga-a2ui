@@ -164,8 +164,17 @@ export function exportTemplate(template: string, destination: string, options: {
   const target = path.resolve(destination);
   if (fs.existsSync(target) || isSymlink(target)) throw new TemplateError(`${target} already exists; choose a new directory.`);
   const files = templateFiles(template);
+  // Only a directory this call creates is ever written into or removed. The existence check above can
+  // be overtaken by another process, so the directory itself is created without `recursive`, which
+  // fails if it exists; the cleanup below must never reach a directory that was not created here.
+  fs.mkdirSync(path.dirname(target), { recursive: true });
   try {
-    fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new TemplateError(`${target} already exists; choose a new directory.`);
+    throw error;
+  }
+  try {
     for (const file of files) {
       const out = path.join(target, file);
       fs.mkdirSync(path.dirname(out), { recursive: true });

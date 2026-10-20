@@ -1,7 +1,7 @@
 # Starter templates
 
 Maintained, tested template sources for new SAGA applications and for attaching SAGA to an existing
-backend. A template is not an npm package. The later CLI and the developer guides take their output and
+backend. A template is not an npm package. `saga init` (CLI1) and the developer guides take their output and
 their snippets from these directories; they do not keep copies.
 
 | Template | Stack | Server | Status |
@@ -34,3 +34,10 @@ npx tsx scripts/starter-snippets.ts --out DIR         # write them as files into
 `exportTemplate`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
 are the functions the CLI and guides call. Export writes only into a directory that does not exist,
 installs nothing and runs nothing.
+
+```sh
+npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
+```
+
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here. When a pair is
+qualified, its owner adds one row there; while it fails, the row is removed.

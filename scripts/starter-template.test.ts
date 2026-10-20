@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import {
   TemplateError,
   exportTemplate,
@@ -57,6 +57,22 @@ describe('exporting a starter', () => {
     expect(() => exportTemplate(template, link, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
     expect(fs.readdirSync(existing)).toEqual(['keep.txt']);
     expect(fs.readFileSync(path.join(existing, 'keep.txt'), 'utf8')).toBe('mine');
+  });
+
+  it('does not merge into, or remove, a directory that appeared after the existence check', () => {
+    // The race: the path is absent when the export looks and present when it creates the directory.
+    const raced = path.join(work, 'raced');
+    fs.mkdirSync(raced);
+    fs.writeFileSync(path.join(raced, 'keep.txt'), 'mine');
+    const exists = fs.existsSync.bind(fs);
+    const spy = vi.spyOn(fs, 'existsSync').mockImplementation((candidate) => (candidate === raced ? false : exists(candidate)));
+    try {
+      expect(() => exportTemplate(template, raced, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readdirSync(raced)).toEqual(['keep.txt']);
+    expect(fs.readFileSync(path.join(raced, 'keep.txt'), 'utf8')).toBe('mine');
   });
 
   it('writes nothing for a directory that is not a template, and removes only its own output when the export fails part-way', () => {
