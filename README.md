@@ -56,6 +56,16 @@ Host support depends on the flow. See [observed host behavior and remaining limi
 - [Blueprints](blueprints/README.md#find-a-design): architecture, contracts and their implementation status.
 - [Adopters](ADOPTERS.md): applications using Saga and their current status.
 
+## Why I built Saga
+
+*Younes Abouelnagah, founder of Machine Wisdom AI*
+
+Working on Headspace for Alexa+ inspired Saga. Getting the production integration working took attention away from the application itself, and the player remained bespoke. I wanted a reusable application foundation for the next team building inside an assistant. I chose A2UI for its UI structure, bindings and updates, with MCP Apps providing host integration.
+
+That work followed earlier Gmail Add-on and Apps Script experience, and five years as a Principal Engineer in Roblox Trust and Safety. Those experiences inform how I approach application behavior and its safety boundaries.
+
+Amazon has publicly named Headspace among the brands building Alexa+ experiences with MCP. [Amazon’s announcement](https://developer.amazon.com/zh/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences) describes that integration program; Headspace is not a Saga adopter or endorser.
+
 ## Machine Wisdom AI and community
 
 [Machine Wisdom AI](https://machine-wisdom.ai) maintains Saga and offers paid production AI engineering and architecture engagements. For help with a project, see the [current engagement options and contact form](https://machine-wisdom.ai). The company site describes availability; this repository makes no support-response commitment.

@@ -12,9 +12,9 @@ Attaching SAGA to a backend you already run is an integration you make in your o
 | Stack | Server | Maintained template | `saga init` |
 | --- | --- | --- | --- |
 | `lit-mcp` | `node` | [`lit-node`](../templates/lit-node/) | offered |
-| `lit-mcp` | `express` | [`lit-express`](../templates/lit-express/) | not offered |
-| `lit-mcp` | `fastify` | [`lit-fastify`](../templates/lit-fastify/) | not offered |
-| `lit-mcp` | `hono` | [`lit-hono`](../templates/lit-hono/) | not offered |
+| `lit-mcp` | `express` | [`lit-express`](../templates/lit-express/) | offered |
+| `lit-mcp` | `fastify` | [`lit-fastify`](../templates/lit-fastify/) | offered |
+| `lit-mcp` | `hono` | [`lit-hono`](../templates/lit-hono/) | offered |
 <!-- /pairs -->
 
 A pair is listed only while CI qualifies it, and a qualified pair is not automatically offered by `saga init`: that command offers the pairs in its own list. A recipe is not a claim about any other pair, and no full matrix is claimed.

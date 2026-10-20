@@ -26,11 +26,19 @@ export interface QualifiedPair {
 
 /**
  * The pairs `init` offers: those CI qualifies, and no others. A template directory existing does not
- * add a pair. Each owner of a further pair adds one row here when its qualification passes (the Lit
- * and Node pair: scripts/starter.test.ts and apps/lit-host/e2e/starter.spec.ts), and removes it while
- * that qualification fails.
+ * add a pair. Each owner of a further pair adds one row here when its qualification passes, and
+ * removes it while that qualification fails. The rows follow `QUALIFIED_STARTERS`
+ * (scripts/qualified-starters.ts), whose templates CI qualifies from packed artifacts: Node
+ * (scripts/starter.test.ts), Express (starter-express.test.ts), Fastify (starter-fastify.test.ts) and
+ * Hono (starter-hono.test.ts), each also in apps/lit-host/e2e/starter.spec.ts. No other pair is
+ * offered: React and Hapi have no qualified template.
  */
-export const SUPPORTED_PAIRS: readonly QualifiedPair[] = [{ stack: 'lit-mcp', server: 'node', template: 'lit-node' }];
+export const SUPPORTED_PAIRS: readonly QualifiedPair[] = [
+  { stack: 'lit-mcp', server: 'node', template: 'lit-node' },
+  { stack: 'lit-mcp', server: 'express', template: 'lit-express' },
+  { stack: 'lit-mcp', server: 'fastify', template: 'lit-fastify' },
+  { stack: 'lit-mcp', server: 'hono', template: 'lit-hono' },
+];
 
 /**
  * The pairs `demo` offers: those offered by `init` whose qualified template the standalone
