@@ -11,8 +11,9 @@ date_added: 2026-10-16
 ## Status
 
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/application_setup.blueprint.md).
-- Implementation: not started. No completed implementation or verification of this contract is recorded.
-- Acceptance: the CLI, maintained templates and qualified server/renderer pairs still need implementation and verification.
+- Implementation: partial. STARTER1 ([#23](https://github.com/MachineWisdomAI/saga-a2ui/issues/23)) implements the first maintained template, `templates/lit-node`, and qualifies one pair, the `lit-mcp` stack on `node` with the official `@modelcontextprotocol/node` 2.1.1 adapter, under the approved design above. The change is under review in the STARTER1 pull request; its landed code SHA is recorded here after it merges, not before. The [README](../../README.md#the-clean-lit-and-node-starter-starter1) lists the checks it ran and their limits.
+- Not implemented: the `express`, `hono`, `fastify` and `hapi` templates ([#62](https://github.com/MachineWisdomAI/saga-a2ui/issues/62) to [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)), the Hapi identity wiring, the demo, the guides and the CLI. None is implied by the first pair.
+- Acceptance: the CLI, the remaining qualified server/renderer pairs and any host or publication acceptance still need implementation and verification.
 
 ## Problem and current behavior
 
@@ -65,7 +66,7 @@ The shared template files are owned by the SDK, tested in CI, and are the single
 
 ## Verification outcomes
 
-Planned checks, not yet run: every offered stack and server pair is exported or installed from clean artifacts in CI, using only public imports. For each pair the check sends allowed and denied requests, a protected request with missing authentication, and concurrent requests showing identity isolation. Hapi's check additionally proves that identity reaches the hook, which its existing tests do not. Init tests cover overwrite, unsafe symlink, implicit install and remote hook refusal, the unsupported-pair refusal, and an interrupted copy that removes only newly created output. The guide snippets are checked against the template files they are generated from. The demo reproduces the full synthetic allowed, denied, expired and recovery semantics. PACK1/PACK2 evidence and the renderer recipe evidence are reused, and full existing SDK and host qualification is not weakened. No pair test has run, and no observed evidence is claimed here.
+Planned checks (the last two sentences say which have run): every offered stack and server pair is exported or installed from clean artifacts in CI, using only public imports. For each pair the check sends allowed and denied requests, a protected request with missing authentication, and concurrent requests showing identity isolation. Hapi's check additionally proves that identity reaches the hook, which its existing tests do not. Init tests cover overwrite, unsafe symlink, implicit install and remote hook refusal, the unsupported-pair refusal, and an interrupted copy that removes only newly created output. The guide snippets are checked against the template files they are generated from. The demo reproduces the full synthetic allowed, denied, expired and recovery semantics. PACK1/PACK2 evidence and the renderer recipe evidence are reused, and full existing SDK and host qualification is not weakened. STARTER1 ran the pair checks for `lit-mcp` on `node` (allowed, denied and missing-authentication requests, a public request, concurrent identities, clean export, install from packed candidate tarballs and build); the [README](../../README.md#the-clean-lit-and-node-starter-starter1) records them. The init refusals, the guide-snippet checks beyond the template's own, the Hapi identity check and the demo have not run, and no other pair has.
 
 ## Implementation sequence
 
@@ -75,7 +76,7 @@ Delivery keeps the existing dependency edges. Both the starter and the demo wait
 
 1. **Which qualified pair is the demo?** No evidence selects one yet; the choice is made from qualification results.
 2. **How is framework-authenticated identity wired through the Hapi bridge callback into the identity hook?** The bridge's callback does not yet receive identity; the design settles it with the Hapi qualification.
-3. **Which adapter versions, beyond the selected Node integration 2.1.1, are qualified for each server target?** The connector design selects Node integration 2.1.1 without qualifying it. Versions for the express, hono and fastify adapters are not selected, and no pair is qualified until it passes the checks above.
+3. **Which adapter versions, beyond the selected Node integration 2.1.1, are qualified for each server target?** The connector design selects Node integration 2.1.1 without qualifying it; STARTER1 now qualifies that version for the one `lit-mcp`/`node` pair only. Versions for the express, hono and fastify adapters are not selected, and no pair is qualified until it passes the checks above.
 
 ## References
 
