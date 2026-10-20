@@ -1,6 +1,6 @@
 # Release candidates: contents, update, rollback and publication
 
-This guide is for a maintainer who prepares, updates to, or restores a **candidate**: a build of one revision of the five owned packages that CI packs, installs and qualifies as a set. A candidate is not a release. Nothing is published, tagged, deployed or made public by anything described here, and the packages stay private (see [public install](public-install.md) and [the version policy](version-policy.md)).
+This guide is for a maintainer who prepares, updates to, or restores a **candidate**: a build of one revision of the five owned packages that CI packs, installs and qualifies as a set. A candidate is not a release. Nothing is published, tagged, deployed or made public by anything described here, and candidate artifacts stay private (see [public install](public-install.md) and [the version policy](version-policy.md)).
 
 ## What CI produces
 
@@ -18,7 +18,7 @@ The tarball digests, the built views and servers, and the consumer installs are 
 
 ## The matched set
 
-**Prerelease version.** Every package carries `0.0.0-candidate.g<first 12 hex of the commit>`, with `.dirty` after it when tracked files differ from the commit (a CI run is never dirty). The repository packages stay unversioned; the identity is stamped into a staged copy, so it is not an owned version, needs no enrollment, and cannot be mistaken for a release. Every SDK-to-SDK dependency and peer in the tarballs is pinned to exactly that version (the repository declares `*`), so a package manager refuses to resolve a sibling from another build. This is checked three ways: the package tests, a real `npm install` of a set that mixes two builds (npm stops with E404 for the missing sibling), and `candidate:verify` below.
+**Prerelease version.** Every package carries `0.0.0-candidate.g<first 12 hex of the commit>`, with `.dirty` after it when tracked files differ from the commit (a CI run is never dirty). Four repository packages now have enrolled release versions; this separate candidate identity is stamped into a staged copy and does not change those owned versions. Every SDK-to-SDK dependency and peer in the tarballs is pinned to exactly that version (from either an exact enrolled sibling version or `*` for an unversioned package), so a package manager refuses to resolve a sibling from another build. This is checked three ways: the package tests, a real `npm install` of a set that mixes two builds (npm stops with E404 for the missing sibling), and `candidate:verify` below.
 
 **Resources.** Each built view is identified by `ui://sha256/<digest>.html`, the SHA-256 of its exact bytes. `candidate.json` lists the notes view of the `own` and `card` combinations and the subscriptions and playback views of the browse and Play application. The episode view is served through the content policy, so its URI depends on the policy an application configures (`npm run candidate:identity` computes it for a given policy).
 
@@ -32,7 +32,7 @@ The tarball digests, the built views and servers, and the consumer installs are 
 
 ## Package contents and boundaries
 
-Each tarball holds `package.json`, `LICENSE` (Apache-2.0, copied into the staged package) and the package `src/` that its `files` list names; `components` also carries `THIRD_PARTY_NOTICES.md`, because it brings `markdown-it` into a consumer's built view and the notices must travel with a view that bundles it. Test and test-support sources and the workspace `tsconfig` files are left out; `candidate.json` lists each exclusion with the rule that leaves it out. There are no bundled templates: the CLI templates in the application-setup design do not exist, and `examples/pack1-consumer` is a development check, not a template. There is no per-package README yet; adding one is a release task.
+Each tarball holds `package.json`, `LICENSE` (Apache-2.0, copied into the staged package) and the package `src/` that its `files` list names; `components` also carries `THIRD_PARTY_NOTICES.md`, because it brings `markdown-it` into a consumer's built view and the notices must travel with a view that bundles it. Test and test-support sources and the workspace `tsconfig` files are left out; `candidate.json` lists each exclusion with the rule that leaves it out. There are no bundled templates: the CLI templates in the application-setup design do not exist, and `examples/pack1-consumer` is a development check, not a template. The four release packages also carry a package README.
 
 What each entry point may load is asserted from the installed copies by `scripts/pack1.test.ts` and not repeated here: server entry points bundle and run for Node with no renderer, DOM or Markdown parser; the view bundle carries the view connection and no server module, Node built-in or credential; neutral components run with no MCP package, renderer or DOM; an own-catalog consumer has no card, parser or components module.
 
@@ -102,7 +102,7 @@ Listing a case by title is a claim, not a run. What ran for this candidate is in
 
 Preparing the candidate grants no authority to publish. Publishing needs the owner's separate authorization and a release change reviewed like any other:
 
-1. Enroll owned versions through the version policy; the packages stay unversioned until then. Set real versions in a release PR, remove `private`, and add `publishConfig.access: public` for the scoped packages. Build the release from the merged, tagged commit, not from a candidate tarball: candidate tarballs name `candidate-artifact.invalid` as their registry and a prerelease identity, so an accidental `npm publish` of one reaches nothing. npm 12.0.2 accepted a private manifest in `publish --dry-run`, so `private` is not the safeguard on its own.
+1. Follow [four-package release preparation](release-packages.md) for the enrolled versions and `release:pack` artifacts. Build the release from the reviewed source commit, not from a candidate tarball: candidate tarballs name `candidate-artifact.invalid` as their registry and a prerelease identity, so an accidental `npm publish` of one reaches nothing. npm 12.0.2 accepted a private manifest in `publish --dry-run`, so `private` is not the safeguard on its own.
 2. Verify ownership of the `@saga-a2ui` scope and publish rights before the first publication; the first publication of a new scoped package must be public.
 3. For repeat releases use npm trusted publishing from the release workflow only, with `id-token: write` confined to that job, an npm and Node combination that npm supports, and a package `repository` URL that matches this repository. The existing CI workflow keeps `contents: read`.
 4. After publishing, install the exact versions anonymously in a clean consumer, build it without source aliases or a checkout, and record that; only then does the Ansari adoption's requirement for public versions hold.
