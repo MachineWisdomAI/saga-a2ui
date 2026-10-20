@@ -1,6 +1,6 @@
 # Preparing the first four-package prerelease
 
-The prepared version is `0.5.0-rc.1` for `@saga-a2ui/core`, `@saga-a2ui/components`,
+The prepared version is `0.5.1-rc.1` for `@saga-a2ui/core`, `@saga-a2ui/components`,
 `@saga-a2ui/mcp` and `@saga-a2ui/react`, with the proposed npm tag `next`. This
 document does not announce registry availability or authorize publication.
 Lit, the CLI, the workspace and the example application are outside this
