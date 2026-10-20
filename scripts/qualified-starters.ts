@@ -7,6 +7,6 @@
 //
 // The names are plain data on purpose: the browser specification imports this file and must not load
 // the build tooling.
-export const QUALIFIED_STARTERS = ['lit-node', 'lit-express', 'lit-hono'] as const;
+export const QUALIFIED_STARTERS = ['lit-node', 'lit-express', 'lit-fastify', 'lit-hono'] as const;
 
 export type QualifiedStarter = (typeof QUALIFIED_STARTERS)[number];

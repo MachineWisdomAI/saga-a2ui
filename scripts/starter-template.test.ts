@@ -129,6 +129,7 @@ describe('snippets', () => {
   it.each([
     ['lit-node', 'auth: decision.authInfo'],
     ['lit-express', 'req.auth = decision.authInfo'],
+    ['lit-fastify', 'reply.code(decision.status)'],
     ['lit-hono', 'decision.authInfo'],
   ] as const)('%s: carry the identity handoff and the direct attachment a developer is meant to copy', (name, handoff) => {
     const byName = Object.fromEntries(extractSnippets(templateDirectory(name)).map((snippet) => [snippet.name, snippet.text]));

@@ -8,7 +8,7 @@ import { QUALIFIED_STARTERS } from '../../../scripts/qualified-starters.js';
 import type { Listener, ListenerOptions } from '../../../templates/lit-node/server/listener.js';
 import type { HostedResource } from './host-fixture/host.js';
 
-// Each qualified `lit-mcp` starter (templates/lit-node on Node, templates/lit-express on Express, templates/lit-hono on Hono,
+// Each qualified `lit-mcp` starter (templates/lit-node on Node, templates/lit-express on Express, templates/lit-fastify on Fastify, templates/lit-hono on Hono,
 // see scripts/qualified-starters.ts), in a real browser. The page under test is the one the
 // starter's own build produced from packed SDK tarballs (scripts/build-starter.ts)
 // and the one its server serves over a real MCP connection. It is mounted in the sandboxed
