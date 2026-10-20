@@ -1,87 +1,93 @@
-# Installing SAGA A2UI
+# Installing saga a2ui
 
-SAGA A2UI does not yet have a public npm release. The current repository contains
-a runnable Lit example and unreleased SDK packages under `packages/` that cannot yet be
-installed from a registry. Locally packed copies of them, including the optional
-`@saga-a2ui/components` FaithfulCard, are built into an external example by
-`npm run build:answer-consumer` (Lit) and, for the optional React card, `npm run build:react-card-consumer`
-(see the [development reference](development-reference.md)); `npm run build:pack1-consumers` installs the packed packages into two separate
-consumers (the application's own catalog alone, and the same catalog plus the card; see "PACK1" in the [development reference](development-reference.md)).
-The two PACK1 consumers qualify notes and Archive; #154/#156 also qualifies the actual external authenticated browse/Play listener with matching installed resources, as recorded in the [development reference](development-reference.md). Those are development checks, not an installation recipe. CI also packs the five packages as an unreleased **candidate** artifact (PACK2); [candidate contents, update, rollback and the publication recipe](candidate-update-and-rollback.md) describe it. A candidate's prerelease version is not a release version. This guide will name the tested package versions when the first release exists. To run the demonstration, create a project from a qualified starter or attach SAGA to an existing backend from a candidate build, follow [Getting started](getting-started.md).
+Four packages are available from public npm at **`0.1.0-rc.1`**:
 
-## Run the current source example
+| Package | Use |
+| --- | --- |
+| `@saga-a2ui/core` | Application actions and A2UI protocol processing. |
+| `@saga-a2ui/mcp` | MCP server operations, view connections and request lifetimes. |
+| `@saga-a2ui/react` | React A2UI integration, action controls and optional FaithfulCard rendering. |
+| `@saga-a2ui/components` | Optional FaithfulCard content, link and image policies. |
 
-Repository access is required while the source remains private. Use the Node
-version in `.nvmrc`, then run:
+Use Node **22.12.0 or newer** and a TypeScript-aware bundler. These packages export
+TypeScript source. Install the parts your application uses, keeping saga package
+versions matched. The React and FaithfulCard recipe below installs all four.
 
-```sh
-git clone https://github.com/MachineWisdomAI/saga-a2ui.git
-cd saga-a2ui
-npm ci
-npx playwright install --with-deps chromium
-npm run verify
-npm start
+## Install the React and MCP packages
+
+Before installing, add the required override to your application's root
+`package.json`, preserving any existing overrides:
+
+```json
+{
+  "overrides": {
+    "@a2ui/markdown-it": "0.2.1"
+  }
+}
 ```
 
-The example's development credentials and content are synthetic. The
-[development reference](development-reference.md) describes its MCP listener, authenticated browsing and
-playback recipes, and the limits of its local host fixture. Running it locally
-does not establish compatibility with a conversational host.
+Then install the published versions and the supported React peers:
 
-## First public npm release
+```sh
+npm install --save-exact --strict-peer-deps \
+  @saga-a2ui/core@0.1.0-rc.1 \
+  @saga-a2ui/components@0.1.0-rc.1 \
+  @saga-a2ui/mcp@0.1.0-rc.1 \
+  @saga-a2ui/react@0.1.0-rc.1 \
+  react@19.3.1 react-dom@19.3.1
+```
 
-The first distribution uses public npm packages under `@saga-a2ui`. The [four-package prerelease preparation](release-packages.md) records proposed versions and exact artifact commands; it does not establish registry availability. Only packages
-with implemented, reviewed public exports and passing release checks will be
-published. The workspace root and runnable application remain private npm
-workspaces; their `private` setting is independent of GitHub repository visibility.
+Commit the resulting application lockfile. The [React integration guide](react-consumers.md)
+explains the public imports, the pnpm workspace-root override, and why A2UI's
+Zod 3 and MCP's Zod 4 dependencies must remain distinct. Applications using the
+MCP APIs directly should declare the dependencies they import; the qualified
+combination uses MCP Apps `2.0.3`, MCP server `2.3.1`, MCP Node `2.1.1` and Zod
+`4.6.7`.
 
-The release must provide:
+Use `@saga-a2ui/react/a2ui` for A2UI surfaces and catalogs. Do not add direct
+`@a2ui/react` or `@a2ui/web_core` dependencies for this integration. The required
+Markdown override keeps A2UI `0.13.0` on its compatible dependency combination.
 
-- Public SDK source at an identified Git commit and exact npm package versions
-  that can be downloaded without authentication.
-- A tested combination of package, upstream dependency, catalog, protocol and
-  built-resource versions, with the supported Node range and a rollback recipe.
-- An example installed from those registry versions outside the source workspace,
-  using public exports and a consumer lockfile. It must build and render without
-  source aliases, copied SDK modules, private registry access or a local checkout.
-- License and attribution files for the distributed code and bundled dependencies.
-  Preserve actual upstream notices; a package metadata license label alone does
-  not describe every file in an upstream distribution.
+Public-registry installation, strict typechecking, application builds and a
+standalone container have been verified for this four-package recipe. Host
+behavior has its own [compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
 
-The release notes will supply the exact installation command after that command
-has passed in a clean consumer. Do not infer a release version from a branch name
-or install an unverified dist-tag.
+## Run a demo or use a Lit starter
 
-The planned migration of the Ansari application into `iaser-ai/ansari` cannot merge until the
-public SDK source and exact public npm versions described above exist; private CI
-packages and locally packed candidates can support development but do not meet
-that requirement. The [Ansari migration design](../blueprints/features/ansari_adoption.blueprint.md)
-describes the full path. Source publication, package installation and
-actual-host acceptance are recorded as separate outcomes.
+Follow [Getting started](getting-started.md) to run the synthetic podcast demo,
+create a Lit starter, or attach saga to an existing backend. Those paths build
+matched candidate tarballs from a source checkout, including `@saga-a2ui/lit`,
+which is **not published on npm**. The CLI is also source tooling, not an npm
+package.
 
-Releasing the SDK to npm gives developers libraries to install. It does not
-deploy an application; that is the application owner's work. A listing in
-ChatGPT or Claude comes from the host's own review of the deployed application.
-The draft [host publication design](../blueprints/features/host_publication.blueprint.md)
-proposes optional shared tooling that prepares application plugin packages and
-directory submission materials. That tooling is not implemented, and its
-commands are not an alternative to the npm release procedure below.
+Candidate versions such as `0.0.0-candidate.g<12 hex>` are distinct from the
+published `0.1.0-rc.1` release. See [candidate installation, updates and rollback](candidate-update-and-rollback.md).
+Source package versions may advance ahead of npm; use the published versions
+above for a registry installation.
 
-## Publishing configuration
+The [development reference](development-reference.md) covers local builds,
+packed-consumer checks and the synthetic examples. The workspace root and
+example applications are private npm workspaces; that setting does not control
+GitHub source visibility.
 
-Maintainers must verify ownership and publish access for the npm scope before the
-first release. A new scoped package must be published with public access. The
-first publication and subsequent release jobs require the repository's release
-authorization; this guide does not grant it.
+## Maintainer publication
 
-For repeat releases, configure npm trusted publishing for each actual package and
-the intended GitHub Actions workflow. The publishing job needs an npm-supported
-Node/npm combination, `id-token: write`, and a package repository URL matching
-this repository. Keep that permission confined to the release job. The existing
-source-validation workflow does not yet publish packages.
+The [release-packages guide](release-packages.md) describes building and
+qualifying exact tarballs for a subsequent release. Source version changes and
+passing CI do not publish them. Verify package contents, licenses, integrity,
+scope ownership and the approved versions and tag before publishing with public
+npm access. Verify the resulting exact versions through an anonymous clean
+installation.
 
-See npm's [public scoped package instructions](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/)
+For repeat releases, configure npm trusted publishing for each package and its
+GitHub Actions workflow. The publishing job needs an npm-supported Node/npm
+combination, `id-token: write`, and a package repository URL matching this
+repository. Keep that permission confined to the release job; the existing
+source-validation workflow does not publish packages. See npm's
+[public scoped package instructions](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/)
 and [trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
-The package-specific trust configuration requires an existing package; account
-access and initial publication must therefore be resolved before assuming later
-OIDC releases are ready. See [npm trust](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
+
+Installing libraries does not deploy an application or submit it to a host
+directory. The repository's [publication tooling](../scripts/publish/README.md)
+prepares application artifacts and records manual handoff; deployment and
+submission remain the application owner's work.

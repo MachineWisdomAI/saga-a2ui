@@ -2,7 +2,7 @@
 
 Build, test and implementation notes accumulated as the SDK evolved. Dated slices describe their own evidence and limitations; use [Getting started](getting-started.md) for the current setup path and the [project overview](../README.md) for current scope.
 
-New here: [Getting started](../docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. There is no public release yet; the packages are private candidate builds. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](actions.md).
+New here: [Getting started](../docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. Core, components, MCP and React are [published on npm at `0.1.0-rc.1`](public-install.md); local qualification and Lit starters use separately built candidate packages. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](actions.md).
 
 React applications: follow [the React consumer dependency guide](../docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
 
