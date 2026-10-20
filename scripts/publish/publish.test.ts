@@ -392,9 +392,25 @@ describe('inputs that must prevent a ready claim', () => {
       await blocked(withLogo('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width=64/></svg>'), 'package.assets');
     });
 
-    it('a complete SVG with comments, a prolog and nested elements is accepted', async () => {
+    it('an SVG whose text uses an entity the XML grammar does not define', async () => {
+      const svg = (content: string): string => `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">${content}</svg>`;
+      const { record } = await blocked(withLogo('logo.svg', svg('<text>&undefined;</text>')), 'package.assets');
+      expect(record.findings.find((finding) => finding.id === 'package.assets')?.detail).toMatch(/logo\.svg is not a complete SVG document: it is not well-formed XML \(.*entity/);
+      // HTML-only entities, an unbound namespace prefix, a repeated attribute, an unescaped ampersand and a bad name are XML errors as well.
+      for (const damaged of [svg('<text>&nbsp;</text>'), svg('<a:b/>'), '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" width="64"/>', svg('<text>fish & chips</text>'), svg('<1bad/>'), svg('<text>a</text>') + '<svg/>']) {
+        await blocked(withLogo('logo.svg', damaged), 'package.assets');
+      }
+    });
+
+    it('an SVG that is XML but not an SVG document, or that declares entities', async () => {
+      await blocked(withLogo('logo.svg', '<svg width="64" height="64"></svg>'), 'package.assets');
+      await blocked(withLogo('logo.svg', '<html xmlns="http://www.w3.org/1999/xhtml" width="64" height="64"/>'), 'package.assets');
+      await blocked(withLogo('logo.svg', '<!DOCTYPE svg [<!ENTITY a "b">]><svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><text>&a;</text></svg>'), 'package.assets');
+    });
+
+    it('a complete SVG with entity references the grammar defines, comments, a prolog and nested elements is accepted', async () => {
       const app = copyFixture();
-      withLogo('logo.svg', '<?xml version="1.0"?>\n<!-- logo -->\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g><rect width="64" height="64" fill="#2357C6"/></g></svg>\n')(app);
+      withLogo('logo.svg', '<?xml version="1.0"?>\n<!-- logo -->\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g><rect width="64" height="64" fill="#2357C6"/><text>fish &amp; chips &#169; &lt;3</text></g></svg>\n')(app);
       const run = await check(app);
       expect(run.code, run.out).toBe(0);
     });
@@ -770,6 +786,33 @@ describe('a credential an endpoint echoes', () => {
     expect(written).not.toContain(supplied);
     // Only a safe diagnostic kind is kept.
     expect(recordOf(path.join(cwd, 'publication')).findings.find((finding) => finding.id === 'endpoint.discovery')?.detail).toMatch(/^The (endpoint|request)/);
+  });
+
+  it('never reaches the console when a thrown error carries it: an asset name with a backslash that cannot be placed in the archive', async () => {
+    const app = copyFixture();
+    const name = `logo-${supplied}\\icon.svg`;
+    fs.copyFileSync(path.join(app, 'assets', 'logo.svg'), path.join(app, 'assets', name));
+    editInput(app, (input) => (input.assets.logo = `assets/${name}`));
+    const cwd = workspace();
+    for (const run of [await prepare(app, 'publication', { cwd, environment: { NOTES_TOKEN: supplied } }, ['--bearer-env', 'NOTES_TOKEN']), await check(app, { cwd, environment: { NOTES_TOKEN: supplied } }, ['--bearer-env', 'NOTES_TOKEN'])]) {
+      // The failure is reported, not hidden, and the exit code says nothing was prepared.
+      expect(run.code).toBe(1);
+      expect(run.err).toMatch(/^saga publish: /);
+      expect(`${run.out}${run.err}`).not.toContain(supplied);
+    }
+    expect(fs.existsSync(path.join(cwd, 'publication'))).toBe(false);
+  });
+
+  it('never reaches the console through an unexpected error from any stage, expected or not', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd, environment: { NOTES_TOKEN: supplied }, validators: { get ok(): boolean { throw new Error(`validators exploded with ${supplied} and ${bearer}`); } } as unknown as ValidatorLoad }, ['--bearer-env', 'NOTES_TOKEN']);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/validators exploded/);
+    for (const text of [run.out, run.err]) {
+      expect(text).not.toContain(supplied);
+      expect(text).not.toContain('synthetic0123456789abcdefghij');
+    }
   });
 
   it('is redacted from the report even when the input itself carries it, while the secret check still refuses to write', async () => {

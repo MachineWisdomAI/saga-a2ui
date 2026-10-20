@@ -582,62 +582,69 @@ function withRedactedOutput(io: PublishIo, request: PublishRequest): PublishIo {
 export const publicationTool: PublicationTool = {
   async run(request, unredacted) {
     const io = withRedactedOutput(unredacted, request);
-    if (request.target !== 'chatgpt') {
-      io.stderr(`saga publish: the ${request.target} target is not supported by this version; the supported target is chatgpt.\n`);
-      return 2;
-    }
-    if (io.signal?.aborted) {
-      io.stderr('saga publish: interrupted before anything was read or written.\n');
-      return EXIT_INTERRUPTED;
-    }
-    const loaded = loadReleaseInput(path.resolve(io.cwd, request.release));
-    if (!loaded.ok) {
-      io.stderr(`saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`);
-      return EXIT_NOT_READY;
-    }
-    let assessment: Assessment;
+    // Every failure, expected or not, is reported here through the redacted channels. An error is
+    // never rethrown to the caller, whose own reporting is not redacted: a message can carry text
+    // from an input (an asset name, a path) that holds a credential.
     try {
-      assessment = await assess(request, loaded.loaded, io);
+      return await execute(request, io);
     } catch (error) {
       if (io.signal?.aborted) {
         io.stderr('saga publish: interrupted; nothing was written.\n');
         return EXIT_INTERRUPTED;
       }
-      throw error;
+      io.stderr(`saga publish: ${error instanceof Error ? error.message : String(error)}\nNothing was prepared; fix the problem named above and rerun.\n`);
+      return EXIT_NOT_READY;
     }
-    if (io.signal?.aborted) {
-      io.stderr('saga publish: interrupted; nothing was written.\n');
-      return EXIT_INTERRUPTED;
-    }
-    const { record, archive } = assessment;
-    io.stdout(report(record, request));
-
-    if (request.command === 'prepare') {
-      const leaked = record.findings.some((finding) => finding.id === 'record.secrets');
-      if (leaked || request.out === undefined) {
-        io.stderr(leaked ? 'saga publish: nothing was written because the record would contain a secret.\n' : 'saga publish: prepare needs --out DIRECTORY.\n');
-        return leaked ? EXIT_NOT_READY : 2;
-      }
-      const target = path.resolve(io.cwd, request.out);
-      if (!fs.existsSync(path.dirname(target)) || !fs.statSync(path.dirname(target)).isDirectory()) {
-        io.stderr(`saga publish: the parent directory ${path.dirname(target)} does not exist; create it first or choose a path inside an existing directory.\n`);
-        return EXIT_NOT_READY;
-      }
-      const files: OutputFile[] = [{ path: RECORD_FILE, content: () => `${JSON.stringify(record, null, 2)}\n` }];
-      if (archive !== null) files.push({ path: ARCHIVE_FILE, content: () => archive });
-      try {
-        await writeOutput(target, files, io.signal);
-      } catch (error) {
-        if (error instanceof ExportInterrupted) {
-          io.stderr(`saga publish: interrupted; ${error.removed ? 'the output this run was writing was removed and nothing that existed was changed' : 'the output path had been replaced during the write, so nothing there was removed'}.\n`);
-          return EXIT_INTERRUPTED;
-        }
-        io.stderr(`saga publish: ${(error as Error).message}\n`);
-        return EXIT_NOT_READY;
-      }
-      io.stdout(`\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${ARCHIVE_FILE} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`);
-    }
-    io.stdout('Nothing was deployed, uploaded, submitted or published.\n');
-    return record.verdict === 'ready' ? 0 : EXIT_NOT_READY;
   },
 };
+
+async function execute(request: PublishRequest, io: PublishIo): Promise<number> {
+  if (request.target !== 'chatgpt') {
+    io.stderr(`saga publish: the ${request.target} target is not supported by this version; the supported target is chatgpt.\n`);
+    return 2;
+  }
+  if (io.signal?.aborted) {
+    io.stderr('saga publish: interrupted before anything was read or written.\n');
+    return EXIT_INTERRUPTED;
+  }
+  const loaded = loadReleaseInput(path.resolve(io.cwd, request.release));
+  if (!loaded.ok) {
+    io.stderr(`saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`);
+    return EXIT_NOT_READY;
+  }
+  const assessment = await assess(request, loaded.loaded, io);
+  if (io.signal?.aborted) {
+    io.stderr('saga publish: interrupted; nothing was written.\n');
+    return EXIT_INTERRUPTED;
+  }
+  const { record, archive } = assessment;
+  io.stdout(report(record, request));
+
+  if (request.command === 'prepare') {
+    const leaked = record.findings.some((finding) => finding.id === 'record.secrets');
+    if (leaked || request.out === undefined) {
+      io.stderr(leaked ? 'saga publish: nothing was written because the record would contain a secret.\n' : 'saga publish: prepare needs --out DIRECTORY.\n');
+      return leaked ? EXIT_NOT_READY : 2;
+    }
+    const target = path.resolve(io.cwd, request.out);
+    if (!fs.existsSync(path.dirname(target)) || !fs.statSync(path.dirname(target)).isDirectory()) {
+      io.stderr(`saga publish: the parent directory ${path.dirname(target)} does not exist; create it first or choose a path inside an existing directory.\n`);
+      return EXIT_NOT_READY;
+    }
+    const files: OutputFile[] = [{ path: RECORD_FILE, content: () => `${JSON.stringify(record, null, 2)}\n` }];
+    if (archive !== null) files.push({ path: ARCHIVE_FILE, content: () => archive });
+    try {
+      await writeOutput(target, files, io.signal);
+    } catch (error) {
+      if (error instanceof ExportInterrupted) {
+        io.stderr(`saga publish: interrupted; ${error.removed ? 'the output this run was writing was removed and nothing that existed was changed' : 'the output path had been replaced during the write, so nothing there was removed'}.\n`);
+        return EXIT_INTERRUPTED;
+      }
+      io.stderr(`saga publish: ${(error as Error).message}\n`);
+      return EXIT_NOT_READY;
+    }
+    io.stdout(`\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${ARCHIVE_FILE} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`);
+  }
+  io.stdout('Nothing was deployed, uploaded, submitted or published.\n');
+  return record.verdict === 'ready' ? 0 : EXIT_NOT_READY;
+}

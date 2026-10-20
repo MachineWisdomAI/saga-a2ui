@@ -56,6 +56,8 @@ Everything the command prints passes through a redactor first: secret-looking sp
 credential given with `--bearer-env` are replaced by a marker. What an endpoint or a proxy says
 about a failure is never printed or recorded; only a fixed diagnostic kind is (authentication
 challenge, timeout, HTTP status, network error, unusable answer).
+The same holds for a failure nobody anticipated: every error the command raises is caught and
+reported through that redactor (exit code 1), never rethrown to a caller that prints it raw.
 
 ## What is checked
 
@@ -80,8 +82,11 @@ is `unknown`, and any `unknown` makes the verdict `incomplete`; any `fail` makes
   least 48 px, at most 5 MiB), no app references, hooks or reviewer credentials, and no secret.
   The logo and icons are read as images, not just recognised by a header: a PNG must have every
   chunk complete with a correct checksum, one `IHDR` first, `IEND` last with nothing after it, and
-  image data that inflates to exactly the rows the header promises; an SVG must be one complete,
-  well-formed document (balanced elements, quoted attributes, no entities or text outside the root).
+  image data that inflates to exactly the rows the header promises; an SVG must be accepted by an
+  established XML parser (jsdom's, from the repository's development dependencies; this tool keeps no
+  grammar of its own, so undefined entities, unbound prefixes, repeated attributes and truncated
+  documents are refused) and have an `svg` root element in the SVG namespace, with no entity
+  declarations. If that parser cannot be loaded, the assets finding is `unknown`, not a pass.
   The secret scan looks for credential patterns and for the literal discovery credential; findings
   name the kind, never the value.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the

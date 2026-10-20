@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { inflateSync } from 'node:zlib';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/client/validators/ajv';
 import type { ReleaseInput } from './release-input.js';
@@ -399,63 +400,63 @@ function pngPixelProblem(png: PngHeader): string | null {
   return null;
 }
 
-/** Whether `text` is one complete, well-formed XML document whose root element is `svg`. A string is what is wrong. */
-function svgStructureProblem(text: string): string | null {
-  const stack: string[] = [];
-  let rootSeen = false;
-  let rootClosed = false;
-  let at = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const tag = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[A-Za-z_][\w.:-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*)\s*(\/?)>/y;
-  while (at < text.length) {
-    if (text[at] !== '<') {
-      const next = text.indexOf('<', at);
-      const chunk = text.slice(at, next < 0 ? text.length : next);
-      if (stack.length === 0 && chunk.trim() !== '') return 'has text outside its root element';
-      at = next < 0 ? text.length : next;
-      continue;
-    }
-    const closer = text.startsWith('<!--', at) ? '-->' : text.startsWith('<![CDATA[', at) ? ']]>' : text.startsWith('<?', at) ? '?>' : undefined;
-    if (closer !== undefined) {
-      if (closer === ']]>' && stack.length === 0) return 'has character data outside its root element';
-      const end = text.indexOf(closer, at + 2);
-      if (end < 0) return 'has an unterminated comment, instruction or CDATA section';
-      at = end + closer.length;
-      continue;
-    }
-    if (/^<!DOCTYPE/i.test(text.slice(at, at + 9))) {
-      if (rootSeen) return 'has a document type declaration after its root element';
-      const end = text.indexOf('>', at);
-      if (end < 0 || /<!ENTITY/i.test(text.slice(at, end + 1)) || text.slice(at, end).includes('[')) return 'has a document type declaration with an internal subset or entities';
-      at = end + 1;
-      continue;
-    }
-    tag.lastIndex = at;
-    const match = tag.exec(text);
-    if (match === null) return 'has a malformed tag';
-    const [whole, closing, name, attributes, selfClosing] = match as unknown as [string, string, string, string, string];
-    if (closing === '/') {
-      if (attributes.trim() !== '' || selfClosing === '/' || stack.pop() !== name) return `has a closing tag </${name}> that matches no open element`;
-      if (stack.length === 0) rootClosed = true;
-    } else {
-      if (rootClosed) return 'has more than one root element';
-      const names = [...attributes.matchAll(/\s([A-Za-z_][\w.:-]*)\s*=/g)].map((one) => one[1]);
-      if (new Set(names).size !== names.length) return `has an element <${name}> with a repeated attribute`;
-      if (!rootSeen) {
-        if (name !== 'svg' && !name.endsWith(':svg')) return 'has a root element that is not svg';
-        rootSeen = true;
-      }
-      if (selfClosing === '/') {
-        if (stack.length === 0) rootClosed = true;
-      } else stack.push(name);
-    }
-    at += whole.length;
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+interface XmlDocument {
+  readonly documentElement: { readonly localName: string; readonly namespaceURI: string | null } | null;
+  getElementsByTagName(name: string): { readonly length: number; item(index: number): { readonly textContent: string | null } | null };
+}
+type XmlParser = (text: string) => XmlDocument;
+
+let xmlParser: XmlParser | { readonly unavailable: string } | undefined;
+
+/**
+ * An established XML parser (jsdom's, the repository's root development dependency; it wraps the
+ * `saxes` parser, which enforces the XML grammar including entity references, names, namespaces and
+ * attribute uniqueness), or the reason none could be loaded. This tool does not keep a grammar of
+ * its own: what the parser rejects is not certified, and when no parser can be loaded validity is
+ * reported as unknown instead of being guessed at.
+ */
+function loadXmlParser(): XmlParser | { readonly unavailable: string } {
+  if (xmlParser !== undefined) return xmlParser;
+  try {
+    const require = createRequire(import.meta.url);
+    const { JSDOM } = require('jsdom') as { JSDOM: new (html: string) => { window: { DOMParser: new () => { parseFromString(text: string, type: string): XmlDocument } } } };
+    const { DOMParser } = new JSDOM('').window;
+    xmlParser = (text) => new DOMParser().parseFromString(text, 'image/svg+xml');
+  } catch (error) {
+    xmlParser = { unavailable: `the XML parser (jsdom) could not be loaded: ${(error as Error).message}` };
   }
-  if (!rootSeen) return 'has no root element';
-  return stack.length > 0 || !rootClosed ? `is truncated: <${stack[stack.length - 1] ?? 'svg'}> is never closed` : null;
+  return xmlParser;
+}
+
+/** The outcome of checking an icon whose validity cannot be established here. */
+export interface IconUnverified {
+  readonly unverified: string;
+}
+
+/**
+ * `null` when `text` is one well-formed XML document whose root element is an SVG `svg` element, a
+ * string saying what is wrong when the XML parser rejects it, or `IconUnverified` when no parser is
+ * available. Entity declarations are refused before parsing: an icon has no use for them.
+ */
+function svgStructureProblem(text: string): string | IconUnverified | null {
+  if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text)) return 'has a document type declaration with an internal subset or entities';
+  const parse = loadXmlParser();
+  if (typeof parse !== 'function') return { unverified: parse.unavailable };
+  const document = parse(text);
+  const failure = document.getElementsByTagName('parsererror');
+  if (failure.length > 0 || document.documentElement === null) {
+    const reason = (failure.item(0)?.textContent ?? '').trim().replace(/\s+/g, ' ');
+    return `is not well-formed XML${reason === '' ? '' : ` (${reason.slice(0, 160)})`}`;
+  }
+  const root = document.documentElement;
+  if (root.localName !== 'svg' || root.namespaceURI !== SVG_NAMESPACE) return `has a root element that is not an svg element in the ${SVG_NAMESPACE} namespace`;
+  return null;
 }
 
 /** `null` when the file is a usable icon: a complete, valid square PNG or well-formed SVG of at least 48 by 48 and at most 5 MiB. */
-export function iconProblem(file: string, data: Uint8Array): string | null {
+export function iconProblem(file: string, data: Uint8Array): string | IconUnverified | null {
   if (data.length > MAX_IMAGE_BYTES) return `${file} is larger than 5 MiB.`;
   const bytes = Buffer.from(data);
   const extension = path.extname(file).toLowerCase();
@@ -471,7 +472,7 @@ export function iconProblem(file: string, data: Uint8Array): string | null {
   if (extension === '.svg') {
     const text = bytes.toString('utf8');
     const structure = svgStructureProblem(text);
-    if (structure !== null) return `${file} is not a complete SVG document: it ${structure}.`;
+    if (structure !== null) return typeof structure === 'string' ? `${file} is not a complete SVG document: it ${structure}.` : { unverified: `${file}: ${structure.unverified}` };
     const root = /<svg\b[^>]*>/i.exec(text);
     if (root === null) return `${file} is not an SVG document.`;
     const attribute = (name: string): string | undefined => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(root[0])?.[1];
@@ -598,6 +599,7 @@ export function checkArchive(archive: Uint8Array, options: ArchiveCheckOptions):
   const face = isRecord(openai) && isRecord(openai.interface) ? openai.interface : {};
   const referenced = ['logo', 'composerIcon', 'logoDark', 'composerIconDark'].flatMap((field) => (face[field] === undefined ? [] : [{ field, value: face[field] }]));
   const assetProblems: string[] = [];
+  const assetUnverified: string[] = [];
   for (const required of ['logo', 'composerIcon']) if (face[required] === undefined) assetProblems.push(`interface.${required} is required.`);
   for (const { field, value } of referenced) {
     if (typeof value !== 'string' || !/^\.\/assets\/[^/]+$/.test(value)) {
@@ -608,10 +610,11 @@ export function checkArchive(archive: Uint8Array, options: ArchiveCheckOptions):
     if (entry === undefined) assetProblems.push(`interface.${field} points to ${value}, which is not in the package.`);
     else {
       const problem = iconProblem(entry.path, entry.data);
-      if (problem !== null) assetProblems.push(problem);
+      if (typeof problem === 'string') assetProblems.push(problem);
+      else if (problem !== null) assetUnverified.push(problem.unverified);
     }
   }
-  findings.push(assetProblems.length === 0 ? pass('package.assets', 'The logo and composer icon are present, square and within the size limits.') : fail('package.assets', `The assets have ${assetProblems.length} problem${assetProblems.length === 1 ? '' : 's'}.`, 'Add or correct the asset files named in the release input.', assetProblems.join(' ')));
+  findings.push(assetProblems.length === 0 && assetUnverified.length > 0 ? unknown('package.assets', 'An icon could not be verified as a valid image.', 'Run this command where the repository\'s development dependencies are installed (npm ci), then rerun.', assetUnverified.join(' ')) : assetProblems.length === 0 ? pass('package.assets', 'The logo and composer icon are present, square, valid and within the size limits.') : fail('package.assets', `The assets have ${assetProblems.length} problem${assetProblems.length === 1 ? '' : 's'}.`, 'Add or correct the asset files named in the release input.', assetProblems.join(' ')));
 
   // Components the portal cannot accept, and fields it rejects.
   const excluded: string[] = [];
