@@ -68,8 +68,8 @@ function link(name: string, into: string): void {
 
 /**
  * The prerelease version a candidate build carries: `0.0.0-candidate.g<first 12 hex of the commit>`,
- * with `.dirty` appended when tracked files differ from that commit. The packages themselves stay
- * unversioned (docs/version-policy.md): this identity exists only in the staged copy that is packed,
+ * with `.dirty` appended when tracked files differ from that commit. This identity exists only in
+ * the staged candidate copy, independently of enrolled release versions (docs/version-policy.md),
  * so it names a build of one revision and is never a release, a tag or an npm availability claim.
  * The leading `g` keeps an all-digit commit prefix a valid semver identifier.
  */
