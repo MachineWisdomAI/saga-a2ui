@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createDevelopmentVerifier, DEV_ACCOUNTS } from './dev-auth.js';
 import type { MediaStore } from '../playback/media-service.js';
 import type { PlaybackBackend } from '../playback/playback-server.js';
@@ -60,13 +62,16 @@ const answerBackend: AnswerBackend = {
   },
 };
 
-const viewHtml = await readFile(new URL('../../dist/view/view.html', import.meta.url), 'utf8');
-const subscriptionsViewHtml = await readFile(
-  new URL('../../dist/subscriptions-view/subscriptions.html', import.meta.url),
-  'utf8',
-);
-const playbackViewHtml = await readFile(new URL('../../dist/playback-view/playback.html', import.meta.url), 'utf8');
-const answerViewHtml = await readFile(new URL('../../dist/answer-view/answer.html', import.meta.url), 'utf8');
+// The built views are read before the port opens, so a missing artifact stops the process instead
+// of serving a listener without its view. `SAGA_VIEWS_DIR` names the directory that holds them
+// (`view/view.html`, ...); an installed copy of this application, run outside the repository
+// (PACK1, scripts/build-installed-lit-host.ts), points it at the views built beside it. Unset, it is `dist` here.
+const viewsDirectory = process.env.SAGA_VIEWS_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url));
+const readView = (relativePath: string) => readFile(path.join(viewsDirectory, relativePath), 'utf8');
+const viewHtml = await readView('view/view.html');
+const subscriptionsViewHtml = await readView('subscriptions-view/subscriptions.html');
+const playbackViewHtml = await readView('playback-view/playback.html');
+const answerViewHtml = await readView('answer-view/answer.html');
 const listener = await startEpisodeListener({
   viewHtml,
   catalog,

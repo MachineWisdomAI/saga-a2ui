@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   buildConsumerFromConfig,
+  bundleConsumerServer,
   createWorkDirectory,
   installPackedSdk,
   linkDeclaredDependencies,
@@ -38,6 +39,7 @@ export const LIT_HOST_OWN_DEPENDENCIES = [
   '@modelcontextprotocol/client',
   '@modelcontextprotocol/core',
   '@modelcontextprotocol/ext-apps',
+  '@modelcontextprotocol/node',
   'jose',
   'lit',
   'vite',
@@ -156,6 +158,17 @@ export interface BuiltPage {
   readonly provenance: ModuleProvenance;
 }
 
+/** The application's own listener, bundled in the same installed consumer as its pages (PACK1, #154). */
+export interface BuiltServer {
+  /** The bundled entry, `<consumer>/.server/server.mjs`. */
+  readonly file: string;
+  readonly sha256: string;
+  /** Where every bundled module came from; the SDK is bundled in, so only installed copies may appear. */
+  readonly provenance: ModuleProvenance;
+  /** The packages the bundle still imports at run time, which resolve from the consumer's `node_modules`. */
+  readonly externalImports: readonly string[];
+}
+
 export interface InstalledLitHostIdentity {
   readonly sourceCommit: string;
   readonly sourceDirty: boolean;
@@ -166,26 +179,127 @@ export interface InstalledLitHostIdentity {
   /** SHA-256 of each file written under the output directory, keyed by its path there. */
   readonly builtFilesSha256: Record<string, string>;
   readonly pages: readonly BuiltPage[];
+  /** The listener built from the same install as the pages. Its bytes are not written under the output directory. */
+  readonly server: Omit<BuiltServer, 'file'>;
+  /** The served playback view against the accepted CARD2 production hash; recorded, not asserted (see CARD2_PLAYBACK_SHA256). */
+  readonly playbackView: { readonly sha256: string; readonly cardTwoSha256: string; readonly matchesCardTwo: boolean };
+}
+
+/** The installed playback document CARD2 accepted ("reviewed installed playback HTML", issue #20 comment 6280435005). A different value names a changed view, for the coordinator to assess. */
+export const CARD2_PLAYBACK_SHA256 = '7ea1d8d0d696a20921896d1df45905cd22455f5f17fa20cd1d41243591224afd';
+
+/** The application entry the external listener is bundled from: the same one `npm run serve:mcp` runs. */
+export const INSTALLED_SERVER_ENTRY = 'src/mcp/serve.ts';
+
+/** The bare package names a bundle imports at run time. */
+function externalImportsOf(file: string): string[] {
+  const code = fs.readFileSync(file, 'utf8');
+  const found = new Set<string>();
+  for (const match of code.matchAll(/(?:^|\n)\s*import\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+    const specifier = match[1] as string;
+    if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
+    found.add(specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : (specifier.split('/')[0] as string));
+  }
+  return [...found].sort();
+}
+
+export interface BuiltInstalledHost {
+  readonly consumer: string;
+  readonly sdk: PackedSdk;
+  readonly pages: readonly BuiltPage[];
+  readonly server: BuiltServer;
+}
+
+/**
+ * Builds every page and the application's listener in one installed consumer inside `work`, which the
+ * caller owns and removes. The pages end up in `<consumer>/dist`, the listener in `<consumer>/.server`.
+ * The listener is bundled against the same installed copies the pages were: a module loaded from the
+ * workspace instead fails the build rather than being reported.
+ */
+export async function buildInstalledHost(work: string): Promise<BuiltInstalledHost> {
+  const { consumer, sdk } = prepareInstalledLitHost(work);
+  const pages: BuiltPage[] = [];
+  for (const config of INSTALLED_PAGE_CONFIGS) {
+    const provenance = classifyModules(consumer, await buildConsumerFromConfig(consumer, config));
+    if (provenance.unexpected.length > 0) throw new Error(`${config} loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`);
+    pages.push({ config, provenance });
+  }
+  const bundled = await bundleConsumerServer(consumer, INSTALLED_SERVER_ENTRY);
+  const provenance = classifyModules(consumer, bundled.modules);
+  if (provenance.unexpected.length > 0) throw new Error(`the listener loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`);
+  const externalImports = externalImportsOf(bundled.file);
+  const sdkImports = externalImports.filter((name) => name.startsWith('@saga-a2ui/'));
+  if (sdkImports.length > 0) throw new Error(`the listener bundle still imports ${sdkImports.join(', ')} at run time instead of carrying the installed copies`);
+  return { consumer, sdk, pages, server: { file: bundled.file, sha256: sha256(bundled.file), provenance, externalImports } };
+}
+
+export interface RunningInstalledListener {
+  /** `http://127.0.0.1:<port>`, as the process reported it. */
+  readonly origin: string;
+  readonly mcpUrl: string;
+  readonly subscriptionsUrl: string;
+  readonly playbackUrl: string;
+  readonly answerUrl: string;
+  /** What the process wrote to standard output and error so far. */
+  output(): string;
+  stop(): Promise<void>;
+}
+
+/** How long a listener may take to report that it is ready. */
+const LISTENER_READY_MS = 30_000;
+
+/**
+ * Starts the bundled listener as its own Node process with the consumer (outside the repository) as
+ * its working directory and `viewsDirectory` (default: the views built beside it) as the only place
+ * it reads its views from. The environment carries no credential: the process gets `PATH`, an
+ * ephemeral port and the views directory, so the application's synthetic verifier is its only
+ * authentication. It is ready only when it printed its URL, which it does after reading every view;
+ * a missing view ends the process before that and rejects here with what it wrote.
+ */
+export async function startInstalledListener(built: BuiltInstalledHost, viewsDirectory = path.join(built.consumer, 'dist')): Promise<RunningInstalledListener> {
+  const child = spawn(process.execPath, [built.server.file], {
+    cwd: built.consumer,
+    env: { PATH: process.env.PATH ?? '', PORT: '0', SAGA_VIEWS_DIR: viewsDirectory },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let written = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
+  child.stderr.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
+  const exited = new Promise<number | null>((resolve) => child.once('exit', resolve));
+  const stop = async (): Promise<void> => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    await exited;
+  };
+  const urlOf = (label: string): string | undefined => new RegExp(`${label}[^\\n]*?(http://127\\.0\\.0\\.1:\\d+/\\S+)`).exec(written)?.[1];
+  const deadline = Date.now() + LISTENER_READY_MS;
+  while (Date.now() < deadline) {
+    const mcp = /MCP server listening at (http:\/\/127\.0\.0\.1:\d+)\/mcp/.exec(written);
+    const subscriptions = urlOf('subscriptions endpoint');
+    const playback = urlOf('playback endpoint');
+    const answer = urlOf('answer endpoint');
+    if (mcp?.[1] && subscriptions && playback && answer) {
+      return { origin: mcp[1], mcpUrl: `${mcp[1]}/mcp`, subscriptionsUrl: subscriptions, playbackUrl: playback, answerUrl: answer, output: () => written, stop };
+    }
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`the installed listener ended before it was ready (exit ${child.exitCode ?? child.signalCode}):\n${written}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  await stop();
+  throw new Error(`the installed listener was not ready within ${LISTENER_READY_MS} ms:\n${written}`);
 }
 
 /**
  * Builds every page into `outDir` and returns the identities a review needs: the source commit, the
- * runtime, the packed tarball digests, each built file's digest and, per page build, where its
- * modules came from. A module loaded from the workspace instead of an installed copy fails the
- * build rather than being reported.
+ * runtime, the packed tarball digests, each built file's digest and, per page build and for the
+ * listener, where its modules came from. A module loaded from the workspace instead of an installed
+ * copy fails the build rather than being reported.
  */
 export async function buildInstalledLitHost(outDir: string): Promise<InstalledLitHostIdentity> {
   const work = createWorkDirectory('saga-installed-lit-host-');
   try {
-    const { consumer, sdk } = prepareInstalledLitHost(work);
-    const pages: BuiltPage[] = [];
-    for (const config of INSTALLED_PAGE_CONFIGS) {
-      const provenance = classifyModules(consumer, await buildConsumerFromConfig(consumer, config));
-      if (provenance.unexpected.length > 0) throw new Error(`${config} loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`);
-      pages.push({ config, provenance });
-    }
+    const { consumer, sdk, pages, server } = await buildInstalledHost(work);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.cpSync(path.join(consumer, 'dist'), outDir, { recursive: true });
+    const playbackSha256 = sha256(path.join(outDir, 'playback-view', 'playback.html'));
     return {
       sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
       sourceDirty: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: repoRoot, encoding: 'utf8' }).trim() !== '',
@@ -194,6 +308,8 @@ export async function buildInstalledLitHost(outDir: string): Promise<InstalledLi
       packedTarballSha256: sdk.tarballSha256,
       builtFilesSha256: Object.fromEntries(filesUnder(outDir).map((file) => [path.relative(outDir, file).split(path.sep).join('/'), sha256(file)])),
       pages,
+      server: { sha256: server.sha256, provenance: server.provenance, externalImports: server.externalImports },
+      playbackView: { sha256: playbackSha256, cardTwoSha256: CARD2_PLAYBACK_SHA256, matchesCardTwo: playbackSha256 === CARD2_PLAYBACK_SHA256 },
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
