@@ -1,5 +1,5 @@
-import { type ReactCatalogComponent } from '@a2ui/react/v0_9';
-import { Catalog, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import { type ReactCatalogComponent } from '@saga-a2ui/react/a2ui';
+import { Catalog, type SurfaceModel } from '@saga-a2ui/react/a2ui';
 import { a2uiV0_9Decoder, createMessageSession, type IngestResult, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { faithfulCardEntry } from '@saga-a2ui/react/faithful-card';
 

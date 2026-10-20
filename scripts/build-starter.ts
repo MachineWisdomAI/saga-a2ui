@@ -12,6 +12,7 @@ import {
   repoRoot,
   type PackedSdk,
 } from './packed-consumer.js';
+import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import { exportTemplate, readTemplateMetadata, templateDirectory, type ExportedStarter, type TemplateMetadata } from './starter-template.js';
 
 // Qualification build of a maintained starter template (templates/<name>). The template is
@@ -20,12 +21,13 @@ import { exportTemplate, readTemplateMetadata, templateDirectory, type ExportedS
 // scripts and configuration build it. Only what the starter declares is linked in; a missing
 // declaration, a workspace alias or a file left out of a package fails here instead of passing.
 //
-//   npx tsx scripts/build-starter.ts     # writes apps/lit-host/dist/starter (ignored)
+//   npx tsx scripts/build-starter.ts                      # every qualified template into apps/lit-host/dist/starters/<name> (ignored)
+//   npx tsx scripts/build-starter.ts --template lit-node  # one of them
 //
 // Building the candidate is not publishing anything.
 
-export const STARTER = 'lit-node';
-export const starterDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'starter');
+/** Where the browser specification reads the built template `name` from. */
+export const starterDist = (name: string): string => path.join(repoRoot, 'apps', 'lit-host', 'dist', 'starters', name);
 
 /**
  * What the qualification harness adds around the starter, outside its output: the entry through
@@ -54,7 +56,7 @@ function declaredThirdParty(consumer: string): string[] {
 }
 
 /** Exports the starter into `work` and installs exactly the SDK packages its metadata names. */
-export function prepareStarter(work: string, name: string = STARTER): PreparedStarter {
+export function prepareStarter(work: string, name: string): PreparedStarter {
   const template = templateDirectory(name);
   const metadata = readTemplateMetadata(template);
   const consumer = path.join(work, 'starter');
@@ -100,11 +102,11 @@ export async function buildStarter(prepared: PreparedStarter): Promise<BuiltStar
 
 const sha256 = (file: string): string => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-/** Builds the starter into `outDir` for the browser specification and returns the identities a review needs. */
-export async function buildStarterInto(outDir: string): Promise<Record<string, unknown>> {
+/** Builds the template `name` into `outDir` for the browser specification and returns the identities a review needs. */
+export async function buildStarterInto(name: string, outDir: string): Promise<Record<string, unknown>> {
   const work = createWorkDirectory('saga-starter-');
   try {
-    const prepared = prepareStarter(work);
+    const prepared = prepareStarter(work, name);
     typecheckStarter(prepared.consumer);
     const built = await buildStarter(prepared);
     fs.rmSync(outDir, { recursive: true, force: true });
@@ -116,12 +118,12 @@ export async function buildStarterInto(outDir: string): Promise<Record<string, u
       sourceDirty: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: repoRoot, encoding: 'utf8' }).trim() !== '',
       platform: `${process.platform}-${process.arch}`,
       node: process.version,
-      template: { name: STARTER, files: built.exported.files.length, stack: built.metadata.stack, server: built.metadata.server },
+      template: { name, files: built.exported.files.length, stack: built.metadata.stack, server: built.metadata.server },
       installedPackages: Object.keys(built.sdk.manifests).sort(),
       packedTarballSha256: built.sdk.tarballSha256,
       builtView: { sha256: sha256(built.view) },
       builtServer: { sha256: sha256(built.server) },
-      templateSource: path.relative(repoRoot, templateDirectory(STARTER)),
+      templateSource: path.relative(repoRoot, templateDirectory(name)),
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -129,7 +131,15 @@ export async function buildStarterInto(outDir: string): Promise<Record<string, u
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const identity = await buildStarterInto(starterDist);
-  fs.writeFileSync(path.join(starterDist, 'identity.json'), `${JSON.stringify(identity, null, 2)}\n`);
-  console.log(JSON.stringify(identity, null, 2));
+  const argv = process.argv.slice(2);
+  const at = argv.indexOf('--template');
+  const requested = at < 0 ? undefined : argv[at + 1];
+  if (at >= 0 && (requested === undefined || requested.startsWith('--'))) throw new Error('--template requires a template name');
+  const names = requested === undefined ? QUALIFIED_STARTERS : QUALIFIED_STARTERS.filter((name) => name === requested);
+  if (names.length === 0) throw new Error(`${String(requested)} is not a qualified starter template (${QUALIFIED_STARTERS.join(', ')}).`);
+  for (const name of names) {
+    const identity = await buildStarterInto(name, starterDist(name));
+    fs.writeFileSync(path.join(starterDist(name), 'identity.json'), `${JSON.stringify(identity, null, 2)}\n`);
+    console.log(JSON.stringify(identity, null, 2));
+  }
 }
