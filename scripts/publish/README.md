@@ -185,9 +185,12 @@ and the package digest, so two hosts, or two releases, never share one.
 
 Each observation carries `observedAt`, the time the host showed it (ISO 8601 with an offset, never in the
 future; the time of the command when omitted), and the event carries `recordedAt`, when the tool wrote it.
-Later stages cannot predate earlier ones. An approval is not a listing: `record-listing` is accepted only
+Later stages cannot predate earlier ones, and a review or listing observation cannot predate the newest
+review or listing observation already recorded: a delayed observation never supersedes a newer one. An approval is not a listing: `record-listing` is accepted only
 after an approval, with a named host and a reference to what was observed, and `status` keeps saying
-`not verified` until then.
+`not verified` until then. `record-listing` checks that the release is still current before it answers anything, including that a
+listing is already recorded as live: an earlier live observation stays in the record as made for the release
+the record pins, and does not excuse changed or unusable evidence.
 
 **An uncertain submission is inspected before any retry.** `attempt` records that you are about to submit,
 before you do, and prints the host's guide, the pinned package and digest and the owner-only steps. If the
@@ -198,7 +201,9 @@ made. Once a submission is recorded, `attempt` is refused, `confirm-submission` 
 nothing and with another is refused as a second upload. Of two commands that read the same record, one
 is refused: an event is created whole with a hard link, which fails when its number is taken, so none is
 lost or doubled, and an interrupt before the link leaves no event (a leftover temporary file, named with a
-leading dot, is ignored). A record that was altered, has a missing event or holds other files is refused and
+leading dot, is ignored). An event is also written only into the directory that was read: the command holds that
+directory by its identity, and a path replaced or renamed under it is refused with nothing recorded and
+nothing changed in the directory now at the path. A record that was altered, has a missing event or holds other files is refused and
 never repaired.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,

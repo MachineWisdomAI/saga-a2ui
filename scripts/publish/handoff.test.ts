@@ -85,6 +85,25 @@ async function submitted(): Promise<{ readonly s: Session; readonly app: string;
   return handoff;
 }
 
+/** A clock that, the first time the command reads it (after the record was read, before it is written), runs `swap`: the way a path is replaced under a running command. */
+const swappingClock = (s: Session, swap: () => void): (() => Date) => {
+  let done = false;
+  return () => {
+    if (!done) {
+      done = true;
+      swap();
+    }
+    return s.time.now();
+  };
+};
+
+/** Moves the handoff directory aside and puts another directory, holding one file that is not a record, at its path. */
+function replaceHandoff(cwd: string, aside: string): void {
+  fs.renameSync(path.join(cwd, HANDOFF), path.join(cwd, aside));
+  fs.mkdirSync(path.join(cwd, HANDOFF));
+  fs.writeFileSync(path.join(cwd, HANDOFF, 'foreign.txt'), 'not a record');
+}
+
 const statusOf = (s: Session, ...extra: string[]): Promise<Run> => s.run(['status', '--handoff', HANDOFF, ...extra]);
 
 describe('beginning a handoff', () => {
@@ -293,6 +312,38 @@ describe('an uncertain submission', () => {
     expect(retry.err).toMatch(/outcome was never recorded/);
   });
 
+  it('writes only into the directory that was read: a path replaced under a running command is refused and the other directory is untouched', async () => {
+    const { s, out } = await begun();
+    const run = await s.run(['attempt', '--handoff', HANDOFF, '--prepared', out], { now: swappingClock(s, () => replaceHandoff(s.cwd, 'handoff-original')) });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/handoff directory was replaced while this command was running, so nothing was recorded/);
+    expect(run.out).not.toMatch(/Recorded the start of a submission attempt/);
+    // The foreign directory holds what it held, byte for byte, with no event and no leftover.
+    expect(files(s.cwd)).toEqual(['foreign.txt']);
+    expect(fs.readFileSync(path.join(s.cwd, HANDOFF, 'foreign.txt'), 'utf8')).toBe('not a record');
+    // The record that was read has no attempt, so resuming it does not mistake the refusal for one.
+    expect(fs.readdirSync(path.join(s.cwd, 'handoff-original')).sort()).toEqual(['000001.json']);
+
+    fs.rmSync(path.join(s.cwd, HANDOFF), { recursive: true });
+    fs.renameSync(path.join(s.cwd, 'handoff-original'), path.join(s.cwd, HANDOFF));
+    expect((await statusOf(s)).out).toMatch(/Submission\s+not submitted/);
+    expect((await s.run(['attempt', '--handoff', HANDOFF, '--prepared', out])).code).toBe(0);
+    expect(types(s.cwd)).toEqual(['begin', 'submission-attempt']);
+  });
+
+  it('writes the first event only into the directory it made: a path replaced meanwhile is refused and left alone', async () => {
+    const { cwd, out } = await prepared();
+    const s = session(cwd);
+    const run = await s.run(['begin', '--handoff', HANDOFF, '--prepared', out, '--authority-ref', AUTHORITY], { now: swappingClock(s, () => replaceHandoff(cwd, 'handoff-made')) });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/handoff directory was replaced while this command was running, so nothing was recorded/);
+    expect(files(cwd)).toEqual(['foreign.txt']);
+    expect(fs.readFileSync(path.join(cwd, HANDOFF, 'foreign.txt'), 'utf8')).toBe('not a record');
+    expect(fs.readdirSync(path.join(cwd, 'handoff-made'))).toEqual([]);
+  });
+
   it('is unaffected by the remains of an interrupted write, and refuses a record that was altered', async () => {
     const { s } = await begun();
     fs.writeFileSync(path.join(s.cwd, HANDOFF, '.000002.json.tmp-abc123'), '{"half":');
@@ -411,6 +462,64 @@ describe('stale evidence', () => {
 });
 
 describe('review and the live listing', () => {
+  const LIVE = (out: string): string[] => ['record-listing', '--handoff', HANDOFF, '--prepared', out, '--state', 'verified-live', '--host', 'Claude web, Notes workspace', '--evidence', 'recording 7'];
+
+  it('checks the current release before it answers that the listing is already verified live, and keeps the earlier observation', async () => {
+    const { s, app, out } = await submitted();
+    expect((await s.run(['record-review', '--handoff', HANDOFF, '--state', 'approved'])).code).toBe(0);
+    s.time.advance(60);
+    expect((await s.run(LIVE(out))).code).toBe(0);
+    const recorded = files(s.cwd);
+    const widened = editing('resources/read', (result) => {
+      const content = result.contents[0];
+      content._meta = { ...content._meta, ui: { ...content._meta?.ui, csp: { ...content._meta?.ui?.csp, connectDomains: ['https://elsewhere.example.com'] } } };
+    });
+    expect((await prepare(app, 'claude', 'changed', { cwd: s.cwd, wire: widened })).code).toBe(0);
+
+    // The same command, against changed, missing or unusable evidence: refused, not idempotent success.
+    for (const current of ['changed', 'missing']) {
+      const repeated = await s.run(LIVE(current));
+      expect(repeated.code, repeated.out).toBe(1);
+      expect(repeated.out).not.toMatch(/already verified live/);
+      expect(repeated.err).toMatch(current === 'changed' ? /no longer the current one/ : /cannot be used/);
+      expect(repeated.err).toMatch(/earlier observation \(verified live on Claude web, Notes workspace, recording 7, observed [^)]*\) stays in the record as made for the release this record pins/);
+    }
+    const unchecked = await s.run(['record-listing', '--handoff', HANDOFF, '--state', 'verified-live', '--host', 'Claude web, Notes workspace', '--evidence', 'recording 7']);
+    expect(unchecked.code).toBe(2);
+    expect(files(s.cwd)).toEqual(recorded);
+
+    // Against the release that was submitted, still current, the repeat is idempotent and says which release it speaks for.
+    const same = await s.run(LIVE(out));
+    expect(same.code, same.err).toBe(0);
+    expect(same.out).toMatch(/already verified live .* for the release this record pins, which is still the current one; nothing changed/);
+    expect(files(s.cwd)).toEqual(recorded);
+    const status = await statusOf(s, '--prepared', 'changed');
+    expect(status.out).toMatch(/observed for the earlier release, so recheck it on the named host/);
+  });
+
+  it('orders each review and listing observation after the newest one already recorded', async () => {
+    const { s, out } = await submitted();
+    s.time.advance(60);
+    const review = (state: string, at: string): Promise<Run> => s.run(['record-review', '--handoff', HANDOFF, '--state', state, '--observed-at', at]);
+
+    expect((await review('in-review', '2026-10-21T10:30:00Z')).code).toBe(0);
+    const older = await review('approved', '2026-10-21T10:00:00Z');
+    expect(older.code).toBe(1);
+    expect(older.err).toMatch(/before the review was last observed as in-review \(2026-10-21T10:30:00.000Z\)/);
+    expect(types(s.cwd)).toEqual(['begin', 'submission-attempt', 'submission-confirmed', 'review-observed']);
+    // The existing floor still applies, and a time equal to the last observation is not before it.
+    expect((await review('approved', '2026-10-21T09:00:00Z')).err).toMatch(/before the submission was observed/);
+    expect((await review('approved', '2026-10-21T10:30:00Z')).code).toBe(0);
+
+    const listing = (state: string, at: string): Promise<Run> => s.run(['record-listing', '--handoff', HANDOFF, '--prepared', out, '--state', state, '--host', 'Claude web', '--evidence', 'note', '--observed-at', at]);
+    expect((await listing('not-listed', '2026-10-21T11:00:00Z')).code).toBe(0);
+    const stale = await listing('verified-live', '2026-10-21T10:45:00Z');
+    expect(stale.code).toBe(1);
+    expect(stale.err).toMatch(/before the listing was last observed as not-listed \(2026-10-21T11:00:00.000Z\)/);
+    expect((await listing('verified-live', '2026-10-21T11:00:00Z')).code).toBe(0);
+    expect(types(s.cwd).slice(-3)).toEqual(['review-observed', 'listing-observed', 'listing-observed']);
+  });
+
   it('keeps submission, the host\'s review and a verified listing distinct, in order, with named-host evidence', async () => {
     const { s, out } = await submitted();
     const open = await statusOf(s);

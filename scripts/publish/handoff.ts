@@ -122,7 +122,7 @@ type EventBody = HandoffEvent extends infer E ? (E extends HandoffEvent ? Omit<E
 const eventFile = (seq: number): string => `${String(seq).padStart(6, '0')}.json`;
 const EVENT_FILE = /^(\d{6})\.json$/;
 
-type ReadRecord = { readonly ok: true; readonly events: readonly HandoffEvent[]; readonly tipSha256: string } | { readonly ok: false; readonly problem: string };
+type ReadRecord = { readonly ok: true; readonly events: readonly HandoffEvent[]; readonly tipSha256: string; readonly identity: fs.BigIntStats } | { readonly ok: false; readonly problem: string };
 
 /**
  * Reads a handoff directory back: a real directory holding only this tool's numbered events (a
@@ -131,9 +131,9 @@ type ReadRecord = { readonly ok: true; readonly events: readonly HandoffEvent[];
  * not repaired: a damaged record is for a person to look at.
  */
 function readRecord(directory: string): ReadRecord {
-  let stat: fs.Stats;
+  let stat: fs.BigIntStats;
   try {
-    stat = fs.lstatSync(directory);
+    stat = fs.lstatSync(directory, { bigint: true });
   } catch {
     return { ok: false, problem: `${directory} does not exist; \`handoff begin\` creates a record.` };
   }
@@ -158,33 +158,68 @@ function readRecord(directory: string): ReadRecord {
     tip = sha256(bytes);
   }
   if (events.length === 0 || tip === null) return { ok: false, problem: `${directory} holds no handoff record; \`handoff begin\` creates one.` };
-  return { ok: true, events, tipSha256: tip };
+  // What was read is one directory's record only if the path still names that directory.
+  if (!isDirectoryAt(directory, stat)) return { ok: false, problem: `${directory} was replaced while the record was being read; nothing was read from it that can be trusted.` };
+  return { ok: true, events, tipSha256: tip, identity: stat };
 }
 
 class Raced extends Error {}
 class Interrupted extends Error {}
+class Replaced extends Error {}
+
+/** Whether `directory` names, right now, the very directory `identity` describes (not a link to it and not another directory put at the same path). */
+function isDirectoryAt(directory: string, identity: fs.BigIntStats): boolean {
+  try {
+    return sameDirectory(fs.lstatSync(directory, { bigint: true }), identity);
+  } catch {
+    return false;
+  }
+}
+
+/** The directory held open by its identity: a rename or replacement of its path afterwards does not change which directory this is. */
+const OPEN_DIRECTORY = fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) | (fs.constants.O_NOFOLLOW ?? 0);
 
 /**
- * Appends one event as the next file. The content is written beside it first and then linked into
- * place: a link fails when the name exists, so the event is created whole or not at all, and a
- * command that read the record before another one appended is refused instead of overwriting or
- * duplicating. An interrupt seen before the link leaves no event.
+ * Appends one event as the next file, to the directory that was read and no other. The content is
+ * written beside it first and then linked into place: a link fails when the name exists, so the
+ * event is created whole or not at all, and a command that read the record before another one
+ * appended is refused instead of overwriting or duplicating. An interrupt seen before the link
+ * leaves no event.
+ *
+ * The name of the file protects the position in the record; `bound` protects which record. The
+ * directory is opened and compared with the identity the caller read (or made), and where the
+ * system names an open directory (`/proc/self/fd`) staging, link and cleanup all go through that
+ * handle, so a path replaced afterwards cannot receive the event. The path is compared again
+ * before the staged event is linked, and a replacement is refused with nothing recorded.
  */
-function appendEvent(directory: string, previous: { readonly seq: number; readonly tipSha256: string | null }, body: EventBody, now: Date, signal: AbortSignal | undefined): void {
-  const seq = previous.seq + 1;
-  const event = { format: HANDOFF_FORMAT, seq, previousSha256: previous.tipSha256, recordedAt: now.toISOString(), ...body };
-  const staged = path.join(directory, `.${eventFile(seq)}.tmp-${randomBytes(6).toString('hex')}`);
-  fs.writeFileSync(staged, `${JSON.stringify(event, null, 2)}\n`, { flag: 'wx' });
+function appendEvent(directory: string, bound: fs.BigIntStats, previous: { readonly seq: number; readonly tipSha256: string | null }, body: EventBody, now: Date, signal: AbortSignal | undefined): void {
+  let handle: number;
   try {
-    if (signal?.aborted) throw new Interrupted();
+    handle = fs.openSync(directory, OPEN_DIRECTORY);
+  } catch {
+    throw new Replaced();
+  }
+  try {
+    if (!sameDirectory(fs.fstatSync(handle, { bigint: true }), bound) || !isDirectoryAt(directory, bound)) throw new Replaced();
+    const through = fs.existsSync(`/proc/self/fd/${handle}`) ? `/proc/self/fd/${handle}` : directory;
+    const seq = previous.seq + 1;
+    const event = { format: HANDOFF_FORMAT, seq, previousSha256: previous.tipSha256, recordedAt: now.toISOString(), ...body };
+    const staged = path.join(through, `.${eventFile(seq)}.tmp-${randomBytes(6).toString('hex')}`);
+    fs.writeFileSync(staged, `${JSON.stringify(event, null, 2)}\n`, { flag: 'wx' });
     try {
-      fs.linkSync(staged, path.join(directory, eventFile(seq)));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Raced();
-      throw error;
+      if (signal?.aborted) throw new Interrupted();
+      if (!isDirectoryAt(directory, bound)) throw new Replaced();
+      try {
+        fs.linkSync(staged, path.join(through, eventFile(seq)));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Raced();
+        throw error;
+      }
+    } finally {
+      fs.rmSync(staged, { force: true });
     }
   } finally {
-    fs.rmSync(staged, { force: true });
+    fs.closeSync(handle);
   }
 }
 
@@ -286,6 +321,9 @@ function observation(option: string, value: string | undefined, now: Date): { re
 }
 
 const before = (earlier: string, later: string): boolean => Date.parse(later) < Date.parse(earlier);
+
+/** The latest of the instants given: an observation is ordered after the newest one already recorded. */
+const latest = (first: string, ...rest: readonly (string | undefined)[]): string => rest.reduce<string>((newest, value) => (value !== undefined && Date.parse(value) > Date.parse(newest) ? value : newest), first);
 
 // ---------------------------------------------------------------------------------------------
 // Decisions
@@ -427,6 +465,8 @@ function decideReview({ request, status, now }: Context): Decision {
   const observed = observation('observed-at', request.observedAt, now);
   if ('problem' in observed) return refuse(observed.problem);
   if (before(submission.observedAt, observed.value)) return refuse(`--observed-at ${observed.value} is before the submission was observed (${submission.observedAt}).`);
+  // A resumed or delayed observation does not supersede a newer one with an older one.
+  if (review.state !== 'not-started' && before(review.observedAt, observed.value)) return refuse(`--observed-at ${observed.value} is before the review was last observed as ${review.state} (${review.observedAt}); an older observation does not replace a newer one.`);
   return {
     kind: 'append',
     body: { type: 'review-observed', state, reference: reference === null ? null : reference.value, observedAt: observed.value },
@@ -439,18 +479,20 @@ function decideListing({ request, status, now, freshness }: Context): Decision {
   if (state === undefined) return refuse(`--state must be one of ${LISTING_STATES.join(', ')}.`);
   const { review, listing, begin } = status;
   if (review.state !== 'approved') return refuse(`The host's review is ${review.state}; a listing is observed only after an approval is recorded.`);
+  // Readiness of the current release comes before any idempotent answer: a recorded live observation is history, and it does not excuse changed or unusable evidence.
+  const problem = staleMessage(freshness, 'Recording the listing');
+  if (problem !== null) return refuse(listing.state === 'verified-live' ? `${problem} The earlier observation (verified live on ${listing.host}, ${listing.evidence}, observed ${listing.observedAt}) stays in the record as made for the release this record pins; it is not evidence that the current release is live.` : problem);
   if (listing.state === 'verified-live') {
-    return state === 'verified-live' ? { kind: 'unchanged', message: `The listing was already verified live on ${listing.host} (${listing.evidence}), observed ${listing.observedAt}; nothing changed.` } : refuse(`The listing is recorded as verified live on ${listing.host}; a later withdrawal is a new observation of a new release.`);
+    return state === 'verified-live' ? { kind: 'unchanged', message: `The listing was already verified live on ${listing.host} (${listing.evidence}), observed ${listing.observedAt}, for the release this record pins, which is still the current one; nothing changed.` } : refuse(`The listing is recorded as verified live on ${listing.host}; a later withdrawal is a new observation of a new release.`);
   }
   const named = freeText('host', request.host);
   if ('problem' in named) return refuse(`${named.problem} A listing is verified on a named host: say which (for example the web client and workspace you looked at).`);
   const evidence = freeText('evidence', request.evidence);
   if ('problem' in evidence) return refuse(`${evidence.problem} Name the reference to what you observed (a link, a recording, a note).`);
-  const problem = staleMessage(freshness, 'Recording the listing');
-  if (problem !== null) return refuse(problem);
   const observed = observation('observed-at', request.observedAt, now);
   if ('problem' in observed) return refuse(observed.problem);
   if (before(review.observedAt, observed.value)) return refuse(`--observed-at ${observed.value} is before the approval was observed (${review.observedAt}).`);
+  if (listing.state !== 'not-verified' && before(latest(review.observedAt, listing.observedAt), observed.value)) return refuse(`--observed-at ${observed.value} is before the listing was last observed as ${listing.state} (${listing.observedAt}); an older observation does not replace a newer one.`);
   return {
     kind: 'append',
     body: {
@@ -589,10 +631,14 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
   const created = existing === undefined;
   if (created) fs.mkdirSync(directory);
   const ours = statDirectory(directory);
+  if (ours === undefined) {
+    io.stderr(`saga publish handoff begin: ${directory} could not be read after it was made. Nothing was recorded.\n`);
+    return EXIT_REFUSED;
+  }
   // The directory this command made is removed again only while it is still that directory and empty.
   const abandon = (): void => {
     const now = statDirectory(directory);
-    if (created && ours !== undefined && now !== undefined && sameDirectory(now, ours) && fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
+    if (created && now !== undefined && sameDirectory(now, ours) && fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
   };
 
   const host = HOST_DIRECTORIES[record.target];
@@ -605,7 +651,7 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
     authority,
   };
   try {
-    appendEvent(directory, { seq: 0, tipSha256: null }, body, io.now(), io.signal);
+    appendEvent(directory, ours, { seq: 0, tipSha256: null }, body, io.now(), io.signal);
   } catch (error) {
     abandon();
     return failedAppend(error, io, 'begin');
@@ -634,6 +680,10 @@ function failedAppend(error: unknown, io: HandoffIo, action: string): number {
   if (error instanceof Interrupted) {
     io.stderr(`saga publish handoff ${action}: interrupted; nothing was recorded.\n`);
     return EXIT_INTERRUPTED;
+  }
+  if (error instanceof Replaced) {
+    io.stderr(`saga publish handoff ${action}: the handoff directory was replaced while this command was running, so nothing was recorded and nothing in the directory now at that path was changed. Read the record with \`handoff status\` and decide again.\n`);
+    return EXIT_REFUSED;
   }
   if (error instanceof Raced) {
     io.stderr(`saga publish handoff ${action}: the record changed while this command was running (another command recorded an event first), so nothing was recorded. Read it with \`handoff status\` and decide again.\n`);
@@ -691,7 +741,7 @@ export async function runHandoff(request: HandoffRequest, io: HandoffIo): Promis
   }
   const last = read.events[read.events.length - 1] as HandoffEvent;
   try {
-    appendEvent(path.resolve(io.cwd, request.handoff as string), { seq: last.seq, tipSha256: read.tipSha256 }, decision.body, io.now(), io.signal);
+    appendEvent(path.resolve(io.cwd, request.handoff as string), read.identity, { seq: last.seq, tipSha256: read.tipSha256 }, decision.body, io.now(), io.signal);
   } catch (error) {
     return failedAppend(error, io, request.action);
   }
