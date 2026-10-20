@@ -95,7 +95,7 @@ What the controls let you see:
 | --- | --- |
 | `fixtures/` | The demonstration's synthetic accounts, episodes, media and credentials. Never part of the starter. |
 | `server/main.ts`, `server/demo-server.ts` | Composition: the application's listener, a second listener for the Strict level, the host page and its small forwarding surface. |
-| `server/notes-endpoint.ts` | Serves the notes example behind `templates/lit-node/server/authenticate.ts`, the starter's glue, used as it ships. |
+| `server/notes-endpoint.ts` | Serves the notes example behind `templates/lit-node/server/authenticate.ts`, the starter's glue, used as it ships. Authentication, the request body and each backend wait of the notes operations are stages of one request, bounded by 3 s per operation and 10 s per request. A wait that ends says the notes are unavailable, never that nothing changed. |
 | `host/` | The stand-in host page, built on the repository's local host fixture. |
 
 The protocol, transport and renderer behavior is the SDK's: the SDK is bundled into `server.mjs` from

@@ -3,7 +3,12 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import type { AddressInfo } from 'node:net';
+import { createServerBudgets, type BudgetSettings } from '@saga-a2ui/mcp/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { serveNotes } from '../demo/lit-node/server/notes-endpoint.js';
+import { createDemoVerifier } from '../demo/lit-node/fixtures/sign-ins.js';
+import { createFixtureBackend } from '../examples/pack1-consumer/server/index.js';
 import { DEV_TOKENS } from '../apps/lit-host/src/mcp/dev-auth.js';
 import { DEMO_TEMPLATE, STARTER_GLUE, buildDemo, prepareDemo, startDownload, writeDownload, type RunningDemoProcess } from './build-demo.js';
 import { createWorkDirectory, repoRoot } from './packed-consumer.js';
@@ -213,3 +218,151 @@ describe('the running demonstration', () => {
     });
   });
 });
+
+// The notes endpoint is an SDK request like the application's own: its clock starts at admission, and
+// the body and the notes operations are stages of that one request. These are raw HTTP calls, so they
+// show what a caller sees, not what a stage reports.
+const JSON_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' } as const;
+
+interface Seen {
+  /** Undefined when the connection ended before any response arrived. */
+  readonly status: number | undefined;
+  readonly body: string;
+  readonly closed: boolean;
+  readonly elapsedMs: number;
+}
+
+/** Sends `sent` of a body that declares `declared` bytes and then nothing, or the whole body when they match. */
+function post(url: string, headers: Record<string, string>, sent: string, declared: number, windowMs: number): Promise<Seen> {
+  const began = Date.now();
+  return new Promise<Seen>((resolve) => {
+    let status: number | undefined;
+    let body = '';
+    let closed = false;
+    const request = http.request(url, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': String(declared), ...headers } });
+    const done = (): void => {
+      clearTimeout(timer);
+      request.destroy();
+      resolve({ status, body, closed, elapsedMs: Date.now() - began });
+    };
+    const timer = setTimeout(done, windowMs);
+    request.on('response', (response) => {
+      status = response.statusCode;
+      response.setEncoding('utf8').on('data', (chunk: string) => void (body += chunk));
+    });
+    request.on('error', () => undefined);
+    request.on('close', () => {
+      closed = true;
+      done();
+    });
+    request.write(sent);
+    if (declared === Buffer.byteLength(sent)) request.end();
+  });
+}
+
+const callTool = (name: string, args: Record<string, unknown>): string => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
+const BEARER = (token: string): Record<string, string> => ({ authorization: ['Bearer', token].join(' ') });
+
+describe('the notes endpoint bounds its body and its operations (default budgets, the downloaded process)', () => {
+  const notesUrl = (): string => new URL('/notes/mcp', running.hostUrl).href;
+
+  it('answers a body that stalls once with 408 at the operation limit and releases the connection', async () => {
+    const seen = await post(notesUrl(), BEARER(DEV_TOKENS.alice), '{"jsonrpc"', 1_000, 8_000);
+    expect(seen.status).toBe(408);
+    expect(seen.closed).toBe(true);
+    expect(seen.elapsedMs).toBeGreaterThanOrEqual(2_800);
+    expect(seen.elapsedMs).toBeLessThan(4_500);
+    // Nothing is left half-served: the endpoint answers the next caller normally.
+    expect((await listNotes(DEV_TOKENS.alice)).status).toBe(200);
+  }, 20_000);
+
+  it('answers an archive the backend is still holding at the operation limit as unavailable, never as a refusal, and keeps the late effect', async () => {
+    try {
+      await control('hold-archives');
+      const began = Date.now();
+      const waited = await archive('n-1', DEV_TOKENS.alice);
+      const elapsedMs = Date.now() - began;
+      expect(elapsedMs).toBeGreaterThanOrEqual(2_800);
+      expect(elapsedMs).toBeLessThan(4_500);
+      expect(waited.status).toBe(200);
+      expect(waited.body?.result?.isError).toBe(true);
+      expect(waited.body?.result?.content?.[0]?.text).toBe('Your notes are unavailable.');
+      // Ending the wait says nothing about the archive: it is not reported as one the server knows changed nothing.
+      expect(waited.body?.result?._meta ?? {}).not.toHaveProperty('pack1/no-effect');
+    } finally {
+      await control('release-archives');
+    }
+    // The archive that had already reached the backend still happened, once; nobody retried it.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(JSON.stringify((await listNotes(DEV_TOKENS.alice)).body?.result?.structuredContent)).not.toContain('Alpha');
+    const again = await archive('n-1', DEV_TOKENS.alice);
+    expect(again.body?.result?.isError).toBe(true);
+  }, 30_000);
+});
+
+describe('the notes endpoint shares one request deadline across authentication, body and operation', () => {
+  const servers: http.Server[] = [];
+  afterAll(async () => {
+    for (const server of servers) await new Promise<void>((resolve) => (server.close(() => resolve()), server.closeAllConnections()));
+  });
+
+  /** The endpoint on its own loopback port, with these budgets and a verifier that answers after `verifyMs`. */
+  async function start(budgets: BudgetSettings, verifyMs: number, hooks: Parameters<typeof createFixtureBackend>[0] = {}): Promise<string> {
+    const real = createDemoVerifier();
+    const verifier = { verifyAccessToken: async (token: string) => (await new Promise((resolve) => setTimeout(resolve, verifyMs)), real.verifyAccessToken(token)) };
+    const backend = createFixtureBackend(hooks);
+    const server = http.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    servers.push(server);
+    const { port } = server.address() as AddressInfo;
+    const allowedHosts = [`127.0.0.1:${port}`];
+    const created = createServerBudgets(budgets);
+    server.on('request', (req, res) => void serveNotes({ html: '<notes-app></notes-app>', backend, verifier, allowedHosts }, req, res, created.startRequest()).catch(() => res.destroy()));
+    return `http://127.0.0.1:${port}/`;
+  }
+
+  it('gives a body only what authentication left of the request, not a fresh operation limit', async () => {
+    const url = await start({ operationMs: 3_000, requestMs: 1_500 }, 700);
+    const seen = await post(url, BEARER(DEV_TOKENS.alice), '{"jsonrpc"', 1_000, 6_000);
+    expect(seen.status).toBe(408);
+    expect(seen.closed).toBe(true);
+    // Authentication (700 ms) and the body together stay inside the request's 1,500 ms; a reset clock would take 3,700 ms.
+    expect(seen.elapsedMs).toBeGreaterThanOrEqual(1_300);
+    expect(seen.elapsedMs).toBeLessThan(2_300);
+  }, 15_000);
+
+  it('gives an operation only what authentication and the body left of the request, and starts nothing afterwards', async () => {
+    let reached = 0;
+    let released = false;
+    const url = await start({ operationMs: 3_000, requestMs: 1_500 }, 700, {
+      before: async (call) => {
+        if (call !== 'archive') return;
+        reached += 1;
+        await new Promise<void>((resolve) => setTimeout(resolve, 5_000).unref());
+        released = true;
+      },
+    });
+    const body = callTool('archive_note', { noteId: 'n-1' });
+    const seen = await post(url, BEARER(DEV_TOKENS.alice), body, Buffer.byteLength(body), 6_000);
+    // The request deadline passed while the archive was held. The one answer is "unavailable": not a
+    // success, and not a refusal that claims nothing changed (the archive may still happen).
+    expect(seen.status).toBe(200);
+    expect(seen.body).toContain('Your notes are unavailable.');
+    expect(seen.body).not.toContain('pack1/no-effect');
+    expect(seen.body).not.toContain('archivedAt');
+    expect(seen.elapsedMs).toBeGreaterThanOrEqual(1_300);
+    expect(seen.elapsedMs).toBeLessThan(2_300);
+    expect(reached).toBe(1);
+    expect(released).toBe(false);
+  }, 15_000);
+
+  it('bounds a list operation the backend never answers by the operation limit and answers unavailable', async () => {
+    const url = await start({ operationMs: 500, requestMs: 5_000 }, 0, { before: (call) => (call === 'notesFor' ? new Promise<void>(() => undefined) : undefined) });
+    const body = callTool('list_notes', {});
+    const seen = await post(url, BEARER(DEV_TOKENS.alice), body, Buffer.byteLength(body), 6_000);
+    expect(seen.status).toBe(200);
+    expect(seen.body).toContain('Your notes are unavailable.');
+    expect(seen.elapsedMs).toBeLessThan(1_800);
+  }, 15_000);
+});
+

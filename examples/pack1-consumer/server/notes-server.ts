@@ -1,7 +1,7 @@
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, type AuthInfo, type CallToolResult, type ServerContext } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
-import { registerProtectedOperation, viewUriForHtml } from '@saga-a2ui/mcp/server';
+import { registerProtectedOperation, valueOrThrow, viewUriForHtml, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 import {
   ARCHIVE_TOOL,
@@ -66,32 +66,62 @@ const failure = (text: string): CallToolResult => ({ isError: true, content: [{ 
 /** A failure the server knows changed nothing; the view may tell the person so. Any other failure leaves the outcome unknown. */
 const refusal = (text: string): CallToolResult => ({ ...failure(text), _meta: { [NO_EFFECT_META]: true } });
 
-/** Builds the MCP server for one built notes page. `html` is the final document; its bytes name its resource. */
-export function createNotesServer(options: { readonly html: string; readonly backend: NotesBackend }): McpServer {
+export interface NotesServerOptions {
+  /** The final document; its bytes name its resource. */
+  readonly html: string;
+  readonly backend: NotesBackend;
+  /**
+   * The request this server was built for, started by the adapter at admission. With it, every
+   * backend wait is a stage of that request: bounded by the operation limit and by what the request
+   * has left, and never renewed. Without it the list operation runs under the SDK defaults and the
+   * two application tools wait on the caller's cancellation alone.
+   */
+  readonly lifetime?: RequestLifetime;
+}
+
+/** Builds the MCP server for one built notes page. */
+export function createNotesServer(options: NotesServerOptions): McpServer {
   const html = requireViewArtifact(options.html);
-  const { backend } = options;
+  const { backend, lifetime } = options;
+
+  /**
+   * Runs one backend call of an application tool inside the request's lifetime. A call that does not
+   * finish in time throws its typed cause, which the tool answers as "unavailable" and never as a
+   * refusal: ending the wait does not undo a call already started, and a late answer is dropped.
+   */
+  async function bounded<T>(ctx: ServerContext, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    if (lifetime === undefined) return work(ctx.mcpReq.signal);
+    const result = await lifetime.run('storage', (scope) => work(scope.signal), { upstream: ctx.mcpReq.signal });
+    // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
+    if (!result.ok && result.cause.kind !== 'request-timeout' && result.cause.kind !== 'disconnected' && result.cause.kind !== 'completed') lifetime.record(result.cause);
+    return valueOrThrow(result);
+  }
   const view = { uri: viewUriForHtml(html), title: 'Notes view', html, csp: CLOSED_VIEW_CSP };
   const server = new McpServer({ name: 'pack1-notes', version: '0.0.0' });
 
-  registerProtectedOperation(server, {
-    name: LIST_TOOL,
-    title: 'Open my notes',
-    description: 'Shows the signed-in account’s own notes, each with an Archive control.',
-    annotations: READ_ONLY,
-    input: z.strictObject({}),
-    output: NotesOutputSchema,
-    view,
-    failures: { absent: TEXT.noNotes, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
-    identity: identityOf,
-    async handle(_input, identity, request) {
-      return { kind: 'record', record: await backend.notesFor(identity.accountId, request.signal) };
+  registerProtectedOperation(
+    server,
+    {
+      name: LIST_TOOL,
+      title: 'Open my notes',
+      description: 'Shows the signed-in account’s own notes, each with an Archive control.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: NotesOutputSchema,
+      view,
+      failures: { absent: TEXT.noNotes, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        return { kind: 'record', record: await backend.notesFor(identity.accountId, request.signal) };
+      },
+      // Each public field is copied by name: a record's other fields stay on the server.
+      project: (records) => {
+        const notes = records.map((note) => ({ id: note.id, title: note.title, body: note.body }));
+        return { text: `${notes.length} notes`, data: { notes } };
+      },
     },
-    // Each public field is copied by name: a record's other fields stay on the server.
-    project: (records) => {
-      const notes = records.map((note) => ({ id: note.id, title: note.title, body: note.body }));
-      return { text: `${notes.length} notes`, data: { notes } };
-    },
-  });
+    lifetime === undefined ? undefined : { lifetime },
+  );
 
   registerAppTool(
     server,
@@ -108,7 +138,7 @@ export function createNotesServer(options: { readonly html: string; readonly bac
       const identity = identityOf(ctx.http?.authInfo);
       if (!identity) return failure(TEXT.signInRequired);
       try {
-        if (!(await backend.isSignedIn(identity.accountId, ctx.mcpReq.signal))) return failure(TEXT.signInRequired);
+        if (!(await bounded(ctx, (signal) => backend.isSignedIn(identity.accountId, signal)))) return failure(TEXT.signInRequired);
       } catch {
         return failure(TEXT.unavailable);
       }
@@ -132,14 +162,14 @@ export function createNotesServer(options: { readonly html: string; readonly bac
       const identity = identityOf(ctx.http?.authInfo);
       if (!identity) return refusal(TEXT.signInRequired);
       try {
-        const archived = await backend.archive(identity.accountId, noteId, ctx.mcpReq.signal);
+        const archived = await bounded(ctx, (signal) => backend.archive(identity.accountId, noteId, signal));
         // One sentence for an absent note, someone else's note and an archived one: nothing is disclosed.
         if (archived === undefined) return refusal(TEXT.cannotArchive);
         const output = ArchiveOutputSchema.parse({ noteId, archivedAt: archived.archivedAt });
         return { content: [{ type: 'text', text: 'archived' }], structuredContent: output };
       } catch {
-        // An exception, or an output that failed validation after the write: the archive may have
-        // been applied, so this failure does not claim otherwise.
+        // An exception, a wait that ran out of time, or an output that failed validation after the
+        // write: the archive may have been applied (or may still be), so this failure does not claim otherwise.
         return failure(TEXT.unavailable);
       }
     },
