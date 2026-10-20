@@ -4,7 +4,8 @@ import type { AccountSubscriptions, SubscriptionBackend } from '../../../apps/li
 import type { EntitlementDecision, MediaStore } from '../../../apps/lit-host/src/playback/media-service.js';
 import type { PlaybackBackend } from '../../../apps/lit-host/src/playback/playback-server.js';
 import { toneWav } from '../../../apps/lit-host/src/playback/synthetic-media.js';
-import { createFixtureBackend, type FixtureBackend, type NoteRecord } from '../../../examples/pack1-consumer/server/index.js';
+import { createFixtureBackend, type FixtureBackend } from '../../../examples/pack1-consumer/server/index.js';
+import { syntheticNotes } from './notes.js';
 
 // DEMO-OWNED synthetic business data: the fictional podcast service the demonstration runs. Nothing
 // here is an SDK export and none of it belongs in the clean starter (templates/lit-node). The
@@ -50,26 +51,6 @@ const subscriptions: Readonly<Record<string, AccountSubscriptions>> = {
     subscriptions: [{ subscriptionId: 'sub-b1', creator: 'Synthetic Creator Three', tier: 'Silver', status: 'active' }],
   },
 };
-
-/** Private fields a leak would make visible; they must never reach a wire or a page. */
-export const PRIVATE_CANARY = 'DEMO-PRIVATE-FIELD-CANARY';
-
-function notes(): NoteRecord[] {
-  const note = (id: string, ownerAccountId: string, title: string, body: string): NoteRecord => ({
-    id,
-    ownerAccountId,
-    title,
-    body,
-    internalCostCenter: `${PRIVATE_CANARY}-cost-${id}`,
-    privateMemo: `${PRIVATE_CANARY}-memo-${id}`,
-  });
-  return [
-    note('n-1', DEV_ACCOUNTS.alice, 'Alpha', 'Draft the first show notes.'),
-    note('n-2', DEV_ACCOUNTS.alice, 'Beta', 'Book the guest for the second episode.'),
-    note('n-3', DEV_ACCOUNTS.alice, 'Gamma', 'Check the audio levels.'),
-    note('n-4', DEV_ACCOUNTS.bob, 'Delta', 'Bob’s note, never shown to Alice.'),
-  ];
-}
 
 /**
  * Changes a person makes to the synthetic business while the demonstration runs, standing in for
@@ -126,7 +107,7 @@ export function createDemoWorld(): DemoWorld {
         if (call === 'archive' && held) await new Promise<void>((resolve) => release.push(resolve));
       },
     },
-    notes(),
+    syntheticNotes(DEV_ACCOUNTS),
   );
   const aliceMay = (): boolean => entitlements.get(DEV_ACCOUNTS.alice)?.has(EPISODE_IDS.entitled) === true;
 
