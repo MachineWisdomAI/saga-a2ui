@@ -2,7 +2,10 @@
 
 Maintained, tested template sources for new SAGA applications and for attaching SAGA to an existing
 backend. A template is not an npm package. `saga init` (CLI1) and the developer guides take their output and
-their snippets from these directories; they do not keep copies.
+their snippets from these directories; they do not keep copies. The existing-backend recipes
+([`docs/attach-to-existing-backend.md`](../docs/attach-to-existing-backend.md), GUIDE1) are
+generated from the qualified templates by `npm run guide:recipes`; adding a template to
+`scripts/qualified-starters.ts` fails `scripts/guide.test.ts` until they are regenerated.
 
 | Template | Stack | Server | Status |
 | --- | --- | --- | --- |

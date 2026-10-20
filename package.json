@@ -11,6 +11,7 @@
     "build:starter": "tsx scripts/build-starter.ts",
     "build:demo": "tsx scripts/build-demo.ts",
     "starter:snippets": "tsx scripts/starter-snippets.ts",
+    "guide:recipes": "tsx scripts/guide-recipes.ts",
     "build:react-card-consumer": "tsx scripts/build-react-card-consumer.ts",
     "build:installed-lit-host": "tsx scripts/build-installed-lit-host.ts",
     "serve:mcp": "npm run serve:mcp -w @saga-a2ui/lit-host-app",
