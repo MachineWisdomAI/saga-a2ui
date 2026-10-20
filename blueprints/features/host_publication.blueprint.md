@@ -11,7 +11,7 @@ date_added: 2026-10-16
 ## Status
 
 - Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
-- Implementation: partial. ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified; resumable submission handoff (CLI5) remains unfinished.
+- Implementation: ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified. The resumable submission handoff (CLI5, [#68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68)) is implemented as `saga publish handoff` and awaits independent review; its acceptance record is separate and not yet written.
 - Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions.
 
 ## Problem and current behavior
@@ -53,7 +53,7 @@ Independent verification passed 122 supplied Claude/shared publication checks an
 
 ## Proposed behavior
 
-An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. ChatGPT preparation and the release-input format are implemented by CLI3, and Claude artifacts by CLI4; resumable submission behavior below remains the approved remaining design.
+An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. ChatGPT preparation and the release-input format are implemented by CLI3, Claude artifacts by CLI4, and the resumable submission record by CLI5 (`saga publish handoff`, [its README](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5)). The record is fixture-verified; an actual submission needs the intended publisher's authority and access, and an actual listing needs named-host evidence, neither of which this implementation supplies.
 
 By default, checking reads local artifacts and performs read-only endpoint discovery. It does not invoke application tools, change remote state or fabricate host acceptance. Executing test cases requires an explicitly selected test fixture and authorized credentials. Preparation proceeds automatically through checks and generation; missing information produces specific findings without stopping unrelated preparation.
 

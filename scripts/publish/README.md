@@ -1,10 +1,11 @@
-# Publication tooling (`saga publish`, CLI3 and CLI4)
+# Publication tooling (`saga publish`, CLI3, CLI4 and CLI5)
 
 Optional developer tooling in the single `saga` CLI ([`scripts/saga.ts`](../saga.ts)). It checks a
 built application, its already deployed HTTPS MCP endpoint and a release input, and prepares one
 host's materials with a findings record: the ChatGPT plugin package (CLI3) or the Claude connector
 dossier (CLI4). Both targets read the same release input, the same endpoint and the same evidence
 record. It deploys, uploads and submits nothing, and a prepared package is never reported as live.
+`saga publish handoff` (CLI5) then keeps the resumable record of the manual submission that follows.
 Design: [host publication Blueprint](../../blueprints/features/host_publication.blueprint.md).
 
 ```sh
@@ -138,6 +139,82 @@ finding is `unknown` and the verdict `incomplete`. The bundle is a separate subm
 (public before it goes live, with push access for the submitting account); the report lists that as
 pending handoff.
 
+## Resuming a handoff (`saga publish handoff`, CLI5)
+
+`prepare` ends where the publisher's own work begins: submitting in the host's portal, the host's review
+and, much later, a listing someone can install. `handoff` is the record of that work, kept in a directory
+of your choosing, so it can stop at any point (a closed browser, a colleague taking over, a timeout whose
+outcome nobody saw) and resume without a second upload and without a prepared package, a submission or an
+approval being mistaken for a live listing. It reads and writes local files only. It calls no host and
+no network, has no submission interface, hosting or credential of its own, and submits nothing: the
+publisher submits by hand in the host's documented flow
+([ChatGPT](https://developers.openai.com/plugins/deploy/submission),
+[Claude](https://claude.com/docs/connectors/building/submission), portal
+<https://claude.ai/directory/manage>).
+
+```sh
+saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+saga publish handoff status              --handoff DIR [--prepared ./publication-now]
+saga publish handoff attempt             --handoff DIR --prepared ./publication-now
+saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
+saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
+saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+```
+
+**What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
+digest in its record) and whose verdict is `ready`, and pins it: the host (target, directory name,
+guide and portal), the application and its publisher, the exact release evidence (source revision, release
+input and view digests, the tool definitions, served resources and contract digest, the deployment
+identity, the declared and installed `@saga-a2ui` packages, the validators and the package digest) and the
+references to the intended publisher's authority. Authority references are pointers (an agreement, a
+ticket, an owner's confirmation) that this tool does not verify, and every free-text field is refused when
+it looks like a credential. The handoff identity is derived from the host, the application, the publisher
+and the package digest, so two hosts, or two releases, never share one.
+
+**Four states, each from its own events.** The record is a directory of numbered event files
+(`000001.json`, `000002.json`, ...), appended and never rewritten, each naming the digest of the one before it.
+`status` derives the states from them:
+
+| State | Values | Set by |
+| --- | --- | --- |
+| Preparation | `ready`, or `stale` once the release changed | `begin`, and `--prepared` |
+| Submission | `not submitted`, `UNRESOLVED attempt`, `submitted` (with the host's reference) | `attempt`, `confirm-submission`, `void-attempt` |
+| Review | `not started`, `in-review`, `changes-requested`, `approved`, `rejected` | `record-review` |
+| Live listing | `not verified`, `verified-live`, `not-listed` (each on a named host, with evidence) | `record-listing` |
+
+Each observation carries `observedAt`, the time the host showed it (ISO 8601 with an offset, never in the
+future; the time of the command when omitted), and the event carries `recordedAt`, when the tool wrote it.
+Later stages cannot predate earlier ones. An approval is not a listing: `record-listing` is accepted only
+after an approval, with a named host and a reference to what was observed, and `status` keeps saying
+`not verified` until then.
+
+**An uncertain submission is inspected before any retry.** `attempt` records that you are about to submit,
+before you do, and prints the host's guide, the pinned package and digest and the owner-only steps. If the
+outcome is never recorded, the next `attempt` is refused and says what to inspect. The attempt is settled
+only by `confirm-submission` (the host shows it; its reference is recorded) or `void-attempt` (the host
+shows none for this release; what you inspected is recorded), and only then can another attempt be
+made. Once a submission is recorded, `attempt` is refused, `confirm-submission` with the same reference changes
+nothing and with another is refused as a second upload. Of two commands that read the same record, one
+is refused: an event is created whole with a hard link, which fails when its number is taken, so none is
+lost or doubled, and an interrupt before the link leaves no event (a leftover temporary file, named with a
+leading dot, is ignored). A record that was altered, has a missing event or holds other files is refused and
+never repaired.
+
+**Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
+and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,
+a built view, a tool definition, a served resource and its metadata, the server instructions, the
+deployment identity, the packages, the validators, how much of the endpoint was read and the package
+content. A preparation that is not `ready` is never current. When stale, `status` lists what changed and
+exits 1, and `attempt` and `record-listing` are refused for the old release; begin a new handoff for the new
+one. What the host already holds for the old release stays as recorded, and a verified listing is reported
+as observed for the earlier release. `attempt` and `record-listing` require `--prepared`, so readiness is
+never assumed.
+
+Not covered: submitting, verifying the publisher's authority or the host account, and observing an
+installation. Those are the publisher's and the host's, and a `verified-live` record is the maintainer's
+statement about a named host, not something this tool can check.
+
 ## What is checked
 
 `pass` is only the result of a check that ran and held. A check that could not run or conclude
@@ -213,8 +290,8 @@ destructive annotation.
 
 ## Not covered here
 
-Portal automation and submission, upload retries, resumable submission records (SDK68), a real
-ChatGPT or Claude web run, and the owner-only steps listed under "Pending handoff" in every report
+Portal automation and submission, upload retries (the handoff only records the maintainer's manual
+submission), a real ChatGPT or Claude web run, and the owner-only steps listed under "Pending handoff" in every report
 (publisher verification and authority, domain verification, reviewer accounts and credentials, the
 review walkthrough, the Claude policy acknowledgments). Local validators and fixture runs do not
 replace actual-host observation.

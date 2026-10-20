@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { claudeUiDomain, type ConnectorDossier } from './claude.js';
 import type { PluginValidation, PluginValidator } from './claude-plugin.js';
-import { PUBLISHED, copyFixture, editInput, editing, listing, png, recordOf, saga, status, wire, workspace, type Options, type Run } from './harness.js';
+import { PUBLISHED, claudeApp, copyFixture, editInput, editing, listing, png, recordOf, saga, status, wire, workspace, type Options, type Run } from './harness.js';
 import { ARCHIVE_FILES, RECORD_FILE, sha256, type PublicationRecord } from './record.js';
 import { readZip } from './zip.js';
 
@@ -18,37 +18,6 @@ const release = (app: string): string => path.join(app, 'saga-publication.json')
 const check = (app: string, options?: Options, extra: string[] = []): Promise<Run> => saga(['publish', 'check', '--target', 'claude', '--release', release(app), ...extra], options);
 const prepare = (app: string, out: string, options?: Options, extra: string[] = []): Promise<Run> => saga(['publish', 'prepare', '--target', 'claude', '--release', release(app), '--out', out, ...extra], options);
 const prepareChatgpt = (app: string, out: string, options?: Options): Promise<Run> => saga(['publish', 'prepare', '--target', 'chatgpt', '--release', release(app), '--out', out], options);
-
-/** The release input's Claude connector section: everything the portal asks for, as the application owner would supply it. */
-const connector = (): Record<string, any> => ({
-  name: 'Notes Fixture',
-  oneLiner: 'Shows whether the Notes Fixture service is running.',
-  description: 'Shows whether the Notes Fixture service is running, in a card inside the conversation. It only reports status and reads nothing from your account.',
-  categories: ['Developer Tools'],
-  slug: 'notes-fixture',
-  documentationURL: 'https://notes.example.com/docs',
-  privacyPolicyURL: 'https://notes.example.com/privacy',
-  support: { email: 'support@notes.example.com', url: 'https://notes.example.com/support' },
-  icon: 'assets/icon.svg',
-  screenshots: [1, 2, 3].map((n) => ({ file: `screenshots/${n}.png`, prompt: `Is the notes service running? (${n})` })),
-  useCases: { primary: ['Check whether the notes service is running'], prerequisites: 'Nothing: the connector needs no account.', access: 'read' },
-  authentication: { mode: 'none' },
-  dataHandling: { apiOwnership: 'first-party', personalHealthData: false, sponsoredContent: false },
-  allowedLinkUris: ['https://notes.example.com'],
-  reviewContact: { name: 'Fixture Reviewer', email: 'review@notes.example.com' },
-});
-
-/** A copy of the fixture application with its Claude section and the three carousel screenshots the section names. */
-function claudeApp(change: (connector: Record<string, any>, input: Record<string, any>) => void = () => undefined): string {
-  const app = copyFixture();
-  fs.mkdirSync(path.join(app, 'screenshots'));
-  for (const n of [1, 2, 3]) fs.writeFileSync(path.join(app, 'screenshots', `${n}.png`), png(600, 600, 1000));
-  editInput(app, (input) => {
-    input.claude = { connector: connector() };
-    change(input.claude.connector, input);
-  });
-  return app;
-}
 
 const dossierOf = (directory: string): ConnectorDossier => {
   const entries = readZip(fs.readFileSync(path.join(directory, DOSSIER)));

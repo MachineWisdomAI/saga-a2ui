@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ARCHIVE_FILES, RECORD_FILE, RECORD_FORMAT, sha256, type PublicationRecord } from './record.js';
+import { ARCHIVE_FILES, RECORD_FILE, RECORD_FORMAT, sha256, type PublicationRecord, type ReleaseEvidence } from './record.js';
 
 // A previously prepared output directory, read back so a new check can say what changed since
 // (CLI3 #66, CLI4 #67). Evidence recorded earlier is stale when the release input, a built view, a tool
@@ -8,37 +8,40 @@ import { ARCHIVE_FILES, RECORD_FILE, RECORD_FORMAT, sha256, type PublicationReco
 // difference names which, so only the affected checks are rerun.
 
 export type PreviousOutput =
-  | { readonly kind: 'found'; readonly record: PublicationRecord; readonly intact: true }
-  | { readonly kind: 'found'; readonly record: PublicationRecord; readonly intact: false; readonly problem: string }
+  | { readonly kind: 'found'; readonly record: PublicationRecord; readonly recordSha256: string; readonly intact: true }
+  | { readonly kind: 'found'; readonly record: PublicationRecord; readonly recordSha256: string; readonly intact: false; readonly problem: string }
   | { readonly kind: 'missing'; readonly problem: string };
 
 const ARCHIVE_NAMES: readonly string[] = Object.values(ARCHIVE_FILES);
 
 export function readPreviousOutput(directory: string): PreviousOutput {
   let record: PublicationRecord;
+  let recordSha256: string;
   try {
-    record = JSON.parse(fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8')) as PublicationRecord;
+    const bytes = fs.readFileSync(path.join(directory, RECORD_FILE));
+    record = JSON.parse(bytes.toString('utf8')) as PublicationRecord;
+    recordSha256 = sha256(bytes);
   } catch {
     return { kind: 'missing', problem: `${path.join(directory, RECORD_FILE)} cannot be read as a findings record.` };
   }
   if (record?.format !== RECORD_FORMAT) return { kind: 'missing', problem: `${path.join(directory, RECORD_FILE)} is not a ${RECORD_FORMAT} record.` };
-  if (record.artifact === null) return { kind: 'found', record, intact: true };
+  if (record.artifact === null) return { kind: 'found', record, recordSha256, intact: true };
   // The record is read back from disk, so the file it names is only ever one of the archives this tool writes.
   const file = record.artifact.file;
-  if (!ARCHIVE_NAMES.includes(file)) return { kind: 'found', record, intact: false, problem: 'The record names a file this tool does not write.' };
+  if (!ARCHIVE_NAMES.includes(file)) return { kind: 'found', record, recordSha256, intact: false, problem: 'The record names a file this tool does not write.' };
   let bytes: Buffer;
   try {
     bytes = fs.readFileSync(path.join(directory, file));
   } catch {
-    return { kind: 'found', record, intact: false, problem: `The record names ${file}, which is missing.` };
+    return { kind: 'found', record, recordSha256, intact: false, problem: `The record names ${file}, which is missing.` };
   }
-  return sha256(bytes) === record.artifact.sha256 ? { kind: 'found', record, intact: true } : { kind: 'found', record, intact: false, problem: `${file} no longer matches the digest in the record.` };
+  return sha256(bytes) === record.artifact.sha256 ? { kind: 'found', record, recordSha256, intact: true } : { kind: 'found', record, recordSha256, intact: false, problem: `${file} no longer matches the digest in the record.` };
 }
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /** What differs between an earlier record and the one just computed, in words. Empty when nothing the evidence depends on changed. */
-export function staleness(previous: PublicationRecord, current: PublicationRecord): string[] {
+export function staleness(previous: ReleaseEvidence, current: ReleaseEvidence): string[] {
   const changes: string[] = [];
   if (previous.target !== current.target) changes.push(`the earlier output was prepared for ${previous.target}, not ${current.target}`);
   if (previous.inputs.releaseInput.sha256 !== current.inputs.releaseInput.sha256) changes.push('the release input changed');
@@ -46,7 +49,7 @@ export function staleness(previous: PublicationRecord, current: PublicationRecor
   if (!same(previous.endpoint.tools, current.endpoint.tools)) changes.push('the tool definitions changed');
   // Resources are compared with their metadata: a view's content security policy lives there, and a
   // change to the origins it may reach changes what the host permits without changing a byte of the view.
-  const withoutMeta = (resources: PublicationRecord['endpoint']['resources']): unknown => resources.map(({ metaSha256: _meta, ...rest }) => rest);
+  const withoutMeta = (resources: ReleaseEvidence['endpoint']['resources']): unknown => resources.map(({ metaSha256: _meta, ...rest }) => rest);
   if (!same(withoutMeta(previous.endpoint.resources), withoutMeta(current.endpoint.resources))) changes.push('a served resource changed');
   if (!same(previous.endpoint.resources.map((one) => one.metaSha256), current.endpoint.resources.map((one) => one.metaSha256))) changes.push('a served resource\'s metadata (its content security policy and permissions) changed');
   if (previous.endpoint.instructionsSha256 !== current.endpoint.instructionsSha256) changes.push('the server instructions changed');
