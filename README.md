@@ -24,7 +24,7 @@ npm start
 
 Open the `Open the demo host page:` address printed by the server. This builds a self-contained Lit/Node demo from local candidate packages. It uses a local fixture host; it does not establish playback support in ChatGPT, Claude or Alexa+. See [demo controls and limitations](demo/lit-node/README.md).
 
-**There is no public npm release yet.** SDK packages are private, unversioned source manifests; the build produces matched candidate tarballs. For your own application, follow [Getting started](docs/getting-started.md) to create a starter or [attach to an existing backend](docs/attach-to-existing-backend.md). Use the exact candidate dependency set, not registry install commands for unreleased packages.
+**There is no public npm release yet.** The four-package release set (`core`, `components`, `mcp` and `react`) has versioned manifests prepared for publication; it has not been published. Lit remains a private candidate package. Source builds produce matched candidate tarballs. For your own application, follow [Getting started](docs/getting-started.md) to create a starter or [attach to an existing backend](docs/attach-to-existing-backend.md). Use the exact candidate dependency set, not registry install commands for unreleased packages.
 
 ## What Saga provides
 
