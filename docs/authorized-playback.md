@@ -108,7 +108,9 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 | [`playback/recipient-proof.ts`](../apps/lit-host/src/playback/recipient-proof.ts) | The view's key pair and per-request proof |
 | [`playback/playback-view.ts`](../apps/lit-host/src/playback/playback-view.ts) | View controller: request generations, terminal teardown and acquisition-scoped cleanup |
 | [`playback/web-audio-player.ts`](../apps/lit-host/src/playback/web-audio-player.ts) | Web Audio player: prepare, start, pause, resume |
-| [`lit/play-control.ts`](../apps/lit-host/src/lit/play-control.ts) | Play button and status line |
+| [`lit/play-control.ts`](../apps/lit-host/src/lit/play-control.ts) | Play button and status line (Lit) |
+| [`react/play-control.tsx`](../apps/lit-host/src/react/play-control.tsx), [`playback-react-main.tsx`](../apps/lit-host/src/playback-react-main.tsx) | The same control and composition in React (REACT2): the same controller, actions and server, no description card |
+| [`playback/play-presentation.ts`](../apps/lit-host/src/playback/play-presentation.ts) | The wording, the button chosen for each state and the page title, shared by both controls |
 | [`mcp/protected-request.ts`](../apps/lit-host/src/mcp/protected-request.ts), [`mcp/request-auth.ts`](../apps/lit-host/src/mcp/request-auth.ts) | Body classification and bearer authentication for the shared gate |
 
 ## Limits

@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import {
+  ExportInterrupted,
   TemplateError,
   exportTemplate,
+  exportTemplateInterruptibly,
   extractSnippets,
   readTemplateMetadata,
   stampSdkVersion,
@@ -61,6 +63,22 @@ describe('exporting a starter', () => {
     expect(fs.readFileSync(path.join(existing, 'keep.txt'), 'utf8')).toBe('mine');
   });
 
+  it('does not merge into, or remove, a directory that appeared after the existence check', () => {
+    // The race: the path is absent when the export looks and present when it creates the directory.
+    const raced = path.join(work, 'raced');
+    fs.mkdirSync(raced);
+    fs.writeFileSync(path.join(raced, 'keep.txt'), 'mine');
+    const exists = fs.existsSync.bind(fs);
+    const spy = vi.spyOn(fs, 'existsSync').mockImplementation((candidate) => (candidate === raced ? false : exists(candidate)));
+    try {
+      expect(() => exportTemplate(template, raced, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readdirSync(raced)).toEqual(['keep.txt']);
+    expect(fs.readFileSync(path.join(raced, 'keep.txt'), 'utf8')).toBe('mine');
+  });
+
   it('writes nothing for a directory that is not a template, and removes only its own output when the export fails part-way', () => {
     const notATemplate = fs.mkdtempSync(path.join(work, 'plain-'));
     const target = path.join(work, 'never-written');
@@ -72,6 +90,50 @@ describe('exporting a starter', () => {
     const partial = path.join(work, 'partial');
     expect(() => exportTemplate(bad, partial, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
     expect(fs.existsSync(partial)).toBe(false);
+  });
+
+  it('does not delete a directory that replaced its output before a write failed, and does not write into it', () => {
+    // The race: after the export created its directory, another process moved it away and put its own at the same path.
+    const target = path.join(work, 'swapped');
+    const write = fs.writeFileSync.bind(fs);
+    let writes = 0;
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      if (!String(args[0]).startsWith(`${target}${path.sep}`)) return write(...args);
+      writes += 1;
+      if (writes < 4) return write(...args);
+      fs.renameSync(target, `${target}.moved`);
+      fs.mkdirSync(target);
+      write(path.join(target, 'keep.txt'), 'mine');
+      throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+    });
+    try {
+      expect(() => exportTemplate(template, target, { sdkVersion: SDK_VERSION })).toThrow(/no space left.*was replaced meanwhile/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(writes).toBe(4);
+    expect(fs.readdirSync(target)).toEqual(['keep.txt']);
+    expect(fs.readFileSync(path.join(target, 'keep.txt'), 'utf8')).toBe('mine');
+  });
+
+  it('removes its own directory and reports the interrupt when the signal aborts during an interruptible export, but not before the event loop has run', async () => {
+    const target = path.join(work, 'interrupted');
+    const interrupt = new AbortController();
+    // A callback scheduled from a synchronous write runs only when the export hands control back; the export must do so.
+    const write = fs.writeFileSync.bind(fs);
+    let writes = 0;
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      writes += 1;
+      if (writes === 3) setImmediate(() => interrupt.abort());
+      return write(...args);
+    });
+    try {
+      await expect(exportTemplateInterruptibly(template, target, { sdkVersion: SDK_VERSION, signal: interrupt.signal })).rejects.toBeInstanceOf(ExportInterrupted);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.existsSync(target)).toBe(false);
+    expect(writes).toBeLessThan(templateFiles(template).length);
   });
 
   it('rejects an SDK range other than "*" rather than rewriting it', () => {

@@ -10,6 +10,8 @@ import { createWorkDirectory, repoRoot } from './packed-consumer.js';
 // does not carry, and the identities that name the result. The pages themselves are exercised in a
 // browser by the existing specs, run against this build with SAGA_BUILT_DIR=dist-installed.
 
+const REACT_PLAYER = 'vite.playback-react-view.config.ts';
+
 const work = createWorkDirectory('saga-installed-lit-host-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
@@ -79,9 +81,23 @@ describe('the application pages built from the packed SDK packages', () => {
     }
     // The own-catalog and action route needs only core and Lit.
     expect(sdkPackagesOf('vite.action-consumer.config.ts').sort()).toEqual(['@saga-a2ui/core', '@saga-a2ui/lit']);
-    for (const { config, provenance } of identity.pages) {
+    // Only the React player page carries React (REACT2); it is checked on its own below.
+    for (const { config, provenance } of identity.pages.filter((one) => one.config !== REACT_PLAYER)) {
       expect(provenance.thirdPartyPackages.filter((name) => /^react/.test(name)), config).toEqual([]);
     }
+  });
+
+  it('builds the React player from the application\'s React runtime and the installed core and MCP copies only: no Lit, no components, no Markdown parser', () => {
+    const { installedSdkFiles, thirdPartyPackages } = page(REACT_PLAYER).provenance;
+    // The shared controller runs the same typed server action and the same bridge as the Lit player.
+    expect(installedSdkFiles).toEqual(
+      expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/instance-host.ts', '@saga-a2ui/mcp/src/view/index.ts']),
+    );
+    expect(sdkPackagesOf(REACT_PLAYER).sort()).toEqual(['@saga-a2ui/core', '@saga-a2ui/mcp']);
+    expect(thirdPartyPackages).toEqual(expect.arrayContaining(['react', 'react-dom']));
+    expect(thirdPartyPackages.filter((name) => /^lit|^@lit|^@a2ui\/|markdown-it/.test(name))).toEqual([]);
+    expect(installedSdkFiles.filter((file) => /\/faithful-card\/|\/lit\//.test(file))).toEqual([]);
+    expect(installedSdkFiles).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
   });
 
   it('puts no server module of the delivery package or the MCP server libraries in any browser page', () => {
@@ -102,6 +118,7 @@ describe('the application pages built from the packed SDK packages', () => {
       'answer-view/answer.html',
       'subscriptions-view/subscriptions.html',
       'playback-view/playback.html',
+      'playback-react-view/playback-react.html',
       'host-fixture/index.html',
       'catalog-isolation/index.html',
       'action-consumer/index.html',

@@ -1,7 +1,7 @@
 # Starter templates
 
 Maintained, tested template sources for new SAGA applications and for attaching SAGA to an existing
-backend. A template is not an npm package. The later CLI and the developer guides take their output and
+backend. A template is not an npm package. `saga init` (CLI1) and the developer guides take their output and
 their snippets from these directories; they do not keep copies.
 
 | Template | Stack | Server | Status |
@@ -43,6 +43,16 @@ npx tsx scripts/starter-snippets.ts --template lit-fastify   # the Fastify pair'
 npx tsx scripts/starter-snippets.ts --template lit-hono   # choose another template (default lit-node)
 ```
 
-`exportTemplate`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
+`exportTemplate`, `exportTemplateInterruptibly`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
 are the functions the CLI and guides call. Export writes only into a directory that does not exist,
-installs nothing and runs nothing.
+installs nothing and runs nothing. It removes only the directory it created, which it recognizes by the
+directory's identity and not by its path, and leaves a path that was replaced meanwhile as it found it.
+`exportTemplateInterruptibly` is the same export for a caller that must react to SIGINT or SIGTERM: it
+yields to the event loop between files, which a synchronous copy cannot do.
+
+```sh
+npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
+```
+
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here. When a pair is
+qualified, its owner adds one row there; while it fails, the row is removed.
