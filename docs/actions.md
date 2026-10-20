@@ -16,7 +16,7 @@ npx vitest run scripts/guide-actions.test.ts
 npx vitest run scripts/starter.test.ts
 ```
 
-The first test file installs the notes application from packed candidate tarballs into a clean directory, connects a real MCP client to its server, and presses real controls on the real action runtime. It covers every allowed, denied and refused path below. The second qualifies the starter's HTTP authentication, which the notes application leaves to its own listener. Neither needs a browser. The browser checks for the same application run in `apps/lit-host/e2e/pack1-consumers.spec.ts`; the README lists the build and browser commands.
+The first test file installs the notes application from packed candidate tarballs into a clean directory, connects a real MCP client to its server, and presses real controls on the real action runtime. It covers every allowed, denied and refused path below. The second qualifies the starter's HTTP authentication, which the notes application leaves to its own listener. Neither needs a browser. The browser checks for the same application run in `apps/lit-host/e2e/pack1-consumers.spec.ts`; the [development reference](development-reference.md#local-development) lists the build and browser commands.
 
 ## Who owns what
 

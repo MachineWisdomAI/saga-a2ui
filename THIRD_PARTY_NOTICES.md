@@ -6,7 +6,7 @@ are installed from npm with their own license files and are not copied into SAGA
 
 ## markdown-it 15.0.2 and its runtime dependencies
 
-`markdown-it` reads FaithfulCard content as Markdown through the optional `@saga-a2ui/components` package (see "Standard descriptions (POL1)" and "The passive FaithfulCard and an installed second consumer" in the README).
+`markdown-it` reads FaithfulCard content as Markdown through the optional `@saga-a2ui/components` package (see "Standard descriptions (POL1)" and "The passive FaithfulCard and an installed second consumer" in the [development reference](docs/development-reference.md)).
 It and the packages it depends on at run time are bundled into the built views and into the built external consumer example.
 
 - `markdown-it` 15.0.2 (MIT). The `argparse` 3.0.3 package (PSF-2.0) is a dependency of its command-line

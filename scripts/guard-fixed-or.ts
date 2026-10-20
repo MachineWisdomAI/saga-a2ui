@@ -7,7 +7,7 @@ import { isAuthoredTypeScript, repositoryRoot, walkFiles } from './authored-tree
 // after unwrapping parentheses and zero-argument `.trim()` calls, is a string
 // or template that contains fixed non-whitespace text. Identifiers, interpolations,
 // whitespace-only fixed text, concatenation, other operators, and other methods
-// are outside this check. See README.md.
+// are outside this check. See docs/development-reference.md#repository-verification.
 
 type Finding = { file: string; line: number };
 
