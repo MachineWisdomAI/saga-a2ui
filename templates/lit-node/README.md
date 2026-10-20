@@ -49,3 +49,8 @@ has stopped; the application owns whatever such work holds.
 
 Each operation may run 3 s and each request 10 s unless `startListener` is given `budgets`. A
 verifier that does not answer is cut off by the operation limit and the request is answered 503.
+
+The request's clock starts when it is admitted and also covers the waits `server/listener.ts`
+owns. A body that stalls is answered 408 and its connection is closed, and nothing is built or
+called for it. A response that is not delivered before the request limit is destroyed rather than
+left holding its connection, and a response already started is never given a second status.

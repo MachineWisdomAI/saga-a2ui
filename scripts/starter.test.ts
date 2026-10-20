@@ -298,6 +298,127 @@ describe('the request and operation clocks', () => {
   });
 });
 
+describe('the request lifetime at the HTTP body and delivery boundary', () => {
+  const JSON_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' } as const;
+
+  interface Raw {
+    status: number | undefined;
+    /** True when the connection closed (or was never held open) within the window. */
+    closed: boolean;
+    /** True when the response body arrived whole. */
+    complete: boolean;
+    elapsedMs: number;
+  }
+
+  /**
+   * POSTs with a declared length that is never fulfilled: only `sent` is written, then nothing. It
+   * resolves when the connection closes, or `windowMs` passes, and says what the client saw.
+   */
+  async function stalledBody(url: string, sent: string, headers: Record<string, string>, windowMs: number): Promise<Raw> {
+    const began = Date.now();
+    return new Promise<Raw>((resolve) => {
+      const raw: Raw = { status: undefined, closed: false, complete: false, elapsedMs: 0 };
+      const request = http.request(url, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': '1000', ...headers } });
+      const done = () => {
+        clearTimeout(timer);
+        raw.elapsedMs = Date.now() - began;
+        request.destroy();
+        resolve(raw);
+      };
+      const timer = setTimeout(done, windowMs);
+      request.on('response', (response) => {
+        raw.status = response.statusCode;
+        response.on('data', () => undefined);
+        response.on('end', () => (raw.complete = true));
+      });
+      request.on('error', () => undefined);
+      request.on('close', () => {
+        raw.closed = true;
+        done();
+      });
+      request.write(sent);
+    });
+  }
+
+  it.each([
+    ['the operation limit', { operationMs: 50, requestMs: 100 }],
+    ['the request limit alone', { operationMs: 5_000, requestMs: 100 }],
+  ] as const)('a public body that stalls is bounded by %s: one 408 and a closed connection', async (_label, budgets) => {
+    const { listener } = await start({ budgets });
+    const raw = await stalledBody(listener.statusUrl, '{', {}, 1_500);
+    expect(raw.status).toBe(408);
+    expect(raw.closed).toBe(true);
+    expect(raw.elapsedMs).toBeLessThan(700);
+  });
+
+  it('a protected body that stalls does no protected work and releases the connection', async () => {
+    const { listener, calls } = await start({ budgets: { operationMs: 50, requestMs: 100 } });
+    const raw = await stalledBody(listener.accountUrl, '{', { authorization: `Bearer ${TOKEN.a}` }, 1_500);
+    expect(raw.status).toBe(408);
+    expect(raw.closed).toBe(true);
+    expect(raw.elapsedMs).toBeLessThan(700);
+    expect(calls.verifier).toBe(1); // authentication ran before the body, as its own stage
+    expect(calls.authorize).toBe(0); // nothing was built or called for a request that never finished arriving
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(calls.authorize).toBe(0); // and nothing started after the budget ran out
+  });
+
+  it('a caller that goes away mid-body leaves the listener serving others', async () => {
+    const { listener } = await start({ budgets: { operationMs: 5_000, requestMs: 10_000 } });
+    const url = new URL(listener.statusUrl);
+    const request = http.request(url, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': '1000' } });
+    request.on('error', () => undefined);
+    request.write('{');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    request.destroy();
+    const result = await (await connect(listener.statusUrl)).callTool({ name: 'get_status', arguments: {} });
+    expect(result.structuredContent).toEqual({ status: 'running' });
+  });
+
+  it('refuses a declared body that is too large, and a body that is not JSON, without building a server', async () => {
+    const { listener } = await start();
+    const tooLarge = await stalledBody(listener.statusUrl, '{', { 'content-length': String(2 * 1024 * 1024) }, 1_000);
+    expect(tooLarge.status).toBe(413);
+    expect(tooLarge.closed).toBe(true);
+
+    const notJson = await fetch(listener.statusUrl, { method: 'POST', headers: JSON_HEADERS, body: '{not json' });
+    expect(notJson.status).toBe(400);
+    expect(await notJson.json()).toMatchObject({ jsonrpc: '2.0', error: { code: -32700 } });
+  });
+
+  it('a finite response that cannot be delivered in time is destroyed, not left holding the connection', async () => {
+    // A built page padded to tens of megabytes, read by a client that stops reading: the answer is
+    // committed, but the transport can never finish it inside the 600 ms request budget.
+    const padded = `${html}<!--${'x'.repeat(48 * 1024 * 1024)}-->`;
+    const { listener } = await start({ html: padded, budgets: { operationMs: 500, requestMs: 600 } });
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: viewUriForHtml(padded) } });
+
+    const outcome = await new Promise<{ status: number | undefined; complete: boolean; received: number; closedAfterMs: number }>((resolve) => {
+      const began = Date.now();
+      const request = http.request(listener.statusUrl, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': String(Buffer.byteLength(body)) } });
+      request.on('error', () => undefined);
+      request.on('response', (response) => {
+        let received = 0;
+        response.on('data', (chunk: Buffer) => (received += chunk.length));
+        response.on('error', () => undefined);
+        response.pause(); // the peer stops reading while the answer is still being delivered
+        setTimeout(() => response.resume(), 1_200); // and picks up whatever is left after the budget has gone
+        response.on('close', () => resolve({ status: response.statusCode, complete: response.complete, received, closedAfterMs: Date.now() - began }));
+      });
+      request.end(body);
+    });
+
+    expect(outcome.status).toBe(200); // committed before the deadline; a second status is never written
+    expect(outcome.complete).toBe(false); // the deadline ended delivery
+    expect(outcome.received).toBeLessThan(padded.length);
+    expect(outcome.closedAfterMs).toBeLessThan(4_000);
+
+    // The listener is unharmed.
+    const result = await (await connect(listener.statusUrl)).callTool({ name: 'get_status', arguments: {} });
+    expect(result.structuredContent).toEqual({ status: 'running' });
+  }, 30_000);
+});
+
 describe('the built view is required', () => {
   it('will not start without the built page', async () => {
     await expect(start({ html: '<!doctype html><title>not the view</title>' })).rejects.toBeInstanceOf(entry.ViewArtifactMissing);
