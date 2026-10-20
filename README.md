@@ -8,25 +8,25 @@ Saga combines robust foundations from [Google's A2UI project](https://a2ui.org/)
 
 Your team knows what customers should be able to do with your service. Saga provides the application foundations for turning those tasks into interactive experiences, from browsing content to taking an action through an existing API. The aim is to give your team a head start and reduce the custom application code it has to maintain as these experiences evolve.
 
-A2UI describes the interface, its data bindings and updates. Saga connects that model to rendered components, user actions and the application's lifecycle, with MCP Apps providing the connection to the host. You can build on that foundation while keeping your own services, authentication and business rules. The [host compatibility guide](docs/2026-10-19_host-compatibility-observations_v1.md) describes the workflows tested in individual assistants.
+A2UI describes the interface, its data bindings and updates, independently of how messages travel between an agent and its host. Delivery can use MCP Apps or [A2A](https://a2ui.org/). Saga connects the application model to rendered components, user actions and the application's lifecycle, with an MCP Apps integration. You can build on that foundation while keeping your own services, authentication and business rules.
 
 ## What Saga provides
 
-### Interfaces and actions built on A2UI
+### An interactive UI and actions built in code
 
-Render an interface from A2UI messages and update it as application data changes. Bind a button to a typed action that runs locally or calls your backend. Saga manages the action's connection to the view, including what happens when a result arrives after the view has changed or closed.
+Use TypeScript to define an interface, update it as application data changes, and bind a component to a typed action. Define actions that run locally or call your backend, with behavior expressed in code rather than embedded in the A2UI JSON. Saga manages the action's connection to the view, including what happens when a result arrives after the view has changed or closed.
 
 The [action guide](docs/actions.md) follows a notes application through these interactions, showing how the same application contract serves different views.
 
 ### Integration with your existing API platform
 
-Start with a Node, Express, Fastify or Hono backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md). Saga carries the verified request identity through to your application, where your server checks permissions and performs the operation.
+Start with a Node, Express, Fastify or Hono backend, or [add Saga to an existing service](docs/attach-to-existing-backend.md). A [Hapi starter](https://github.com/MachineWisdomAI/saga-a2ui/issues/65) is planned. Saga carries the verified request identity through to your application, where your server checks permissions and performs the operation.
 
 Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
 
 ### Content controls for the application you are building
 
-Saga's [FaithfulCard component](docs/react-consumers.md) presents Markdown in a styled card, preserving the supplied answer and its source attribution. It renders that answer directly, without asking the host LLM to paraphrase it for display.
+Saga's [FaithfulCard component](docs/react-consumers.md) presents Markdown in a styled card, preserving the supplied answer, including source attribution for RAG agents. It renders that answer directly, without asking the host LLM to paraphrase it for display.
 
 Your application chooses which links may open and which image hosts are allowed. For content that needs more restrictive handling, links can remain inactive and images can wait until the reader chooses to load them. These settings let you adapt the presentation to where your content comes from and what readers should be able to do with it.
 
@@ -57,6 +57,7 @@ The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npm
 - [Action guide](docs/actions.md): connect interactions to application behavior.
 - [Development reference](docs/development-reference.md#local-development): build and test the SDK.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
+- [Host compatibility](docs/2026-10-19_host-compatibility-observations_v1.md): choose a host for your application.
 - [Blueprints](blueprints/README.md#find-a-design): explore the architecture and component contracts.
 - [Building with Saga](ADOPTERS.md): IASER's Ansari integration and how to share your application.
 
