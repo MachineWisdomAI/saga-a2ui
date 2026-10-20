@@ -56,6 +56,8 @@ describe('the React card consumer built from the packed SDK packages', () => {
       'react-dom/client',
       'zod',
     ]);
+    const manifest = JSON.parse(fs.readFileSync(path.join(reactCardConsumerSource, 'package.json'), 'utf8'));
+    expect(Object.keys(manifest.dependencies).filter(name => name.startsWith('@a2ui/'))).toEqual([]);
     expect(fs.existsSync(path.join(reactCardConsumerSource, 'node_modules'))).toBe(false);
   });
 
