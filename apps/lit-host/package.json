@@ -11,7 +11,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
     "test:browser": "playwright test && npm run test:browser:installed",
-    "test:browser:installed": "SAGA_BUILT_DIR=dist-installed playwright test e2e/fixture.spec.ts e2e/lifecycle.spec.ts e2e/catalog-isolation.spec.ts e2e/app-element-lifecycle.spec.ts e2e/action-binding.spec.ts e2e/async-action-binding.spec.ts e2e/resource-action-binding.spec.ts e2e/server-action-binding.spec.ts e2e/mcp-view.spec.ts e2e/answer-view.spec.ts e2e/request-pipeline-view.spec.ts e2e/subscriptions-view.spec.ts e2e/playback-view.spec.ts e2e/faithful-card.spec.ts e2e/faithful-card-reading.spec.ts e2e/faithful-card-access.spec.ts e2e/faithful-card-instances.spec.ts e2e/card-workflow.spec.ts e2e/card-instances.spec.ts e2e/view-bundle.spec.ts",
+    "test:browser:installed": "SAGA_BUILT_DIR=dist-installed playwright test e2e/fixture.spec.ts e2e/lifecycle.spec.ts e2e/catalog-isolation.spec.ts e2e/app-element-lifecycle.spec.ts e2e/action-binding.spec.ts e2e/async-action-binding.spec.ts e2e/resource-action-binding.spec.ts e2e/server-action-binding.spec.ts e2e/mcp-view.spec.ts e2e/answer-view.spec.ts e2e/request-pipeline-view.spec.ts e2e/subscriptions-view.spec.ts e2e/playback-view.spec.ts e2e/installed-listener.spec.ts e2e/faithful-card.spec.ts e2e/faithful-card-reading.spec.ts e2e/faithful-card-access.spec.ts e2e/faithful-card-instances.spec.ts e2e/card-workflow.spec.ts e2e/card-instances.spec.ts e2e/view-bundle.spec.ts",
     "test:headless": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
