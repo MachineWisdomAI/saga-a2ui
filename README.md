@@ -12,7 +12,7 @@ saga a2ui combines robust foundations from [Google's A2UI project](https://a2ui.
 
 Your team knows what customers should be able to do with your service. saga a2ui provides the application foundations for turning those tasks into interactive experiences, from browsing content to taking an action through an existing API. The aim is to give your team a head start and reduce the custom application code it has to maintain as these experiences evolve.
 
-A2UI describes the interface, its data bindings and updates, independently of how messages travel between an agent and its host. Delivery can use MCP Apps or [A2A](https://a2a-protocol.org/). saga a2ui connects the application model to rendered components, user actions and the application's lifecycle, with an MCP Apps integration. You can build on that foundation while keeping your own services, authentication and business rules.
+A2UI describes the interface, its data bindings and updates, independently of how messages travel between an agent and its host. Delivery can use MCP Apps or A2A; [A2A transport support for saga a2ui is planned](https://github.com/MachineWisdomAI/saga-a2ui/issues/198). saga a2ui connects the application model to rendered components, user actions and the application's lifecycle, with an MCP Apps integration. You can build on that foundation while keeping your own services, authentication and business rules.
 
 ## What saga a2ui provides
 
