@@ -10,8 +10,9 @@ import { serveNotes } from '../demo/lit-node/server/notes-endpoint.js';
 import { createDemoVerifier } from '../demo/lit-node/fixtures/sign-ins.js';
 import { createFixtureBackend } from '../examples/pack1-consumer/server/index.js';
 import { DEV_TOKENS } from '../apps/lit-host/src/mcp/dev-auth.js';
-import { DEMO_TEMPLATE, STARTER_GLUE, buildDemo, prepareDemo, startDownload, writeDownload, type RunningDemoProcess } from './build-demo.js';
+import { STARTER_GLUE, buildDemo, prepareDemo, startDownload, writeDownload, type RunningDemoProcess } from './build-demo.js';
 import { createWorkDirectory, repoRoot } from './packed-consumer.js';
+import { DEMO_TEMPLATE } from './qualified-starters.js';
 import { templateDirectory } from './starter-template.js';
 
 // DEMO1: the standalone demonstration, qualified as a download. It is built from the packed candidate

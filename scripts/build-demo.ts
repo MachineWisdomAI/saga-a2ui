@@ -14,7 +14,8 @@ import {
   repoRoot,
   type PackedSdk,
 } from './packed-consumer.js';
-import { exportTemplate, readTemplateMetadata, templateDirectory } from './starter-template.js';
+import { DEMO_TEMPLATE } from './qualified-starters.js';
+import { exportTemplate, readTemplateMetadata, templateDirectory, type OutputFile } from './starter-template.js';
 
 // DEMO1: builds the standalone synthetic demonstration (`demo/lit-node`) the way a download of it is
 // made. The SDK packages are packed as the release candidate's tarballs and unpacked as installed
@@ -26,13 +27,14 @@ import { exportTemplate, readTemplateMetadata, templateDirectory } from './start
 //
 //   npx tsx scripts/build-demo.ts      # writes apps/lit-host/dist/demo (ignored)
 //
+// `saga demo` (scripts/saga.ts) gives the same download to a developer: `stageDemo` builds it outside
+// the destination and hands its files over, so the command's destination handling writes them.
+//
 // Building the demonstration is not publishing anything.
 
 export const demoSource = path.join(repoRoot, 'demo', 'lit-node');
 export const demoDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'demo');
 
-/** The one qualified pair the demonstration runs on (templates/lit-node: the `lit-mcp` stack on the `node` server target). */
-export const DEMO_TEMPLATE = 'lit-node';
 /** The installed SDK packages the demonstration imports. */
 export const DEMO_SDK_PACKAGES = ['core', 'lit', 'components', 'mcp'] as const;
 /** Packages the demonstration's own sources import, besides the SDK packages, plus the build tooling its Vite configurations load. */
@@ -128,22 +130,30 @@ export interface BuiltDemo extends PreparedDemo {
   readonly pages: Readonly<Record<string, string>>;
 }
 
-/** Builds the pages and the server inside `prepared.root`. */
-export async function buildDemo(prepared: PreparedDemo): Promise<BuiltDemo> {
+/**
+ * Builds the pages and the server inside `prepared.root`. An aborted `signal` ends the build before
+ * its next stage (each page, then the server) with the abort error; what was built stays in `root`
+ * for the caller to remove.
+ */
+export async function buildDemo(prepared: PreparedDemo, signal?: AbortSignal): Promise<BuiltDemo> {
   const { root } = prepared;
   const application = path.join(root, 'apps', 'lit-host');
   const demo = path.join(root, 'demo', 'lit-node');
   const pages: Record<string, string> = {};
   for (const page of APPLICATION_PAGES) {
+    signal?.throwIfAborted();
     await buildConsumerFromConfig(application, page.config);
     pages[page.as] = path.join(application, page.built);
   }
+  signal?.throwIfAborted();
   await buildConsumerFromConfig(demo, 'vite.notes.config.ts');
   pages['notes.html'] = path.join(demo, 'dist', 'notes', 'own.html');
+  signal?.throwIfAborted();
   await buildConsumerFromConfig(demo, 'vite.host.config.ts');
   pages['host.html'] = path.join(demo, 'dist', 'host', 'index.html');
   for (const [name, file] of Object.entries(pages)) if (!fs.existsSync(file)) throw new Error(`the demonstration build did not write ${name}`);
 
+  signal?.throwIfAborted();
   const bundled = await bundleConsumerServer(root, 'demo/lit-node/server/main.ts');
   const serverProvenance = classifyModules(root, bundled.modules);
   if (serverProvenance.unexpected.length > 0) throw new Error(`the demonstration server loaded modules from outside the installed packages: ${serverProvenance.unexpected.join(', ')}`);
@@ -221,6 +231,50 @@ export async function buildDemoInto(outDir: string): Promise<Record<string, unkn
     return writeDownload(built, outDir);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** A built download held in a scratch directory outside the repository and outside any destination, until `dispose`. */
+export interface StagedDemo {
+  /** The SDK build the download was made from (`release.json` says the same). */
+  readonly sdkVersion: string;
+  /** Every file of the download, relative, in a fixed order; a file is read when it is written. */
+  readonly files: readonly OutputFile[];
+  /** Removes the scratch directory. */
+  dispose(): void;
+}
+
+/** Everything below `directory` as output files, sorted. A symbolic link or anything but a file or directory is an error: the download holds neither. */
+function filesBelow(directory: string): OutputFile[] {
+  const walk = (current: string): string[] =>
+    fs.readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) return walk(full);
+      if (!entry.isFile()) throw new Error(`the demonstration download contains ${path.relative(directory, full)}, which is neither a file nor a directory`);
+      return [path.relative(directory, full).split(path.sep).join('/')];
+    });
+  return walk(directory)
+    .sort()
+    .map((file) => ({ path: file, content: () => fs.readFileSync(path.join(directory, file)) }));
+}
+
+/**
+ * Builds the download exactly as `buildDemoInto` does, but keeps it in a scratch directory and returns
+ * its files instead of writing them anywhere a person chose. Nothing is installed from a registry and
+ * no script of the output runs; the build packs the repository's own packages and bundles them. An
+ * aborted `signal` stops it at the next stage and the scratch directory is removed.
+ */
+export async function stageDemo(signal?: AbortSignal): Promise<StagedDemo> {
+  const work = createWorkDirectory('saga-demo-');
+  const dispose = (): void => fs.rmSync(work, { recursive: true, force: true });
+  try {
+    const built = await buildDemo(prepareDemo(work), signal);
+    const download = path.join(work, 'download');
+    writeDownload(built, download);
+    return { sdkVersion: built.sdk.version, files: filesBelow(download), dispose };
+  } catch (error) {
+    dispose();
+    throw error;
   }
 }
 

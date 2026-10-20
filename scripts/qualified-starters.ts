@@ -10,3 +10,10 @@
 export const QUALIFIED_STARTERS = ['lit-node', 'lit-express', 'lit-fastify'] as const;
 
 export type QualifiedStarter = (typeof QUALIFIED_STARTERS)[number];
+
+/**
+ * The qualified starter the standalone demonstration (DEMO1, `demo/lit-node`) runs on. The demonstration
+ * is built for this one pair; `saga demo` offers it and no other, and a further pair is not offered
+ * until its own demonstration exists and is qualified.
+ */
+export const DEMO_TEMPLATE = 'lit-node' satisfies QualifiedStarter;

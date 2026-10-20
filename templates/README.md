@@ -53,3 +53,7 @@ npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a n
 
 `scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here. When a pair is
 qualified, its owner adds one row there; while it fails, the row is removed.
+
+`saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the
+standalone demonstration (`demo/lit-node`, DEMO1) of the pair `DEMO_TEMPLATE` names. Its synthetic accounts and
+data stay in that output and never enter a template or the starter above.
