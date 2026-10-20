@@ -8,11 +8,12 @@ their snippets from these directories; they do not keep copies.
 | --- | --- | --- | --- |
 | [`lit-node`](lit-node/) | `lit-mcp` (Lit view, MCP delivery) | `node` (`@modelcontextprotocol/node` 2.1.1) | Qualified in CI: [`scripts/starter.test.ts`](../scripts/starter.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-express`](lit-express/) | `lit-mcp` (Lit view, MCP delivery) | `express` (`@modelcontextprotocol/express` 2.0.2, `express` 5.3.0) | Qualified in CI: [`scripts/starter-express.test.ts`](../scripts/starter-express.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
+| [`lit-fastify`](lit-fastify/) | `lit-mcp` (Lit view, MCP delivery) | `fastify` (`@modelcontextprotocol/fastify` 2.0.1, `fastify` 5.12.7) | Qualified in CI: [`scripts/starter-fastify.test.ts`](../scripts/starter-fastify.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 
 The synthetic demonstration of this pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
 
-The `hono`, `fastify` and `hapi` server targets are separate required slices
-([#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63) to
+The `hono` and `hapi` server targets are separate required slices
+([#63](https://github.com/MachineWisdomAI/saga-a2ui/issues/63) and
 [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)). A pair is offered only while CI qualifies it:
 [`scripts/qualified-starters.ts`](../scripts/qualified-starters.ts) lists the qualified templates, the
 shared headless suite is [`scripts/starter-qualification.ts`](../scripts/starter-qualification.ts) and
@@ -36,6 +37,7 @@ npx tsx scripts/build-starter.ts                      # export, install packed c
 npx tsx scripts/build-starter.ts --template lit-express   # one of them
 npx tsx scripts/starter-snippets.ts                   # list the attach-to-an-existing-backend snippets (--template lit-express for the Express pair)
 npx tsx scripts/starter-snippets.ts --out DIR         # write them as files into a new directory
+npx tsx scripts/starter-snippets.ts --template lit-fastify   # the Fastify pair's snippets
 ```
 
 `exportTemplate`, `extractSnippets` and `writeSnippets` in [`scripts/starter-template.ts`](../scripts/starter-template.ts)
