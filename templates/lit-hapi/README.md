@@ -34,7 +34,11 @@ deliberate: the starter ships no identity provider.
 
 The maintained `server/bridge.ts` connects Hapi to the Node MCP transport and is the single repair
 source for this template and its generated recipe. It preserves pre-authentication Host/Origin
-validation, inspectable Hapi error responses and SDK-owned streaming.
+validation, inspectable Hapi error responses and SDK-owned streaming. Each mounted endpoint keeps
+its own persistent handler and subscription capacity, while servers and identity stay per-request.
+The built view and filename-derived URI are prepared once before listening. Modern calls use
+JSON unless progress requires SSE; legacy POST calls retain SSE. Shutdown cancels admitted
+requests, closes both handlers and stops Hapi.
 
 Identity travels one way: `server/listener.ts` uses its Hapi authentication strategy to snapshot and freeze the verified identity before reading
 the body. The bridge hands that context to its request factory and the transport, and `identityOf` (`server/identity.ts`) reads it in the operation. No tool argument can

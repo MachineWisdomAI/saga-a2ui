@@ -1,15 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createMcpFastifyApp } from '@modelcontextprotocol/fastify';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import {
+  createServerBudgets,
+  type BudgetSettings,
+  type LifetimeCause,
+  type RequestLifetime,
+} from '@saga-a2ui/mcp/server';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { createEndpoint, type Endpoint } from './endpoint.js';
 import { authenticate } from './authenticate.js';
-import { createAccountServer, createStatusServer, type AccountServerOptions } from './operations.js';
+import {
+  createAccountServer,
+  createStatusServer,
+  prepareStarterView,
+  type AccountServerOptions,
+} from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers, on Fastify: loopback only, stateless
-// Streamable HTTP (a fresh server and transport per POST, JSON responses). The official
+// Streamable HTTP (a persistent handler per endpoint, a fresh server per request, modern auto responses). The official
 // `@modelcontextprotocol/fastify` adapter creates the app and owns DNS-rebinding protection (Host
 // and Origin validation); add your ingress host name to `ALLOWED_HOSTS` when you deploy, and put
 // your own ingress (TLS, a public host name) in front of the listener.
@@ -32,6 +43,8 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
 export interface ListenerOptions {
   /** The built page, read by the caller before the port opens. */
   readonly html: string;
+  /** The built page's relative filename; the starter builds index.html. */
+  readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
   /** Decides what a verified account may see. */
@@ -59,7 +72,10 @@ type BodyRead = { tooLarge: true } | { tooLarge: false; text: string };
  * Reads the request body until it ends, `MAX_REQUEST_BYTES` is exceeded or `gate` aborts, and
  * settles once. Avoids for-await: leaving that loop destroys the socket before a 413 can be written.
  */
-function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<BodyRead> {
+function readLimitedBody(
+  req: IncomingMessage,
+  gate: AbortSignal,
+): Promise<BodyRead> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let received = 0;
@@ -83,7 +99,8 @@ function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<BodyR
       if (received > MAX_REQUEST_BYTES) return finish({ tooLarge: true });
       chunks.push(bytes);
     };
-    const onEnd = () => finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
+    const onEnd = () =>
+      finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
     const onError = (error: Error) => {
       if (settled) return;
       settled = true;
@@ -113,38 +130,78 @@ function mayAnswer(lifetime: RequestLifetime, res: ServerResponse): boolean {
 }
 
 /** Answers, then drops the connection: the rest of the request body is not wanted. */
-function refuseAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: object): void {
-  res.writeHead(status, { 'content-type': 'application/json', connection: 'close' }).end(JSON.stringify(body));
+function refuseAndClose(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  body: object,
+): void {
+  res
+    .writeHead(status, {
+      'content-type': 'application/json',
+      connection: 'close',
+    })
+    .end(JSON.stringify(body));
   if (res.writableFinished) req.destroy();
   else res.once('finish', () => req.destroy());
 }
 
 /** A body stage that did not finish. An expiry is answered once; a disconnect writes nothing. */
-function bodyFailed(cause: LifetimeCause, lifetime: RequestLifetime, req: IncomingMessage, res: ServerResponse): void {
+function bodyFailed(
+  cause: LifetimeCause,
+  lifetime: RequestLifetime,
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
   // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
-  if (cause.kind !== 'request-timeout' && cause.kind !== 'disconnected' && cause.kind !== 'completed') lifetime.record(cause);
-  if (cause.kind === 'disconnected' || cause.kind === 'cancelled' || cause.kind === 'completed') return;
-  if (mayAnswer(lifetime, res)) refuseAndClose(req, res, 408, { error: 'request_timeout' });
+  if (
+    cause.kind !== 'request-timeout' &&
+    cause.kind !== 'disconnected' &&
+    cause.kind !== 'completed'
+  )
+    lifetime.record(cause);
+  if (
+    cause.kind === 'disconnected' ||
+    cause.kind === 'cancelled' ||
+    cause.kind === 'completed'
+  )
+    return;
+  if (mayAnswer(lifetime, res))
+    refuseAndClose(req, res, 408, { error: 'request_timeout' });
 }
 
 /**
  * Reads and parses a POST body as one bounded stage of the request. `undefined` means the
  * response has been dealt with (or the caller has gone) and nothing may be built for it.
  */
-async function readJsonBody(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<{ value: unknown } | undefined> {
+async function readJsonBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): Promise<{ value: unknown } | undefined> {
   const declared = Number(req.headers['content-length']);
   if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) {
-    if (mayAnswer(lifetime, res)) refuseAndClose(req, res, 413, { error: 'payload_too_large' });
+    if (mayAnswer(lifetime, res))
+      refuseAndClose(req, res, 413, { error: 'payload_too_large' });
     return undefined;
   }
-  const read = await lifetime.run('body', (scope) => readLimitedBody(req, scope.signal));
+  const read = await lifetime.run('body', (scope) =>
+    readLimitedBody(req, scope.signal),
+  );
   if (!read.ok) return void bodyFailed(read.cause, lifetime, req, res);
   if (!mayAnswer(lifetime, res)) return undefined;
-  if (read.value.tooLarge) return void refuseAndClose(req, res, 413, { error: 'payload_too_large' });
+  if (read.value.tooLarge)
+    return void refuseAndClose(req, res, 413, { error: 'payload_too_large' });
   try {
     return { value: JSON.parse(read.value.text) as unknown };
   } catch {
-    res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }));
+    res.writeHead(400, { 'content-type': 'application/json' }).end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32700, message: 'Parse error' },
+      }),
+    );
     return undefined;
   }
 }
@@ -155,7 +212,11 @@ async function readJsonBody(req: IncomingMessage, res: ServerResponse, lifetime:
  * a request deadline that passes before the response is delivered destroys the response, which
  * releases the connection and the transport's listeners. A response is never given a second status.
  */
-function bindResponseToLifetime(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+function bindResponseToLifetime(
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): void {
   // A write to a response this listener destroyed must not escape as an unhandled error.
   res.on('error', () => undefined);
   req.on('error', () => undefined);
@@ -185,15 +246,35 @@ function bindResponseToLifetime(req: IncomingMessage, res: ServerResponse, lifet
   );
 }
 
-export async function startListener(options: ListenerOptions): Promise<Listener> {
-  // Resolved and validated before the port opens. Building the servers once up front also makes a
-  // missing view stop the process here, not at the first request.
+export async function startListener(
+  options: ListenerOptions,
+): Promise<Listener> {
+  // Prepare and validate deployment inputs once, before opening the port. Each request
+  // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const probe = budgets.startRequest();
-  try {
-    createStatusServer({ html: options.html, lifetime: probe });
-  } finally {
-    probe.finish();
+  // #region saga-snippet:prepare-view
+  const view = prepareStarterView(options.html, options.filename);
+  const status = createEndpoint(
+    (lifetime) => createStatusServer({ view, lifetime }),
+    { maxRequestBodySize: MAX_REQUEST_BYTES },
+  );
+  const account = createEndpoint(
+    (lifetime) =>
+      createAccountServer({ view, lifetime, authorize: options.authorize }),
+    { maxRequestBodySize: MAX_REQUEST_BYTES },
+  );
+  // #endregion saga-snippet:prepare-view
+  const active = new Set<RequestLifetime>();
+  let stopping = false;
+  let closing: Promise<void> | undefined;
+  function track(
+    req: IncomingMessage,
+    res: ServerResponse,
+    lifetime: RequestLifetime,
+  ): void {
+    active.add(lifetime);
+    res.once('close', () => active.delete(lifetime));
+    bindResponseToLifetime(req, res, lifetime);
   }
 
   const app = createMcpFastifyApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
@@ -207,23 +288,34 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     return lifetime;
   };
   app.addHook('onRequest', async (request, reply) => {
+    if (stopping) return reply.code(503).send();
     const lifetime = budgets.startRequest();
     lifetimes.set(request.raw, lifetime);
-    bindResponseToLifetime(request.raw, reply.raw, lifetime);
+    track(request.raw, reply.raw, lifetime);
   });
 
   // Fastify's body parsers read the whole body with no deadline. Every content type is handed on
   // as the unread stream instead, and `readJsonBody` reads it under the request's lifetime.
   app.removeAllContentTypeParsers();
-  app.addContentTypeParser('*', (_request, payload, done) => done(null, payload));
+  app.addContentTypeParser('*', (_request, payload, done) =>
+    done(null, payload),
+  );
 
   // #region saga-snippet:identity-handoff
   // Who is asking is decided before any server is built or any body is read. The verified context
   // travels to the tool only as the transport's per-request auth; no tool argument can name an account.
-  const identityHandoff = async (request: FastifyRequest, reply: FastifyReply) => {
-    const decision = await authenticate(request.raw, options.verifier, lifetimeOf(request));
+  const identityHandoff = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
+    const decision = await authenticate(
+      request.raw,
+      options.verifier,
+      lifetimeOf(request),
+    );
     if (!decision.ok) {
-      if (decision.challenge !== undefined) reply.header('WWW-Authenticate', decision.challenge);
+      if (decision.challenge !== undefined)
+        reply.header('WWW-Authenticate', decision.challenge);
       return reply.code(decision.status).send();
     }
     Object.assign(request.raw, { auth: decision.authInfo });
@@ -231,7 +323,11 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // #endregion saga-snippet:identity-handoff
 
   /** Serves one MCP request on a fresh server and transport. Fastify does not answer it: this does. */
-  async function serve(build: (lifetime: RequestLifetime) => McpServer, request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  async function serve(
+    endpoint: Endpoint,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
     const lifetime = lifetimeOf(request);
     const req = request.raw;
     const res = reply.raw;
@@ -239,21 +335,19 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     try {
       // The body is this listener's wait, so it runs under the request's lifetime and is bounded
       // before any server or transport exists. Nothing is built for a request that has ended.
-      const body = req.method === 'POST' ? await readJsonBody(req, res, lifetime) : undefined;
+      const body =
+        req.method === 'POST'
+          ? await readJsonBody(req, res, lifetime)
+          : undefined;
       if (req.method === 'POST' && body === undefined) return;
       if (lifetime.check() !== undefined) return;
-      const server = build(lifetime);
-      const transport = new NodeStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-        maxRequestBodySize: MAX_REQUEST_BYTES,
-      });
-      res.on('close', () => {
-        void transport.close();
-        void server.close();
-      });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, body?.value);
+      await toNodeHandler(
+        {
+          fetch: (request, requestOptions) =>
+            endpoint.fetch(request, lifetime, requestOptions ?? {}),
+        },
+        { maxRequestBodySize: MAX_REQUEST_BYTES },
+      )(req, res, body?.value);
     } catch {
       if (res.destroyed) return;
       if (!res.headersSent) res.writeHead(500).end();
@@ -261,9 +355,9 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     }
   }
 
-  app.all(STATUS_PATH, (request, reply) => serve((lifetime) => createStatusServer({ html: options.html, lifetime }), request, reply));
+  app.all(STATUS_PATH, (request, reply) => serve(status, request, reply));
   app.all(ACCOUNT_PATH, { onRequest: identityHandoff }, (request, reply) =>
-    serve((lifetime) => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), request, reply),
+    serve(account, request, reply),
   );
 
   await app.listen({ port: options.port, host: HOST });
@@ -272,10 +366,14 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   return {
     statusUrl: `http://${HOST}:${port}${STATUS_PATH}`,
     accountUrl: `http://${HOST}:${port}${ACCOUNT_PATH}`,
-    close: async () => {
-      const closing = app.close();
-      app.server.closeAllConnections();
-      await closing;
-    },
+    close: () =>
+      (closing ??= (async () => {
+        stopping = true;
+        for (const lifetime of active) lifetime.disconnect();
+        await Promise.all([status.close(), account.close()]);
+        const drained = app.close();
+        app.server.closeAllConnections();
+        await drained;
+      })()),
   };
 }

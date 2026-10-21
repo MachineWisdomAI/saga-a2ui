@@ -9,8 +9,9 @@ import type {
   RouteOptionsPayload,
   Server,
 } from '@hapi/hapi';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 import {
+  createMcpHandler,
   validateHostHeader,
   validateOriginHeader,
 } from '@modelcontextprotocol/server';
@@ -44,10 +45,9 @@ export interface McpRequestContext {
 
 export interface McpPluginOptions {
   /**
-   * Builds the MCP server for one request. Called per request because stateless
-   * Streamable HTTP keeps nothing between calls. This is the only thing the
-   * plugin knows about the tools it serves, which is what keeps the file
-   * portable between repositories.
+   * Builds a fresh MCP server for each admitted request. The endpoint handler keeps
+   * its notification bus and subscription capacity across requests; identity stays
+   * with this request. The application owns the tools and their data.
    */
   createServer: (context: McpRequestContext) => McpServer;
   /** Hapi body handling; a streaming application may bound and parse it before the handler. */
@@ -86,7 +86,7 @@ interface CapturedResponse {
  * straight to the socket, which would kill such a host on an unauthenticated
  * request just as the guard once did.
  *
- * `handleRequest` funnels every response through a single `writeHead`, so one
+ * The Node adapter funnels every response through a single `writeHead`, so one
  * interception point covers all of them. Success and SSE keep the raw socket:
  * they are the cases where the transport genuinely must own the stream, and
  * being 2xx they never reach the inspection that breaks.
@@ -120,7 +120,7 @@ function captureErrorResponse(res: ServerResponse): {
         originals.writeHead as (...args: unknown[]) => ServerResponse
       ).call(this, status, ...rest);
     }
-    /* istanbul ignore next -- defensive: handleRequest always passes a header object */
+    /* istanbul ignore next -- defensive: the Node adapter always passes a header object */
     const headers = (
       typeof rest[0] === 'object' && rest[0] !== null ? rest[0] : {}
     ) as OutgoingHttpHeaders;
@@ -281,55 +281,61 @@ export const mcpPlugin: Plugin<McpPluginOptions> = {
       return h.continue;
     };
 
+    // One handler per plugin registration: public and protected endpoints never share
+    // subscription capacity or notification delivery. Request identity is not retained.
+    const admissions = new WeakMap<globalThis.Request, McpRequestContext>();
+    const endpoint = createMcpHandler(
+      (context) => {
+        const admitted =
+          context.requestInfo === undefined
+            ? undefined
+            : admissions.get(context.requestInfo);
+        if (admitted === undefined)
+          throw new Error('The MCP request has no admitted Hapi context.');
+        return createServer(admitted);
+      },
+      { maxRequestBodySize: payload.maxBytes },
+    );
+    server.ext('onPreStop', () => endpoint.close());
+
     const handler: Lifecycle.Method = async (
       request: Request,
       h: ResponseToolkit,
     ) => {
       const { req, res } = request.raw;
 
-      // Stateless: a fresh server and transport per request, nothing kept between
-      // calls. Swap in sessionIdGenerator: () => randomUUID() plus a session map
-      // if resumability is ever needed; the hapi wiring below does not change.
       const authInfo = request.auth.isAuthenticated
         ? request.auth.credentials.authInfo
         : undefined;
       const context = Object.freeze({ authInfo, request });
-      // The Node adapter reads this request's auth only. Public routes overwrite it with
-      // undefined even if the caller supplied a bearer header.
+      // Public routes overwrite raw auth even when a bearer header was supplied.
       Object.assign(req, { auth: authInfo });
-      const mcpServer = createServer(context);
-      const transport = new NodeStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
-
-      await mcpServer.connect(transport);
-
-      // Closing the server closes the transport it is connected to, so this is
-      // the only teardown needed. Errors during teardown must not become an
-      // unhandled rejection on a socket that is already gone.
-      res.on('close', () => {
-        Promise.resolve(mcpServer.close()).catch(() => {});
-      });
-
-      // hapi already consumed the request stream, so hand over its parsed body.
-      // GET and DELETE have none; the transport answers those itself.
       const capture = captureErrorResponse(res);
-      await transport.handleRequest(
-        req,
-        res,
-        request.app.mcpBody === undefined
-          ? (request.payload ?? undefined)
-          : request.app.mcpBody.value,
-      );
+      try {
+        await toNodeHandler(
+          {
+            fetch: (webRequest, requestOptions) => {
+              admissions.set(webRequest, context);
+              // Keep the exact Request and the bounded parsed POST body. Without parsedBody,
+              // legacy classification clones the Request and loses its admitted context.
+              return endpoint.fetch(webRequest, requestOptions);
+            },
+          },
+          { maxRequestBodySize: payload.maxBytes },
+        )(
+          req,
+          res,
+          request.app.mcpBody === undefined
+            ? (request.payload ?? undefined)
+            : request.app.mcpBody.value,
+        );
+      } finally {
+        capture.restore();
+      }
 
       // A malformed request never reached the socket; re-send it as hapi's own
       // response so `request.response` is a real object.
       if (capture.captured) {
-        // Put the real write methods back first: hapi is about to use them,
-        // and while they are patched its output would be swallowed and the
-        // socket would never close.
-        capture.restore();
         const { status, headers, body } = capture.captured;
         const response = h.response(body).code(status);
         for (const [name, value] of Object.entries(headers)) {
@@ -351,10 +357,9 @@ export const mcpPlugin: Plugin<McpPluginOptions> = {
 
     const ext = { onPreAuth: { method: guardRebinding } };
 
-    // GET holds an SSE stream open for as long as the client stays connected, so
-    // `handleRequest` does not resolve and `h.abandon` is returned only at
-    // disconnect. A host with `routes.timeout.server` set would meanwhile write a
-    // 503 onto a socket the transport has already written headers to, crashing the
+    // Subscription responses leave their stream with the SDK. A Hapi timeout
+    // must never replace that response after its headers were sent: it would write a
+    // 503 onto a socket the transport owns, crashing the
     // process with ERR_HTTP_HEADERS_SENT. Opt this route out of that timeout.
     const timeout = { server: false as const };
 

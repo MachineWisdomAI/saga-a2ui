@@ -84,6 +84,13 @@ are patch. `!`, `BREAKING CHANGE:`, or
 `BREAKING-CHANGE:` is major from 1.0 onward and minor before 1.0. A dependency's
 own major number does not establish a breaking change in this project.
 
+For an explicitly agreed additive change, a PR body may contain the standalone
+footer `Version-Bump: patch`. This selects a patch even when the PR or its commits
+use `feat`; without the footer the automatic rules above apply. A breaking
+indicator in the PR or any commit still takes precedence. Pass the same body
+through `--body-file` locally; CI reads it from the pull-request event. This is a
+reviewed version decision, not permission to publish or to hide a breaking change.
+
 `.version-policy.json` lists version units, paths, and synchronized files. Changes
 outside all unit paths affect every unit, except configured `exclude_paths`.
 The standard non-release paths cover Markdown/reStructuredText, `docs/`, test
@@ -188,6 +195,14 @@ def intent(title: str, body: str, commits: list[str]) -> int:
             level = 3
         elif match and match[1] == "feat":
             level = max(level, 2)
+    # An explicit reviewed PR decision may classify an additive feature as a patch.
+    # Breaking declarations in the PR or any commit always retain their increment.
+    selections = re.findall(r"^Version-Bump:[ \t]*([^\r\n]*)", body, re.MULTILINE)
+    if selections:
+        if [value.strip() for value in selections] != ["patch"]:
+            raise PolicyError("Use exactly one Version-Bump: patch footer, or omit it for automatic intent")
+        if level < 3:
+            level = 1
     return level
 
 

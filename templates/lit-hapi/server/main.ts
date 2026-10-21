@@ -23,3 +23,12 @@ console.log(`Public status endpoint: ${listener.statusUrl}`);
 console.log(
   `Protected account endpoint (every credential is refused until you replace server/verifier.ts): ${listener.accountUrl}`,
 );
+
+// Stop both MCP handlers and every HTTP exchange before allowing Node to exit.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    void listener.close().catch(() => {
+      process.exitCode = 1;
+    });
+  });
+}

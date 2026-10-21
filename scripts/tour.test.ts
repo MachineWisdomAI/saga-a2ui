@@ -2,14 +2,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CallToolResult, Client } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { RENDERERS, SCENARIOS, SYNTHETIC_BANNER } from '../demo/tour/src/scenarios.js';
+import {
+  RENDERERS,
+  SCENARIOS,
+  SYNTHETIC_BANNER,
+} from '../demo/tour/src/scenarios.js';
 import { GUIDES, SOURCE_ENTRIES } from '../demo/tour/src/source-map.js';
 import { repoRoot } from './packed-consumer.js';
-import { createTourWorld, type ControlName, type Person, type TourWorld } from '../demo/tour/src/simulated-world.js';
-import { startTestHost, type TestHost } from '../packages/mcp/src/server/http-host.test-support.js';
+import {
+  createTourWorld,
+  type ControlName,
+  type Person,
+  type TourWorld,
+} from '../demo/tour/src/simulated-world.js';
+import {
+  startTestHost,
+  type TestHost,
+} from '../packages/mcp/src/server/http-host.test-support.js';
 import { syntheticNotes } from '../demo/lit-node/fixtures/notes.js';
-import { createFixtureBackend, createNotesServer, type FixtureBackend } from '../examples/pack1-consumer/server/index.js';
-import { ARCHIVE_TOOL, LIST_TOOL, SESSION_TOOL, declaresNoEffect } from '../examples/pack1-consumer/src/notes-contract.js';
+import {
+  createFixtureBackend,
+  createNotesServer,
+  type FixtureBackend,
+} from '../examples/pack1-consumer/server/index.js';
+import {
+  ARCHIVE_TOOL,
+  LIST_TOOL,
+  SESSION_TOOL,
+  declaresNoEffect,
+} from '../examples/pack1-consumer/src/notes-contract.js';
 
 // TOUR1: the static tour. This file qualifies what it can without a browser; the page itself is
 // driven by apps/lit-host/e2e/tour.spec.ts.
@@ -19,7 +40,10 @@ import { ARCHIVE_TOOL, LIST_TOOL, SESSION_TOOL, declaresNoEffect } from '../exam
 //    server (examples/pack1-consumer/server) gives for the same synthetic data and the same
 //    situation, so each case below runs both and compares what a view can see of the reply.
 
-const REAL_ACCOUNTS = { alice: 'acct-real-alice', bob: 'acct-real-bob' } as const;
+const REAL_ACCOUNTS = {
+  alice: 'acct-real-alice',
+  bob: 'acct-real-bob',
+} as const;
 const PERSONS: readonly Person[] = ['alice', 'bob', 'nobody'];
 
 /** What a view can see of a reply, and the one fact an action reads from `_meta`. */
@@ -31,7 +55,11 @@ const seenBy = (reply: CallToolResult) => ({
 });
 
 interface Side {
-  call(person: Person, name: string, args: Record<string, unknown>): Promise<CallToolResult>;
+  call(
+    person: Person,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult>;
   control(name: ControlName): void;
   /** Archives that were applied, in order. */
   archived(): readonly string[];
@@ -61,7 +89,8 @@ async function realSide(): Promise<Side> {
   const backend: FixtureBackend = createFixtureBackend(
     {
       before: async (call) => {
-        if (call === 'archive' && held) await new Promise<void>((resolve) => waiting.push(resolve));
+        if (call === 'archive' && held)
+          await new Promise<void>((resolve) => waiting.push(resolve));
       },
       afterArchive: () => {
         if (failsAfterWrite) throw new Error('failed after the write');
@@ -69,19 +98,34 @@ async function realSide(): Promise<Side> {
     },
     syntheticNotes(REAL_ACCOUNTS),
   );
-  const html = '<!doctype html><title>notes</title><p data-testid="view-status"></p>';
-  const credential = (person: Person): string | undefined => (person === 'nobody' ? undefined : person);
+  const html =
+    '<!doctype html><title>notes</title><p data-testid="view-status"></p>';
+  const credential = (person: Person): string | undefined =>
+    person === 'nobody' ? undefined : person;
   host = await startTestHost({
     jsonResponse: true,
-    buildServer: () => createNotesServer({ html, backend }),
+    buildServer: () =>
+      createNotesServer({ html, filename: 'notes.html', backend }),
     authenticate: (token) =>
-      token === 'alice' || token === 'bob' ? { token, clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId: REAL_ACCOUNTS[token] } } : undefined,
+      token === 'alice' || token === 'bob'
+        ? {
+            token,
+            clientId: 'c',
+            scopes: [],
+            expiresAt: 9_999_999_999,
+            extra: { accountId: REAL_ACCOUNTS[token] },
+          }
+        : undefined,
   });
   const clients = new Map<Person, Client>();
-  for (const person of PERSONS) clients.set(person, await host.connect(credential(person)));
+  for (const person of PERSONS)
+    clients.set(person, await host.connect(credential(person)));
   return {
     async call(person, name, args) {
-      return (await (clients.get(person) as Client).callTool({ name, arguments: args })) as CallToolResult;
+      return (await (clients.get(person) as Client).callTool({
+        name,
+        arguments: args,
+      })) as CallToolResult;
     },
     control(name) {
       switch (name) {
@@ -113,7 +157,11 @@ async function realSide(): Promise<Side> {
 }
 
 /** One situation: the same sequence of changes and calls on both sides, compared reply by reply. */
-async function bothAnswerAlike(steps: ReadonlyArray<readonly [Person, string, Record<string, unknown>] | ControlName>): Promise<void> {
+async function bothAnswerAlike(
+  steps: ReadonlyArray<
+    readonly [Person, string, Record<string, unknown>] | ControlName
+  >,
+): Promise<void> {
   const real = await realSide();
   const simulated = simulatedSide(createTourWorld());
   for (const step of steps) {
@@ -123,8 +171,13 @@ async function bothAnswerAlike(steps: ReadonlyArray<readonly [Person, string, Re
       continue;
     }
     const [person, name, args] = step;
-    const [expected, actual] = [await real.call(person, name, args), await simulated.call(person, name, args)];
-    expect(seenBy(actual), `${person} ${name} ${JSON.stringify(args)}`).toEqual(seenBy(expected));
+    const [expected, actual] = [
+      await real.call(person, name, args),
+      await simulated.call(person, name, args),
+    ];
+    expect(seenBy(actual), `${person} ${name} ${JSON.stringify(args)}`).toEqual(
+      seenBy(expected),
+    );
   }
   expect(simulated.archived()).toEqual(real.archived());
 }
@@ -174,7 +227,12 @@ describe('the simulated server answers like the notes application’s real serve
   });
 
   it('leaves the outcome unknown, and does not declare "no effect", when the backend fails after it applied the archive', async () => {
-    await bothAnswerAlike(['fail-after-write', ['alice', ARCHIVE_TOOL, { noteId: 'n-1' }], 'stop-failing-after-write', ['alice', LIST_TOOL, {}]]);
+    await bothAnswerAlike([
+      'fail-after-write',
+      ['alice', ARCHIVE_TOOL, { noteId: 'n-1' }],
+      'stop-failing-after-write',
+      ['alice', LIST_TOOL, {}],
+    ]);
   });
 
   it('applies an archive that was held open even though the caller stopped waiting, and answers it when released', async () => {
@@ -185,16 +243,30 @@ describe('the simulated server answers like the notes application’s real serve
     expect(world.state().waiting).toBe(1);
     expect(world.state().archived).toEqual([]);
     world.control('release-archives');
-    expect(seenBy(await pending).structuredContent).toEqual({ noteId: 'n-1', archivedAt: 1_001 });
-    expect(world.state()).toMatchObject({ archived: ['n-1'], waiting: 0, archives: 'immediate' });
+    expect(seenBy(await pending).structuredContent).toEqual({
+      noteId: 'n-1',
+      archivedAt: 1_001,
+    });
+    expect(world.state()).toMatchObject({
+      archived: ['n-1'],
+      waiting: 0,
+      archives: 'immediate',
+    });
   });
 
   it('rejects input the contract does not accept before any backend call, as the real server’s strict schema does', async () => {
     const world = createTourWorld();
-    for (const args of [{ noteId: 'n-1', accountId: 'tour-account-bob' }, { noteId: 42 }, { noteId: '' }]) {
+    for (const args of [
+      { noteId: 'n-1', accountId: 'tour-account-bob' },
+      { noteId: 42 },
+      { noteId: '' },
+    ]) {
       await expect(world.callTool(ARCHIVE_TOOL, args)).rejects.toThrow();
     }
-    expect(world.state().backendCalls).toEqual({ sessionChecks: 0, archives: 0 });
+    expect(world.state().backendCalls).toEqual({
+      sessionChecks: 0,
+      archives: 0,
+    });
   });
 
   it('keeps the synthetic business of one tour out of the next', async () => {
@@ -210,7 +282,8 @@ describe('the simulated server answers like the notes application’s real serve
 //    file, a guide heading that was renamed or a scenario that names a source that does not exist
 //    must fail here and not on a visitor's click.
 
-const readRepository = (file: string): string => fs.readFileSync(path.join(repoRoot, file), 'utf8');
+const readRepository = (file: string): string =>
+  fs.readFileSync(path.join(repoRoot, file), 'utf8');
 
 describe('the scenarios the tour offers', () => {
   it('are distinct, each linked to existing sources and a guide, and each carries the limit of its own simulation', () => {
@@ -218,36 +291,68 @@ describe('the scenarios the tour offers', () => {
     const known = new Set(SOURCE_ENTRIES.map((one) => one.id));
     for (const scenario of SCENARIOS) {
       expect(scenario.sources.length, scenario.id).toBeGreaterThan(0);
-      for (const source of scenario.sources) expect(known.has(source), `${scenario.id} names the source ${source}`).toBe(true);
+      for (const source of scenario.sources)
+        expect(
+          known.has(source),
+          `${scenario.id} names the source ${source}`,
+        ).toBe(true);
       expect(GUIDES[scenario.guide], scenario.id).toBeDefined();
-      expect(scenario.limit.length, `${scenario.id} says what its simulation does not establish`).toBeGreaterThan(40);
+      expect(
+        scenario.limit.length,
+        `${scenario.id} says what its simulation does not establish`,
+      ).toBeGreaterThan(40);
       expect(scenario.steps.length, scenario.id).toBeGreaterThan(0);
     }
   });
 
   it('cover allowed, refused by a prerequisite, denied by the server, missing credential, unknown outcome, independent instances, an obsolete completion and a closed view', () => {
-    expect(new Set(SCENARIOS.map((one) => one.kind))).toEqual(new Set(['allowed', 'refused', 'denied', 'missing-credential', 'unknown', 'independent', 'obsolete', 'canceled']));
+    expect(new Set(SCENARIOS.map((one) => one.kind))).toEqual(
+      new Set([
+        'allowed',
+        'refused',
+        'denied',
+        'missing-credential',
+        'unknown',
+        'independent',
+        'obsolete',
+        'canceled',
+      ]),
+    );
   });
 
   it('say about a denial and about cancellation that neither proves anything about a real server', () => {
-    const limit = (id: string): string => (SCENARIOS.find((one) => one.id === id) as (typeof SCENARIOS)[number]).limit;
-    expect(limit('permission-withdrawn')).toMatch(/does not prove that any real server enforces permission/);
+    const limit = (id: string): string =>
+      (SCENARIOS.find((one) => one.id === id) as (typeof SCENARIOS)[number])
+        .limit;
+    expect(limit('permission-withdrawn')).toMatch(
+      /does not prove that any real server enforces permission/,
+    );
     expect(limit('allowed')).toMatch(/does not authenticate anyone/);
-    expect(limit('obsolete')).toMatch(/does not prove the server’s effect was undone/);
-    expect(limit('closed-view')).toMatch(/does not prove a remote effect was undone/);
+    expect(limit('obsolete')).toMatch(
+      /does not prove the server’s effect was undone/,
+    );
+    expect(limit('closed-view')).toMatch(
+      /does not prove a remote effect was undone/,
+    );
   });
 
   it('start from the first thing a reader sees: the synthetic banner', () => {
-    expect(SYNTHETIC_BANNER).toBe('Synthetic example — server checks simulated');
+    expect(SYNTHETIC_BANNER).toBe(
+      'Synthetic example — server checks simulated',
+    );
     const page = readRepository('demo/tour/index.html');
     expect(page.indexOf('<body>')).toBeLessThan(page.indexOf(SYNTHETIC_BANNER));
-    expect(page.slice(page.indexOf('<body>'), page.indexOf(SYNTHETIC_BANNER))).not.toMatch(/<(a|button|input|main|h1|iframe)[\s>]/);
+    expect(
+      page.slice(page.indexOf('<body>'), page.indexOf(SYNTHETIC_BANNER)),
+    ).not.toMatch(/<(a|button|input|main|h1|iframe)[\s>]/);
   });
 
   it('offer only the renderers whose preview works, and none for Lynx, whose delivery was retired', () => {
     expect(RENDERERS.map((one) => one.id)).toEqual(['lit', 'react']);
     expect(JSON.stringify([RENDERERS, SCENARIOS])).not.toMatch(/lynx/i);
-    const react = RENDERERS.find((one) => one.id === 'react') as (typeof RENDERERS)[number];
+    const react = RENDERERS.find(
+      (one) => one.id === 'react',
+    ) as (typeof RENDERERS)[number];
     expect(react.evidence).toMatch(/not renderer parity/);
     expect(react.evidence).toMatch(/no React starter/);
   });

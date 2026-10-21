@@ -140,7 +140,9 @@ qualifyStarter(STARTER, ({ built, start, allowedToken }) => {
       ];
       expect(
         templateFiles(hapi).filter((file) => file !== 'server/bridge.ts'),
-      ).toEqual(templateFiles(node));
+      ).toEqual(
+        templateFiles(node).filter((file) => file !== 'server/endpoint.ts'),
+      );
       for (const file of templateFiles(hapi).filter(
         (one) => !adapterFiles.includes(one),
       )) {

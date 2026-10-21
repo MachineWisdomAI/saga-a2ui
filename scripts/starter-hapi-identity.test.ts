@@ -139,14 +139,38 @@ it('keeps an SDK-owned SSE stream open beyond a host timeout and releases it on 
     options: {
       auth: false,
       allowedHosts: ['127.0.0.1'],
-      createServer: () => new McpServer({ name: 'stream', version: '0.0.0' }),
+      createServer: () =>
+        new McpServer(
+          { name: 'stream', version: '0.0.0' },
+          { capabilities: { resources: { subscribe: true } } },
+        ),
     },
   });
   await server.start();
   const abort = new AbortController();
   try {
     const response = await fetch(`${server.info.uri}/mcp`, {
-      headers: { accept: 'text/event-stream' },
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2026-07-28',
+        'Mcp-Method': 'subscriptions/listen',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'subscriptions/listen',
+        params: {
+          notifications: {
+            resourceSubscriptions: ['ui://synthetic/probe.html'],
+          },
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+            'io.modelcontextprotocol/clientCapabilities': {},
+          },
+        },
+      }),
       signal: abort.signal,
     });
     expect(response.status).toBe(200);

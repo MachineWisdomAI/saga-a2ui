@@ -157,11 +157,19 @@ async ({ noteId }, ctx: ServerContext): Promise<CallToolResult> => {
   const identity = identityOf(ctx.http?.authInfo);
   if (!identity) return refusal(TEXT.signInRequired);
   try {
-    const archived = await bounded(ctx, (signal) => backend.archive(identity.accountId, noteId, signal));
+    const archived = await bounded(ctx, (signal) =>
+      backend.archive(identity.accountId, noteId, signal),
+    );
     // One sentence for an absent note, someone else's note and an archived one: nothing is disclosed.
     if (archived === undefined) return refusal(TEXT.cannotArchive);
-    const output = ArchiveOutputSchema.parse({ noteId, archivedAt: archived.archivedAt });
-    return { content: [{ type: 'text', text: 'archived' }], structuredContent: output };
+    const output = ArchiveOutputSchema.parse({
+      noteId,
+      archivedAt: archived.archivedAt,
+    });
+    return {
+      content: [{ type: 'text', text: 'archived' }],
+      structuredContent: output,
+    };
   } catch {
     // An exception, a wait that ran out of time, or an output that failed validation after the
     // write: the archive may have been applied (or may still be), so this failure does not claim otherwise.

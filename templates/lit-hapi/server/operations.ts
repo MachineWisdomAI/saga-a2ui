@@ -32,27 +32,31 @@ export class ViewArtifactMissing extends Error {
   }
 }
 
-function viewFor(html: unknown): OperationView {
+/** Validate and fingerprint the deployment document once, before listening. */
+export function prepareStarterView(
+  html: unknown,
+  filename = 'index.html',
+): OperationView {
   if (typeof html !== 'string' || !html.includes('<starter-app'))
     throw new ViewArtifactMissing();
-  return {
-    uri: viewUriForHtml(html),
+  return Object.freeze({
+    uri: viewUriForHtml(html, filename),
     title: 'Starter view',
     html,
     csp: CLOSED_VIEW_CSP,
-  };
+  });
 }
 
 export interface StatusServerOptions {
-  /** The built page. Its bytes name its resource. */
-  readonly html: string;
+  /** The immutable view prepared before the listener opened. */
+  readonly view: OperationView;
   /** The request this server was built for, started by the listener at admission. */
   readonly lifetime: RequestLifetime;
 }
 
 /** An explicitly public operation: it reads no credential and has no identity. */
 export function createStatusServer({
-  html,
+  view,
   lifetime,
 }: StatusServerOptions): McpServer {
   const server = new McpServer({
@@ -68,7 +72,7 @@ export function createStatusServer({
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: StatusOutputSchema,
-      view: viewFor(html),
+      view,
       failures: {
         absent: TEXT.noStatus,
         unavailable: TEXT.unavailable,
@@ -104,7 +108,7 @@ export interface AccountServerOptions extends StatusServerOptions {
  * the public fields out of it by name.
  */
 export function createAccountServer({
-  html,
+  view,
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
@@ -121,7 +125,7 @@ export function createAccountServer({
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: {
         absent: TEXT.noAccount,
         unavailable: TEXT.unavailable,

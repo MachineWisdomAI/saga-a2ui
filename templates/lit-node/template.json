@@ -1,7 +1,15 @@
 {
   "stack": "lit-mcp",
   "server": "node",
-  "serverAdapter": { "package": "@modelcontextprotocol/node", "version": "2.1.1" },
+  "serverAdapter": {
+    "package": "@modelcontextprotocol/node",
+    "version": "2.1.1"
+  },
   "sdkPackages": ["core", "lit", "mcp"],
-  "snippets": ["register-protected-operation", "identity-handoff", "bind-action"]
+  "snippets": [
+    "prepare-view",
+    "register-protected-operation",
+    "identity-handoff",
+    "bind-action"
+  ]
 }

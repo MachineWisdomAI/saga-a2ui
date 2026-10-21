@@ -12,23 +12,39 @@ import { fixtureAnswers, type AnswerFunction } from '../src/answer-function.js';
 const AnswerInput = z.object({ question: z.string().min(1).max(200) });
 
 /** The FaithfulCard content contract this application publishes (see packages/components). */
-const AnswerOutput = z.strictObject({ contractVersion: z.literal(1), markdown: z.string() });
+const AnswerOutput = z.strictObject({
+  contractVersion: z.literal(1),
+  markdown: z.string(),
+});
 
 /**
  * Builds an MCP server for one built answer page. `html` is the final document, after the build
  * has inlined the application and the SDK: its identity is derived from exactly those bytes, so a
  * rebuilt page with any change is a different resource to a host that caches by URI.
  */
-export function createAnswerServer(html: string, answer: AnswerFunction = fixtureAnswers): McpServer {
+export function createAnswerServer(
+  html: string,
+  answer: AnswerFunction = fixtureAnswers,
+): McpServer {
   const server = new McpServer({ name: 'answer-consumer', version: '0.0.0' });
   registerPublicOperation(server, {
     name: 'answer_question',
     title: 'Answer a question',
     description: 'Answers a question with Markdown that the answer view shows.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     input: AnswerInput,
     output: AnswerOutput,
-    view: { uri: viewUriForHtml(html), title: 'Answer view', html, csp: CLOSED_VIEW_CSP },
+    view: {
+      uri: viewUriForHtml(html, 'mcp.html'),
+      title: 'Answer view',
+      html,
+      csp: CLOSED_VIEW_CSP,
+    },
     failures: {
       absent: 'There is no answer.',
       unavailable: 'The answer is unavailable.',
@@ -38,7 +54,10 @@ export function createAnswerServer(html: string, answer: AnswerFunction = fixtur
       const { markdown } = await answer(input.question);
       return { kind: 'record', record: markdown };
     },
-    project: (markdown) => ({ text: markdown, data: { contractVersion: 1, markdown } }),
+    project: (markdown) => ({
+      text: markdown,
+      data: { contractVersion: 1, markdown },
+    }),
   });
   return server;
 }

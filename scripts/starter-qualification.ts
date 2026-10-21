@@ -118,7 +118,10 @@ export function qualifyStarter(
 
   interface Hooks {
     beforeVerify?(token: string): Promise<void> | void;
-    beforeAuthorize?(accountId: string): Promise<void> | void;
+    beforeAuthorize?(
+      accountId: string,
+      signal: AbortSignal,
+    ): Promise<void> | void;
   }
 
   interface Running {
@@ -190,11 +193,13 @@ export function qualifyStarter(
       },
     };
     const listener = await entry.startListener({
-      html: options.html ?? html,
+      get html() {
+        return options.html ?? html;
+      },
       verifier,
-      authorize: async (identity) => {
+      authorize: async (identity, signal) => {
         calls.authorize += 1;
-        await hooks.beforeAuthorize?.(identity.accountId);
+        await hooks.beforeAuthorize?.(identity.accountId, signal);
         return identity.accountId !== ACCOUNT_DENIED;
       },
       port: 0,
@@ -227,6 +232,161 @@ export function qualifyStarter(
     client.callTool({ name: 'get_account', arguments: {} });
   const textOf = (result: { content?: unknown }): string =>
     JSON.stringify(result.content);
+
+  async function wireCall(
+    url: string,
+    modern: boolean,
+    name: string,
+    token?: string,
+  ): Promise<{
+    response: Response;
+    result: { structuredContent?: unknown; isError?: boolean };
+  }> {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        ...(modern
+          ? {
+              'MCP-Protocol-Version': '2026-07-28',
+              'Mcp-Method': 'tools/call',
+              'Mcp-Name': name,
+            }
+          : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: {},
+          ...(modern
+            ? {
+                _meta: {
+                  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                  'io.modelcontextprotocol/clientCapabilities': {},
+                },
+              }
+            : {}),
+        },
+      }),
+    });
+    const text = await response.text();
+    expect(response.status, text).toBe(200);
+    const messages = response.headers
+      .get('content-type')
+      ?.startsWith('text/event-stream')
+      ? text
+          .split('\n')
+          .filter((line) => line.startsWith('data: '))
+          .map((line) => JSON.parse(line.slice(6)))
+      : [JSON.parse(text)];
+    const message = messages.find((one) => one.id === 1);
+    expect(message?.error, text).toBeUndefined();
+    return { response, result: message.result };
+  }
+
+  describe('the persistent HTTP endpoints', () => {
+    it.each([true, false])(
+      'shutdown cancels an active modern=%s request and is safe to repeat',
+      async (modern) => {
+        let admitted!: (signal: AbortSignal) => void;
+        const entered = new Promise<AbortSignal>((resolve) => {
+          admitted = resolve;
+        });
+        const { listener } = await start({
+          hooks: {
+            beforeAuthorize: async (_id, signal) => {
+              admitted(signal);
+              await new Promise<void>(() => undefined);
+            },
+          },
+        });
+        const pending = fetch(listener.accountUrl, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            authorization: `Bearer ${TOKEN.a}`,
+            ...(modern
+              ? {
+                  'MCP-Protocol-Version': '2026-07-28',
+                  'Mcp-Method': 'tools/call',
+                  'Mcp-Name': 'get_account',
+                }
+              : {}),
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name: 'get_account',
+              arguments: {},
+              ...(modern
+                ? {
+                    _meta: {
+                      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                      'io.modelcontextprotocol/clientCapabilities': {},
+                    },
+                  }
+                : {}),
+            },
+          }),
+        }).then(
+          async (response) => {
+            await response.text().catch(() => undefined);
+          },
+          () => undefined,
+        );
+        const signal = await entered;
+        await Promise.all([listener.close(), listener.close(), pending]);
+        expect(signal.aborted).toBe(true);
+      },
+    );
+
+    it('reads on another replica the resource discovered on the first', async () => {
+      const first = await start();
+      const second = await start();
+      const discovery = await connect(first.listener.statusUrl);
+      const reader = await connect(second.listener.statusUrl);
+      const { tools } = await discovery.listTools();
+      const uri = (
+        tools[0]?._meta as { ui?: { resourceUri?: string } } | undefined
+      )?.ui?.resourceUri;
+      expect(typeof uri).toBe('string');
+      const { contents } = await reader.readResource({ uri: String(uri) });
+      expect(contents[0]).toMatchObject({ uri, text: html });
+    });
+
+    it.each([true, false])(
+      'serves modern=%s requests through both mounted endpoints with their admitted identity',
+      async (modern) => {
+        const { listener, calls } = await start();
+        const status = await wireCall(listener.statusUrl, modern, 'get_status');
+        const account = await wireCall(
+          listener.accountUrl,
+          modern,
+          'get_account',
+          TOKEN.a,
+        );
+        expect(status.result.structuredContent).toEqual({ status: 'running' });
+        expect(account.result.structuredContent).toEqual({
+          accountId: ACCOUNT_A,
+        });
+        for (const { response } of [status, account]) {
+          expect(response.headers.get('mcp-session-id')).toBeNull();
+          expect(response.headers.get('content-type')).toContain(
+            modern ? 'application/json' : 'text/event-stream',
+          );
+        }
+        expect(calls).toEqual({ verifier: 1, authorize: 1 });
+      },
+    );
+  });
 
   /** A raw protected request, so a refusal can be read as the HTTP answer it is. */
   async function rawCall(
@@ -264,7 +424,7 @@ export function qualifyStarter(
       expect(result.structuredContent).toEqual({ status: 'running' });
       const uri = (result._meta as { ui: { resourceUri: string } }).ui
         .resourceUri;
-      expect(uri).toBe(viewUriForHtml(html));
+      expect(uri).toBe(viewUriForHtml(html, 'index.html'));
 
       const { contents } = await client.readResource({ uri });
       const [content] = contents;
@@ -605,7 +765,7 @@ export function qualifyStarter(
         jsonrpc: '2.0',
         id: 1,
         method: 'resources/read',
-        params: { uri: viewUriForHtml(padded) },
+        params: { uri: viewUriForHtml(padded, 'index.html') },
       });
 
       const outcome = await new Promise<{
@@ -655,6 +815,29 @@ export function qualifyStarter(
   });
 
   describe('the built view is required', () => {
+    it('prepares the view before listening and reuses it across requests', async () => {
+      let reads = 0;
+      const { listener } = await start({
+        get html() {
+          reads += 1;
+          return html;
+        },
+      });
+      expect(reads).toBe(1);
+      const client = await connect(listener.statusUrl);
+      const listed = await client.listResources();
+      const resource = await client.readResource({
+        uri: listed.resources[0]!.uri,
+      });
+      const result = await client.callTool({
+        name: 'get_status',
+        arguments: {},
+      });
+      expect(result.structuredContent).toEqual({ status: 'running' });
+      expect((resource.contents[0] as { text: string }).text).toBe(html);
+      expect(reads).toBe(1);
+    });
+
     it('will not start without the built page', async () => {
       await expect(
         start({ html: '<!doctype html><title>not the view</title>' }),

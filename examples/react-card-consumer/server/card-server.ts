@@ -1,5 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
+import {
+  createContentPolicy,
+  type ContentPolicy,
+} from '@saga-a2ui/components/faithful-card';
 import { CLOSED_VIEW_CSP, type ViewCsp } from '@saga-a2ui/mcp/policy';
 import { registerPublicOperation, viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
@@ -10,12 +13,17 @@ import { embedPolicy } from '../src/embedded-policy.js';
 // serves it. This file never builds result metadata or a resource of its own, and holds no answer.
 
 /** The application's backend call. Any implementation of the type can be composed in. */
-export type AnswerFunction = (question: string) => Promise<{ readonly markdown: string }>;
+export type AnswerFunction = (
+  question: string,
+) => Promise<{ readonly markdown: string }>;
 
 const AnswerInput = z.object({ question: z.string().min(1).max(200) });
 
 /** The FaithfulCard content contract this application publishes (see packages/components). */
-const AnswerOutput = z.strictObject({ contractVersion: z.literal(1), markdown: z.string() });
+const AnswerOutput = z.strictObject({
+  contractVersion: z.literal(1),
+  markdown: z.string(),
+});
 
 /**
  * What the host mounts: the document with the policy's restrictions and configuration embedded, the
@@ -29,13 +37,20 @@ export interface CardResource {
   readonly csp: ViewCsp;
 }
 
-export function cardResource(builtHtml: string, policy: ContentPolicy): CardResource {
+export function cardResource(
+  builtHtml: string,
+  policy: ContentPolicy,
+  filename: string,
+): CardResource {
   const html = embedPolicy(builtHtml, policy);
   return {
-    uri: viewUriForHtml(html),
+    uri: viewUriForHtml(html, filename),
     html,
     // The origins the policy allows for images and fonts are the only declarations; the data: and blob: baseline needs none.
-    csp: { ...CLOSED_VIEW_CSP, resourceDomains: policy.resource.resourceDomains },
+    csp: {
+      ...CLOSED_VIEW_CSP,
+      resourceDomains: policy.resource.resourceDomains,
+    },
   };
 }
 
@@ -43,19 +58,39 @@ export function cardResource(builtHtml: string, policy: ContentPolicy): CardReso
  * Builds an MCP server for one built page (`builtHtml`, as the build wrote it) under the content policy
  * created from `policyConfiguration` (`createContentPolicy` rejects an invalid one, and so does this).
  */
-export function createCardServer(builtHtml: string, settings: { readonly policyConfiguration: unknown; readonly answer: AnswerFunction }): McpServer {
+export function createCardServer(
+  builtHtml: string,
+  settings: {
+    readonly filename: string;
+    readonly policyConfiguration: unknown;
+    readonly answer: AnswerFunction;
+  },
+): McpServer {
   const created = createContentPolicy(settings.policyConfiguration);
   if (!created.ok) throw new Error(created.failure.message);
-  const view = cardResource(builtHtml, created.policy);
-  const server = new McpServer({ name: 'react-card-consumer', version: '0.0.0' });
+  const view = cardResource(builtHtml, created.policy, settings.filename);
+  const server = new McpServer({
+    name: 'react-card-consumer',
+    version: '0.0.0',
+  });
   registerPublicOperation(server, {
     name: 'answer_question',
     title: 'Answer a question',
     description: 'Answers a question with Markdown that the card shows.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     input: AnswerInput,
     output: AnswerOutput,
-    view: { uri: view.uri, title: 'Answer card', html: view.html, csp: view.csp },
+    view: {
+      uri: view.uri,
+      title: 'Answer card',
+      html: view.html,
+      csp: view.csp,
+    },
     failures: {
       absent: 'There is no answer.',
       unavailable: 'The answer is unavailable.',
@@ -65,7 +100,10 @@ export function createCardServer(builtHtml: string, settings: { readonly policyC
       const { markdown } = await settings.answer(input.question);
       return { kind: 'record', record: markdown };
     },
-    project: (markdown) => ({ text: markdown, data: { contractVersion: 1, markdown } }),
+    project: (markdown) => ({
+      text: markdown,
+      data: { contractVersion: 1, markdown },
+    }),
   });
   return server;
 }

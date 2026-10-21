@@ -233,12 +233,15 @@ tool rules differ: ChatGPT asks for three explicit hints, Claude for a title and
 destructive annotation.
 
 - The build: every view exists inside the build directory, is a regular file, and has a
-  content-addressed `ui://sha256/…` identity.
+  content-addressed `ui://views/<filename>.<fingerprint>.html` identity.
+  Each `build.views` entry is relative to `build.directory` and must be the same filename the
+  application passes to `viewUriForHtml`: for example, `nested/answer.html` retains `nested/`
+  in the resource URI. The build directory itself is not part of that name.
 - The endpoint: a public HTTPS URL (no local, internal or IP-literal host). Discovery performs
   `initialize`, `tools/list`, `resources/list` and `resources/read` and never `tools/call`. Each tool
   has a description and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint`. The
   endpoint serves every built view byte for byte as `text/html;profile=mcp-app` with a declared
-  content security policy, every tool's view belongs to this build, and a served `ui://sha256/…`
+  content security policy, every tool's view belongs to this build, and a served `ui://views/<filename>.<fingerprint>.html`
   name matches its bytes. A deployment that serves a different build is the stale case.
 - The deployment identity: `endpoint.expectedServer` (name and version) is compared with what the
   endpoint reports in `initialize`. Equal is `established`, different is a failure, and anything

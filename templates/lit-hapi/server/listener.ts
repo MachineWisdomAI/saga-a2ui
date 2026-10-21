@@ -13,6 +13,7 @@ import { mcpPlugin } from './bridge.js';
 import {
   createAccountServer,
   createStatusServer,
+  prepareStarterView,
   type AccountServerOptions,
 } from './operations.js';
 
@@ -33,6 +34,8 @@ declare module '@hapi/hapi' {
 export interface ListenerOptions {
   /** The built page, read by the caller before the port opens. */
   readonly html: string;
+  /** The built page's relative filename; the starter builds index.html. */
+  readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
   /** Decides what a verified account may see. */
@@ -58,16 +61,24 @@ export async function startListener(
   options: ListenerOptions,
 ): Promise<Listener> {
   const budgets = createServerBudgets(options.budgets);
-  const probe = budgets.startRequest();
-  try {
-    createStatusServer({ html: options.html, lifetime: probe });
-  } finally {
-    probe.finish();
-  }
+  // #region saga-snippet:prepare-view
+  // Both endpoint registrations below keep one persistent handler and reuse this immutable view.
+  const view = prepareStarterView(options.html, options.filename);
+  // #endregion saga-snippet:prepare-view
+  const active = new Set<RequestLifetime>();
+  let stopping = false;
+  let closing: Promise<void> | undefined;
   const http = Hapi.server({ host: HOST, port: options.port });
+  http.ext('onPreStop', () => {
+    stopping = true;
+    for (const lifetime of active) lifetime.disconnect();
+  });
   http.ext('onRequest', (request, h) => {
+    if (stopping) return h.response().code(503).takeover();
     const lifetime = budgets.startRequest();
     request.app.lifetime = lifetime;
+    active.add(lifetime);
+    request.raw.res.once('close', () => active.delete(lifetime));
     bindResponseToLifetime(request.raw.req, request.raw.res, lifetime);
     return h.continue;
   });
@@ -255,7 +266,7 @@ export async function startListener(
       allowedHosts: ALLOWED_HOSTNAMES,
       createServer: ({ request }) =>
         createStatusServer({
-          html: options.html,
+          view,
           lifetime: request.app.lifetime,
         }),
     },
@@ -277,7 +288,7 @@ export async function startListener(
             'The protected route did not establish request identity.',
           );
         return createAccountServer({
-          html: options.html,
+          view,
           lifetime: request.app.lifetime,
           authorize: options.authorize,
         });
@@ -289,7 +300,7 @@ export async function startListener(
   return {
     statusUrl: `${http.info.uri}${STATUS_PATH}`,
     accountUrl: `${http.info.uri}${ACCOUNT_PATH}`,
-    close: () => http.stop({ timeout: 0 }),
+    close: () => (closing ??= http.stop({ timeout: 0 })),
   };
 }
 
