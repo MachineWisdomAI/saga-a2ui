@@ -47,7 +47,8 @@ registered MCP requests and throws for requests outside those endpoints. Authent
 claim validation and authorization remain application-owned.
 
 Registration supplies the complete body, deadline and socket handling by default; no
-parsing hooks or request application-state fields are needed. Omit `budgets` and
+parsing hooks or request application-state fields are needed. POST requests must use
+`Content-Type: application/json`; unsupported content types receive HTTP 415. Omit `budgets` and
 `maxRequestBytes` to keep the defaults shown. `maxSubscriptions` optionally limits this
 endpoint's concurrent subscriptions; omission keeps the SDK default. Each registration
 owns a separate persistent handler and subscription capacity. Stopping Hapi cancels
