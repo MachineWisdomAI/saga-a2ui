@@ -94,6 +94,7 @@ those defaults, such as `skills/**`, `skillsets/**`, or `src/content/**`. Review
 the actual package/build inputs when adopting the policy: installed skills,
 runtime prompts, templates, and rendered site content are product, even in
 Markdown. Existing `exclude_paths` still exclude captured or vendored material.
+Existing `release_paths` cannot be removed or narrowed in a change PR.
 Documentation images under `assets/brand/` and `diagrams/` also remain exempt.
 Root units use `**`. JSON mirrors can select a field with a `key` array; separate
 units may own different fields in the same workspace lockfile. Use `regex` mirrors
@@ -388,6 +389,8 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
                 raise PolicyError("existing version units, paths, and mirrors cannot be removed from a change PR")
         if not set(config.get("exclude_paths", [])).issubset(prior.get("exclude_paths", [])):
             raise PolicyError("a change PR cannot add exclusions that bypass existing version checks")
+        if not set(prior.get("release_paths", [])).issubset(config.get("release_paths", [])):
+            raise PolicyError("a change PR cannot remove release_paths that protect shipped product files")
     event = json.loads(Path(args.event_file).read_text()) if args.event_file else {}
     pr = event.get("pull_request", {})
     title = args.title if args.title is not None else pr.get("title", "")
