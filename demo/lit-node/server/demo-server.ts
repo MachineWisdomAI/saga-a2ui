@@ -114,6 +114,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
 
   const application = await startEpisodeListener({
     viewHtml: views.episode,
+    viewFilename: 'episode.html',
     catalog: world.catalog,
     contentPolicy: standard,
     port: 0,
@@ -129,7 +130,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
   let strictListener: EpisodeListener | undefined;
   const http: Server = createServer();
   try {
-    strictListener = await startEpisodeListener({ viewHtml: views.episode, catalog: world.catalog, contentPolicy: strict, port: 0 });
+    strictListener = await startEpisodeListener({ viewHtml: views.episode, viewFilename: 'episode.html', catalog: world.catalog, contentPolicy: strict, port: 0 });
     await new Promise<void>((resolve, reject) => {
       http.once('error', reject);
       http.listen(options.port, HOST, resolve);

@@ -73,7 +73,7 @@ async function realSide(): Promise<Side> {
   const credential = (person: Person): string | undefined => (person === 'nobody' ? undefined : person);
   host = await startTestHost({
     jsonResponse: true,
-    buildServer: () => createNotesServer({ html, backend }),
+    buildServer: () => createNotesServer({ html, filename: 'notes.html', backend }),
     authenticate: (token) =>
       token === 'alice' || token === 'bob' ? { token, clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId: REAL_ACCOUNTS[token] } } : undefined,
   });

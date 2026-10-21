@@ -28,7 +28,7 @@ export function createAnswerServer(html: string, answer: AnswerFunction = fixtur
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     input: AnswerInput,
     output: AnswerOutput,
-    view: { uri: viewUriForHtml(html), title: 'Answer view', html, csp: CLOSED_VIEW_CSP },
+    view: { uri: viewUriForHtml(html, 'mcp.html'), title: 'Answer view', html, csp: CLOSED_VIEW_CSP },
     failures: {
       absent: 'There is no answer.',
       unavailable: 'The answer is unavailable.',

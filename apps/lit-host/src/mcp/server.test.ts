@@ -104,7 +104,7 @@ describe('episode MCP server over streamable HTTP', () => {
     const { resources } = await client.listResources();
     expect(resources.map((resource) => resource.uri)).toContain(uri);
     // The registered identity is the SDK byte identity of the document the resource serves.
-    expect(uri).toBe(viewUriForHtml(await readText(client, uri)));
+    expect(uri).toBe(viewUriForHtml(await readText(client, uri), 'view.html'));
   });
 
   it('serves the same immutable HTML for every read, free of request data', async () => {
@@ -151,7 +151,7 @@ describe('episode MCP server over streamable HTTP', () => {
     const { contents } = await client.readResource({ uri });
     const defaultUri = (await servedIdentity(VIEW_HTML)).uri;
     expect(uri).not.toBe(defaultUri);
-    expect(uri).toBe(viewUriForHtml(contents[0] && 'text' in contents[0] ? contents[0].text : ''));
+    expect(uri).toBe(viewUriForHtml(contents[0] && 'text' in contents[0] ? contents[0].text : '', 'view.html'));
     expect(contents[0]?._meta).toEqual({
       ui: {
         csp: {
@@ -221,7 +221,7 @@ describe('episode MCP server over streamable HTTP', () => {
     expect(same.text).toBe(base.text);
     expect(new Set([base.uri, code.uri, css.uri, both.uri]).size).toBe(4);
     // Each registered URI is the byte identity of the document its own resource serves.
-    for (const served of [base, code, css, both]) expect(served.uri).toBe(viewUriForHtml(served.text));
+    for (const served of [base, code, css, both]) expect(served.uri).toBe(viewUriForHtml(served.text, 'view.html'));
   });
 
   it.each([

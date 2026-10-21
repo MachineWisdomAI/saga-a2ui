@@ -99,7 +99,7 @@ describe('candidate identity', () => {
       await client.connect(clientSide);
       try {
         const listed = await client.listResources();
-        const episode = listed.resources.find((resource) => resource.uri.startsWith('ui://sha256/'));
+        const episode = listed.resources.find((resource) => resource.uri.startsWith('ui://views/view.'));
         if (episode === undefined) throw new Error('The server lists no episode view.');
         const read = await client.readResource({ uri: episode.uri });
         const content = read.contents[0];
@@ -135,7 +135,7 @@ describe('candidate identity', () => {
         if (!created.ok) throw new Error('The policy is valid.');
         const identity = episodeResourceIdentity(root, created.policy) as { uri: string; bytes: number; sha256: string };
         const actual = await served(created.policy);
-        expect(actual.uri).toBe(viewUriForHtml(actual.bytes));
+        expect(actual.uri).toBe(viewUriForHtml(actual.bytes, 'view.html'));
         expect(actual.uri).not.toBe((await served(DEFAULT_CONTENT_POLICY)).uri);
         expect(identity.uri).toBe(actual.uri);
         expect(identity.bytes).toBe(actual.bytes.length);
@@ -157,7 +157,7 @@ describe('candidate identity', () => {
         fs.copyFileSync(path.join(repoRoot, 'package-lock.json'), path.join(root, 'package-lock.json'));
         const resources = (candidateIdentity(root) as { resources: { uri: string; sha256: string }[] }).resources;
         expect(resources.map((resource) => resource.uri)).toEqual([
-          viewUriForHtml(contentResource(viewHtml, DEFAULT_CONTENT_POLICY).html),
+          viewUriForHtml(contentResource(viewHtml, DEFAULT_CONTENT_POLICY).html, 'view.html'),
           SUBSCRIPTIONS_VIEW_URI,
           PLAYBACK_VIEW_URI,
         ]);

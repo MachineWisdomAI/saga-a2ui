@@ -3,5 +3,5 @@
   "server": "hono",
   "serverAdapter": { "package": "@modelcontextprotocol/hono", "version": "2.0.2" },
   "sdkPackages": ["core", "lit", "mcp"],
-  "snippets": ["register-protected-operation", "identity-handoff", "bind-action"]
+  "snippets": ["prepare-view", "register-protected-operation", "identity-handoff", "bind-action"]
 }

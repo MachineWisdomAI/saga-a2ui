@@ -53,7 +53,7 @@ const LISTS: readonly Lists[] = [
   { name: 'one image host and several font origins', imageHosts: [IMAGE_HOST], fontOrigins: [FONT_ORIGIN, `${FONT_ORIGIN}:8443`] },
 ];
 
-type CreateCardServer = (html: string, settings: { policyConfiguration: unknown; answer: (question: string) => Promise<{ markdown: string }> }) => McpServer;
+type CreateCardServer = (html: string, settings: { filename: string; policyConfiguration: unknown; answer: (question: string) => Promise<{ markdown: string }> }) => McpServer;
 let createCardServer: CreateCardServer;
 const pages = {} as Record<Brand, Buffer>;
 let identity: {
@@ -96,6 +96,7 @@ async function serve(brand: Brand, configuration: unknown, answers: ReadonlyMap<
     jsonResponse: true,
     buildServer: () =>
       createCardServer(pages[brand].toString('utf8'), {
+        filename: `${brand}.html`,
         policyConfiguration: configuration,
         answer: async (question) => {
           asked.push(question);
@@ -480,7 +481,7 @@ for (const brand of BRAND_NAMES) {
         .replace(/<script type="application\/json" id="saga-content-policy">[^<]*<\/script>/, '');
       expect(stripped).toBe(html);
       expect(identity.builtPages[brand].sha256).toBe(createHash('sha256').update(pages[brand]).digest('hex'));
-      expect(served.uri).toBe(`ui://sha256/${createHash('sha256').update(served.resource.html).digest('hex')}.html`);
+      expect(served.uri).toBe(`ui://views/${brand}.${createHash('sha256').update(served.resource.html).digest('hex').slice(0, 32)}.html`);
       expect(identity.installedVersions).toMatchObject({ react: '19.3.1', 'react-dom': '19.3.1', '@a2ui/react': '0.13.0', '@a2ui/web_core': '0.13.0' });
       expect(Object.keys(identity.packedTarballSha256).sort()).toEqual(['components', 'core', 'mcp', 'react']);
       for (const hash of Object.values(identity.packedTarballSha256)) expect(hash).toMatch(/^[0-9a-f]{64}$/);

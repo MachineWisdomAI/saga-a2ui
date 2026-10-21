@@ -89,7 +89,7 @@ for (const consumer of consumers) {
       });
       const host = await startTestHost({
         jsonResponse: true,
-        buildServer: () => server.createNotesServer({ html: bytes.toString('utf8'), backend }),
+        buildServer: () => server.createNotesServer({ filename: `${consumer}.html`, html: bytes.toString('utf8'), backend }),
         authenticate: (credential) => (credential === undefined ? undefined : AUTH[credential]),
       });
       environment = { backend, host, alice: await host.connect('alice'), bob: await host.connect('bob'), anonymous: await host.connect(), hold, held, fault, bytes, server };
@@ -157,7 +157,7 @@ for (const consumer of consumers) {
       const served = await servedResource();
       const result = await toolResult();
       expect((result._meta as { ui: { resourceUri: string } }).ui.resourceUri).toBe(served.uri);
-      expect(served.uri).toBe(`ui://sha256/${createHash('sha256').update(bytes).digest('hex')}.html`);
+      expect(served.uri).toBe(`ui://views/${consumer}.${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}.html`);
       expect(Buffer.from(served.html, 'utf8').equals(bytes)).toBe(true);
       expect(served.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
 
@@ -168,7 +168,7 @@ for (const consumer of consumers) {
 
       // UI artifact first: without the built page no server is built, whatever else is configured.
       for (const missing of ['', '<!doctype html><title>not the notes view</title>']) {
-        expect(() => environment.server.createNotesServer({ html: missing, backend: environment.backend })).toThrow(environment.server.ViewArtifactMissing);
+        expect(() => environment.server.createNotesServer({ filename: `${consumer}.html`, html: missing, backend: environment.backend })).toThrow(environment.server.ViewArtifactMissing);
       }
     });
 

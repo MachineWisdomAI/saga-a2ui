@@ -170,7 +170,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
   describe('built pages served over MCP from the installed mcp package', () => {
     interface Served {
       readonly pages: Record<(typeof REACT_CARD_BRANDS)[number], string>;
-      readonly createCardServer: (html: string, settings: { policyConfiguration: unknown; answer: (question: string) => Promise<{ markdown: string }> }) => McpServer;
+      readonly createCardServer: (html: string, settings: { filename: string; policyConfiguration: unknown; answer: (question: string) => Promise<{ markdown: string }> }) => McpServer;
     }
     let preparing: Promise<Served> | undefined;
     const prepared = (): Promise<Served> =>
@@ -230,7 +230,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
     }, 180_000);
 
     // Derived here from the requirement (SHA-256 of the served bytes), not by the package's own function.
-    const identityOf = (html: string): string => `ui://sha256/${sha256(html)}.html`;
+    const identityOf = (html: string, filename = 'neutral.html'): string => `ui://views/${filename.slice(0, -5)}.${sha256(html).slice(0, 32)}.html`;
     const open: { host?: TestHost } = {};
     afterEach(async () => {
       await open.host?.close();
@@ -245,11 +245,11 @@ describe('the React card consumer built from the packed SDK packages', () => {
     }
 
     /** Serves `html` under `policyConfiguration` and reads back what a host would: the tool's link, the resource and a result. */
-    async function serve(html: string, policyConfiguration: unknown, questions: readonly string[] = ['anything']): Promise<Reading & { linked: string[] }> {
+    async function serve(html: string, policyConfiguration: unknown, questions: readonly string[] = ['anything'], filename = 'neutral.html'): Promise<Reading & { linked: string[] }> {
       const { createCardServer } = await prepared();
       open.host = await startTestHost({
         jsonResponse: true,
-        buildServer: () => createCardServer(html, { policyConfiguration, answer: async (question) => ({ markdown: `Answer to: ${question}` }) }),
+        buildServer: () => createCardServer(html, { filename, policyConfiguration, answer: async (question) => ({ markdown: `Answer to: ${question}` }) }),
       });
       const client = await open.host.connect();
       const linked: string[] = [];
@@ -283,9 +283,9 @@ describe('the React card consumer built from the packed SDK packages', () => {
       ['strictListed', 'img-src data: https://images.example.com', 'font-src data: https://fonts.example.com https://fonts.example.com:8443'],
     ] as const)('serves %s with the exact document restrictions, the identity of those bytes and every result linked to it', async (name, images, fonts) => {
       const { pages } = await prepared();
-      const reading = await serve(pages.harbor, POLICIES[name], ['first question', 'second question', 'a third, different question']);
+      const reading = await serve(pages.harbor, POLICIES[name], ['first question', 'second question', 'a third, different question'], 'harbor.html');
       expect(reading.mimeType).toBe('text/html;profile=mcp-app');
-      expect(reading.uri).toBe(identityOf(reading.html));
+      expect(reading.uri).toBe(identityOf(reading.html, 'harbor.html'));
       expect(reading.linked).toEqual([reading.uri, reading.uri, reading.uri]); // distinct answers reuse one resource
 
       const policies = [...reading.html.matchAll(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/g)].map((match) => match[1] as string);
@@ -316,7 +316,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
         (await serve(pages.neutral, POLICIES.strictEmpty)).uri, // level
         (await serve(pages.neutral, POLICIES.standardListed)).uri, // origin lists
         (await serve(pages.neutral, { level: 'standard', fontOrigins: ['https://fonts.example.com'] })).uri, // a font origin alone
-        (await serve(pages.harbor, POLICIES.standardEmpty)).uri, // brand: tokens, artwork and font bytes
+        (await serve(pages.harbor, POLICIES.standardEmpty, undefined, 'harbor.html')).uri, // brand: tokens, artwork and font bytes
         (await serve(pages.neutral.replace('</body>', '<!-- rebuilt --></body>'), POLICIES.standardEmpty)).uri, // one changed byte
       ]);
       expect(identities.size).toBe(6);
@@ -326,7 +326,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
     it('refuses a policy configuration that does not validate, before serving anything', async () => {
       const { pages, createCardServer } = await prepared();
       for (const bad of [{ level: 'lenient' }, { fontOrigins: ['http://fonts.example.com'] }, { fontOrigins: ['https://*.example.com'] }]) {
-        expect(() => createCardServer(pages.neutral, { policyConfiguration: bad, answer: async () => ({ markdown: '' }) })).toThrow();
+        expect(() => createCardServer(pages.neutral, { filename: 'neutral.html', policyConfiguration: bad, answer: async () => ({ markdown: '' }) })).toThrow();
       }
     }, 120_000);
 

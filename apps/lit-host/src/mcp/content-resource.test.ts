@@ -22,8 +22,8 @@ function embeddedJson(html: string): string | null {
 describe('the content-policy resource', () => {
   it('derives the identity of the default policy from the served document and declares no domains', () => {
     const resource = contentResource(VIEW, policyWith());
-    expect(resource.uri).toBe(viewUriForHtml(resource.html));
-    expect(resource.uri).toMatch(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/);
+    expect(resource.uri).toBe(viewUriForHtml(resource.html, 'view.html'));
+    expect(resource.uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
     expect(resource.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
   });
 
@@ -44,7 +44,7 @@ describe('the content-policy resource', () => {
     const b = contentResource(VIEW, policyWith(['cdn.example.org'])).uri;
     expect(a).toBe(same);
     expect(new Set([base, a, b]).size).toBe(3);
-    expect(a).toMatch(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/);
+    expect(a).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
   });
 
   it('puts the policy-derived restrictions in the document before any script', () => {
@@ -197,8 +197,8 @@ describe('identity of the self-contained resource', () => {
   it('is the SDK byte identity of the served document, for every policy', () => {
     for (const [, policy] of POLICIES) {
       const resource = contentResource(cardDocument(), policy);
-      expect(resource.uri).toBe(viewUriForHtml(resource.html));
-      expect(resource.uri).toBe(viewUriForHtml(Buffer.from(resource.html, 'utf8')));
+      expect(resource.uri).toBe(viewUriForHtml(resource.html, 'view.html'));
+      expect(resource.uri).toBe(viewUriForHtml(Buffer.from(resource.html, 'utf8'), 'view.html'));
     }
   });
 

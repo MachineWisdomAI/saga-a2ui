@@ -234,7 +234,7 @@ describe('snippets', () => {
     const target = path.join(work, 'snippet-files');
     const written = writeSnippets(template, target);
 
-    expect(written.map((file) => path.basename(file)).sort()).toEqual(['bind-action.ts', 'identity-handoff.ts', 'register-protected-operation.ts']);
+    expect(written.map((file) => path.basename(file)).sort()).toEqual(['bind-action.ts', 'identity-handoff.ts', 'prepare-view.ts', 'register-protected-operation.ts']);
     for (const snippet of extractSnippets(template)) expect(fs.readFileSync(path.join(target, `${snippet.name}.ts`), 'utf8')).toBe(`${snippet.text}\n`);
     expect(() => writeSnippets(template, target)).toThrow(TemplateError);
   });

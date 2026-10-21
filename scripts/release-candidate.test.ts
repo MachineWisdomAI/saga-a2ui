@@ -238,8 +238,8 @@ describe('packed candidates', () => {
       version: packed[0]!.version,
       packages: packed.map((one) => ({ name: `@saga-a2ui/${one.name}`, tarball: path.basename(one.tarball), sha256: one.sha256 })),
       combinations: [
-        { id: 'notes-own', packages: ['core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://sha256/own.html' }] },
-        { id: 'notes-card', packages: ['components', 'core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://sha256/card.html' }] },
+        { id: 'notes-own', packages: ['core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://views/own.00000000000000000000000000000000.html', file: 'own.html' }] },
+        { id: 'notes-card', packages: ['components', 'core', 'lit', 'mcp'], resources: [{ role: 'notes view', uri: 'ui://views/card.00000000000000000000000000000000.html', file: 'card.html' }] },
       ],
       carriedEvidence: { cases: CARRIED_CASES.map(({ file, title }) => ({ file, title })) },
     });
@@ -299,13 +299,13 @@ describe('packed candidates', () => {
     const html = Buffer.from('<notes-app></notes-app>', 'utf8');
 
     it('is the resource a candidate recorded when its bytes are the same', () => {
-      expect(checkPagePairing(html, viewUriForHtml(html))).toEqual([]);
+      expect(checkPagePairing(html, viewUriForHtml(html, 'notes.html'), 'notes.html')).toEqual([]);
     });
 
     it('is refused, with the repair, when the bytes differ in any way', () => {
-      const [finding, ...rest] = checkPagePairing(Buffer.from('<notes-app> </notes-app>', 'utf8'), viewUriForHtml(html));
+      const [finding, ...rest] = checkPagePairing(Buffer.from('<notes-app> </notes-app>', 'utf8'), viewUriForHtml(html, 'notes.html'), 'notes.html');
       expect(rest).toEqual([]);
-      expect(finding).toMatchObject({ code: 'resource-mismatch', expected: viewUriForHtml(html) });
+      expect(finding).toMatchObject({ code: 'resource-mismatch', expected: viewUriForHtml(html, 'notes.html') });
       expect(finding?.guidance).toMatch(/Rebuild the view from the candidate packages/);
       expect(finding?.guidance).toMatch(/restart the server/);
     });

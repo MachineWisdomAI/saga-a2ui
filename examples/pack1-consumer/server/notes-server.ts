@@ -70,6 +70,8 @@ const refusal = (text: string): CallToolResult => ({ ...failure(text), _meta: { 
 export interface NotesServerOptions {
   /** The final document; its bytes name its resource. */
   readonly html: string;
+  /** The actual built page filename, relative to the view directory. */
+  readonly filename: string;
   readonly backend: NotesBackend;
   /**
    * The request this server was built for, started by the adapter at admission. With it, every
@@ -97,7 +99,7 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
     if (!result.ok && result.cause.kind !== 'request-timeout' && result.cause.kind !== 'disconnected' && result.cause.kind !== 'completed') lifetime.record(result.cause);
     return valueOrThrow(result);
   }
-  const view = { uri: viewUriForHtml(html), title: 'Notes view', html, csp: CLOSED_VIEW_CSP };
+  const view = { uri: viewUriForHtml(html, options.filename), title: 'Notes view', html, csp: CLOSED_VIEW_CSP };
   const server = new McpServer({ name: 'pack1-notes', version: '0.0.0' });
 
   registerProtectedOperation(

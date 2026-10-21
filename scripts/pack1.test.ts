@@ -215,7 +215,7 @@ describe('what an entry point may load, from the installed copies', () => {
         "import { z } from 'zod';",
         'export async function run() {',
         "  const server = new McpServer({ name: 'server-only', version: '0.0.0' });",
-        "  registerPublicOperation(server, { name: 'read', title: 'Read', description: 'Reads.', annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, input: z.object({}), output: z.strictObject({ ok: z.boolean() }), view: { uri: viewUriForHtml('<p></p>'), title: 'v', html: '<p></p>', csp: CLOSED_VIEW_CSP }, failures: { absent: 'a', unavailable: 'u', invalidOutput: 'i' }, handle: () => ({ kind: 'record', record: true }), project: () => ({ text: 'ok', data: { ok: true } }) });",
+        "  registerPublicOperation(server, { name: 'read', title: 'Read', description: 'Reads.', annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, input: z.object({}), output: z.strictObject({ ok: z.boolean() }), view: { uri: viewUriForHtml('<p></p>', 'test.html'), title: 'v', html: '<p></p>', csp: CLOSED_VIEW_CSP }, failures: { absent: 'a', unavailable: 'u', invalidOutput: 'i' }, handle: () => ({ kind: 'record', record: true }), project: () => ({ text: 'ok', data: { ok: true } }) });",
         "  const noDom = typeof document === 'undefined' && typeof window === 'undefined' && typeof HTMLElement === 'undefined';",
         "  return { noDom, action: typeof Action.local, csp: CLOSED_VIEW_CSP.connectDomains.length };",
         '}',

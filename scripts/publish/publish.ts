@@ -123,7 +123,7 @@ function readBuild(loaded: LoadedReleaseInput): { readonly views: BuiltView[]; r
       if (!fs.statSync(real).isFile()) throw new Error('is not a file');
       const data = fs.readFileSync(real);
       if (data.length === 0) throw new Error('is empty');
-      return { file, uri: viewUriForHtml(data), sha256: sha256(data), bytes: data.length, data };
+      return { file, uri: viewUriForHtml(data, file), sha256: sha256(data), bytes: data.length, data };
     } catch (error) {
       problems.push(`${file} ${(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'does not exist' : (error as Error).message}.`);
       return missing;
@@ -211,8 +211,8 @@ function viewFindings(snapshot: EndpointSnapshot, views: readonly BuiltView[]): 
     if (uri !== undefined && !built.some((view) => view.uri === uri)) problems.push(`${tool.name} points to ${uri}, which is not a view of this build.`);
   }
   for (const resource of snapshot.resources) {
-    const addressed = /^ui:\/\/sha256\/([0-9a-f]{64})\.html$/.exec(resource.uri);
-    if (addressed !== null && addressed[1] !== resource.sha256) problems.push(`${resource.uri} names a digest that is not the digest of the bytes served.`);
+    const addressed = /^ui:\/\/views\/.+\.([0-9a-f]{32})\.html$/.exec(resource.uri);
+    if (addressed !== null && addressed[1] !== resource.sha256?.slice(0, 32)) problems.push(`${resource.uri} names a digest that is not the digest of the bytes served.`);
     if (resource.mimeType !== MCP_APP_MIME) problems.push(`${resource.uri} is served as ${resource.mimeType ?? 'no type'}, not ${MCP_APP_MIME}.`);
     const ui = isRecord(resource.meta) && isRecord(resource.meta.ui) ? resource.meta.ui : undefined;
     if (!isRecord(ui?.csp)) problems.push(`${resource.uri} declares no content security policy.`);

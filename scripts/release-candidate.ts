@@ -138,8 +138,8 @@ export function checkInstalledCombination(modulesDirectory: string, expected: Ex
 }
 
 /** The built view a server serves must be the one the candidate recorded; its URI is the digest of its bytes. */
-export function checkPagePairing(html: Uint8Array, expectedUri: string): Finding[] {
-  const actual = viewUriForHtml(html);
+export function checkPagePairing(html: Uint8Array, expectedUri: string, filename: string): Finding[] {
+  const actual = viewUriForHtml(html, filename);
   if (actual === expectedUri) return [];
   return [
     {
@@ -285,7 +285,7 @@ export interface CombinationRecord {
 const readJson = <T>(file: string): T => JSON.parse(fs.readFileSync(file, 'utf8')) as T;
 const builtResource = (role: string, file: string): CombinationRecord['resources'][number] => {
   const bytes = fs.readFileSync(path.join(repoRoot, file));
-  return { role, uri: viewUriForHtml(bytes), sha256: sha256Hex(bytes), file };
+  return { role, uri: viewUriForHtml(bytes, path.basename(file)), sha256: sha256Hex(bytes), file };
 };
 
 const A2UI_PROTOCOL = { protocol: 'A2UI', version: 'v0.9', upstream: '@a2ui/web_core 0.13.0' } as const;
@@ -665,7 +665,7 @@ export function verifyCommand(argv: readonly string[]): VerifyOutcome {
     if (page !== undefined) {
       const [resource, ...others] = combination.resources;
       if (resource === undefined || others.length > 0) throw new Error(`--page compares one built view, and ${combination.id} records ${combination.resources.length}; check its views with their own builds.`);
-      findings.push(...checkPagePairing(fs.readFileSync(path.resolve(page)), resource.uri));
+      findings.push(...checkPagePairing(fs.readFileSync(path.resolve(page)), resource.uri, path.basename(resource.file)));
     }
     return {
       exitCode: findings.length === 0 ? 0 : 1,

@@ -611,7 +611,7 @@ describe('a complete built application (the qualified lit-node starter)', () => 
     expect(methods).not.toContain('tools/call');
     const record = recordOf(path.join(cwd, 'publication'));
     expect(record.verdict).toBe('ready');
-    expect(record.inputs.views).toEqual([{ file: 'index.html', uri: expect.stringMatching(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/), sha256: sha256(html), bytes: Buffer.byteLength(html) }]);
+    expect(record.inputs.views).toEqual([{ file: 'index.html', uri: expect.stringMatching(/^ui:\/\/views\/index\.[0-9a-f]{32}\.html$/), sha256: sha256(html), bytes: Buffer.byteLength(html) }]);
     expect(record.endpoint.resources.map((one) => one.sha256)).toEqual([sha256(html)]);
     expect(record.endpoint.deploymentIdentity.status).toBe('established');
 

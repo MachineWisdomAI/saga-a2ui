@@ -1,15 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { localhostHostValidation, localhostOriginValidation } from '@modelcontextprotocol/express';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import express, { type ErrorRequestHandler, type Request, type RequestHandler, type Response } from 'express';
+import { createEndpoint, type Endpoint } from './endpoint.js';
 import { authenticate } from './authenticate.js';
 import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers, on Express: loopback only, stateless Streamable
-// HTTP (a fresh server and transport per POST, JSON responses) and DNS-rebinding and origin
+// HTTP (a persistent handler per endpoint, a fresh server per request, modern auto responses) and DNS-rebinding and origin
 // protection from the official `@modelcontextprotocol/express` adapter. Put your own ingress (TLS, a
 // public host name) in front of it and replace `localhostHostValidation()` with
 // `hostHeaderValidation([...your host names])` when you deploy.
@@ -33,6 +34,8 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
 export interface ListenerOptions {
   /** The built page, read by the caller before the port opens. */
   readonly html: string;
+  /** The built page's relative filename; the starter builds index.html. */
+  readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
   /** Decides what a verified account may see. */
@@ -193,13 +196,27 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const view = prepareStarterView(options.html);
+  // #region saga-snippet:prepare-view
+  const view = prepareStarterView(options.html, options.filename);
+  const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  // #endregion saga-snippet:prepare-view
+  const active = new Set<RequestLifetime>();
+  let stopping = false;
+  let closing: Promise<void> | undefined;
+  function track(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+    active.add(lifetime);
+    res.once('close', () => active.delete(lifetime));
+    bindResponseToLifetime(req, res, lifetime);
+  }
+
 
   /** The first middleware: the request's clock starts here, before any credential or body wait. */
   const admit: RequestHandler = (req, res, next) => {
+    if (stopping) { res.writeHead(503).end(); return; }
     const lifetime = budgets.startRequest();
     res.locals.lifetime = lifetime;
-    bindResponseToLifetime(req, res, lifetime);
+    track(req, res, lifetime);
     next();
   };
 
@@ -218,25 +235,14 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // #endregion saga-snippet:identity-handoff
 
   /** Serves one MCP request with a server and transport built for it alone. */
-  async function serve(build: (lifetime: RequestLifetime) => McpServer, req: Request, res: Response): Promise<void> {
+  async function serve(endpoint: Endpoint, req: Request, res: Response): Promise<void> {
     const lifetime = lifetimeOf(res);
     // The body is the adapter's wait, so it runs under the request's lifetime and is bounded
     // before any server or transport exists. Nothing is built for a request that has ended.
     const body = req.method === 'POST' ? await readJsonBody(req, res, lifetime) : undefined;
     if (req.method === 'POST' && body === undefined) return;
     if (lifetime.check() !== undefined) return;
-    const server = build(lifetime);
-    const transport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-      maxRequestBodySize: MAX_REQUEST_BYTES,
-    });
-    res.on('close', () => {
-      void transport.close();
-      void server.close();
-    });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, body?.value);
+    await toNodeHandler({ fetch: (request, requestOptions) => endpoint.fetch(request, lifetime, requestOptions ?? {}) }, { maxRequestBodySize: MAX_REQUEST_BYTES })(req, res, body?.value);
   }
 
   const app = express();
@@ -245,9 +251,9 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   app.set('strict routing', true);
   app.use(admit);
   app.use(localhostHostValidation(), localhostOriginValidation());
-  app.all(STATUS_PATH, (req, res) => serve((lifetime) => createStatusServer({ view, lifetime }), req, res));
+  app.all(STATUS_PATH, (req, res) => serve(status, req, res));
   app.all(ACCOUNT_PATH, identify, (req, res) =>
-    serve((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), req, res),
+    serve(account, req, res),
   );
   app.use((_req, res) => {
     res.writeHead(404).end();
@@ -270,10 +276,14 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   return {
     statusUrl: `http://${HOST}:${port}${STATUS_PATH}`,
     accountUrl: `http://${HOST}:${port}${ACCOUNT_PATH}`,
-    close: () =>
-      new Promise<void>((resolve) => {
-        http.close(() => resolve());
+    close: () => closing ??= (async () => {
+      stopping = true;
+      for (const lifetime of active) lifetime.disconnect();
+      await Promise.all([status.close(), account.close()]);
+      await new Promise<void>((resolve, reject) => {
+        http.close((error) => error ? reject(error) : resolve());
         http.closeAllConnections();
-      }),
+      });
+    })(),
   };
 }

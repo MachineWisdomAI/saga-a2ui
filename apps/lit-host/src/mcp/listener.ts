@@ -113,6 +113,7 @@ function singleHeader(value: string | string[] | undefined): string | undefined 
 }
 
 export interface EpisodeListenerOptions {
+  readonly viewFilename?: string;
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
   /** Trusted content policy of the public episode view. Defaults to Standard with no image host. */
@@ -595,6 +596,7 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     await servePublic(req, res, lifetime, (requestLifetime) =>
       createEpisodeServer({
         viewHtml: options.viewHtml,
+        viewFilename: options.viewFilename,
         catalog: options.catalog,
         contentPolicy: options.contentPolicy ?? DEFAULT_CONTENT_POLICY,
         lifetime: requestLifetime,

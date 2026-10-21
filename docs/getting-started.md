@@ -97,32 +97,43 @@ npm start
 
 ### HTTP defaults
 
-For a new HTTP application, use **stateless MCP** and **prepare the built view once at startup**. A tool invocation does not need a server-side conversation session. Keep conversation history in your application when the product needs it; keep request timeouts, cancellation and verified identity scoped to each request.
+Use **stateless MCP** and **prepare the built view once at startup**. The four maintained starters each construct two persistent `createMcpHandler` instances: one for the public status endpoint and one for the protected account endpoint. Each factory constructs a fresh server for a request. Each handler owns a separate notification bus, subscription limit and shutdown operation, so public subscribers cannot receive protected endpoint notifications or consume its subscription slots.
 
-The Hono target above supplies routing and middleware through the official `@modelcontextprotocol/hono` adapter. Its Node adapter runs Hono on Node.js: choosing Hono replaces hand-written HTTP plumbing, not the JavaScript runtime. Express and Fastify remain supported choices for an existing backend.
+The Hono target uses the official `@modelcontextprotocol/hono` validation middleware and Hono's Node adapter. Hono supplies routing and middleware; Node remains the runtime. Its routes mount `handler.fetch(c.req.raw, { parsedBody, authInfo })`; Node, Express and Fastify use the official `toNodeHandler` adapter. The application authenticates before invoking the protected handler and reads the body under the request's deadline. All mounting paths pass `parsedBody` explicitly: in the pinned SDK this preserves the original `Request` object in both modern and legacy factories, allowing the endpoint's WeakMap to recover the admitted lifetime through `ctx.requestInfo`.
 
-For a modern MCP endpoint, the upstream `createMcpHandler` export from `@modelcontextprotocol/server` accepts a server factory and owns per-request transport creation and cleanup. Its default compatibility path also serves older HTTP clients statelessly. Do not add `Mcp-Session-Id`, a session map, an idle-session sweeper or an SSE replay store to a simple request/answer app. The maintained starter transports likewise use `sessionIdGenerator: undefined`; they do not retain MCP sessions.
+#### Response modes and slow tools
 
-Keep deployment work outside that factory:
+For modern requests, leave `responseMode` unset (`'auto'`):
 
-```text
-startup
-  read the built HTML
-  apply any deployment revision stamp
-  validate the view and compute viewUriForHtml(finalHtml)
-  retain one immutable OperationView
-  open the HTTP listener
+| Mode | Behavior | When to use it |
+| --- | --- | --- |
+| `'auto'` | Returns JSON unless a related mid-call message upgrades the response to SSE. | Default for normal application endpoints. |
+| `'json'` | Returns only the terminal result; drops mid-call progress and logging. | When discarding those notifications is intentional. |
+| `'sse'` | Uses SSE from the start. | When an always-streaming response is required. |
 
-HTTP request
-  create a server and transport for this request
-  register operations with the prepared OperationView
-  handle the request with its own identity and lifetime
-  release request resources when the response finishes or disconnects
-```
+SAGA's `request.reportProgress(...)` emits progress only when the client supplied a `progressToken`. A slow call without a related message remains JSON in `auto`; elapsed time alone never starts streaming. The SDK's `keepAliveMs` defaults to 15,000 milliseconds (`0` disables it), and in `auto` starts only after SSE upgrade. Configure the application's request and operation budgets, proxy timeouts and response mode for the work it actually performs; keepalive does not extend those budgets.
 
-Hash the exact UTF-8 HTML bytes that the resource serves, after all stamping. Reuse those bytes and their URI for discovery, tool results and resource reads. Reading, stamping and fingerprinting unchanged HTML on every request adds work and risks inconsistent resource identity. Restart after rebuilding the view. Answer-specific data and answer fingerprints still belong to the individual tool call.
+These modes describe the modern path. The pinned handler's default compatibility path serves 2025-era clients with a fresh stateless transport per request and SSE responses. It retains the older initialization exchange but creates no protocol session; GET and DELETE return 405. No opt-in is needed to serve 2026-07-28 alongside that compatibility path. See the [upstream handler reference](https://ts.sdk.modelcontextprotocol.io/v2/api/@modelcontextprotocol/server/server/createMcpHandler.html).
 
-The CLI creates a new directory; it does not migrate an existing application. To move an existing server to Hono, generate a separate Hono starter as a reference or print its snippets, then adapt its HTTP layer while preserving your application's operations, renderer and policy. A Lit starter does not require an existing React application to change renderer.
+#### Protocol state and notifications
+
+The [2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28/changelog) removes protocol sessions, the initialization handshake and SSE replay. Modern requests carry their protocol version and capabilities in `_meta`; clients re-issue a request after a broken stream. An old session map or replay store does not belong in a new request/answer application.
+
+- Keep cross-call application state behind explicit server-minted handles passed as ordinary tool arguments.
+- For additional input, use the multi-round-trip pattern: return `resultType: "input_required"` with input requests and request state, then accept the client's retry with `inputResponses`. Do not describe older server-initiated requests as a reason to introduce sessions.
+- Long-running background work can use the separate `io.modelcontextprotocol/tasks` extension when both application and client support it. The starters do not implement a task workflow.
+- `subscriptions/listen` is an opted-in POST response stream for change notifications. Request progress and logging stay on their own request's response stream. Subscription streams and ordinary long-running SSE responses both hold HTTP connections.
+- The default subscription bus is in-process and `maxSubscriptions` defaults to 1024 per handler. A multi-replica application using notifications needs a shared pub/sub implementation **within the same authorization boundary**. These fixed starter operations publish no change notifications.
+
+To preserve an existing sessionful 2025 deployment, route it explicitly using upstream `isLegacyRequest` ahead of a modern handler configured with `legacy: 'reject'`; that is a separate migration choice.
+
+#### Startup, view identity and shutdown
+
+Read and validate the built HTML before listening. Compute `viewUriForHtml(finalHtml, 'index.html')` once and retain the immutable `OperationView` used by discovery, tool results and resource reads. A URI such as `ui://views/index.<32-character-sha256-prefix>.html` identifies both the file and its final bytes. Rebuilding the document changes its address automatically, while identical filenames and bytes agree across replicas. Full SHA-256 checksums remain available in qualification records. Answer-specific data never enters this cached document.
+
+On `SIGINT` or `SIGTERM`, the starter stops admission, cancels active request lifetimes, closes both persistent MCP handlers, then closes the Node HTTP listener and connections. `handler.close()` aborts modern exchanges and subscription streams; legacy exchanges also need request/connection teardown. The [Hono Node guide](https://hono.dev/docs/getting-started/nodejs) likewise makes the application's underlying HTTP server responsible for shutdown.
+
+The CLI creates a separate reference project; it does not migrate an existing application. Preserve your own operations, renderer and policy when adapting its HTTP layer. A Lit starter does not require an existing React application to change renderer.
 
 ### Unqualified pairs are refused
 
@@ -156,7 +167,7 @@ Both keep ordinary formatting and both retain server authorization and data-shar
 
 ### Rebuild and resource matching
 
-A view is served as an MCP App resource whose address is `ui://sha256/<digest>.html`, the SHA-256 of the exact bytes served. A view that embeds a policy has an address that depends on that policy, so **changing the policy or rebuilding the view changes the address**. Rebuild the view from the installed packages, restart the server so it serves the rebuilt view, and pair a server only with the view built beside it. A view that meets a result it does not understand shows that the view and its server are from different builds instead of rendering it. `npm run candidate:identity` prints the identities for a given policy.
+A view is served as an MCP App resource whose address is `ui://views/<filename>.<32-character-sha256-prefix>.html`, the SHA-256 of the exact bytes served. A view that embeds a policy has an address that depends on that policy, so **changing the policy or rebuilding the view changes the address**. Rebuild the view from the installed packages, restart the server so it serves the rebuilt view, and pair a server only with the view built beside it. A view that meets a result it does not understand shows that the view and its server are from different builds instead of rendering it. `npm run candidate:identity` prints the identities for a given policy.
 
 ## Identity and the evidence behind it
 

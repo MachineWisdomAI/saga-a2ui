@@ -25,6 +25,7 @@ export interface EpisodeCatalog {
 }
 
 export interface EpisodeServerOptions {
+  readonly viewFilename?: string;
   /** The built, immutable view document. Combined only with the trusted policy, never request data. */
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
@@ -49,7 +50,7 @@ function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
  */
 export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-a2ui-episode-demo', version: '0.0.0' });
-  const view = contentResource(options.viewHtml, options.contentPolicy);
+  const view = contentResource(options.viewHtml, options.contentPolicy, options.viewFilename);
 
   registerPublicOperation(
     server,

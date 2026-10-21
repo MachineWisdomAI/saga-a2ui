@@ -117,7 +117,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
         return { bytes: fs.readFileSync(path.join(out, 'mcp.html')), createAnswerServer: loaded.createAnswerServer };
       })());
     // Derived here from the requirement (SHA-256 of the served bytes), not by the package's own function.
-    const identityOf = (bytes: Buffer | string): string => `ui://sha256/${createHash('sha256').update(bytes).digest('hex')}.html`;
+    const identityOf = (bytes: Buffer | string): string => `ui://views/mcp.${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}.html`;
     const open: { host?: TestHost } = {};
     afterEach(async () => {
       await open.host?.close();

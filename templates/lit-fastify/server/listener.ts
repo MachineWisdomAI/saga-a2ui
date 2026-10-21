@@ -1,15 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createMcpFastifyApp } from '@modelcontextprotocol/fastify';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { createEndpoint, type Endpoint } from './endpoint.js';
 import { authenticate } from './authenticate.js';
 import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers, on Fastify: loopback only, stateless
-// Streamable HTTP (a fresh server and transport per POST, JSON responses). The official
+// Streamable HTTP (a persistent handler per endpoint, a fresh server per request, modern auto responses). The official
 // `@modelcontextprotocol/fastify` adapter creates the app and owns DNS-rebinding protection (Host
 // and Origin validation); add your ingress host name to `ALLOWED_HOSTS` when you deploy, and put
 // your own ingress (TLS, a public host name) in front of the listener.
@@ -32,6 +33,8 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
 export interface ListenerOptions {
   /** The built page, read by the caller before the port opens. */
   readonly html: string;
+  /** The built page's relative filename; the starter builds index.html. */
+  readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
   /** Decides what a verified account may see. */
@@ -189,7 +192,20 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const view = prepareStarterView(options.html);
+  // #region saga-snippet:prepare-view
+  const view = prepareStarterView(options.html, options.filename);
+  const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  // #endregion saga-snippet:prepare-view
+  const active = new Set<RequestLifetime>();
+  let stopping = false;
+  let closing: Promise<void> | undefined;
+  function track(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+    active.add(lifetime);
+    res.once('close', () => active.delete(lifetime));
+    bindResponseToLifetime(req, res, lifetime);
+  }
+
 
   const app = createMcpFastifyApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
 
@@ -202,9 +218,10 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     return lifetime;
   };
   app.addHook('onRequest', async (request, reply) => {
+    if (stopping) return reply.code(503).send();
     const lifetime = budgets.startRequest();
     lifetimes.set(request.raw, lifetime);
-    bindResponseToLifetime(request.raw, reply.raw, lifetime);
+    track(request.raw, reply.raw, lifetime);
   });
 
   // Fastify's body parsers read the whole body with no deadline. Every content type is handed on
@@ -226,7 +243,7 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // #endregion saga-snippet:identity-handoff
 
   /** Serves one MCP request on a fresh server and transport. Fastify does not answer it: this does. */
-  async function serve(build: (lifetime: RequestLifetime) => McpServer, request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  async function serve(endpoint: Endpoint, request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const lifetime = lifetimeOf(request);
     const req = request.raw;
     const res = reply.raw;
@@ -237,18 +254,7 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
       const body = req.method === 'POST' ? await readJsonBody(req, res, lifetime) : undefined;
       if (req.method === 'POST' && body === undefined) return;
       if (lifetime.check() !== undefined) return;
-      const server = build(lifetime);
-      const transport = new NodeStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-        maxRequestBodySize: MAX_REQUEST_BYTES,
-      });
-      res.on('close', () => {
-        void transport.close();
-        void server.close();
-      });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, body?.value);
+      await toNodeHandler({ fetch: (request, requestOptions) => endpoint.fetch(request, lifetime, requestOptions ?? {}) }, { maxRequestBodySize: MAX_REQUEST_BYTES })(req, res, body?.value);
     } catch {
       if (res.destroyed) return;
       if (!res.headersSent) res.writeHead(500).end();
@@ -256,9 +262,9 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     }
   }
 
-  app.all(STATUS_PATH, (request, reply) => serve((lifetime) => createStatusServer({ view, lifetime }), request, reply));
+  app.all(STATUS_PATH, (request, reply) => serve(status, request, reply));
   app.all(ACCOUNT_PATH, { onRequest: identityHandoff }, (request, reply) =>
-    serve((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), request, reply),
+    serve(account, request, reply),
   );
 
   await app.listen({ port: options.port, host: HOST });
@@ -267,10 +273,13 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   return {
     statusUrl: `http://${HOST}:${port}${STATUS_PATH}`,
     accountUrl: `http://${HOST}:${port}${ACCOUNT_PATH}`,
-    close: async () => {
-      const closing = app.close();
+    close: () => closing ??= (async () => {
+      stopping = true;
+      for (const lifetime of active) lifetime.disconnect();
+      await Promise.all([status.close(), account.close()]);
+      const drained = app.close();
       app.server.closeAllConnections();
-      await closing;
-    },
+      await drained;
+    })(),
   };
 }

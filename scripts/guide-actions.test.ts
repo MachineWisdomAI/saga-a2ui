@@ -89,7 +89,7 @@ async function start(): Promise<Running> {
   const html = '<!doctype html><title>notes</title><p data-testid="view-status"></p>';
   const host = await startTestHost({
     jsonResponse: true,
-    buildServer: () => entry.server.createNotesServer({ html, backend }),
+    buildServer: () => entry.server.createNotesServer({ html, filename: 'own.html', backend }),
     authenticate: (credential) => (credential === undefined ? undefined : AUTH[credential]),
   });
   running = {

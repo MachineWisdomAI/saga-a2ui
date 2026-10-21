@@ -162,7 +162,7 @@ export async function serveNotes(options: NotesEndpointOptions, req: IncomingMes
   if (lifetime.check() !== undefined) return;
   // The transport reads the verified context only from the request, never from a tool argument.
   Object.assign(req, { auth: decision.authInfo });
-  const server = createNotesServer({ html: options.html, backend: options.backend, lifetime });
+  const server = createNotesServer({ html: options.html, filename: 'notes.html', backend: options.backend, lifetime });
   const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

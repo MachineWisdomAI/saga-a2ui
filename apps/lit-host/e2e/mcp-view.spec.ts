@@ -90,7 +90,7 @@ test('the resource is linked from the tool and served with an empty-allowlist CS
   const { tools } = await client.listTools();
   const uri = await registeredViewUri();
   expect(tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta).toMatchObject({ ui: { resourceUri: uri } });
-  expect(uri).toMatch(/^ui:\/\/sha256\/[0-9a-f]{64}\.html$/);
+  expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
 
   const resource = await readView();
   expect(resource.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });

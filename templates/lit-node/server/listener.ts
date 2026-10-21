@@ -1,15 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import { toNodeHandler, localhostHostValidation, localhostOriginValidation } from '@modelcontextprotocol/node';
+import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import { createEndpoint, type Endpoint } from './endpoint.js';
 import { authenticate } from './authenticate.js';
 import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers: loopback only, stateless Streamable HTTP
-// (a fresh server and transport per POST, JSON responses) and DNS-rebinding protection on the
+// (a persistent handler per endpoint, a fresh server per request, modern auto responses) and DNS-rebinding protection on the
 // Host header. Put your own ingress (TLS, a public host name) in front of it, and add that host
-// name to `allowedHosts`, when you deploy.
+// name through `hostHeaderValidation([...])` instead of localhost-only validation when you deploy.
 //
 // Time: each request's lifetime starts when the request is admitted, before any credential or body
 // wait. This file wires that one deadline into the waits the application owns: authentication, the
@@ -25,6 +26,8 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
 export interface ListenerOptions {
   /** The built page, read by the caller before the port opens. */
   readonly html: string;
+  /** The built page's relative filename; the starter builds index.html. */
+  readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
   /** Decides what a verified account may see. */
@@ -50,7 +53,20 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const view = prepareStarterView(options.html);
+  // #region saga-snippet:prepare-view
+  const view = prepareStarterView(options.html, options.filename);
+  const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  // #endregion saga-snippet:prepare-view
+  const active = new Set<RequestLifetime>();
+  let stopping = false;
+  let closing: Promise<void> | undefined;
+  function track(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+    active.add(lifetime);
+    res.once('close', () => active.delete(lifetime));
+    bindResponseToLifetime(req, res, lifetime);
+  }
+
 
   const http = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -58,7 +74,8 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     http.listen(options.port, HOST, resolve);
   });
   const { port } = http.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
-  const allowedHosts = [`${HOST}:${port}`, `localhost:${port}`];
+  const validateHost = localhostHostValidation();
+  const validateOrigin = localhostOriginValidation();
 
   /**
    * Reads the request body until it ends, `MAX_REQUEST_BYTES` is exceeded or `gate` aborts, and
@@ -154,31 +171,18 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     }
   }
 
-  async function serve(build: () => McpServer, req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<void> {
+  async function serve(endpoint: Endpoint, req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<void> {
     // The body is the adapter's wait, so it runs under the request's lifetime and is bounded
     // before any server or transport exists. Nothing is built for a request that has ended.
     const body = req.method === 'POST' ? await readJsonBody(req, res, lifetime) : undefined;
     if (req.method === 'POST' && body === undefined) return;
     if (lifetime.check() !== undefined) return;
-    const server = build();
-    const transport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-      enableDnsRebindingProtection: true,
-      allowedHosts,
-      maxRequestBodySize: MAX_REQUEST_BYTES,
-    });
-    res.on('close', () => {
-      void transport.close();
-      void server.close();
-    });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, body?.value);
+    await toNodeHandler({ fetch: (request, requestOptions) => endpoint.fetch(request, lifetime, requestOptions ?? {}) }, { maxRequestBodySize: MAX_REQUEST_BYTES })(req, res, body?.value);
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<void> {
     const path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
-    if (path === STATUS_PATH) return serve(() => createStatusServer({ view, lifetime }), req, res, lifetime);
+    if (path === STATUS_PATH) return serve(status, req, res, lifetime);
     if (path !== ACCOUNT_PATH) {
       res.writeHead(404).end();
       return;
@@ -193,13 +197,15 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     }
     Object.assign(req, { auth: decision.authInfo });
     // #endregion saga-snippet:identity-handoff
-    return serve(() => createAccountServer({ view, lifetime, authorize: options.authorize }), req, res, lifetime);
+    return serve(account, req, res, lifetime);
   }
 
   http.on('request', (req, res) => {
+    if (stopping) { res.writeHead(503).end(); return; }
+    if (!validateHost(req, res) || !validateOrigin(req, res)) return;
     // The request's clock starts at admission, before any credential or body wait.
     const lifetime = budgets.startRequest();
-    bindResponseToLifetime(req, res, lifetime);
+    track(req, res, lifetime);
     handle(req, res, lifetime).catch(() => {
       if (res.destroyed) return;
       if (!res.headersSent) res.writeHead(500).end();
@@ -210,11 +216,15 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   return {
     statusUrl: `http://${HOST}:${port}${STATUS_PATH}`,
     accountUrl: `http://${HOST}:${port}${ACCOUNT_PATH}`,
-    close: () =>
-      new Promise<void>((resolve) => {
-        http.close(() => resolve());
+    close: () => closing ??= (async () => {
+      stopping = true;
+      for (const lifetime of active) lifetime.disconnect();
+      await Promise.all([status.close(), account.close()]);
+      await new Promise<void>((resolve, reject) => {
+        http.close((error) => error ? reject(error) : resolve());
         http.closeAllConnections();
-      }),
+      });
+    })(),
   };
 }
 

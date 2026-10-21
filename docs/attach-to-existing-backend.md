@@ -29,9 +29,10 @@ A pair is listed only while CI qualifies it, and a qualified pair is not automat
 
 1. Install the SDK packages the recipe lists from one candidate, together, and keep the `@a2ui/markdown-it` override in your root `package.json`.
 2. Decide who is asking. Your application authenticates the request (`server/verifier.ts` is the seam for your identity provider) and gives SAGA the result only through the transport’s per-request auth, as in the identity handoff below. A protected operation that receives no verified identity does not run; a declared public operation needs none and is given none.
-3. Register the operations your backend exposes. The handler makes your own authorization decision for that request’s identity, and the projection copies the public fields out of the record by name.
-4. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address is derived from its bytes, so rebuild the view and restart the server together.
-5. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
+3. Read the built HTML before listening. The preparation snippet defines `view` from `options.html` and its actual filename (`index.html` in the starter); `server/main.ts` reads that file. Prepare it once and reuse it in each request factory.
+4. Register the operations your backend exposes. The handler makes your own authorization decision for that request’s identity, and the projection copies the public fields out of the record by name.
+5. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address preserves its filename and fingerprints its final bytes, so rebuild the view and restart the server together.
+6. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
 
 CI qualifies the starter’s listener and operations against real MCP clients. That qualification belongs to the starter: attaching the same lines to your application does not inherit it. Test your own authentication, authorization and refusal paths in your application.
 
@@ -40,7 +41,17 @@ CI qualifies the starter’s listener and operations against real MCP clients. T
 
 Template: [`templates/lit-node`](../templates/lit-node/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-node/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+```
 
 ### Hand the verified identity to the transport
 
@@ -117,7 +128,17 @@ attach: (view) => {
 
 Template: [`templates/lit-express`](../templates/lit-express/). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-express/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+```
 
 ### Hand the verified identity to the transport
 
@@ -197,7 +218,17 @@ attach: (view) => {
 
 Template: [`templates/lit-fastify`](../templates/lit-fastify/). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-fastify/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+```
 
 ### Hand the verified identity to the transport
 
@@ -276,7 +307,17 @@ attach: (view) => {
 
 Template: [`templates/lit-hono`](../templates/lit-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-hono/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+```
 
 ### Hand the verified identity to the transport
 
@@ -287,7 +328,7 @@ From `templates/lit-hono/server/listener.ts`:
 // only as the transport's per-request auth; no tool argument can name an account.
 const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
 if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
-return serve(c, () => createAccountServer({ view, lifetime, authorize: options.authorize }), decision.authInfo);
+return serve(c, account, decision.authInfo);
 ```
 
 ### Register a protected operation

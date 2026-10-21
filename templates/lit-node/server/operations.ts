@@ -18,9 +18,9 @@ export class ViewArtifactMissing extends Error {
 }
 
 /** Validate and fingerprint the deployment document once, before listening. */
-export function prepareStarterView(html: unknown): OperationView {
+export function prepareStarterView(html: unknown, filename = 'index.html'): OperationView {
   if (typeof html !== 'string' || !html.includes('<starter-app')) throw new ViewArtifactMissing();
-  return Object.freeze({ uri: viewUriForHtml(html), title: 'Starter view', html, csp: CLOSED_VIEW_CSP });
+  return Object.freeze({ uri: viewUriForHtml(html, filename), title: 'Starter view', html, csp: CLOSED_VIEW_CSP });
 }
 
 export interface StatusServerOptions {

@@ -163,7 +163,7 @@ describe('the application listener installed from the packed packages and run ou
       const uri = tools.result.tools.find((tool) => tool._meta?.ui?.resourceUri)?._meta?.ui?.resourceUri;
       if (uri === undefined) throw new Error('get_episode is not linked to a view');
       const episode = await read(listener.mcpUrl, DEV_TOKENS.alice, uri);
-      expect(uri).toBe(`ui://sha256/${sha256(episode.text)}.html`);
+      expect(uri).toBe(`ui://views/view.${sha256(episode.text).slice(0, 32)}.html`);
       const withoutPolicy = episode.text
         .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '')
         .replace(/<script type="application\/json" id="saga-content-policy">[\s\S]*?<\/script>/, '');

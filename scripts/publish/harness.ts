@@ -31,7 +31,7 @@ afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 let listener: Listener;
 export const viewHtml = fs.readFileSync(path.join(FIXTURE, 'build', 'view.html'), 'utf8');
 beforeAll(async () => {
-  listener = await startListener({ html: viewHtml, verifier: { verifyAccessToken: () => Promise.reject(new Error('this fixture is public')) }, authorize: async () => true, port: 0 });
+  listener = await startListener({ filename: 'view.html', html: viewHtml, verifier: { verifyAccessToken: () => Promise.reject(new Error('this fixture is public')) }, authorize: async () => true, port: 0 });
 });
 afterAll(async () => listener.close());
 
@@ -106,7 +106,15 @@ export function wire(rewrite?: (method: string, response: Response) => Promise<R
       }
       methods.push(method);
       const response = await fetch(listener.statusUrl, sent);
-      return rewrite === undefined ? response : rewrite(method, response);
+      if (rewrite === undefined) return response;
+      // Synthetic mutations edit JSON-RPC values, independently of whether the real listener
+      // delivered that value as JSON or as the terminal message of a legacy SSE exchange.
+      if (response.headers.get('content-type')?.startsWith('text/event-stream')) {
+        const messages = (await response.text()).split('\n').filter((line) => line.startsWith('data: ')).map((line) => JSON.parse(line.slice(6)));
+        const terminal = messages.find((message) => 'result' in message || 'error' in message);
+        return rewrite(method, new Response(JSON.stringify(terminal), { status: response.status, headers: { 'content-type': 'application/json' } }));
+      }
+      return rewrite(method, response);
     },
   };
 }

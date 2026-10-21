@@ -29,10 +29,10 @@ export interface CardResource {
   readonly csp: ViewCsp;
 }
 
-export function cardResource(builtHtml: string, policy: ContentPolicy): CardResource {
+export function cardResource(builtHtml: string, policy: ContentPolicy, filename: string): CardResource {
   const html = embedPolicy(builtHtml, policy);
   return {
-    uri: viewUriForHtml(html),
+    uri: viewUriForHtml(html, filename),
     html,
     // The origins the policy allows for images and fonts are the only declarations; the data: and blob: baseline needs none.
     csp: { ...CLOSED_VIEW_CSP, resourceDomains: policy.resource.resourceDomains },
@@ -43,10 +43,10 @@ export function cardResource(builtHtml: string, policy: ContentPolicy): CardReso
  * Builds an MCP server for one built page (`builtHtml`, as the build wrote it) under the content policy
  * created from `policyConfiguration` (`createContentPolicy` rejects an invalid one, and so does this).
  */
-export function createCardServer(builtHtml: string, settings: { readonly policyConfiguration: unknown; readonly answer: AnswerFunction }): McpServer {
+export function createCardServer(builtHtml: string, settings: { readonly filename: string; readonly policyConfiguration: unknown; readonly answer: AnswerFunction }): McpServer {
   const created = createContentPolicy(settings.policyConfiguration);
   if (!created.ok) throw new Error(created.failure.message);
-  const view = cardResource(builtHtml, created.policy);
+  const view = cardResource(builtHtml, created.policy, settings.filename);
   const server = new McpServer({ name: 'react-card-consumer', version: '0.0.0' });
   registerPublicOperation(server, {
     name: 'answer_question',

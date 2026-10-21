@@ -99,11 +99,11 @@ type ServerModule = typeof Pack1Server;
 const ALICE = { token: 't', clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId: 'acct-alice' } };
 
 /** Connects to the rebuilt server, as an application's listener would, and reads the view its tool names. */
-async function servedView(serverFile: string, html: string): Promise<{ uri: string; html: string }> {
+async function servedView(serverFile: string, html: string, filename: string): Promise<{ uri: string; html: string }> {
   const server = (await import(pathToFileURL(serverFile).href)) as ServerModule;
   const host = await startTestHost({
     jsonResponse: true,
-    buildServer: () => server.createNotesServer({ html, backend: server.createFixtureBackend() }),
+    buildServer: () => server.createNotesServer({ html, filename, backend: server.createFixtureBackend() }),
     authenticate: (credential) => (credential === undefined ? undefined : ALICE),
   });
   try {
@@ -168,13 +168,13 @@ export async function rehearseTransition(options: RehearsalOptions): Promise<Reh
       assertInstalledTarballs(`The ${stage.name} build of the ${consumer} consumer`, identity.packedTarballSha256, byName);
       const pageBytes = fs.readFileSync(path.join(root, consumer, recipe.page));
       const serverFile = path.join(root, consumer, 'server.mjs');
-      const served = await servedView(serverFile, pageBytes.toString('utf8'));
-      const isTheBuiltPage = served.uri === viewUriForHtml(pageBytes) && Buffer.from(served.html, 'utf8').equals(pageBytes);
-      if (!isTheBuiltPage) throw new Error(`The ${stage.name} stage's ${consumer} server serves ${served.uri}, not the view it was rebuilt with (${viewUriForHtml(pageBytes)}). Rebuild the view from this install and restart the server so it serves that view.`);
+      const served = await servedView(serverFile, pageBytes.toString('utf8'), recipe.page);
+      const isTheBuiltPage = served.uri === viewUriForHtml(pageBytes, recipe.page) && Buffer.from(served.html, 'utf8').equals(pageBytes);
+      if (!isTheBuiltPage) throw new Error(`The ${stage.name} stage's ${consumer} server serves ${served.uri}, not the view it was rebuilt with (${viewUriForHtml(pageBytes, recipe.page)}). Rebuild the view from this install and restart the server so it serves that view.`);
       built[consumer] = {
         installedPackages: identity.installedPackages,
         installedTarballSha256: identity.packedTarballSha256,
-        page: { uri: viewUriForHtml(pageBytes), sha256: sha256Hex(pageBytes) },
+        page: { uri: viewUriForHtml(pageBytes, recipe.page), sha256: sha256Hex(pageBytes) },
         server: serverDigests(fs.readFileSync(serverFile)),
         served: { uri: served.uri, isTheBuiltPage },
       };
