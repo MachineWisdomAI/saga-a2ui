@@ -439,7 +439,7 @@ Tests: `src/mcp/subscriptions-view.test.ts` ("host teardown of the subscriptions
 
 ### Standard descriptions (POL1)
 
-Episode descriptions are read as Markdown under one trusted, immutable content policy chosen by the application. This section is Standard (POL1); Strict and the reader's Show images control follow in [POL2](#strict-descriptions-and-show-images-pol2). One new runtime dependency: `markdown-it` 15.0.2 (MIT; notices in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)). No MCP-UI, CopilotKit, AG-UI or Ora package is used. A2UI's optional `@a2ui/markdown-it` peer stays uninstalled; SAGA uses `markdown-it` directly so it controls the token set.
+Episode descriptions are read as Markdown under one trusted, immutable content policy chosen by the application. This section is Standard (POL1); Strict and the reader's Show images control follow in [POL2](#strict-descriptions-and-show-images-pol2). One new runtime dependency: `markdown-it` 15.0.3 (MIT; notices in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)). No MCP-UI, CopilotKit, AG-UI or Ora package is used. A2UI's optional `@a2ui/markdown-it` peer stays uninstalled; SAGA uses `markdown-it` directly so it controls the token set.
 
     npm run build && npm run serve:mcp   # the default policy; PORT=… overrides the port
 
@@ -1221,7 +1221,7 @@ Both pages and both servers come from the same application source. The two bundl
 | Zod | Zod 3 only as core's `zod3` alias (`npm:zod@3.25.76`, for A2UI catalog schemas); Zod 4.6.7 in `components` and `mcp` |
 | MCP set | `@modelcontextprotocol/client`, `core`, `server` 2.3.1 and `ext-apps` 2.0.3, all in `mcp` and nowhere else |
 | Between SDK packages | range `*` in the repository, resolved by installing the packed copy; any other form (`workspace:`, `file:`, `link:`, a path, a URL) fails. Since PACK2 the packed copy pins the exact candidate version instead of `*` |
-| Optional components | `lit` and `react` name `@saga-a2ui/components` only as an optional peer (`*`); `core`, `mcp` and `components` name no renderer; `markdown-it` 15.0.2 belongs to `components` alone |
+| Optional components | `lit` and `react` name `@saga-a2ui/components` only as an optional peer (`*`); `core`, `mcp` and `components` name no renderer; `markdown-it` 15.0.3 belongs to `components` alone |
 | React | peers `react` and `react-dom` 19.3.1 exactly; `./faithful-card.css` is a named export, not a file path |
 | Resources | every `exports` target is a shipped file; every relative import and resource in shipped source resolves inside its own tarball; every bare import is a declared dependency or peer, or a public export of an owned package; no test or support file ships |
 
