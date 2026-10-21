@@ -4,9 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import type { FetchLike } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type {
-  Listener,
-  ListenerOptions,
+import {
+  startListener,
+  type Listener,
+  type ListenerOptions,
 } from '../../templates/lit-node/server/listener.js';
 import {
   buildStarter,
@@ -112,6 +113,39 @@ describe('a ready application', () => {
     expect(run.out).toMatch(
       /OpenAI organization has completed individual or business verification/,
     );
+  });
+
+  it('accepts a nested view when its relative filename matches the deployed resource', async () => {
+    const app = copyFixture();
+    fs.mkdirSync(path.join(app, 'build', 'nested'));
+    fs.renameSync(
+      path.join(app, 'build', 'view.html'),
+      path.join(app, 'build', 'nested', 'view.html'),
+    );
+    editInput(app, (input) => (input.build.views = ['nested/view.html']));
+    const listener = await startListener({
+      filename: 'nested/view.html',
+      html: viewHtml,
+      verifier: {
+        verifyAccessToken: async () => {
+          throw new Error('public fixture');
+        },
+      },
+      authorize: async () => true,
+      port: 0,
+    });
+    try {
+      const run = await check(app, {
+        wire: {
+          methods: [],
+          fetch: (_url, init) => fetch(listener.statusUrl, init),
+        },
+      });
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(run.out).toContain('pass    endpoint.views');
+    } finally {
+      await listener.close();
+    }
   });
 
   it('prepare writes a valid package and a record bound to its digest, naming the publisher and not the operator', async () => {
@@ -395,6 +429,41 @@ describe('inputs that must prevent a ready claim', () => {
       record.findings.find((finding) => finding.id === 'endpoint.views')
         ?.detail,
     ).toMatch(/does not serve view\.html/);
+  });
+
+  it('explains a filename mismatch when the endpoint serves the same bytes under another name', async () => {
+    const { record } = await blocked((app) => {
+      fs.mkdirSync(path.join(app, 'build', 'nested'));
+      fs.renameSync(
+        path.join(app, 'build', 'view.html'),
+        path.join(app, 'build', 'nested', 'view.html'),
+      );
+      editInput(app, (input) => (input.build.views = ['nested/view.html']));
+    }, 'endpoint.views');
+    const detail = record.findings.find(
+      (finding) => finding.id === 'endpoint.views',
+    )?.detail;
+    expect(detail).toMatch(
+      /serves the bytes of nested\/view\.html as ui:\/\/views\/view\./,
+    );
+    expect(detail).toContain(
+      'Use the same relative filename in build.views and viewUriForHtml',
+    );
+    expect(detail).toContain('build.views is relative to build.directory');
+  });
+
+  it('rejects served bytes that disagree with a 32-character URI fingerprint', async () => {
+    const { record } = await blocked(() => undefined, 'endpoint.views', {
+      wire: editing('resources/read', (result) => {
+        result.contents[0].text += '\n<!-- changed served bytes -->';
+      }),
+    });
+    expect(
+      record.findings.find((finding) => finding.id === 'endpoint.views')
+        ?.detail,
+    ).toMatch(
+      /ui:\/\/views\/view\.[0-9a-f]{32}\.html names a digest that is not the digest of the bytes served/,
+    );
   });
 
   it('a missing build', async () => {

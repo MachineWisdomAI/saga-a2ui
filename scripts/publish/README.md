@@ -234,6 +234,9 @@ destructive annotation.
 
 - The build: every view exists inside the build directory, is a regular file, and has a
   content-addressed `ui://views/<filename>.<fingerprint>.html` identity.
+  Each `build.views` entry is relative to `build.directory` and must be the same filename the
+  application passes to `viewUriForHtml`: for example, `nested/answer.html` retains `nested/`
+  in the resource URI. The build directory itself is not part of that name.
 - The endpoint: a public HTTPS URL (no local, internal or IP-literal host). Discovery performs
   `initialize`, `tools/list`, `resources/list` and `resources/read` and never `tools/call`. Each tool
   has a description and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint`. The

@@ -29,6 +29,8 @@ import {
 // (a persistent handler per endpoint, a fresh server per request, modern auto responses) and DNS-rebinding protection on the
 // Host header. Put your own ingress (TLS, a public host name) in front of it, and add that host
 // name through `hostHeaderValidation([...])` instead of localhost-only validation when you deploy.
+// If clients send a remote Origin, also replace `localhostOriginValidation()` with an explicit
+// trusted-origin policy; allowing the Host alone does not allow that Origin.
 //
 // Time: each request's lifetime starts when the request is admitted, before any credential or body
 // wait. This file wires that one deadline into the waits the application owns: authentication, the

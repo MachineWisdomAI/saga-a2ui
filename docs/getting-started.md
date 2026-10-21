@@ -101,6 +101,8 @@ Use **stateless MCP** and **prepare the built view once at startup**. The four m
 
 The Hono target uses the official `@modelcontextprotocol/hono` validation middleware and Hono's Node adapter. Hono supplies routing and middleware; Node remains the runtime. Its routes mount `handler.fetch(c.req.raw, { parsedBody, authInfo })`; Node, Express and Fastify use the official `toNodeHandler` adapter. The application authenticates before invoking the protected handler and reads the body under the request's deadline. All mounting paths pass `parsedBody` explicitly: in the pinned SDK this preserves the original `Request` object in both modern and legacy factories, allowing the endpoint's WeakMap to recover the admitted lifetime through `ctx.requestInfo`.
 
+When deploying behind an ingress, configure both Host and Origin validation for the clients you accept. Allowing a public Host does not make a remote browser Origin pass localhost-only Origin validation; use an explicit trusted-origin policy when accepting those requests.
+
 #### Response modes and slow tools
 
 For modern requests, leave `responseMode` unset (`'auto'`):
@@ -124,6 +126,8 @@ The [2026-07-28 specification](https://modelcontextprotocol.io/specification/202
 - Long-running background work can use the separate `io.modelcontextprotocol/tasks` extension when both application and client support it. The starters do not implement a task workflow.
 - `subscriptions/listen` is an opted-in POST response stream for change notifications. Request progress and logging stay on their own request's response stream. Subscription streams and ordinary long-running SSE responses both hold HTTP connections.
 - The default subscription bus is in-process and `maxSubscriptions` defaults to 1024 per handler. A multi-replica application using notifications needs a shared pub/sub implementation **within the same authorization boundary**. These fixed starter operations publish no change notifications.
+
+The starters' request deadline also applies to response streams (10,000 milliseconds by default). An application adding long-lived subscriptions must choose a stream lifetime policy; keepalives do not bypass the deadline.
 
 To preserve an existing sessionful 2025 deployment, route it explicitly using upstream `isLegacyRequest` ahead of a modern handler configured with `legacy: 'reject'`; that is a separate migration choice.
 

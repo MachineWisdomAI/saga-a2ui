@@ -221,7 +221,6 @@ export async function startListener(
   }
 
   app.all(STATUS_PATH, (c) => {
-    const lifetime = c.get('lifetime');
     return serve(c, status);
   });
 

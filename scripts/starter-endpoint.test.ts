@@ -19,9 +19,7 @@ import { createEndpoint } from '../templates/lit-node/server/endpoint.js';
 const URI = 'ui://synthetic/account-only.html';
 const endpoints: ReturnType<typeof createEndpoint>[] = [];
 const servers: Server[] = [];
-const lifetimes: ReturnType<
-  ReturnType<typeof createServerBudgets>['startRequest']
->[] = [];
+const lifetimes: RequestLifetime[] = [];
 afterEach(async () => {
   await Promise.all(endpoints.splice(0).map((endpoint) => endpoint.close()));
   for (const lifetime of lifetimes.splice(0)) lifetime.finish();

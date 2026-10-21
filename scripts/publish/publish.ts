@@ -305,10 +305,16 @@ function viewFindings(
       (resource) => resource.uri === view.uri,
     );
     if (served === undefined) {
-      if (!partial)
-        problems.push(
-          `The endpoint does not serve ${view.file} (${view.uri}); the deployed application is not this build, or this build is not deployed.`,
+      if (!partial) {
+        const sameBytes = snapshot.resources.find(
+          (resource) => resource.sha256 === view.sha256,
         );
+        problems.push(
+          sameBytes === undefined
+            ? `The endpoint does not serve ${view.file} (${view.uri}); the deployed application is not this build, or this build is not deployed.`
+            : `The endpoint serves the bytes of ${view.file} as ${sameBytes.uri}, but this build expects ${view.uri}. Use the same relative filename in build.views and viewUriForHtml; build.views is relative to build.directory.`,
+        );
+      }
     } else if (served.sha256 !== view.sha256)
       problems.push(
         `The endpoint serves ${served.uri} with different bytes than ${view.file}.`,
