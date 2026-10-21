@@ -4,33 +4,91 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Documentation, artifacts, policy tests and CI routing
+    runs-on: ubuntu-latest
+    outputs:
+      application: ${{ steps.scope.outputs.application }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Test CI paths, renames and conservative fallback
+        run: python3 scripts/test-ci-scope.py
+      - name: Validate tracked Git LFS artifact pointers
+        run: python3 scripts/check-lfs.py
+      - name: Check version enrollment
+        run: python3 scripts/check-version-enrollment.py
+      - name: Test version-policy integration
+        run: python3 scripts/test-version-enrollment.py
+      - name: Select qualification from changed paths
+        id: scope
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci-scope.py --event "$CI_EVENT" --base "$CI_BASE" --head "$CI_HEAD"
+      - name: Set up Node for focused documentation checks
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install root documentation tools without SDK workspaces or lifecycle scripts
+        run: npm ci --workspaces=false --ignore-scripts
+      - name: Check guide commands, snippets, links, tour references and notices
+        run: npm run test:docs
+      - name: Explain selected checks
+        env:
+          CI_SCOPE: ${{ steps.scope.outputs.scope }}
+        run: |
+          echo "Qualification scope: $CI_SCOPE" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Focused documentation, artifact and Python policy checks always run. All other changes and every manual run also retain application and release qualification.' >> "$GITHUB_STEP_SUMMARY"
   app:
+    name: Application types, builds, tests and release qualification
+    needs: changes
+    if: needs.changes.outputs.application == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - name: Install SDK workspace dependencies
+        run: npm ci
       # The Lynx fixture is its own project with its own lockfile, outside the SDK workspace (see README).
-      - run: npm ci --prefix apps/lynx-fixture
-      - run: npx playwright install --with-deps chromium
-      - run: npm install --global pnpm@10.33.0
-      - run: npm run test:pnpm-react
-      - run: npm run verify
+      - name: Install standalone Lynx fixture dependencies
+        run: npm ci --prefix apps/lynx-fixture
+      - name: Install Chromium and system browser dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Install pinned pnpm for external React consumer
+        run: npm install --global pnpm@10.33.0
+      - name: Qualify packed React packages with pnpm
+        run: npm run test:pnpm-react
+      - name: Run guards, types, builds, headless and browser tests
+        run: npm run verify
       # PACK2: pack, install and qualify the release candidate, then keep it as a workflow artifact.
       # Nothing is published: this job has contents: read and holds no registry credential.
-      - run: npm run candidate:pack -- --out candidate-out
+      - name: Pack and qualify complete release candidate
+        run: npm run candidate:pack -- --out candidate-out
       # Install candidate A, update to B and roll back to A as rebuilt applications, running the
       # PACK1 action and lifetime cases against each rebuilt page and server; adds rehearsal.json.
-      - run: npm run candidate:rehearse -- --candidate candidate-out/candidate.json
-      - uses: actions/upload-artifact@v4
+      - name: Rehearse installed candidate update and rollback
+        run: npm run candidate:rehearse -- --candidate candidate-out/candidate.json
+      - name: Retain qualified candidate and rehearsal evidence
+        uses: actions/upload-artifact@v4
         with:
           name: saga-a2ui-candidate-${{ github.sha }}
           path: candidate-out/
