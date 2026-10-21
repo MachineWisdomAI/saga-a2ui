@@ -233,21 +233,17 @@ export function qualifyStarter(
   const textOf = (result: { content?: unknown }): string =>
     JSON.stringify(result.content);
 
-  async function wireCall(
-    url: string,
+  function toolRequest(
     modern: boolean,
     name: string,
-    token?: string,
-  ): Promise<{
-    response: Response;
-    result: { structuredContent?: unknown; isError?: boolean };
-  }> {
-    const response = await fetch(url, {
+    authorization?: string,
+  ): RequestInit {
+    return {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
-        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        ...(authorization === undefined ? {} : { authorization }),
         ...(modern
           ? {
               'MCP-Protocol-Version': '2026-07-28',
@@ -273,7 +269,26 @@ export function qualifyStarter(
             : {}),
         },
       }),
-    });
+    };
+  }
+
+  async function wireCall(
+    url: string,
+    modern: boolean,
+    name: string,
+    token?: string,
+  ): Promise<{
+    response: Response;
+    result: { structuredContent?: unknown; isError?: boolean };
+  }> {
+    const response = await fetch(
+      url,
+      toolRequest(
+        modern,
+        name,
+        token === undefined ? undefined : `Bearer ${token}`,
+      ),
+    );
     const text = await response.text();
     expect(response.status, text).toBe(200);
     const messages = response.headers
@@ -305,38 +320,10 @@ export function qualifyStarter(
             },
           },
         });
-        const pending = fetch(listener.accountUrl, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-            authorization: `Bearer ${TOKEN.a}`,
-            ...(modern
-              ? {
-                  'MCP-Protocol-Version': '2026-07-28',
-                  'Mcp-Method': 'tools/call',
-                  'Mcp-Name': 'get_account',
-                }
-              : {}),
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'tools/call',
-            params: {
-              name: 'get_account',
-              arguments: {},
-              ...(modern
-                ? {
-                    _meta: {
-                      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-                      'io.modelcontextprotocol/clientCapabilities': {},
-                    },
-                  }
-                : {}),
-            },
-          }),
-        }).then(
+        const pending = fetch(
+          listener.accountUrl,
+          toolRequest(modern, 'get_account', `Bearer ${TOKEN.a}`),
+        ).then(
           async (response) => {
             await response.text().catch(() => undefined);
           },
@@ -393,20 +380,7 @@ export function qualifyStarter(
     url: string,
     authorization?: string,
   ): Promise<Response> {
-    return fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        ...(authorization === undefined ? {} : { authorization }),
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'get_account', arguments: {} },
-      }),
-    });
+    return fetch(url, toolRequest(false, 'get_account', authorization));
   }
 
   // ---------------------------------------------------------------------------------------------
