@@ -29,13 +29,18 @@ export interface NotesController {
 }
 
 /** The page's own elements (`view-status`, `read-log`, `holds-pending`, `holds-confirmed`) are the same in every consumer's HTML. */
-export function createNotesController(app: App, surface: NotesSurface): NotesController {
-  const text = (id: string): Element | null => document.querySelector(`[data-testid="${id}"]`);
+export function createNotesController(
+  app: App,
+  surface: NotesSurface,
+): NotesController {
+  const text = (id: string): Element | null =>
+    document.querySelector(`[data-testid="${id}"]`);
   const status = text('view-status');
   const readLog = text('read-log');
   const holdsPending = text('holds-pending');
   const holdsConfirmed = text('holds-confirmed');
-  const say = (sentence: string): void => void (status && (status.textContent = sentence));
+  const say = (sentence: string): void =>
+    void (status && (status.textContent = sentence));
   say(VIEW_TEXT.waiting);
 
   const read: string[] = [];
@@ -55,7 +60,10 @@ export function createNotesController(app: App, surface: NotesSurface): NotesCon
 
   // Each result replaces the notes shown. An error or a result this contract does not accept shows
   // none of it (readNotesResult), and the next valid result shows its own notes again.
-  const show = (result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void => {
+  const show = (result: {
+    readonly isError?: boolean;
+    readonly structuredContent?: unknown;
+  }): void => {
     const shown = readNotesResult(result);
     surface.ingest(notesData(shown.notes));
     say(shown.status);

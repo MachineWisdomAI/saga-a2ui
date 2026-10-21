@@ -19,7 +19,10 @@ export const SKIP_DIRECTORIES = new Set([
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 export function repositoryRoot(cwd: string): string {
-  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd,
+    encoding: 'utf8',
+  });
   if (result.status === 0) {
     const root = (result.stdout ?? '').trim();
     if (root) return root;
@@ -32,7 +35,10 @@ export function isAuthoredTypeScript(fileName: string): boolean {
   return SOURCE_EXTENSIONS.has(path.extname(fileName));
 }
 
-export function walkFiles(root: string, accept: (fileName: string) => boolean): string[] {
+export function walkFiles(
+  root: string,
+  accept: (fileName: string) => boolean,
+): string[] {
   const found: string[] = [];
   function visit(dir: string): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

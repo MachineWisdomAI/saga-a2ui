@@ -1,5 +1,10 @@
 import { planOf, type ActionDefinition } from './definition.js';
-import { emitObservation, Invocation, type InvocationOwner, type Seam } from './invocation.js';
+import {
+  emitObservation,
+  Invocation,
+  type InvocationOwner,
+  type Seam,
+} from './invocation.js';
 import { resolveLimits, type Limits } from './limits.js';
 import { discardOutcome, isThenable } from './thenable.js';
 
@@ -63,7 +68,10 @@ let bindingCount = 0;
 export function createBinding<Event>(
   definition: ActionDefinition<Event>,
   seam: BindingSeam,
-): { readonly binding: ActionBinding; readonly activate: (event: Event) => void } {
+): {
+  readonly binding: ActionBinding;
+  readonly activate: (event: Event) => void;
+} {
   const plan = planOf(definition);
   // Resolved here, once, from two immutable layers: an invocation's clocks cannot change afterwards.
   const limits = resolveLimits(plan.limits, seam.limits ?? {});
@@ -100,7 +108,8 @@ export function createBinding<Event>(
     bindingId: id,
     isDisposed,
     decided(invocation) {
-      if (owner === invocation && !isDisposed() && phase() === 'running') setPhase('settling');
+      if (owner === invocation && !isDisposed() && phase() === 'running')
+        setPhase('settling');
     },
     settled(invocation) {
       unsettled.delete(invocation);
@@ -137,7 +146,11 @@ export function createBinding<Event>(
   };
 
   const ignore = (busy: Invocation<Event>): void => {
-    emitObservation(plan, id, Date.now(), { phase: 'ignored', ignoredReason: 'busy', busyInvocationId: busy.id });
+    emitObservation(plan, id, Date.now(), {
+      phase: 'ignored',
+      ignoredReason: 'busy',
+      busyInvocationId: busy.id,
+    });
   };
 
   const activate = (event: Event): void => {
@@ -152,7 +165,12 @@ export function createBinding<Event>(
       ignore(owner);
       return;
     }
-    const invocation = new Invocation<Event>(plan, invocationOwner, seam, limits);
+    const invocation = new Invocation<Event>(
+      plan,
+      invocationOwner,
+      seam,
+      limits,
+    );
     const replaced = owner;
     owner = invocation;
     replaced?.replaced();

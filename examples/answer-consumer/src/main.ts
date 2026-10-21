@@ -10,7 +10,8 @@ import { createContentView } from './content-view.js';
 // any of them. (The page an MCP host mounts is mcp.html, composed in mcp-main.ts.)
 const params = new URLSearchParams(location.search);
 const brand: BrandName = params.get('brand') === 'harbor' ? 'harbor' : 'nur';
-const answer = params.get('answers') === 'brief' ? briefAnswers : fixtureAnswers;
+const answer =
+  params.get('answers') === 'brief' ? briefAnswers : fixtureAnswers;
 const level = params.get('level') === 'strict' ? 'strict' : 'standard';
 
 const content = createContentView({
@@ -30,4 +31,7 @@ const content = createContentView({
 });
 
 registerFaithfulCard();
-customElements.define('answer-consumer', createAnswerAppElement({ answer, branding: brandings[brand], content }));
+customElements.define(
+  'answer-consumer',
+  createAnswerAppElement({ answer, branding: brandings[brand], content }),
+);

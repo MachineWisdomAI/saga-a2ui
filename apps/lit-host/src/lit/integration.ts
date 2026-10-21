@@ -15,12 +15,20 @@ export class SagaPanelElement extends A2uiLitElement<typeof SagaPanelApi> {
     const props = this.controller?.props;
     if (!props) return nothing;
     const title = String(props.title ?? '');
-    const description = props.description === undefined ? '' : String(props.description);
+    const description =
+      props.description === undefined ? '' : String(props.description);
     return html`<section data-testid="panel">
       <h2 data-testid="panel-title">${title}</h2>
-      ${description
-        ? html`<div data-testid="panel-description"><saga-faithful-card-content .contractVersion=${1} .markdown=${description}></saga-faithful-card-content></div>`
-        : nothing}
+      ${
+        description
+          ? html`<div data-testid="panel-description">
+              <saga-faithful-card-content
+                .contractVersion=${1}
+                .markdown=${description}
+              ></saga-faithful-card-content>
+            </div>`
+          : nothing
+      }
     </section>`;
   }
 }
@@ -32,12 +40,22 @@ const SagaPanel: LitComponentApi = {
 };
 
 /** Application-owned catalog: one component, no functions. */
-export const sagaCatalog = new Catalog<LitComponentApi>(SAGA_CATALOG_ID, 'v0.9', [SagaPanel]);
+export const sagaCatalog = new Catalog<LitComponentApi>(
+  SAGA_CATALOG_ID,
+  'v0.9',
+  [SagaPanel],
+);
 
 /**
  * Explicit setup: defines the catalog's custom element and the card element it uses.
  * Call once at startup; repeating it is harmless. Nothing registers at import time.
  */
 export function registerLitElements(): void {
-  defineElements([SagaPanel, { tagName: 'saga-faithful-card-content', element: FaithfulCardContentElement }]);
+  defineElements([
+    SagaPanel,
+    {
+      tagName: 'saga-faithful-card-content',
+      element: FaithfulCardContentElement,
+    },
+  ]);
 }

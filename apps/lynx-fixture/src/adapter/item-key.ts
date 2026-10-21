@@ -27,17 +27,27 @@ type Source =
  * version-sensitive copy: `readLive` is compared with the renderer's resolved prop in the browser
  * tests so a divergence shows.
  */
-export function resolveBindingPath(path: string, dataContextPath: string | undefined): string {
+export function resolveBindingPath(
+  path: string,
+  dataContextPath: string | undefined,
+): string {
   if (path === '') return path;
   if (path.startsWith('/')) return path;
-  return dataContextPath === undefined || dataContextPath === '' ? `/${path}` : `${dataContextPath}/${path}`;
+  return dataContextPath === undefined || dataContextPath === ''
+    ? `/${path}`
+    : `${dataContextPath}/${path}`;
 }
 
 /** Where the property's value comes from now, read from the raw component the surface holds. */
 function sourceOf(where: Where, prop: string): Source {
-  const component = where.surface.components.get(where.componentId) as Record<string, unknown> | undefined;
+  const component = where.surface.components.get(where.componentId) as
+    Record<string, unknown> | undefined;
   const raw = component?.[prop];
-  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+  if (
+    typeof raw === 'string' ||
+    typeof raw === 'number' ||
+    typeof raw === 'boolean'
+  ) {
     return { kind: 'literal', value: raw };
   }
   if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
@@ -48,7 +58,12 @@ function sourceOf(where: Where, prop: string): Source {
       const resolved = resolveBindingPath(path, where.dataContextPath);
       if (resolved === '') return { kind: 'unreadable' };
       // `getSignal` registers an empty signal for an absent path; the store tolerates that.
-      return { kind: 'signal', signal: where.surface.store.getSignal(resolved) as unknown as SignalLike };
+      return {
+        kind: 'signal',
+        signal: where.surface.store.getSignal(
+          resolved,
+        ) as unknown as SignalLike,
+      };
     }
   }
   return { kind: 'unreadable' };
@@ -63,7 +78,11 @@ export function readLive(where: Where, prop: string): unknown {
 }
 
 export type WatchEvent =
-  | { readonly type: 'signal'; readonly value: unknown; readonly counted: boolean }
+  | {
+      readonly type: 'signal';
+      readonly value: unknown;
+      readonly counted: boolean;
+    }
   | { readonly type: 'resource'; readonly moved: boolean }
   | { readonly type: 'follow'; readonly from: string; readonly to: string };
 
@@ -101,9 +120,11 @@ export class ItemWatch {
     this.stop();
     this.#where = where;
     this.#prop = prop;
-    this.#offResource = where.surface.resources.get(where.componentId)?.subscribe(() => {
-      this.observe({ type: 'resource', moved: this.reconcile() });
-    });
+    this.#offResource = where.surface.resources
+      .get(where.componentId)
+      ?.subscribe(() => {
+        this.observe({ type: 'resource', moved: this.reconcile() });
+      });
     this.reconcile();
   }
 
@@ -153,7 +174,11 @@ export class ItemWatch {
           return;
         }
       }
-      this.observe({ type: 'signal', value, counted: !Object.is(this.#seen, value) && this.#seen !== UNSET });
+      this.observe({
+        type: 'signal',
+        value,
+        counted: !Object.is(this.#seen, value) && this.#seen !== UNSET,
+      });
       this.#record(value);
     });
     live = true;

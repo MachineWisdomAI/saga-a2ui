@@ -27,7 +27,10 @@ function recordingPlayer(): Recorded {
       return new Promise((resolve) => void (release = resolve));
     },
     pause: () => (player.calls.push('pause'), Promise.resolve()),
-    resume: () => (player.calls.push('resume'), Promise.resolve('resumed' as const)),
+    resume: () => (
+      player.calls.push('resume'),
+      Promise.resolve('resumed' as const)
+    ),
     stop: () => void player.calls.push('stop'),
     onEnded: (listener) => void (ended = listener),
     holdNextStart() {
@@ -124,7 +127,9 @@ describe('the player owner’s leases', () => {
     const lease = owner.begin();
     owner.begin();
 
-    await expect(owner.start(lease, bytes)).rejects.toBeInstanceOf(LeaseEndedError);
+    await expect(owner.start(lease, bytes)).rejects.toBeInstanceOf(
+      LeaseEndedError,
+    );
     await expect(owner.pause(lease)).rejects.toBeInstanceOf(LeaseEndedError);
     await expect(owner.resume(lease)).rejects.toBeInstanceOf(LeaseEndedError);
   });

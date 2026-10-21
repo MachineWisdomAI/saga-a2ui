@@ -52,7 +52,9 @@ test('the view HTML is one self-contained document without server code or creden
 });
 
 test('the Lit application and host-fixture bundles contain no server code or credentials', async () => {
-  const files = (await builtFiles(builtUrl(''))).filter((path) => /\.(js|html)$/.test(path));
+  const files = (await builtFiles(builtUrl(''))).filter((path) =>
+    /\.(js|html)$/.test(path),
+  );
   expect(files.length).toBeGreaterThan(0);
   for (const path of files) {
     const text = await readFile(path, 'utf8');
@@ -68,7 +70,9 @@ test('the answer view is one self-contained document without server code or cred
   // It renders through the SDK's Lit binding with its own catalog, and carries nothing of the
   // panel catalog, its Markdown policy or any optional component.
   expect(html).toContain('answer-card');
-  expect(html).not.toMatch(/saga-panel|saga-description|FaithfulCard|html_block/); // html_block: markdown-it rule
+  expect(html).not.toMatch(
+    /saga-panel|saga-description|FaithfulCard|html_block/,
+  ); // html_block: markdown-it rule
 });
 
 test('the player view is one self-contained document with no server code, credential or per-user value', async () => {
@@ -79,9 +83,20 @@ test('the player view is one self-contained document with no server code, creden
   // constructs one. (The optional description card brings the upstream A2UI Lit renderer along, whose
   // unused media components contain `<audio` and `<video` template text, so the check is on the
   // document's markup and on construction rather than on every character of the script.)
-  expect(html.replace(/<script\b[\s\S]*?<\/script>/gi, '')).not.toMatch(/<audio|<video|<source/i);
-  expect(html).not.toMatch(/new Audio\(|createElement\(["'`](?:audio|video|source)["'`]\)/);
-  expect(violations(html, ['createPlaybackServer', 'createMediaService', 'node:crypto', 'playback:play'])).toEqual([]);
+  expect(html.replace(/<script\b[\s\S]*?<\/script>/gi, '')).not.toMatch(
+    /<audio|<video|<source/i,
+  );
+  expect(html).not.toMatch(
+    /new Audio\(|createElement\(["'`](?:audio|video|source)["'`]\)/,
+  );
+  expect(
+    violations(html, [
+      'createPlaybackServer',
+      'createMediaService',
+      'node:crypto',
+      'playback:play',
+    ]),
+  ).toEqual([]);
   // The only thing signed in the view is a proof, and its key is generated at run time.
   expect(html).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
 });

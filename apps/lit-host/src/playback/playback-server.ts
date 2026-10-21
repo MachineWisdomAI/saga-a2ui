@@ -1,7 +1,20 @@
-import { McpServer, type CallToolResult, type ServerContext } from '@modelcontextprotocol/server';
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import {
+  McpServer,
+  type CallToolResult,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { calculateJwkThumbprint } from 'jose';
-import { throwIfEnded, valueOrThrow, type BoundedScope, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import {
+  throwIfEnded,
+  valueOrThrow,
+  type BoundedScope,
+  type RequestLifetime,
+} from '@saga-a2ui/mcp/server';
 import { identityFromAuthInfo } from '../mcp/request-auth.js';
 import type { ViewSessionLabeler } from '../mcp/subscriptions-server.js';
 import type { EntitlementDecision, MediaService } from './media-service.js';
@@ -41,7 +54,11 @@ export interface EpisodeRecord {
 export interface PlaybackBackend {
   findEpisode(episodeId: string): EpisodeRecord | undefined;
   /** `signal` aborts when the lookup is abandoned (its budget, the request's deadline or the caller). */
-  checkEntitlement(accountId: string, episodeId: string, signal: AbortSignal): Promise<EntitlementDecision>;
+  checkEntitlement(
+    accountId: string,
+    episodeId: string,
+    signal: AbortSignal,
+  ): Promise<EntitlementDecision>;
 }
 
 export interface PlaybackServerOptions {
@@ -63,9 +80,17 @@ export interface PlaybackServerOptions {
  * for the media origin and nothing else: no script, style, image, media element or frame origin.
  */
 const viewCsp = (mediaOrigin: string) =>
-  ({ connectDomains: [mediaOrigin], resourceDomains: [], frameDomains: [], baseUriDomains: [] }) as const;
+  ({
+    connectDomains: [mediaOrigin],
+    resourceDomains: [],
+    frameDomains: [],
+    baseUriDomains: [],
+  }) as const;
 
-const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
+const failure = (text: string) => ({
+  isError: true as const,
+  content: [{ type: 'text' as const, text }],
+});
 
 /**
  * Runs one tool's whole handler as a bounded operation of the request. Expiry, the caller's
@@ -80,7 +105,9 @@ async function boundedHandler(
   work: (scope: BoundedScope) => Promise<CallToolResult>,
 ): Promise<CallToolResult> {
   const { lifetime } = options;
-  const outcome = await lifetime.run('handler', work, { upstream: ctx.mcpReq.signal });
+  const outcome = await lifetime.run('handler', work, {
+    upstream: ctx.mcpReq.signal,
+  });
   if (outcome.ok) return outcome.value;
   lifetime.record(outcome.cause);
   return failure(PLAYBACK_UNAVAILABLE_TEXT);
@@ -90,8 +117,13 @@ async function boundedHandler(
  * One app-only Play operation. `visibility: ['app']` makes the host offer it to the embedded
  * view and withhold it from the model's tool list.
  */
-export function createPlaybackServer(options: PlaybackServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-a2ui-playback-demo', version: '0.0.0' });
+export function createPlaybackServer(
+  options: PlaybackServerOptions,
+): McpServer {
+  const server = new McpServer({
+    name: 'saga-a2ui-playback-demo',
+    version: '0.0.0',
+  });
 
   // The input is a strict object, so a forged `accountId` is rejected instead of dropped.
   // `registerAppTool` also writes the legacy flat `ui/resourceUri` key that older hosts read.
@@ -100,9 +132,15 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
     PLAY_TOOL_NAME,
     {
       title: 'Play episode',
-      description: 'Starts foreground playback of one episode for the signed-in listener.',
+      description:
+        'Starts foreground playback of one episode for the signed-in listener.',
       inputSchema: PlayRequestSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
       _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI, visibility: ['app'] } },
     },
     async ({ episodeId }, ctx) => {
@@ -112,7 +150,9 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
 
       // Routing is checked before any protected work: without a usable recipient key the view
       // cannot receive a bound capability, so nothing is looked up or fetched.
-      const recipient = RecipientKeySchema.safeParse(ctx.mcpReq._meta?.[RECIPIENT_KEY_META]);
+      const recipient = RecipientKeySchema.safeParse(
+        ctx.mcpReq._meta?.[RECIPIENT_KEY_META],
+      );
       if (!recipient.success) return failure(PLAYBACK_UNSUPPORTED_TEXT);
 
       return boundedHandler(options, ctx, async (scope) => {
@@ -120,24 +160,45 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
         // handler as an exception: a backend failure is a fixed sentence, and so is a contract fault.
         try {
           const decision = valueOrThrow(
-            await scope.run('authorization', (stage) => options.backend.checkEntitlement(identity.accountId, episodeId, stage.signal)),
+            await scope.run('authorization', (stage) =>
+              options.backend.checkEntitlement(
+                identity.accountId,
+                episodeId,
+                stage.signal,
+              ),
+            ),
           );
           const episode = options.backend.findEpisode(episodeId);
-          if (decision !== 'entitled' || !episode) return failure(PLAYBACK_DENIED_TEXT);
+          if (decision !== 'entitled' || !episode)
+            return failure(PLAYBACK_DENIED_TEXT);
 
           // The public fields are validated before a capability exists, so a record that breaks the
           // contract leaves no issued-but-undelivered grant behind.
-          const shown = ViewEpisodeSchema.parse({ episodeId: episode.id, title: episode.title });
+          const shown = ViewEpisodeSchema.parse({
+            episodeId: episode.id,
+            title: episode.title,
+          });
           const { kty, crv, x, y } = recipient.data;
-          const recipientThumbprint = await calculateJwkThumbprint({ kty, crv, x, y });
+          const recipientThumbprint = await calculateJwkThumbprint({
+            kty,
+            crv,
+            x,
+            y,
+          });
           // The lookup above may have answered after this handler was abandoned. No capability is
           // issued for a request the gate has closed.
           throwIfEnded(scope);
-          const issued = options.mediaService.issue({ accountId: identity.accountId, episodeId, recipientThumbprint });
+          const issued = options.mediaService.issue({
+            accountId: identity.accountId,
+            episodeId,
+            recipientThumbprint,
+          });
 
           // Two projections, each built field by field and validated before serialization. Only
           // the view's, in `_meta`, carries the capability.
-          const forModel = ModelPlaybackSchema.parse({ text: PLAYBACK_AUTHORIZED_TEXT });
+          const forModel = ModelPlaybackSchema.parse({
+            text: PLAYBACK_AUTHORIZED_TEXT,
+          });
           const forView = ViewPlaybackSchema.parse({
             episodeId: shown.episodeId,
             title: shown.title,
@@ -146,9 +207,13 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
             capability: issued.capability,
             expiresAt: issued.expiresAt,
           });
-          return { content: [{ type: 'text', text: forModel.text }], _meta: { [PLAYBACK_RESULT_META]: forView } };
+          return {
+            content: [{ type: 'text', text: forModel.text }],
+            _meta: { [PLAYBACK_RESULT_META]: forView },
+          };
         } catch (error) {
-          if (error instanceof ZodError) return failure(PLAYBACK_INVALID_RESULT_TEXT);
+          if (error instanceof ZodError)
+            return failure(PLAYBACK_INVALID_RESULT_TEXT);
           throw error; // an ended scope or a failed dependency: the bounded handler records the cause and answers unavailable
         }
       });
@@ -163,10 +228,16 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
     OPEN_TOOL_NAME,
     {
       title: 'Open playable episode',
-      description: 'Shows one episode with a Play control. Playing it needs a signed-in listener with access.',
+      description:
+        'Shows one episode with a Play control. Playing it needs a signed-in listener with access.',
       inputSchema: PlayRequestSchema,
       outputSchema: OpenedEpisodeSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       _meta: { ui: { resourceUri: PLAYBACK_VIEW_URI } },
     },
     async ({ episodeId }, ctx) => {
@@ -182,18 +253,37 @@ export function createPlaybackServer(options: PlaybackServerOptions): McpServer 
             description: episode.description,
             viewSession: options.labelViewSession(identity.signInId),
           });
-          return { content: [{ type: 'text', text: `${opened.title} (${opened.episodeId})` }], structuredContent: opened };
+          return {
+            content: [
+              { type: 'text', text: `${opened.title} (${opened.episodeId})` },
+            ],
+            structuredContent: opened,
+          };
         } catch (error) {
-          if (error instanceof ZodError) return failure(PLAYBACK_INVALID_RESULT_TEXT);
+          if (error instanceof ZodError)
+            return failure(PLAYBACK_INVALID_RESULT_TEXT);
           throw error;
         }
       });
     },
   );
 
-  registerAppResource(server, 'Playback view', PLAYBACK_VIEW_URI, {}, async () => ({
-    contents: [{ uri: PLAYBACK_VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: options.viewHtml, _meta: { ui: { csp: viewCsp(options.mediaOrigin) } } }],
-  }));
+  registerAppResource(
+    server,
+    'Playback view',
+    PLAYBACK_VIEW_URI,
+    {},
+    async () => ({
+      contents: [
+        {
+          uri: PLAYBACK_VIEW_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: options.viewHtml,
+          _meta: { ui: { csp: viewCsp(options.mediaOrigin) } },
+        },
+      ],
+    }),
+  );
 
   return server;
 }

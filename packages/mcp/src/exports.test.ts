@@ -14,7 +14,10 @@ interface Bundled {
   readonly code: string;
 }
 
-async function bundle(specifier: string, target: 'node' | 'browser'): Promise<Bundled> {
+async function bundle(
+  specifier: string,
+  target: 'node' | 'browser',
+): Promise<Bundled> {
   // Resolve the way an installed consumer does: through the package name and its exports map.
   const entry = fileURLToPath(import.meta.resolve(specifier));
   const result = await build({
@@ -31,15 +34,20 @@ async function bundle(specifier: string, target: 'node' | 'browser'): Promise<Bu
       rollupOptions: { external: target === 'node' ? [/^node:/] : [] },
     },
   });
-  const outputs = (Array.isArray(result) ? result : [result]).flatMap((one) => ('output' in one ? one.output : []));
-  const chunks = outputs.flatMap((output) => (output.type === 'chunk' ? [output] : []));
+  const outputs = (Array.isArray(result) ? result : [result]).flatMap((one) =>
+    'output' in one ? one.output : [],
+  );
+  const chunks = outputs.flatMap((output) =>
+    output.type === 'chunk' ? [output] : [],
+  );
   return {
     modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)),
     code: chunks.map((chunk) => chunk.code).join('\n'),
   };
 }
 
-const RENDERER = /node_modules\/(lit|lit-html|lit-element|@lit|@a2ui|react|react-dom)\//;
+const RENDERER =
+  /node_modules\/(lit|lit-html|lit-element|@lit|@a2ui|react|react-dom)\//;
 const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 
 describe('package subpath exports', () => {
@@ -57,15 +65,28 @@ describe('package subpath exports', () => {
       'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
-    expect(Object.keys(policy).sort()).toEqual(['CLOSED_VIEW_CSP', 'DEFAULT_OPERATION_MS', 'DEFAULT_REQUEST_MS', 'startBoundedTimer']);
+    expect(Object.keys(policy).sort()).toEqual([
+      'CLOSED_VIEW_CSP',
+      'DEFAULT_OPERATION_MS',
+      'DEFAULT_REQUEST_MS',
+      'startBoundedTimer',
+    ]);
   });
 
   it('expose the request-budget seam to a consumer through the package export', () => {
-    const budgets: server.ServerBudgets = server.createServerBudgets({ operationMs: 1_000 });
-    const lifetime: server.RequestLifetime = budgets.forRoute({ requestMs: 2_000 }).startRequest();
+    const budgets: server.ServerBudgets = server.createServerBudgets({
+      operationMs: 1_000,
+    });
+    const lifetime: server.RequestLifetime = budgets
+      .forRoute({ requestMs: 2_000 })
+      .startRequest();
     try {
-      expect([lifetime.operationMs, lifetime.requestMs]).toEqual([1_000, 2_000]);
-      expect(() => server.createServerBudgets({ requestMs: 0 })).toThrow(server.BudgetConfigurationError);
+      expect([lifetime.operationMs, lifetime.requestMs]).toEqual([
+        1_000, 2_000,
+      ]);
+      expect(() => server.createServerBudgets({ requestMs: 0 })).toThrow(
+        server.BudgetConfigurationError,
+      );
     } finally {
       lifetime.finish();
     }
@@ -73,18 +94,30 @@ describe('package subpath exports', () => {
 
   it('keep the server export free of any renderer, view or application code', async () => {
     const { modules, code } = await bundle('@saga-a2ui/mcp/server', 'node');
-    expect(modules.some((id) => id.endsWith('/packages/mcp/src/server/operation.ts'))).toBe(true); // the graph was really walked
+    expect(
+      modules.some((id) =>
+        id.endsWith('/packages/mcp/src/server/operation.ts'),
+      ),
+    ).toBe(true); // the graph was really walked
     expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
-    expect(modules.filter((id) => id.includes('/packages/mcp/src/view/'))).toEqual([]);
+    expect(
+      modules.filter((id) => id.includes('/packages/mcp/src/view/')),
+    ).toEqual([]);
     expect(modules.filter((id) => id.includes('/apps/'))).toEqual([]);
     expect(code).not.toMatch(/\bdocument\./);
   });
 
   it('keep the view export free of any server module, Node built-in or renderer', async () => {
     const { modules, code } = await bundle('@saga-a2ui/mcp/view', 'browser');
-    expect(modules.some((id) => id.endsWith('/packages/mcp/src/view/index.ts'))).toBe(true);
-    expect(modules.filter((id) => SERVER_ONLY.test(id) || RENDERER.test(id))).toEqual([]);
-    expect(modules.filter((id) => id.includes('/packages/mcp/src/server/'))).toEqual([]);
+    expect(
+      modules.some((id) => id.endsWith('/packages/mcp/src/view/index.ts')),
+    ).toBe(true);
+    expect(
+      modules.filter((id) => SERVER_ONLY.test(id) || RENDERER.test(id)),
+    ).toEqual([]);
+    expect(
+      modules.filter((id) => id.includes('/packages/mcp/src/server/')),
+    ).toEqual([]);
     expect(code).not.toMatch(/node:[a-z_/]+/);
   });
 

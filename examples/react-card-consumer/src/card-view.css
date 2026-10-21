@@ -3,7 +3,9 @@
  * the card's CSS custom properties, its trusted artwork and its trusted font; nothing here and nothing
  * in an answer can change which artwork or font those are.
  */
-body { margin: 0; }
+body {
+  margin: 0;
+}
 
 .card-app {
   max-width: 42rem;
@@ -27,7 +29,11 @@ body { margin: 0; }
   background-size: auto 100%;
 }
 
-.card-artwork { display: block; height: 2rem; width: auto; }
+.card-artwork {
+  display: block;
+  height: 2rem;
+  width: auto;
+}
 
 .card-title {
   margin: 0;
@@ -35,4 +41,7 @@ body { margin: 0; }
   font-family: var(--brand-title-family, system-ui, sans-serif);
 }
 
-.card-status { min-height: 1.5em; margin-block: 0.5rem; }
+.card-status {
+  min-height: 1.5em;
+  margin-block: 0.5rem;
+}

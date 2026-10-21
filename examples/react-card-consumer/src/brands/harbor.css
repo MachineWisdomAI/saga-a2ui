@@ -18,4 +18,6 @@
   --brand-title-family: 'HarborMark', Georgia, serif;
 }
 
-.card-banner { background-image: url('../../assets/harbor-mark.svg'); }
+.card-banner {
+  background-image: url('../../assets/harbor-mark.svg');
+}

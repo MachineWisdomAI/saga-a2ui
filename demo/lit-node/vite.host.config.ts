@@ -8,5 +8,9 @@ export default defineConfig({
   root: path.resolve('host'),
   base: './',
   plugins: [viteSingleFile()],
-  build: { outDir: path.resolve('dist/host'), emptyOutDir: true, target: 'es2022' }, // the page awaits its configuration at the top level
+  build: {
+    outDir: path.resolve('dist/host'),
+    emptyOutDir: true,
+    target: 'es2022',
+  }, // the page awaits its configuration at the top level
 });

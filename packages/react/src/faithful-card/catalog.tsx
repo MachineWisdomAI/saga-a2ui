@@ -1,4 +1,8 @@
-import { createComponentImplementation, type NodeViewProps, type ReactComponentImplementation } from '@a2ui/react/v0_9';
+import {
+  createComponentImplementation,
+  type NodeViewProps,
+  type ReactComponentImplementation,
+} from '@a2ui/react/v0_9';
 import { FaithfulCardApi } from '@saga-a2ui/components/faithful-card';
 import { createContext, useCallback, useContext } from 'react';
 import { CardContent } from './card.js';
@@ -7,9 +11,12 @@ import { CardContent } from './card.js';
 const NodeLiveContext = createContext<() => boolean>(() => true);
 
 /** Wraps an entry's generated view with what only the node knows: whether it has been disposed. */
-function withNodeLiveness(implementation: ReactComponentImplementation): ReactComponentImplementation {
+function withNodeLiveness(
+  implementation: ReactComponentImplementation,
+): ReactComponentImplementation {
   const Inner = implementation.view;
-  if (!Inner) throw new Error('withNodeLiveness needs an entry with a generated view');
+  if (!Inner)
+    throw new Error('withNodeLiveness needs an entry with a generated view');
   const View = (props: NodeViewProps) => {
     // The resolver disposes a node synchronously, possibly before React has unmounted its view, so a
     // control that is still on screen asks the node rather than trusting that it was rendered.
@@ -33,6 +40,12 @@ function withNodeLiveness(implementation: ReactComponentImplementation): ReactCo
 export const faithfulCardEntry: ReactComponentImplementation = withNodeLiveness(
   createComponentImplementation(FaithfulCardApi, ({ props }) => {
     const isLive = useContext(NodeLiveContext);
-    return <CardContent contractVersion={props.contractVersion} markdown={props.markdown} isLive={isLive} />;
+    return (
+      <CardContent
+        contractVersion={props.contractVersion}
+        markdown={props.markdown}
+        isLive={isLive}
+      />
+    );
   }),
 );

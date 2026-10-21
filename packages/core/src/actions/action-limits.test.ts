@@ -35,13 +35,30 @@ afterEach(() => {
 const never = (): Promise<void> => new Promise<void>(() => undefined);
 
 /** Not numbers a bound can be: every one is refused, wherever it is supplied. */
-const badValues: readonly unknown[] = [0, -1, -0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '5', '', null, true, {}, [5], () => 5];
+const badValues: readonly unknown[] = [
+  0,
+  -1,
+  -0.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  '5',
+  '',
+  null,
+  true,
+  {},
+  [5],
+  () => 5,
+];
 
 /**
  * When the work deadline decided the outcome and when a stalled failure hook was given up on, for a
  * handler and a failure hook that never settle. Both are read from the observer's own clock.
  */
-async function bounds(overrides: Limits, instance: Limits | undefined): Promise<{ deadlineMs: number | undefined; hookMs: number | undefined }> {
+async function bounds(
+  overrides: Limits,
+  instance: Limits | undefined,
+): Promise<{ deadlineMs: number | undefined; hookMs: number | undefined }> {
   const events: ObservedEvent[] = [];
   const action = Action.local<Press>('measure')
     .run(never)
@@ -49,13 +66,21 @@ async function bounds(overrides: Limits, instance: Limits | undefined): Promise<
     .observe((event) => void events.push(event))
     .onFailure(never)
     .build();
-  rig(action, { ...(instance === undefined ? {} : { limits: instance }) }).control.press();
+  rig(action, {
+    ...(instance === undefined ? {} : { limits: instance }),
+  }).control.press();
   await elapse(200_000);
   const decided = events.find((event) => event.phase === 'outcome-decided');
-  const gaveUp = events.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'onFailure');
+  const gaveUp = events.find(
+    (event) =>
+      event.phase === 'cleanup-error' && event.cleanupStep === 'onFailure',
+  );
   return {
     deadlineMs: decided?.elapsedMs,
-    hookMs: gaveUp === undefined || decided === undefined ? undefined : gaveUp.elapsedMs - decided.elapsedMs,
+    hookMs:
+      gaveUp === undefined || decided === undefined
+        ? undefined
+        : gaveUp.elapsedMs - decided.elapsedMs,
   };
 }
 
@@ -83,14 +108,18 @@ describe('an action declared without any limit', () => {
     await elapse(1);
     expect(binding.state.phase).toBe('idle');
 
-    const steps = events.filter((event) => event.phase === 'cleanup-error').map((event) => [event.cleanupStep, event.elapsedMs]);
+    const steps = events
+      .filter((event) => event.phase === 'cleanup-error')
+      .map((event) => [event.cleanupStep, event.elapsedMs]);
     expect(steps).toEqual([
       ['onFailure', 35_000],
       ['release', 40_000],
       ['onFinally', 45_000],
     ]);
     // No whole-invocation cap: the invocation outlasted 35 seconds because every step has its own budget.
-    expect(events.find((event) => event.phase === 'finished')?.elapsedMs).toBe(45_000);
+    expect(events.find((event) => event.phase === 'finished')?.elapsedMs).toBe(
+      45_000,
+    );
   });
 
   it('gives a server action the same defaults, and its request the time left on the 30,000 ms work deadline', async () => {
@@ -120,13 +149,21 @@ describe('an action declared without any limit', () => {
     expect(requests[0]?.options?.timeout).toBe(20_000);
 
     await elapse(20_000);
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
   });
 
   it('keeps a synchronous action synchronous, with no timer left behind', () => {
     const ran: string[] = [];
     const action = Action.local<Press>('sync')
-      .atActivation(({ scope }) => scope.own('lease', () => void ran.push('release')))
+      .atActivation(({ scope }) =>
+        scope.own('lease', () => void ran.push('release')),
+      )
       .run(() => void ran.push('run'))
       .onSuccess(() => void ran.push('success'))
       .onFinally(() => void ran.push('finally'))
@@ -143,7 +180,8 @@ describe('an action declared without any limit', () => {
   it('ends the wait at the original work deadline however long prerequisites and the handler keep making progress', async () => {
     const outcomes: Outcome<unknown>[] = [];
     const late: string[] = [];
-    const step = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const step = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
     const steady = prerequisite('steady', async () => {
       await step(20_000);
       return proceed();
@@ -163,7 +201,13 @@ describe('an action declared without any limit', () => {
     control.press();
     await elapse(60_000);
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(late).toEqual(['finished:false']); // the late result revived nothing
   });
 
@@ -187,7 +231,13 @@ describe('an action declared without any limit', () => {
     await settle();
 
     expect(shown).toEqual([]);
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
   });
 
   it('answers current() false once the work deadline has passed by the clock, before its timer is delivered', async () => {
@@ -234,7 +284,13 @@ describe('an action declared without any limit', () => {
     await settle();
 
     expect(ran).toEqual([]);
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
   });
 
   it('counts the work deadline from the end of the activation prefix, not from the first wait', async () => {
@@ -257,7 +313,13 @@ describe('an action declared without any limit', () => {
     expect(outcomes).toEqual([]);
     await elapse(1);
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
   });
 
   it('releases a resource acquired after the invocation ended within the resolved hook budget', async () => {
@@ -266,7 +328,12 @@ describe('an action declared without any limit', () => {
     const action = Action.local<Press>('late-lease')
       .run(async ({ scope }) => {
         // The acquisition starts while the invocation is active; its token arrives after the invocation ended.
-        await scope.acquire(() => lateAcquire.promise, () => never()).catch(() => undefined);
+        await scope
+          .acquire(
+            () => lateAcquire.promise,
+            () => never(),
+          )
+          .catch(() => undefined);
       })
       .observe((event) => void observed.push(event))
       .build();
@@ -277,7 +344,10 @@ describe('an action declared without any limit', () => {
     lateAcquire.resolve('go');
     await elapse(700);
 
-    const stalled = observed.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'release');
+    const stalled = observed.find(
+      (event) =>
+        event.phase === 'cleanup-error' && event.cleanupStep === 'release',
+    );
     expect(stalled).toBeDefined();
     expect(stalled!.elapsedMs).toBe(700);
   });
@@ -316,7 +386,13 @@ describe('an action declared without any limit', () => {
     expect(binding.state.phase).toBe('running');
     await elapse(1);
 
-    expect(events.find((event) => event.phase === 'outcome-decided')).toMatchObject({ status: 'failed', failureKind: 'timeout', elapsedMs: longMs });
+    expect(
+      events.find((event) => event.phase === 'outcome-decided'),
+    ).toMatchObject({
+      status: 'failed',
+      failureKind: 'timeout',
+      elapsedMs: longMs,
+    });
     expect(binding.state.phase).not.toBe('running');
   });
 
@@ -337,7 +413,10 @@ describe('an action declared without any limit', () => {
     await elapse(longMs - firstSpanMs - 1);
 
     const decided = events.find((event) => event.phase === 'outcome-decided');
-    const gaveUp = events.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'onFailure');
+    const gaveUp = events.find(
+      (event) =>
+        event.phase === 'cleanup-error' && event.cleanupStep === 'onFailure',
+    );
     expect(gaveUp).toBeDefined();
     expect(gaveUp!.elapsedMs - decided!.elapsedMs).toBe(longMs);
   });
@@ -347,7 +426,12 @@ describe('an action declared without any limit', () => {
     const lateAcquire = gate<string>();
     const action = Action.local<Press>('long-late-lease')
       .run(async ({ scope }) => {
-        await scope.acquire(() => lateAcquire.promise, () => never()).catch(() => undefined);
+        await scope
+          .acquire(
+            () => lateAcquire.promise,
+            () => never(),
+          )
+          .catch(() => undefined);
       })
       .observe((event) => void observed.push(event))
       .build();
@@ -357,10 +441,18 @@ describe('an action declared without any limit', () => {
     binding.dispose();
     lateAcquire.resolve('go');
     await elapse(firstSpanMs + 1);
-    expect(observed.some((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'release')).toBe(false);
+    expect(
+      observed.some(
+        (event) =>
+          event.phase === 'cleanup-error' && event.cleanupStep === 'release',
+      ),
+    ).toBe(false);
     await elapse(longMs - firstSpanMs - 1);
 
-    const stalled = observed.find((event) => event.phase === 'cleanup-error' && event.cleanupStep === 'release');
+    const stalled = observed.find(
+      (event) =>
+        event.phase === 'cleanup-error' && event.cleanupStep === 'release',
+    );
     expect(stalled?.elapsedMs).toBe(longMs);
   });
 
@@ -381,18 +473,53 @@ describe('an action declared without any limit', () => {
 describe('each limit resolves on its own: action override, then the instance configuration, then the default', () => {
   it.each([
     ['nothing configured', {}, undefined, 30_000, 5_000],
-    ['an action overriding hookMs under an instance setting deadlineMs', { hookMs: 2_000 }, { deadlineMs: 45_000 }, 45_000, 2_000],
-    ['an action overriding hookMs with no instance setting', { hookMs: 2_000 }, undefined, 30_000, 2_000],
-    ['an action overriding both over an instance setting both', { deadlineMs: 1_000, hookMs: 700 }, { deadlineMs: 45_000, hookMs: 3_000 }, 1_000, 700],
-    ['an action overriding deadlineMs only', { deadlineMs: 1_000 }, { deadlineMs: 45_000, hookMs: 3_000 }, 1_000, 3_000],
+    [
+      'an action overriding hookMs under an instance setting deadlineMs',
+      { hookMs: 2_000 },
+      { deadlineMs: 45_000 },
+      45_000,
+      2_000,
+    ],
+    [
+      'an action overriding hookMs with no instance setting',
+      { hookMs: 2_000 },
+      undefined,
+      30_000,
+      2_000,
+    ],
+    [
+      'an action overriding both over an instance setting both',
+      { deadlineMs: 1_000, hookMs: 700 },
+      { deadlineMs: 45_000, hookMs: 3_000 },
+      1_000,
+      700,
+    ],
+    [
+      'an action overriding deadlineMs only',
+      { deadlineMs: 1_000 },
+      { deadlineMs: 45_000, hookMs: 3_000 },
+      1_000,
+      3_000,
+    ],
     ['an instance setting hookMs only', {}, { hookMs: 700 }, 30_000, 700],
-    ['an instance setting both', {}, { deadlineMs: 12_345, hookMs: 678 }, 12_345, 678],
+    [
+      'an instance setting both',
+      {},
+      { deadlineMs: 12_345, hookMs: 678 },
+      12_345,
+      678,
+    ],
   ] as const)('%s', async (_name, overrides, instance, deadlineMs, hookMs) => {
     expect(await bounds(overrides, instance)).toEqual({ deadlineMs, hookMs });
   });
 
   it('treats an omitted or undefined setting as inherited, never as an instruction to disable a bound', async () => {
-    expect(await bounds({ deadlineMs: undefined, hookMs: undefined }, { deadlineMs: undefined, hookMs: 900 })).toEqual({
+    expect(
+      await bounds(
+        { deadlineMs: undefined, hookMs: undefined },
+        { deadlineMs: undefined, hookMs: 900 },
+      ),
+    ).toEqual({
       deadlineMs: 30_000,
       hookMs: 900,
     });
@@ -406,7 +533,9 @@ describe('each limit resolves on its own: action override, then the instance con
         return new Promise<ServerReply>(() => undefined);
       },
     };
-    const inherits = Action.server<Press>('inherits', transport).run(({ call }) => call('t', {})).build();
+    const inherits = Action.server<Press>('inherits', transport)
+      .run(({ call }) => call('t', {}))
+      .build();
     const overrides = Action.server<Press>('overrides', transport)
       .run(({ call }) => call('t', {}))
       .limits({ deadlineMs: 8_000 })
@@ -424,7 +553,10 @@ describe('each limit resolves on its own: action override, then the instance con
       callServerTool(_request, options) {
         return new Promise<ServerReply>((_resolve, reject) => {
           const own = Math.min(options?.timeout ?? Infinity, 3_000); // the transport's own, shorter request limit
-          setTimeout(() => reject(new DOMException('request timed out', 'TimeoutError')), own);
+          setTimeout(
+            () => reject(new DOMException('request timed out', 'TimeoutError')),
+            own,
+          );
         });
       },
     };
@@ -483,7 +615,10 @@ describe('instances are isolated and their configuration is a snapshot', () => {
     await elapse(60_000);
 
     const decidedAt = (bindingId: string) =>
-      events.find((event) => event.bindingId === bindingId && event.phase === 'outcome-decided')?.elapsedMs;
+      events.find(
+        (event) =>
+          event.bindingId === bindingId && event.phase === 'outcome-decided',
+      )?.elapsedMs;
     expect(decidedAt(first.binding.id)).toBe(1_000);
     expect(decidedAt(second.binding.id)).toBe(30_000); // nothing of the first instance's configuration leaked
   });
@@ -508,8 +643,12 @@ describe('instances are isolated and their configuration is a snapshot', () => {
     declared.hookMs = 60_000;
     await elapse(60_000);
 
-    const decided = events.find((event) => event.phase === 'outcome-decided')?.elapsedMs;
-    const gaveUp = events.find((event) => event.cleanupStep === 'onFailure')?.elapsedMs;
+    const decided = events.find(
+      (event) => event.phase === 'outcome-decided',
+    )?.elapsedMs;
+    const gaveUp = events.find(
+      (event) => event.cleanupStep === 'onFailure',
+    )?.elapsedMs;
     expect(decided).toBe(2_000);
     expect(gaveUp).toBe(2_300);
   });
@@ -527,18 +666,35 @@ describe('instances are isolated and their configuration is a snapshot', () => {
 
 describe('a supplied value is validated where it is supplied, before any activation or effect', () => {
   const place = {
-    'the builder’s deadlineMs': (bad: unknown) => Action.local<Press>('x').run(() => undefined).limits({ deadlineMs: bad } as never),
-    'the builder’s hookMs': (bad: unknown) => Action.local<Press>('x').run(() => undefined).limits({ hookMs: bad } as never),
+    'the builder’s deadlineMs': (bad: unknown) =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits({ deadlineMs: bad } as never),
+    'the builder’s hookMs': (bad: unknown) =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits({ hookMs: bad } as never),
     'a server action’s deadlineMs': (bad: unknown) =>
-      Action.server<Press>('x', { callServerTool: () => never() as never }).run(() => undefined).limits({ deadlineMs: bad } as never),
-    'the instance’s deadlineMs': (bad: unknown) => createInstanceHost({ onSetupError: () => undefined, limits: { deadlineMs: bad } as never }),
-    'the instance’s hookMs': (bad: unknown) => createInstanceHost({ onSetupError: () => undefined, limits: { hookMs: bad } as never }),
-    'snapshotLimits': (bad: unknown) => snapshotLimits({ hookMs: bad } as never),
+      Action.server<Press>('x', { callServerTool: () => never() as never })
+        .run(() => undefined)
+        .limits({ deadlineMs: bad } as never),
+    'the instance’s deadlineMs': (bad: unknown) =>
+      createInstanceHost({
+        onSetupError: () => undefined,
+        limits: { deadlineMs: bad } as never,
+      }),
+    'the instance’s hookMs': (bad: unknown) =>
+      createInstanceHost({
+        onSetupError: () => undefined,
+        limits: { hookMs: bad } as never,
+      }),
+    snapshotLimits: (bad: unknown) => snapshotLimits({ hookMs: bad } as never),
   };
 
   for (const [where, supply] of Object.entries(place)) {
     it(`refuses zero, negatives, NaN, infinities and non-numbers in ${where}`, () => {
-      for (const bad of badValues) expect(() => supply(bad), String(bad)).toThrow(TypeError);
+      for (const bad of badValues)
+        expect(() => supply(bad), String(bad)).toThrow(TypeError);
     });
   }
 
@@ -554,29 +710,60 @@ describe('a supplied value is validated where it is supplied, before any activat
       .limits({ deadlineMs: 1_000, hookMs: 100 })
       .build();
 
-    expect(() => rig(action, { limits: { deadlineMs: 0, hookMs: 50 } })).toThrow(/deadlineMs/);
+    expect(() =>
+      rig(action, { limits: { deadlineMs: 0, hookMs: 50 } }),
+    ).toThrow(/deadlineMs/);
     expect(() => rig(action, { limits: { hookMs: -5 } })).toThrow(/hookMs/);
     expect(calls).toEqual([]);
   });
 
   it('refuses a bad action value even when the instance configuration would have been shadowed by it', () => {
-    expect(() => Action.local<Press>('x').run(() => undefined).limits({ hookMs: Number.NaN })).toThrow(/hookMs/);
-    expect(() => Action.local<Press>('x').run(() => undefined).limits(null as never)).toThrow(TypeError);
-    expect(() => createInstanceHost({ onSetupError: () => undefined, limits: null as never })).toThrow(TypeError);
+    expect(() =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits({ hookMs: Number.NaN }),
+    ).toThrow(/hookMs/);
+    expect(() =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits(null as never),
+    ).toThrow(TypeError);
+    expect(() =>
+      createInstanceHost({
+        onSetupError: () => undefined,
+        limits: null as never,
+      }),
+    ).toThrow(TypeError);
   });
 
   it('accepts a limit of one millisecond and any omitted setting', () => {
-    expect(() => Action.local<Press>('x').run(() => undefined).limits({ hookMs: 1 }).build()).not.toThrow();
-    expect(() => Action.local<Press>('x').run(() => undefined).limits({}).build()).not.toThrow();
-    expect(() => createInstanceHost({ onSetupError: () => undefined })).not.toThrow();
-    expect(() => createInstanceHost({ onSetupError: () => undefined, limits: {} })).not.toThrow();
+    expect(() =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits({ hookMs: 1 })
+        .build(),
+    ).not.toThrow();
+    expect(() =>
+      Action.local<Press>('x')
+        .run(() => undefined)
+        .limits({})
+        .build(),
+    ).not.toThrow();
+    expect(() =>
+      createInstanceHost({ onSetupError: () => undefined }),
+    ).not.toThrow();
+    expect(() =>
+      createInstanceHost({ onSetupError: () => undefined, limits: {} }),
+    ).not.toThrow();
   });
 });
 
 /** The reason a real `AbortSignal.timeout` rejects with, read after its timer ran on the real clock. */
 async function timeoutReason(): Promise<unknown> {
   const signal = AbortSignal.timeout(1);
-  await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  await new Promise<void>((resolve) =>
+    signal.addEventListener('abort', () => resolve(), { once: true }),
+  );
   return signal.reason;
 }
 
@@ -584,7 +771,10 @@ describe('error categories supplement the stage and the failure kind', () => {
   type Define = (report: (outcome: Outcome<unknown>) => void) => unknown;
 
   /** Presses a control bound to the definition `define` builds, and returns the outcome `onFinally` received. */
-  async function run(define: Define, options: { elapseMs?: number } = {}): Promise<Outcome<unknown>> {
+  async function run(
+    define: Define,
+    options: { elapseMs?: number } = {},
+  ): Promise<Outcome<unknown>> {
     const finished = gate<Outcome<unknown>>();
     rig(define((outcome) => finished.resolve(outcome))).control.press();
     await elapse(options.elapseMs ?? 0);
@@ -604,7 +794,9 @@ describe('error categories supplement the stage and the failure kind', () => {
     const original = new Error('token expired');
     const auth = await run(
       failing('auth', () => {
-        throw new ActionError('authentication-required', 'Sign in again', { cause: original });
+        throw new ActionError('authentication-required', 'Sign in again', {
+          cause: original,
+        });
       }),
     );
     const denied = await run(
@@ -613,10 +805,18 @@ describe('error categories supplement the stage and the failure kind', () => {
       }),
     );
 
-    expect(auth).toMatchObject({ status: 'failed', stage: 'running', failure: { kind: 'handler-error', category: 'authentication-required' } });
-    expect(denied).toMatchObject({ status: 'failed', failure: { kind: 'handler-error', category: 'permission-denied' } });
+    expect(auth).toMatchObject({
+      status: 'failed',
+      stage: 'running',
+      failure: { kind: 'handler-error', category: 'authentication-required' },
+    });
+    expect(denied).toMatchObject({
+      status: 'failed',
+      failure: { kind: 'handler-error', category: 'permission-denied' },
+    });
     // The original cause stays inspectable, and nothing was formatted for display.
-    const failure = (auth as Extract<Outcome<unknown>, { status: 'failed' }>).failure as { error: unknown };
+    const failure = (auth as Extract<Outcome<unknown>, { status: 'failed' }>)
+      .failure as { error: unknown };
     expect(failure.error).toBeInstanceOf(ActionError);
     expect((failure.error as ActionError).cause).toBe(original);
   });
@@ -624,8 +824,14 @@ describe('error categories supplement the stage and the failure kind', () => {
   it('falls back to unknown for an error nobody classified, however much it sounds like authentication', async () => {
     const unfamiliar = [
       new Error('401 Unauthorized'),
-      Object.assign(new Error('forbidden'), { status: 403, category: 'authentication-required' }),
-      Object.assign(new Error('unauthorized'), { status: 401, code: 'UNAUTHENTICATED' }),
+      Object.assign(new Error('forbidden'), {
+        status: 403,
+        category: 'authentication-required',
+      }),
+      Object.assign(new Error('unauthorized'), {
+        status: 401,
+        code: 'UNAUTHENTICATED',
+      }),
       'sign in required',
       undefined,
     ];
@@ -635,8 +841,13 @@ describe('error categories supplement the stage and the failure kind', () => {
           throw thrown;
         }),
       );
-      expect(outcome, String(thrown)).toMatchObject({ status: 'failed', failure: { kind: 'handler-error', category: 'unknown' } });
-      expect(((outcome as { failure: { error: unknown } }).failure.error)).toBe(thrown); // the cause is the original value
+      expect(outcome, String(thrown)).toMatchObject({
+        status: 'failed',
+        failure: { kind: 'handler-error', category: 'unknown' },
+      });
+      expect((outcome as { failure: { error: unknown } }).failure.error).toBe(
+        thrown,
+      ); // the cause is the original value
     }
   });
 
@@ -652,27 +863,50 @@ describe('error categories supplement the stage and the failure kind', () => {
   });
 
   it('reads the platform’s own timeout and abort errors as such', async () => {
-    const platform: readonly (readonly [string, () => unknown, ErrorCategory])[] = [
-      ['DOMException TimeoutError', () => new DOMException('timed out', 'TimeoutError'), 'timeout'],
-      ['DOMException AbortError', () => new DOMException('aborted', 'AbortError'), 'canceled'],
-      ['AbortSignal.timeout reason', () => AbortSignal.timeout(0).reason, 'timeout'],
-      ['AbortController.abort reason', () => {
-        const controller = new AbortController();
-        controller.abort();
-        return controller.signal.reason;
-      }, 'canceled'],
+    const platform: readonly (readonly [
+      string,
+      () => unknown,
+      ErrorCategory,
+    ])[] = [
+      [
+        'DOMException TimeoutError',
+        () => new DOMException('timed out', 'TimeoutError'),
+        'timeout',
+      ],
+      [
+        'DOMException AbortError',
+        () => new DOMException('aborted', 'AbortError'),
+        'canceled',
+      ],
+      [
+        'AbortSignal.timeout reason',
+        () => AbortSignal.timeout(0).reason,
+        'timeout',
+      ],
+      [
+        'AbortController.abort reason',
+        () => {
+          const controller = new AbortController();
+          controller.abort();
+          return controller.signal.reason;
+        },
+        'canceled',
+      ],
     ];
     for (const [name, make, category] of platform) {
       // The reason of `AbortSignal.timeout` exists only after the timer ran, so read it on the real clock.
       vi.useRealTimers();
-      const thrown = name === 'AbortSignal.timeout reason' ? await timeoutReason() : make();
+      const thrown =
+        name === 'AbortSignal.timeout reason' ? await timeoutReason() : make();
       vi.useFakeTimers();
       const outcome = await run(
         failing('platform', () => {
           throw thrown;
         }),
       );
-      expect(outcome, name).toMatchObject({ failure: { kind: 'handler-error', category } });
+      expect(outcome, name).toMatchObject({
+        failure: { kind: 'handler-error', category },
+      });
     }
   });
 
@@ -690,14 +924,18 @@ describe('error categories supplement the stage and the failure kind', () => {
           throw thrown;
         }),
       );
-      expect(outcome, String(thrown.name)).toMatchObject({ failure: { kind: 'handler-error', category: 'unknown' } });
+      expect(outcome, String(thrown.name)).toMatchObject({
+        failure: { kind: 'handler-error', category: 'unknown' },
+      });
     }
   });
 
   it('keeps an application’s own classification, even when it wraps a lookalike', async () => {
     const outcome = await run(
       failing('wrapped', () => {
-        throw new ActionError('unavailable', 'Try later', { cause: Object.assign(new Error('x'), { name: 'TimeoutError' }) });
+        throw new ActionError('unavailable', 'Try later', {
+          cause: Object.assign(new Error('x'), { name: 'TimeoutError' }),
+        });
       }),
     );
     expect(outcome).toMatchObject({ failure: { category: 'unavailable' } });
@@ -750,17 +988,31 @@ describe('error categories supplement the stage and the failure kind', () => {
     );
 
     // A refusal is the application's own answer: the reason string is not evidence of authentication.
-    expect(refused).toMatchObject({ stage: 'prerequisites', failure: { kind: 'refused', category: 'application' } });
-    expect(invalid).toMatchObject({ stage: 'input', failure: { kind: 'invalid-input', category: 'validation' } });
-    expect(brokenPrerequisite).toMatchObject({ stage: 'prerequisites', failure: { kind: 'prerequisite-error', category: 'unavailable' } });
-    expect(prerequisiteTimeout).toMatchObject({ stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } });
+    expect(refused).toMatchObject({
+      stage: 'prerequisites',
+      failure: { kind: 'refused', category: 'application' },
+    });
+    expect(invalid).toMatchObject({
+      stage: 'input',
+      failure: { kind: 'invalid-input', category: 'validation' },
+    });
+    expect(brokenPrerequisite).toMatchObject({
+      stage: 'prerequisites',
+      failure: { kind: 'prerequisite-error', category: 'unavailable' },
+    });
+    expect(prerequisiteTimeout).toMatchObject({
+      stage: 'prerequisites',
+      failure: { kind: 'timeout', category: 'timeout' },
+    });
   });
 
   it('does not put a category, a cause or any error text into what the observer receives', async () => {
     const observed: ObservedEvent[] = [];
     const action = Action.local<Press>('observed')
       .run(() => {
-        throw new ActionError('authentication-required', 'SECRET-MESSAGE', { cause: new Error('SECRET-CAUSE') });
+        throw new ActionError('authentication-required', 'SECRET-MESSAGE', {
+          cause: new Error('SECRET-CAUSE'),
+        });
       })
       .onFailure(() => undefined)
       .observe((event) => void observed.push(event))
@@ -771,9 +1023,24 @@ describe('error categories supplement the stage and the failure kind', () => {
 
     expect(JSON.stringify(observed)).not.toContain('SECRET');
     for (const event of observed) {
-      expect(Object.keys(event).every((key) => ['label', 'bindingId', 'invocationId', 'elapsedMs', 'phase', 'status', 'failureKind', 'cleanupStep'].includes(key))).toBe(true);
+      expect(
+        Object.keys(event).every((key) =>
+          [
+            'label',
+            'bindingId',
+            'invocationId',
+            'elapsedMs',
+            'phase',
+            'status',
+            'failureKind',
+            'cleanupStep',
+          ].includes(key),
+        ),
+      ).toBe(true);
     }
-    expect(observed.find((event) => event.phase === 'outcome-decided')).toMatchObject({ failureKind: 'handler-error' });
+    expect(
+      observed.find((event) => event.phase === 'outcome-decided'),
+    ).toMatchObject({ failureKind: 'handler-error' });
   });
 });
 
@@ -781,7 +1048,10 @@ describe('what an outcome says about the server effect', () => {
   interface Sent {
     readonly answer: ReturnType<typeof gate<ServerReply>>;
   }
-  function transportDouble(): { readonly transport: ServerTransport; readonly sent: Sent[] } {
+  function transportDouble(): {
+    readonly transport: ServerTransport;
+    readonly sent: Sent[];
+  } {
     const sent: Sent[] = [];
     return {
       sent,
@@ -794,7 +1064,9 @@ describe('what an outcome says about the server effect', () => {
       },
     };
   }
-  const written: ServerReply = { content: [{ type: 'text', text: 'archived' }] };
+  const written: ServerReply = {
+    content: [{ type: 'text', text: 'archived' }],
+  };
 
   it('keeps a known successful write, and reports only the client step, when the success hook then times out', async () => {
     const { transport, sent } = transportDouble();
@@ -811,7 +1083,15 @@ describe('what an outcome says about the server effect', () => {
     await elapse(5_000 + 10);
 
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', category: 'timeout', result: written } },
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: {
+          kind: 'success-hook-timeout',
+          category: 'timeout',
+          result: written,
+        },
+      },
     ]);
     expect(sent).toHaveLength(1); // nothing was replayed
   });
@@ -834,7 +1114,16 @@ describe('what an outcome says about the server effect', () => {
     await settle();
 
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-error', category: 'unknown', error: viewFailed, result: written } },
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: {
+          kind: 'success-hook-error',
+          category: 'unknown',
+          error: viewFailed,
+          result: written,
+        },
+      },
     ]);
     expect(sent).toHaveLength(1);
   });
@@ -854,7 +1143,13 @@ describe('what an outcome says about the server effect', () => {
     sent[0]?.answer.resolve(written); // the write may well have happened; the client had stopped waiting
 
     await settle();
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(sent).toHaveLength(1);
   });
 
@@ -872,7 +1167,9 @@ describe('what an outcome says about the server effect', () => {
     sent[0]?.answer.resolve(written);
     await settle();
 
-    expect(outcomes).toEqual([{ status: 'canceled', cause: 'disposed', stage: 'running' }]);
+    expect(outcomes).toEqual([
+      { status: 'canceled', cause: 'disposed', stage: 'running' },
+    ]);
     expect(sent).toHaveLength(1);
   });
 });
@@ -880,7 +1177,9 @@ describe('what an outcome says about the server effect', () => {
 describe('what the types guarantee about limits and categories', () => {
   // Never called: these lines are checked by `npm run typecheck`, not at runtime.
   it('accepts hooks, resources and a build without limits, and every limit as optional', () => {
-    const transport: ServerTransport = { callServerTool: () => never() as never };
+    const transport: ServerTransport = {
+      callServerTool: () => never() as never,
+    };
     const compileOnly = (): void => {
       Action.local<Press>('local')
         .atActivation(({ scope }) => scope.own(1, () => undefined))
@@ -894,19 +1193,40 @@ describe('what the types guarantee about limits and categories', () => {
         .run(({ call }) => call('t', {}))
         .onSuccess(() => undefined)
         .build();
-      Action.local<Press>('empty').run(() => 1).limits({}).build();
-      Action.local<Press>('hook-only').run(() => 1).limits({ hookMs: 1 }).build();
-      Action.server<Press>('deadline-only', transport).run(({ call }) => call('t', {})).limits({ deadlineMs: 1 }).build();
-      createInstanceHost({ onSetupError: () => undefined, limits: { hookMs: 1 } });
+      Action.local<Press>('empty')
+        .run(() => 1)
+        .limits({})
+        .build();
+      Action.local<Press>('hook-only')
+        .run(() => 1)
+        .limits({ hookMs: 1 })
+        .build();
+      Action.server<Press>('deadline-only', transport)
+        .run(({ call }) => call('t', {}))
+        .limits({ deadlineMs: 1 })
+        .build();
+      createInstanceHost({
+        onSetupError: () => undefined,
+        limits: { hookMs: 1 },
+      });
 
-      // @ts-expect-error a setting is a number
-      Action.local<Press>('text').run(() => 1).limits({ hookMs: '5' });
-      // @ts-expect-error limits are declared once
-      Action.local<Press>('twice').run(() => 1).limits({}).limits;
-      // @ts-expect-error a hook is registered once
-      Action.local<Press>('hook-twice').run(() => 1).onSuccess(() => undefined).onSuccess;
-      // @ts-expect-error the instance configuration takes numbers
-      createInstanceHost({ onSetupError: () => undefined, limits: { deadlineMs: 'soon' } });
+      Action.local<Press>('text')
+        .run(() => 1)
+        // @ts-expect-error a setting is a number
+        .limits({ hookMs: '5' });
+      Action.local<Press>('twice')
+        .run(() => 1)
+        // @ts-expect-error limits are declared once
+        .limits({}).limits;
+      Action.local<Press>('hook-twice')
+        .run(() => 1)
+        // @ts-expect-error a hook is registered once
+        .onSuccess(() => undefined).onSuccess;
+      createInstanceHost({
+        onSetupError: () => undefined,
+        // @ts-expect-error the instance configuration takes numbers
+        limits: { deadlineMs: 'soon' },
+      });
     };
     expect(compileOnly).toBeTypeOf('function');
   });

@@ -1,5 +1,18 @@
-import { createInstanceHost, snapshotLimits, type InstanceHost, type InstanceView, type Limits } from '@saga-a2ui/core/actions';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createInstanceHost,
+  snapshotLimits,
+  type InstanceHost,
+  type InstanceView,
+  type Limits,
+} from '@saga-a2ui/core/actions';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 /**
  * The host one provider owns, with the sink its setup errors go to. A host is never reused: a
@@ -10,7 +23,9 @@ export interface ActionScope {
   readonly onSetupError: (error: unknown) => void;
 }
 
-export const ActionScopeContext = createContext<ActionScope | undefined>(undefined);
+export const ActionScopeContext = createContext<ActionScope | undefined>(
+  undefined,
+);
 
 /**
  * Owns one host for the subtree it wraps. The host is created in an effect and closed in that
@@ -44,14 +59,21 @@ export function InstanceHostProvider(props: {
   });
   useEffect(() => {
     const onSetupError = (error: unknown): void => sink.current(error);
-    const created: ActionScope = { host: createInstanceHost({ onSetupError, limits }), onSetupError };
+    const created: ActionScope = {
+      host: createInstanceHost({ onSetupError, limits }),
+      onSetupError,
+    };
     setScope(created);
     return () => {
       created.host.close();
       setScope(undefined);
     };
   }, [limits]);
-  return scope ? <ActionScopeContext.Provider value={scope}>{props.children}</ActionScopeContext.Provider> : null;
+  return scope ? (
+    <ActionScopeContext.Provider value={scope}>
+      {props.children}
+    </ActionScopeContext.Provider>
+  ) : null;
 }
 
 /**

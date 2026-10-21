@@ -1,9 +1,20 @@
 import { request } from 'node:http';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { OAuthError, OAuthErrorCode, type AuthInfo } from '@modelcontextprotocol/server';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+} from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
-import { createDevelopmentVerifier, DEV_ACCOUNTS, DEV_TOKENS } from './dev-auth.js';
+import {
+  createDevelopmentVerifier,
+  DEV_ACCOUNTS,
+  DEV_TOKENS,
+} from './dev-auth.js';
 import {
   INVALID_OUTPUT_TEXT,
   INVALID_SUBSCRIPTION_INPUT_TEXT,
@@ -22,7 +33,10 @@ import {
   unknownToolRequest,
 } from './subscriptions-failure-fixture.js';
 import { SUBSCRIPTIONS_SCOPE } from './request-auth.js';
-import type { AccountSubscriptions, SubscriptionBackend } from './subscriptions-server.js';
+import type {
+  AccountSubscriptions,
+  SubscriptionBackend,
+} from './subscriptions-server.js';
 
 // Everything here goes through the real listener over HTTP with real bearer credentials.
 
@@ -33,14 +47,32 @@ const accounts: Readonly<Record<string, AccountSubscriptions>> = {
   [DEV_ACCOUNTS.alice]: {
     displayName: 'Alice',
     subscriptions: [
-      { subscriptionId: 'sub-a1', creator: 'Creator One', tier: 'Gold', status: 'active', cardToken: 'canary-card-a1' } as never,
-      { subscriptionId: 'sub-a2', creator: 'Creator Two', tier: 'Basic', status: 'paused' },
+      {
+        subscriptionId: 'sub-a1',
+        creator: 'Creator One',
+        tier: 'Gold',
+        status: 'active',
+        cardToken: 'canary-card-a1',
+      } as never,
+      {
+        subscriptionId: 'sub-a2',
+        creator: 'Creator Two',
+        tier: 'Basic',
+        status: 'paused',
+      },
     ],
     email: 'canary-alice@example.invalid',
   } as AccountSubscriptions,
   [DEV_ACCOUNTS.bob]: {
     displayName: 'Bob',
-    subscriptions: [{ subscriptionId: 'sub-b1', creator: 'Creator Three', tier: 'Silver', status: 'active' }],
+    subscriptions: [
+      {
+        subscriptionId: 'sub-b1',
+        creator: 'Creator Three',
+        tier: 'Silver',
+        status: 'active',
+      },
+    ],
     email: 'canary-bob@example.invalid',
   } as AccountSubscriptions,
 };
@@ -51,9 +83,13 @@ interface Harness {
   connect(token: string): Promise<Client>;
 }
 
-const cleanup: { listener?: EpisodeListener; clients: Client[] } = { clients: [] };
+const cleanup: { listener?: EpisodeListener; clients: Client[] } = {
+  clients: [],
+};
 
-async function harness(backendAccounts: Readonly<Record<string, unknown>> = accounts): Promise<Harness> {
+async function harness(
+  backendAccounts: Readonly<Record<string, unknown>> = accounts,
+): Promise<Harness> {
   const lookups: string[] = [];
   const backend: SubscriptionBackend = {
     async listSubscriptions(accountId) {
@@ -65,7 +101,11 @@ async function harness(backendAccounts: Readonly<Record<string, unknown>> = acco
     viewHtml: VIEW_HTML,
     catalog: { find: () => undefined },
     port: 0,
-    subscriptions: { viewHtml: VIEW_HTML, backend, verifier: createDevelopmentVerifier() },
+    subscriptions: {
+      viewHtml: VIEW_HTML,
+      backend,
+      verifier: createDevelopmentVerifier(),
+    },
   });
   cleanup.listener = listener;
   return {
@@ -74,9 +114,12 @@ async function harness(backendAccounts: Readonly<Record<string, unknown>> = acco
     async connect(token) {
       const client = new Client({ name: 'test-client', version: '0.0.0' });
       await client.connect(
-        new StreamableHTTPClientTransport(new URL(listener.subscriptionsUrl ?? ''), {
-          requestInit: { headers: { authorization: `Bearer ${token}` } },
-        }),
+        new StreamableHTTPClientTransport(
+          new URL(listener.subscriptionsUrl ?? ''),
+          {
+            requestInit: { headers: { authorization: `Bearer ${token}` } },
+          },
+        ),
       );
       cleanup.clients.push(client);
       return client;
@@ -85,7 +128,11 @@ async function harness(backendAccounts: Readonly<Record<string, unknown>> = acco
 }
 
 afterEach(async () => {
-  await Promise.all(cleanup.clients.splice(0).map((client) => client.close().catch(() => undefined)));
+  await Promise.all(
+    cleanup.clients
+      .splice(0)
+      .map((client) => client.close().catch(() => undefined)),
+  );
   await cleanup.listener?.close();
   cleanup.listener = undefined;
 });
@@ -101,32 +148,55 @@ describe('subscriptions for the verified request identity', () => {
     expect(result.structuredContent).toMatchObject({
       displayName: 'Alice',
       subscriptions: [
-        { subscriptionId: 'sub-a1', creator: 'Creator One', tier: 'Gold', status: 'active' },
-        { subscriptionId: 'sub-a2', creator: 'Creator Two', tier: 'Basic', status: 'paused' },
+        {
+          subscriptionId: 'sub-a1',
+          creator: 'Creator One',
+          tier: 'Gold',
+          status: 'active',
+        },
+        {
+          subscriptionId: 'sub-a2',
+          creator: 'Creator Two',
+          tier: 'Basic',
+          status: 'paused',
+        },
       ],
     });
     const wire = JSON.stringify(result);
     expect(wire).not.toContain('canary');
     expect(wire).not.toContain('Creator Three');
-    expect(Object.keys(result.structuredContent ?? {}).sort()).toEqual(['displayName', 'subscriptions', 'viewSession']);
+    expect(Object.keys(result.structuredContent ?? {}).sort()).toEqual([
+      'displayName',
+      'subscriptions',
+      'viewSession',
+    ]);
   });
 
   it('keeps concurrent users apart', async () => {
     const h = await harness();
-    const [alice, bob] = await Promise.all([h.connect(DEV_TOKENS.alice), h.connect(DEV_TOKENS.bob)]);
+    const [alice, bob] = await Promise.all([
+      h.connect(DEV_TOKENS.alice),
+      h.connect(DEV_TOKENS.bob),
+    ]);
     const results = await Promise.all(
-      Array.from({ length: 24 }, (_, index) => list(index % 2 === 0 ? alice : bob)),
+      Array.from({ length: 24 }, (_, index) =>
+        list(index % 2 === 0 ? alice : bob),
+      ),
     );
     results.forEach((result, index) => {
       const wire = JSON.stringify(result);
       expect(wire).toContain(index % 2 === 0 ? 'Creator One' : 'Creator Three');
-      expect(wire).not.toContain(index % 2 === 0 ? 'Creator Three' : 'Creator One');
+      expect(wire).not.toContain(
+        index % 2 === 0 ? 'Creator Three' : 'Creator One',
+      );
     });
   });
 
   it('ignores an account id forged in the tool arguments', async () => {
     const h = await harness();
-    const result = await list(await h.connect(DEV_TOKENS.alice), { accountId: DEV_ACCOUNTS.bob });
+    const result = await list(await h.connect(DEV_TOKENS.alice), {
+      accountId: DEV_ACCOUNTS.bob,
+    });
     expect(JSON.stringify(result)).toContain('Creator One');
     expect(JSON.stringify(result)).not.toContain('Creator Three');
     expect(h.lookups).toEqual([DEV_ACCOUNTS.alice]);
@@ -136,7 +206,9 @@ describe('subscriptions for the verified request identity', () => {
     const h = await harness();
     const alice = await h.connect(DEV_TOKENS.alice);
     const bob = await h.connect(DEV_TOKENS.bob);
-    const labelOf = async (client: Client) => SubscriptionsResultSchema.parse((await list(client)).structuredContent).viewSession;
+    const labelOf = async (client: Client) =>
+      SubscriptionsResultSchema.parse((await list(client)).structuredContent)
+        .viewSession;
     const label = await labelOf(alice);
     expect(label).toMatch(/^vs_[A-Za-z0-9_-]{22}$/);
     expect(label).not.toContain(DEV_TOKENS.alice);
@@ -149,7 +221,14 @@ describe('subscriptions for the verified request identity', () => {
     const h = await harness({
       [DEV_ACCOUNTS.alice]: {
         displayName: 'Alice',
-        subscriptions: [{ subscriptionId: 's', creator: 'C', tier: 'T', status: 'canary-unsupported-status' }],
+        subscriptions: [
+          {
+            subscriptionId: 's',
+            creator: 'C',
+            tier: 'T',
+            status: 'canary-unsupported-status',
+          },
+        ],
       },
     });
     const result = await list(await h.connect(DEV_TOKENS.alice));
@@ -194,9 +273,21 @@ describe('identity is immutable per request', () => {
         },
         verifier: {
           async verifyAccessToken(token) {
-            const account = token === 'alice-token' ? DEV_ACCOUNTS.alice : token === 'bob-token' ? DEV_ACCOUNTS.bob : undefined;
-            if (!account) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Unknown credential');
-            reused.extra = { accountId: account, signInId: `sign-in-${account}` };
+            const account =
+              token === 'alice-token'
+                ? DEV_ACCOUNTS.alice
+                : token === 'bob-token'
+                  ? DEV_ACCOUNTS.bob
+                  : undefined;
+            if (!account)
+              throw new OAuthError(
+                OAuthErrorCode.InvalidToken,
+                'Unknown credential',
+              );
+            reused.extra = {
+              accountId: account,
+              signInId: `sign-in-${account}`,
+            };
             return reused;
           },
         },
@@ -257,9 +348,15 @@ describe('identity is immutable per request', () => {
 
     expect(bobResponse.status).toBe(200);
     expect(aliceResponse.status).toBe(200);
-    expect(JSON.parse(aliceResponse.text).result.structuredContent.displayName).toBe('Alice');
-    expect(JSON.parse(bobResponse.text).result.structuredContent.displayName).toBe('Bob');
-    expect([...lookups].sort()).toEqual([DEV_ACCOUNTS.alice, DEV_ACCOUNTS.bob].sort());
+    expect(
+      JSON.parse(aliceResponse.text).result.structuredContent.displayName,
+    ).toBe('Alice');
+    expect(
+      JSON.parse(bobResponse.text).result.structuredContent.displayName,
+    ).toBe('Bob');
+    expect([...lookups].sort()).toEqual(
+      [DEV_ACCOUNTS.alice, DEV_ACCOUNTS.bob].sort(),
+    );
   });
 });
 
@@ -281,25 +378,41 @@ describe('protected endpoint credentials', () => {
     });
 
   it.each([
-    ['a missing credential', undefined, /^Bearer realm="saga-a2ui-subscriptions"$/],
+    [
+      'a missing credential',
+      undefined,
+      /^Bearer realm="saga-a2ui-subscriptions"$/,
+    ],
     ['a non-bearer scheme', 'Basic abc', /error="invalid_token"/],
     ['a malformed bearer value', 'Bearer not a token', /error="invalid_token"/],
     ['an unknown token', 'Bearer dev-token-nobody', /error="invalid_token"/],
-    ['an expired token', `Bearer ${DEV_TOKENS.expired}`, /error="invalid_token".*expired/],
-  ])('rejects %s with 401 and a challenge before any backend work', async (_name, header, challenge) => {
-    const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', header);
-    expect(response.status).toBe(401);
-    expect(response.headers.get('www-authenticate')).toMatch(challenge);
-    expect(await response.text()).not.toContain('Creator');
-    expect(h.lookups).toEqual([]);
-  });
+    [
+      'an expired token',
+      `Bearer ${DEV_TOKENS.expired}`,
+      /error="invalid_token".*expired/,
+    ],
+  ])(
+    'rejects %s with 401 and a challenge before any backend work',
+    async (_name, header, challenge) => {
+      const h = await harness();
+      const response = await post(h.listener.subscriptionsUrl ?? '', header);
+      expect(response.status).toBe(401);
+      expect(response.headers.get('www-authenticate')).toMatch(challenge);
+      expect(await response.text()).not.toContain('Creator');
+      expect(h.lookups).toEqual([]);
+    },
+  );
 
   it('rejects a service-only credential with 403 insufficient_scope before any backend work', async () => {
     const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', `Bearer ${DEV_TOKENS.service}`);
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      `Bearer ${DEV_TOKENS.service}`,
+    );
     expect(response.status).toBe(403);
-    expect(response.headers.get('www-authenticate')).toMatch(/error="insufficient_scope"/);
+    expect(response.headers.get('www-authenticate')).toMatch(
+      /error="insufficient_scope"/,
+    );
     expect(h.lookups).toEqual([]);
   });
 
@@ -307,17 +420,27 @@ describe('protected endpoint credentials', () => {
     const h = await harness();
     const response = await fetch(h.listener.subscriptionsUrl ?? '', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     expect(response.status).toBe(401);
   });
 
   it('does not expose the protected path unless the application configured it', async () => {
-    const listener = await startEpisodeListener({ viewHtml: VIEW_HTML, catalog: { find: () => undefined }, port: 0 });
+    const listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+    });
     cleanup.listener = listener;
     expect(listener.subscriptionsUrl).toBeUndefined();
-    const response = await post(new URL('/subscriptions/mcp', listener.url).href, `Bearer ${DEV_TOKENS.alice}`);
+    const response = await post(
+      new URL('/subscriptions/mcp', listener.url).href,
+      `Bearer ${DEV_TOKENS.alice}`,
+    );
     expect(response.status).toBe(404);
   });
 });
@@ -353,23 +476,39 @@ describe('subscription request failures', () => {
       body,
     });
 
-  const toolCall = (id: string | number, name: string, args: Record<string, unknown> = {}) =>
-    JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+  const toolCall = (
+    id: string | number,
+    name: string,
+    args: Record<string, unknown> = {},
+  ) =>
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method: 'tools/call',
+      params: { name, arguments: args },
+    });
 
   it('returns an empty list as a successful read, not an error', async () => {
     const h = await harness({ [DEV_ACCOUNTS.alice]: emptyAccount });
     const result = await list(await h.connect(DEV_TOKENS.alice));
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toMatchObject({ displayName: 'Alice', subscriptions: [] });
+    expect(result.structuredContent).toMatchObject({
+      displayName: 'Alice',
+      subscriptions: [],
+    });
     expect(JSON.stringify(result)).not.toContain(FAILURE_CANARY);
   });
 
   it('rejects invalid business input for the known tool before any backend work', async () => {
     const h = await harness();
-    const result = await list(await h.connect(DEV_TOKENS.alice), { ...invalidBusinessArguments });
+    const result = await list(await h.connect(DEV_TOKENS.alice), {
+      ...invalidBusinessArguments,
+    });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).toContain(INVALID_SUBSCRIPTION_INPUT_TEXT);
-    expect(JSON.stringify(result)).not.toContain(invalidBusinessArguments.status);
+    expect(JSON.stringify(result)).not.toContain(
+      invalidBusinessArguments.status,
+    );
     expect(JSON.stringify(result)).not.toContain(FAILURE_CANARY);
     expect(result.structuredContent).toBeUndefined();
     expect(h.lookups).toEqual([]);
@@ -377,8 +516,15 @@ describe('subscription request failures', () => {
 
   it('answers an unknown tool with a correlated JSON-RPC error and does not run the handler', async () => {
     const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', JSON.stringify(unknownToolRequest));
-    const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      JSON.stringify(unknownToolRequest),
+    );
+    const body = (await response.json()) as {
+      id?: unknown;
+      error?: { code?: number; message?: string };
+      result?: unknown;
+    };
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/json');
     expect(response.headers.get('www-authenticate')).toBeNull();
@@ -393,8 +539,16 @@ describe('subscription request failures', () => {
 
   it('answers a malformed MCP call with a correlated JSON-RPC error, not an HTTP auth failure', async () => {
     const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', JSON.stringify(malformedRequest));
-    const body = await response.json() as { jsonrpc?: string; id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      JSON.stringify(malformedRequest),
+    );
+    const body = (await response.json()) as {
+      jsonrpc?: string;
+      id?: unknown;
+      error?: { code?: number; message?: string };
+      result?: unknown;
+    };
     expect(response.status).toBe(400);
     expect(response.headers.get('www-authenticate')).toBeNull();
     expect(body.jsonrpc).toBe('2.0');
@@ -408,8 +562,15 @@ describe('subscription request failures', () => {
 
   it('answers invalid JSON with a parse error that cannot be correlated, and not a tool result', async () => {
     const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', `{${FAILURE_CANARY}`);
-    const body = await response.json() as { id?: unknown; error?: { code?: number }; result?: unknown };
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      `{${FAILURE_CANARY}`,
+    );
+    const body = (await response.json()) as {
+      id?: unknown;
+      error?: { code?: number };
+      result?: unknown;
+    };
     expect(response.status).toBe(400);
     expect(body.id).toBeNull();
     expect(body.error?.code).toBe(-32700);
@@ -420,17 +581,29 @@ describe('subscription request failures', () => {
 
   it('keeps HTTP authorization separate from those protocol failures', async () => {
     const h = await harness();
-    const response = await post(h.listener.subscriptionsUrl ?? '', toolCall(9, SUBSCRIPTIONS_TOOL_NAME), {}, '');
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      toolCall(9, SUBSCRIPTIONS_TOOL_NAME),
+      {},
+      '',
+    );
     // empty token is still an Authorization header; use a missing header instead
     const missing = await fetch(h.listener.subscriptionsUrl ?? '', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
       body: toolCall(9, SUBSCRIPTIONS_TOOL_NAME),
     });
     expect(response.status).toBe(401);
     expect(missing.status).toBe(401);
     expect(missing.headers.get('www-authenticate')).toMatch(/^Bearer /);
-    const body = await missing.json() as { error?: string; jsonrpc?: string; result?: unknown };
+    const body = (await missing.json()) as {
+      error?: string;
+      jsonrpc?: string;
+      result?: unknown;
+    };
     expect(body.error).toBe('missing_token');
     expect(body.jsonrpc).toBeUndefined();
     expect(body.result).toBeUndefined();
@@ -446,7 +619,11 @@ describe('subscription request failures', () => {
     expect(response.status).toBe(413);
     expect(response.headers.get('content-type')).toContain('application/json');
     expect(response.headers.get('www-authenticate')).toBeNull();
-    const body = await response.json() as { error?: string; jsonrpc?: string; result?: unknown };
+    const body = (await response.json()) as {
+      error?: string;
+      jsonrpc?: string;
+      result?: unknown;
+    };
     expect(body.error).toBe('payload_too_large');
     expect(body.jsonrpc).toBeUndefined();
     expect(body.result).toBeUndefined();
@@ -465,7 +642,10 @@ describe('subscription request failures', () => {
     });
     expect(response.status).toBe(406);
     expect(response.headers.get('www-authenticate')).toBeNull();
-    const body = await response.json() as { error?: string; jsonrpc?: string };
+    const body = (await response.json()) as {
+      error?: string;
+      jsonrpc?: string;
+    };
     expect(body.error).toBe('not_acceptable');
     expect(body.jsonrpc).toBeUndefined();
     expect(h.lookups).toEqual([]);
@@ -491,12 +671,20 @@ describe('subscription request failures', () => {
     cleanup.listener = listener;
     const client = new Client({ name: 'test-client', version: '0.0.0' });
     await client.connect(
-      new StreamableHTTPClientTransport(new URL(listener.subscriptionsUrl ?? ''), {
-        requestInit: { headers: { authorization: `Bearer ${DEV_TOKENS.alice}` } },
-      }),
+      new StreamableHTTPClientTransport(
+        new URL(listener.subscriptionsUrl ?? ''),
+        {
+          requestInit: {
+            headers: { authorization: `Bearer ${DEV_TOKENS.alice}` },
+          },
+        },
+      ),
     );
     cleanup.clients.push(client);
-    const result = await client.callTool({ name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} });
+    const result = await client.callTool({
+      name: SUBSCRIPTIONS_TOOL_NAME,
+      arguments: {},
+    });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
     expect(JSON.stringify(result)).not.toContain(FAILURE_CANARY);
@@ -508,11 +696,20 @@ describe('subscription request failures', () => {
 
   it('filters a valid status without returning other rows', async () => {
     const h = await harness();
-    const result = await list(await h.connect(DEV_TOKENS.alice), { status: 'paused' });
+    const result = await list(await h.connect(DEV_TOKENS.alice), {
+      status: 'paused',
+    });
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toMatchObject({
       displayName: 'Alice',
-      subscriptions: [{ subscriptionId: 'sub-a2', creator: 'Creator Two', tier: 'Basic', status: 'paused' }],
+      subscriptions: [
+        {
+          subscriptionId: 'sub-a2',
+          creator: 'Creator Two',
+          tier: 'Basic',
+          status: 'paused',
+        },
+      ],
     });
     expect(JSON.stringify(result)).not.toContain('Creator One');
   });
@@ -520,14 +717,26 @@ describe('subscription request failures', () => {
   it('rejects too many arguments on a single call and on the same call wrapped in a batch', async () => {
     const h = await harness();
     const args: Record<string, boolean> = {};
-    for (let index = 0; index < SUBSCRIPTION_LIMITS.maxArgumentElements + 1; index += 1) args[`k${index}`] = true;
+    for (
+      let index = 0;
+      index < SUBSCRIPTION_LIMITS.maxArgumentElements + 1;
+      index += 1
+    )
+      args[`k${index}`] = true;
     const single = toolCall(21, SUBSCRIPTIONS_TOOL_NAME, args);
     const responses = await Promise.all([
       post(h.listener.subscriptionsUrl ?? '', single),
-      post(h.listener.subscriptionsUrl ?? '', JSON.stringify([JSON.parse(single)])),
+      post(
+        h.listener.subscriptionsUrl ?? '',
+        JSON.stringify([JSON.parse(single)]),
+      ),
     ]);
     for (const response of responses) {
-      const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+      const body = (await response.json()) as {
+        id?: unknown;
+        error?: { code?: number; message?: string };
+        result?: unknown;
+      };
       expect(response.status).toBe(200);
       expect(body.id).toBe(21);
       expect(body.result).toBeUndefined();
@@ -547,8 +756,15 @@ describe('subscription request failures', () => {
       method: 'tools/call',
       params: { name, arguments: { note: FAILURE_CANARY } },
     };
-    const response = await post(h.listener.subscriptionsUrl ?? '', JSON.stringify([call]));
-    const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+    const response = await post(
+      h.listener.subscriptionsUrl ?? '',
+      JSON.stringify([call]),
+    );
+    const body = (await response.json()) as {
+      id?: unknown;
+      error?: { code?: number; message?: string };
+      result?: unknown;
+    };
     expect(response.status).toBe(200);
     expect(body.id).toBe('batch-unknown');
     expect(body.result).toBeUndefined();
@@ -562,11 +778,24 @@ describe('subscription request failures', () => {
   it('does not run any element when one element of a batch is rejected', async () => {
     const h = await harness();
     const body = JSON.stringify([
-      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} } },
-      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'unknown-tool-canary', arguments: {} } },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: {} },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'unknown-tool-canary', arguments: {} },
+      },
     ]);
     const response = await post(h.listener.subscriptionsUrl ?? '', body);
-    const parsed = await response.json() as { result?: unknown; error?: { message?: string } };
+    const parsed = (await response.json()) as {
+      result?: unknown;
+      error?: { message?: string };
+    };
     expect(parsed.result).toBeUndefined();
     expect(JSON.stringify(parsed)).not.toContain('unknown-tool-canary');
     expect(JSON.stringify(parsed)).not.toContain('Creator');
@@ -579,7 +808,9 @@ describe('subscription request failures', () => {
       h.listener.subscriptionsUrl ?? '',
       JSON.stringify([JSON.parse(toolCall(22, SUBSCRIPTIONS_TOOL_NAME))]),
     );
-    const body = await response.json() as { result?: { structuredContent?: { displayName?: string } } };
+    const body = (await response.json()) as {
+      result?: { structuredContent?: { displayName?: string } };
+    };
     expect(response.status).toBe(200);
     expect(body.result?.structuredContent?.displayName).toBe('Alice');
     expect(h.lookups).toEqual([DEV_ACCOUNTS.alice]);
@@ -589,7 +820,11 @@ describe('subscription request failures', () => {
     const h = await harness();
     const url = new URL(h.listener.subscriptionsUrl ?? '');
     const payload = Buffer.alloc(SUBSCRIPTION_LIMITS.maxRequestBytes + 1, 0x61);
-    const outcome = await new Promise<{ status: number; text: string; error?: string }>((resolve) => {
+    const outcome = await new Promise<{
+      status: number;
+      text: string;
+      error?: string;
+    }>((resolve) => {
       const req = request(
         {
           host: url.hostname,
@@ -604,18 +839,31 @@ describe('subscription request failures', () => {
         },
         (res) => {
           const chunks: Buffer[] = [];
-          res.on('data', (chunk: Buffer | string) => chunks.push(Buffer.from(chunk)));
-          res.on('end', () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }));
+          res.on('data', (chunk: Buffer | string) =>
+            chunks.push(Buffer.from(chunk)),
+          );
+          res.on('end', () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              text: Buffer.concat(chunks).toString('utf8'),
+            }),
+          );
         },
       );
-      req.on('error', (error) => resolve({ status: 0, text: '', error: error.message }));
+      req.on('error', (error) =>
+        resolve({ status: 0, text: '', error: error.message }),
+      );
       req.write(payload.subarray(0, 1024));
       req.write(payload.subarray(1024));
       req.end();
     });
     expect(outcome.error).toBeUndefined();
     expect(outcome.status).toBe(413);
-    const body = JSON.parse(outcome.text) as { error?: string; jsonrpc?: string; result?: unknown };
+    const body = JSON.parse(outcome.text) as {
+      error?: string;
+      jsonrpc?: string;
+      result?: unknown;
+    };
     expect(body.error).toBe('payload_too_large');
     expect(body.jsonrpc).toBeUndefined();
     expect(body.result).toBeUndefined();
@@ -644,15 +892,26 @@ describe('subscription request failures', () => {
       },
     });
     cleanup.listener = listener;
-    const pending = post(listener.subscriptionsUrl ?? '', toolCall(31, SUBSCRIPTIONS_TOOL_NAME));
+    const pending = post(
+      listener.subscriptionsUrl ?? '',
+      toolCall(31, SUBSCRIPTIONS_TOOL_NAME),
+    );
     await expect.poll(() => lookups.length).toBe(1);
     const winner = await Promise.race([
       pending.then((response) => ({ kind: 'response' as const, response })),
-      new Promise<{ kind: 'pending' }>((resolve) => setTimeout(() => resolve({ kind: 'pending' }), 250)),
+      new Promise<{ kind: 'pending' }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'pending' }), 250),
+      ),
     ]);
     expect(winner.kind).toBe('response');
     if (winner.kind !== 'response') return;
-    const body = await winner.response.json() as { result?: { isError?: boolean; structuredContent?: unknown; content?: unknown } };
+    const body = (await winner.response.json()) as {
+      result?: {
+        isError?: boolean;
+        structuredContent?: unknown;
+        content?: unknown;
+      };
+    };
     expect(winner.response.status).toBe(200);
     expect(body.result?.isError).toBe(true);
     expect(JSON.stringify(body)).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
@@ -660,7 +919,14 @@ describe('subscription request failures', () => {
     expect(JSON.stringify(body)).not.toContain(FAILURE_CANARY);
     release({
       displayName: 'Alice',
-      subscriptions: [{ subscriptionId: 'sub-late', creator: FAILURE_CANARY, tier: 'Gold', status: 'active' }],
+      subscriptions: [
+        {
+          subscriptionId: 'sub-late',
+          creator: FAILURE_CANARY,
+          tier: 'Gold',
+          status: 'active',
+        },
+      ],
     });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(JSON.stringify(body)).not.toContain(FAILURE_CANARY);
@@ -686,14 +952,21 @@ describe('subscription request failures', () => {
       },
     });
     cleanup.listener = listener;
-    const pending = post(listener.subscriptionsUrl ?? '', toolCall(32, SUBSCRIPTIONS_TOOL_NAME));
+    const pending = post(
+      listener.subscriptionsUrl ?? '',
+      toolCall(32, SUBSCRIPTIONS_TOOL_NAME),
+    );
     const winner = await Promise.race([
       pending.then((response) => ({ kind: 'response' as const, response })),
-      new Promise<{ kind: 'pending' }>((resolve) => setTimeout(() => resolve({ kind: 'pending' }), 250)),
+      new Promise<{ kind: 'pending' }>((resolve) =>
+        setTimeout(() => resolve({ kind: 'pending' }), 250),
+      ),
     ]);
     expect(winner.kind).toBe('response');
     if (winner.kind !== 'response') return;
-    const body = await winner.response.json() as { result?: { isError?: boolean; structuredContent?: unknown } };
+    const body = (await winner.response.json()) as {
+      result?: { isError?: boolean; structuredContent?: unknown };
+    };
     expect(body.result?.isError).toBe(true);
     expect(JSON.stringify(body)).toContain(SUBSCRIPTIONS_UNAVAILABLE_TEXT);
     expect(body.result?.structuredContent).toBeUndefined();
@@ -704,27 +977,38 @@ describe('subscription request failures', () => {
     const h = await harness();
     const response = await post(
       h.listener.subscriptionsUrl ?? '',
-      toolCall(11, SUBSCRIPTIONS_TOOL_NAME, { status: 'x'.repeat(SUBSCRIPTION_LIMITS.maxArgumentString + 1) }),
+      toolCall(11, SUBSCRIPTIONS_TOOL_NAME, {
+        status: 'x'.repeat(SUBSCRIPTION_LIMITS.maxArgumentString + 1),
+      }),
     );
-    const body = await response.json() as { id?: unknown; error?: { code?: number; message?: string }; result?: unknown };
+    const body = (await response.json()) as {
+      id?: unknown;
+      error?: { code?: number; message?: string };
+      result?: unknown;
+    };
     expect(response.status).toBe(200);
     expect(body.id).toBe(11);
     expect(body.result).toBeUndefined();
     expect(body.error?.code).toBe(-32602);
     expect(body.error?.message).toBe('Invalid params');
-    expect(JSON.stringify(body)).not.toContain('x'.repeat(SUBSCRIPTION_LIMITS.maxArgumentString + 1));
+    expect(JSON.stringify(body)).not.toContain(
+      'x'.repeat(SUBSCRIPTION_LIMITS.maxArgumentString + 1),
+    );
     expect(h.lookups).toEqual([]);
   });
 
   it('rejects a result with too many items at projection and does not publish them', async () => {
     const overflow = {
       displayName: 'Alice',
-      subscriptions: Array.from({ length: SUBSCRIPTION_LIMITS.maxSubscriptions + 1 }, (_, index) => ({
-        subscriptionId: `sub-${index}`,
-        creator: index === 50 ? FAILURE_CANARY : 'Creator',
-        tier: 'Gold',
-        status: 'active',
-      })),
+      subscriptions: Array.from(
+        { length: SUBSCRIPTION_LIMITS.maxSubscriptions + 1 },
+        (_, index) => ({
+          subscriptionId: `sub-${index}`,
+          creator: index === 50 ? FAILURE_CANARY : 'Creator',
+          tier: 'Gold',
+          status: 'active',
+        }),
+      ),
     };
     const h = await harness({ [DEV_ACCOUNTS.alice]: overflow });
     const result = await list(await h.connect(DEV_TOKENS.alice));

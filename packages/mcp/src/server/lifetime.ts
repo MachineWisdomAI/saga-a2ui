@@ -1,4 +1,8 @@
-import { DEFAULT_OPERATION_MS, DEFAULT_REQUEST_MS, startBoundedTimer } from '../policy/index.js';
+import {
+  DEFAULT_OPERATION_MS,
+  DEFAULT_REQUEST_MS,
+  startBoundedTimer,
+} from '../policy/index.js';
 
 // The server request lifetime: one monotonic, absolute request deadline that starts when the
 // adapter admits the request, plus the bounded operations that run inside it. This module is
@@ -32,16 +36,41 @@ export type Effect = 'none' | 'unknown';
  * original error, so it is never copied into caller-visible text.
  */
 export type LifetimeCause =
-  | { readonly kind: 'operation-timeout'; readonly stage: Stage; readonly limitMs: number; readonly effect: Effect }
-  | { readonly kind: 'request-timeout'; readonly stage: Stage | undefined; readonly limitMs: number; readonly effect: Effect }
-  | { readonly kind: 'cancelled'; readonly stage: Stage; readonly effect: Effect }
-  | { readonly kind: 'disconnected'; readonly stage: Stage | undefined; readonly effect: Effect }
+  | {
+      readonly kind: 'operation-timeout';
+      readonly stage: Stage;
+      readonly limitMs: number;
+      readonly effect: Effect;
+    }
+  | {
+      readonly kind: 'request-timeout';
+      readonly stage: Stage | undefined;
+      readonly limitMs: number;
+      readonly effect: Effect;
+    }
+  | {
+      readonly kind: 'cancelled';
+      readonly stage: Stage;
+      readonly effect: Effect;
+    }
+  | {
+      readonly kind: 'disconnected';
+      readonly stage: Stage | undefined;
+      readonly effect: Effect;
+    }
   | { readonly kind: 'auth-refused'; readonly status: 401 | 403 }
-  | { readonly kind: 'dependency-failure'; readonly stage: Stage; readonly effect: Effect; readonly error: unknown }
+  | {
+      readonly kind: 'dependency-failure';
+      readonly stage: Stage;
+      readonly effect: Effect;
+      readonly error: unknown;
+    }
   /** The response finished. Later stages are refused; this is not a cancellation. */
   | { readonly kind: 'completed' };
 
-export type StageResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly cause: LifetimeCause };
+export type StageResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly cause: LifetimeCause };
 
 /** Carries a cause through code that signals failure by throwing; `run` recognizes it and keeps the cause. */
 export class StageFailure extends Error {
@@ -83,23 +112,35 @@ export class BudgetConfigurationError extends Error {
   }
 }
 
-const isBudget = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const isBudget = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 /** Throws before anything runs unless every supplied field is a finite positive number. */
-export function assertBudgetSettings(where: string, settings: BudgetSettings | undefined): void {
+export function assertBudgetSettings(
+  where: string,
+  settings: BudgetSettings | undefined,
+): void {
   if (settings === undefined) return;
-  if (typeof settings !== 'object' || settings === null) throw new BudgetConfigurationError(where, ['settings must be an object']);
+  if (typeof settings !== 'object' || settings === null)
+    throw new BudgetConfigurationError(where, ['settings must be an object']);
   const problems: string[] = [];
   for (const field of ['operationMs', 'requestMs'] as const) {
     const value: unknown = settings[field];
-    if (value !== undefined && !isBudget(value)) problems.push(`${field} must be a finite positive number`);
+    if (value !== undefined && !isBudget(value))
+      problems.push(`${field} must be a finite positive number`);
   }
   if (problems.length > 0) throw new BudgetConfigurationError(where, problems);
 }
 
 const now = (): number => performance.now();
 
-const effectOf = (stage: Stage | undefined): Effect => (stage === undefined || stage === 'admission' || stage === 'authentication' || stage === 'body' ? 'none' : 'unknown');
+const effectOf = (stage: Stage | undefined): Effect =>
+  stage === undefined ||
+  stage === 'admission' ||
+  stage === 'authentication' ||
+  stage === 'body'
+    ? 'none'
+    : 'unknown';
 
 /** Limits for stages that begin inside a scope. */
 export interface RunOptions {
@@ -126,7 +167,11 @@ export interface BoundedScope {
    * aborted. A result that loses the race to a limit, an enclosing deadline or cancellation is dropped.
    * Throws `BudgetConfigurationError` for an invalid `limitMs`, before `work` is called.
    */
-  run<T>(stage: Stage, work: (scope: BoundedScope) => T | PromiseLike<T>, options?: RunOptions): Promise<StageResult<T>>;
+  run<T>(
+    stage: Stage,
+    work: (scope: BoundedScope) => T | PromiseLike<T>,
+    options?: RunOptions,
+  ): Promise<StageResult<T>>;
 }
 
 /** The lifetime of one admitted request, owned by the adapter that admitted it. */
@@ -169,12 +214,20 @@ class Scope implements BoundedScope {
 
   remainingMs(): number {
     const own = this.deadline - now();
-    const remaining = this.parent === undefined ? own : Math.min(own, this.parent.remainingMs());
+    const remaining =
+      this.parent === undefined
+        ? own
+        : Math.min(own, this.parent.remainingMs());
     return Math.max(0, remaining);
   }
 
   protected expiry(): LifetimeCause {
-    return { kind: 'operation-timeout', stage: this.stage ?? 'handler', limitMs: this.limitMs, effect: effectOf(this.stage) };
+    return {
+      kind: 'operation-timeout',
+      stage: this.stage ?? 'handler',
+      limitMs: this.limitMs,
+      effect: effectOf(this.stage),
+    };
   }
 
   /** Marks `stage` as running in the request, so a request timeout can say where it was waiting. */
@@ -194,7 +247,8 @@ class Scope implements BoundedScope {
   /** Ends an ancestor whose deadline has passed but whose timer has not run yet (a starved event loop). */
   check(): LifetimeCause | undefined {
     const chain: Scope[] = [];
-    for (let scope: Scope | undefined = this; scope; scope = scope.parent) chain.unshift(scope);
+    for (let scope: Scope | undefined = this; scope; scope = scope.parent)
+      chain.unshift(scope);
     for (const scope of chain) {
       if (scope.signal.aborted) return scope.reasonOf();
       if (scope.deadline - now() <= 0) {
@@ -206,19 +260,35 @@ class Scope implements BoundedScope {
     return undefined;
   }
 
-  run<T>(stage: Stage, work: (scope: BoundedScope) => T | PromiseLike<T>, options: RunOptions = {}): Promise<StageResult<T>> {
+  run<T>(
+    stage: Stage,
+    work: (scope: BoundedScope) => T | PromiseLike<T>,
+    options: RunOptions = {},
+  ): Promise<StageResult<T>> {
     if (options.limitMs !== undefined && !isBudget(options.limitMs)) {
-      throw new BudgetConfigurationError(`Stage "${stage}"`, ['limitMs must be a finite positive number']);
+      throw new BudgetConfigurationError(`Stage "${stage}"`, [
+        'limitMs must be a finite positive number',
+      ]);
     }
     const refusal = this.check();
     if (refusal) return Promise.resolve({ ok: false, cause: refusal });
     // The work never starts, so nothing about it can be unknown: this is the one cancellation with no effect to wonder about.
-    if (options.upstream?.aborted) return Promise.resolve({ ok: false, cause: { kind: 'cancelled', stage, effect: 'none' } });
+    if (options.upstream?.aborted)
+      return Promise.resolve({
+        ok: false,
+        cause: { kind: 'cancelled', stage, effect: 'none' },
+      });
 
     // Each nested stage resolves its own limit (its override, else the operation limit that applies to the
     // whole request) and is then clamped by every enclosing deadline through the scope chain.
     const limit = options.limitMs ?? this.childLimitMs;
-    const child = new Scope(this, now() + limit, this.childLimitMs, stage, limit);
+    const child = new Scope(
+      this,
+      now() + limit,
+      this.childLimitMs,
+      stage,
+      limit,
+    );
     const leave = this.enter(stage);
     return new Promise<StageResult<T>>((resolve) => {
       let settled = false;
@@ -240,7 +310,8 @@ class Scope implements BoundedScope {
       };
       const fail = (cause: LifetimeCause) => settle({ ok: false, cause });
       const onEnclosingEnded = () => fail(this.reasonOf());
-      const onCancelled = () => fail({ kind: 'cancelled', stage, effect: effectOf(stage) });
+      const onCancelled = () =>
+        fail({ kind: 'cancelled', stage, effect: effectOf(stage) });
       // A timer is only one way a deadline is noticed. Work that blocks the thread, or a continuation that
       // is delivered before the timer, would otherwise be accepted after the budget ran out; so a result,
       // success or failure, is first held against the absolute deadlines.
@@ -249,13 +320,27 @@ class Scope implements BoundedScope {
         settle(overdue ? { ok: false, cause: overdue } : result);
       };
       const errored = (error: unknown) =>
-        accept({ ok: false, cause: error instanceof StageFailure ? error.failure : { kind: 'dependency-failure', stage, effect: effectOf(stage), error } });
+        accept({
+          ok: false,
+          cause:
+            error instanceof StageFailure
+              ? error.failure
+              : {
+                  kind: 'dependency-failure',
+                  stage,
+                  effect: effectOf(stage),
+                  error,
+                },
+        });
 
       this.signal.addEventListener('abort', onEnclosingEnded, { once: true });
       upstream?.addEventListener('abort', onCancelled, { once: true });
       cancelTimer = startBoundedTimer(limit, () => fail(child.expiry()));
       try {
-        Promise.resolve(work(child)).then((value) => accept({ ok: true, value }), errored);
+        Promise.resolve(work(child)).then(
+          (value) => accept({ ok: true, value }),
+          errored,
+        );
         // Synchronous work has returned: if it overran, the stage is over now, whatever the promise says
         // (a later settlement is ignored, and a late rejection is still handled above).
         const overdue = child.check();
@@ -277,7 +362,9 @@ class Root extends Scope implements RequestLifetime {
     readonly requestMs: number,
   ) {
     super(undefined, now() + requestMs, operationMs, undefined, requestMs);
-    this.#cancelTimer = startBoundedTimer(requestMs, () => this.end(this.expiry()));
+    this.#cancelTimer = startBoundedTimer(requestMs, () =>
+      this.end(this.expiry()),
+    );
   }
 
   get cause(): LifetimeCause | undefined {
@@ -290,7 +377,12 @@ class Root extends Scope implements RequestLifetime {
 
   protected override expiry(): LifetimeCause {
     const stage = this.#stages.at(-1);
-    return { kind: 'request-timeout', stage, limitMs: this.requestMs, effect: effectOf(stage) };
+    return {
+      kind: 'request-timeout',
+      stage,
+      limitMs: this.requestMs,
+      effect: effectOf(stage),
+    };
   }
 
   protected override enter(stage: Stage): () => void {
@@ -344,7 +436,10 @@ export interface ServerBudgets extends RequestBudgets {
   forRoute(settings?: BudgetSettings): RequestBudgets;
 }
 
-function requestBudgets(operationMs: number, requestMs: number): RequestBudgets {
+function requestBudgets(
+  operationMs: number,
+  requestMs: number,
+): RequestBudgets {
   return Object.freeze({
     operationMs,
     requestMs,
@@ -365,7 +460,10 @@ export function createServerBudgets(settings?: BudgetSettings): ServerBudgets {
     ...requestBudgets(operationMs, requestMs),
     forRoute(route?: BudgetSettings): RequestBudgets {
       assertBudgetSettings('Route budgets', route);
-      return requestBudgets(route?.operationMs ?? operationMs, route?.requestMs ?? requestMs);
+      return requestBudgets(
+        route?.operationMs ?? operationMs,
+        route?.requestMs ?? requestMs,
+      );
     },
   });
 }

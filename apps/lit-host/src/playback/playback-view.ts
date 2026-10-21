@@ -16,7 +16,11 @@ import {
   type InstanceView,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
-import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
+import {
+  connectToolResultView,
+  type ToolResult,
+  type ToolResultViewConnection,
+} from '@saga-a2ui/mcp/view';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
   MEDIA_PATH_PREFIX,
@@ -32,7 +36,11 @@ import {
   type ViewPlayback,
 } from './playback.js';
 import { createPlayerOwner, type PlaybackLease } from './player-owner.js';
-import { createRecipientKey, signMediaProof, type RecipientKey } from './recipient-proof.js';
+import {
+  createRecipientKey,
+  signMediaProof,
+  type RecipientKey,
+} from './recipient-proof.js';
 
 /** The one foreground player. A seam so the controller is exercised without audio hardware. */
 export interface AudioPlayer {
@@ -65,7 +73,10 @@ export interface AudioPlayer {
 /** What the view presents. Only the state names carry meaning; wording belongs to the presenter. */
 export type PlaybackViewState =
   | { readonly kind: 'no-selection' }
-  | { readonly kind: 'ready' | 'pending' | 'playing' | 'paused' | 'ended'; readonly episode: OpenedEpisode }
+  | {
+      readonly kind: 'ready' | 'pending' | 'playing' | 'paused' | 'ended';
+      readonly episode: OpenedEpisode;
+    }
   | {
       readonly kind:
         | 'resume-blocked'
@@ -164,7 +175,13 @@ type PlayAnswer =
 type Reached = 'nothing-sent' | 'request-sent' | 'grant-known';
 
 /** Why a Play handler stopped, as the application's own typed cause. It carries no capability. */
-type PlayFailureKind = 'denied' | 'unsupported' | 'label-lost' | 'unknown-effect' | 'expired' | 'media-failed';
+type PlayFailureKind =
+  | 'denied'
+  | 'unsupported'
+  | 'label-lost'
+  | 'unknown-effect'
+  | 'expired'
+  | 'media-failed';
 
 const failureCategory: Readonly<Record<PlayFailureKind, ErrorCategory>> = {
   denied: 'permission-denied',
@@ -180,7 +197,11 @@ class PlayFailure extends ActionError {
     readonly failure: PlayFailureKind,
     cause?: unknown,
   ) {
-    super(failureCategory[failure], `Play stopped: ${failure}.`, cause === undefined ? undefined : { cause });
+    super(
+      failureCategory[failure],
+      `Play stopped: ${failure}.`,
+      cause === undefined ? undefined : { cause },
+    );
     this.name = 'PlayFailure';
   }
 }
@@ -208,7 +229,12 @@ type PlayResult =
   /** The handler found itself obsolete; the runtime has decided or will decide cancellation. */
   | { readonly kind: 'abandoned' };
 
-const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set(['pending', 'playing', 'paused', 'resume-blocked']);
+const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set([
+  'pending',
+  'playing',
+  'paused',
+  'resume-blocked',
+]);
 
 /**
  * Presents one episode with a Play control and owns the one foreground player.
@@ -240,7 +266,9 @@ const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set([
  * media URL for that same episode. The sign-in label is freshness only; the server authorizes every
  * Play and every media acquisition. A retry never reuses saved authorization: it makes a new Play.
  */
-export async function connectPlaybackView(deps: PlaybackViewDependencies): Promise<PlaybackViewConnection> {
+export async function connectPlaybackView(
+  deps: PlaybackViewDependencies,
+): Promise<PlaybackViewConnection> {
   const { app } = deps;
   const owner = createPlayerOwner(deps.player);
   let selected: OpenedEpisode | undefined;
@@ -308,7 +336,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   owner.onEnded((lease) => {
     if (!selected || retired() || !owner.isCurrent(lease)) return;
     // While a Play is still starting, the owner remembers the end and the invocation reports it.
-    if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked') present({ kind: 'ended', episode: selected });
+    if (kind === 'playing' || kind === 'paused' || kind === 'resume-blocked')
+      present({ kind: 'ended', episode: selected });
   });
 
   const onOpened = (result: ToolResult) => {
@@ -318,9 +347,19 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     selection = {};
     // Likewise, image consent given for what was shown does not carry to what is about to be.
     deps.contentConsent?.revokeAll();
-    const opened = result.isError ? undefined : OpenedEpisodeSchema.safeParse(result.structuredContent);
-    if (!opened?.success) return clearWith({ kind: 'unavailable', ...(selected ? { episode: selected } : {}) });
-    if (pinnedSession !== undefined && opened.data.viewSession !== pinnedSession) return loseLabel();
+    const opened = result.isError
+      ? undefined
+      : OpenedEpisodeSchema.safeParse(result.structuredContent);
+    if (!opened?.success)
+      return clearWith({
+        kind: 'unavailable',
+        ...(selected ? { episode: selected } : {}),
+      });
+    if (
+      pinnedSession !== undefined &&
+      opened.data.viewSession !== pinnedSession
+    )
+      return loseLabel();
     pinnedSession = opened.data.viewSession;
     selected = opened.data;
     clearWith({ kind: 'ready', episode: opened.data });
@@ -331,15 +370,26 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
    * is the invocation's own checkpoint: it also reads the work deadline's clock, so a proof that
    * finished after the bound (its continuation delivered before the deadline timer) sends nothing.
    */
-  async function acquire(view: ViewPlayback, key: RecipientKey, signal: AbortSignal, current: () => boolean): Promise<Acquisition> {
+  async function acquire(
+    view: ViewPlayback,
+    key: RecipientKey,
+    signal: AbortSignal,
+    current: () => boolean,
+  ): Promise<Acquisition> {
     try {
       if (!current() || signal.aborted) return { kind: 'failed' };
-      const proof = await signMediaProof(key, { capability: view.capability, url: view.mediaUrl });
+      const proof = await signMediaProof(key, {
+        capability: view.capability,
+        url: view.mediaUrl,
+      });
       // The work deadline may have passed, or the Play been retired, while the proof was signed: no
       // request carrying the capability and the proof leaves the view now.
       if (!current() || signal.aborted) return { kind: 'failed' };
       const response = await fetch(view.mediaUrl, {
-        headers: { [CAPABILITY_HEADER]: view.capability, [PROOF_HEADER]: proof },
+        headers: {
+          [CAPABILITY_HEADER]: view.capability,
+          [PROOF_HEADER]: proof,
+        },
         cache: 'no-store',
         credentials: 'omit',
         // The media service never redirects. Following one would carry the capability and the
@@ -356,10 +406,17 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   }
 
   const acceptable = (view: ViewPlayback, episode: OpenedEpisode): boolean => {
-    if (view.episodeId !== episode.episodeId || view.viewSession !== pinnedSession) return false;
+    if (
+      view.episodeId !== episode.episodeId ||
+      view.viewSession !== pinnedSession
+    )
+      return false;
     try {
       const url = new URL(view.mediaUrl);
-      return (url.protocol === 'https:' || url.protocol === 'http:') && url.pathname === `${MEDIA_PATH_PREFIX}${episode.episodeId}`;
+      return (
+        (url.protocol === 'https:' || url.protocol === 'http:') &&
+        url.pathname === `${MEDIA_PATH_PREFIX}${episode.episodeId}`
+      );
     } catch {
       return false;
     }
@@ -372,18 +429,26 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
    * unusable grant does not show that no capability was issued (the server issues one before it
    * finishes building the response), so it is never matched on its wording or its origin.
    */
-  const classifyAnswer = (result: ToolResult, episode: OpenedEpisode): PlayAnswer => {
+  const classifyAnswer = (
+    result: ToolResult,
+    episode: OpenedEpisode,
+  ): PlayAnswer => {
     if (result.isError) {
       const text = result.content?.find((part) => part.type === 'text')?.text;
       if (text === PLAYBACK_DENIED_TEXT) return { kind: 'denied' };
       if (text === PLAYBACK_UNSUPPORTED_TEXT) return { kind: 'unsupported' };
       return { kind: 'unclassified' };
     }
-    const granted = ViewPlaybackSchema.safeParse(result._meta?.[PLAYBACK_RESULT_META]);
+    const granted = ViewPlaybackSchema.safeParse(
+      result._meta?.[PLAYBACK_RESULT_META],
+    );
     if (!granted.success) return { kind: 'unclassified' };
     // A well-formed grant under another label proves the sign-in changed, whatever it names.
-    if (granted.data.viewSession !== pinnedSession) return { kind: 'label-lost' };
-    return acceptable(granted.data, episode) ? { kind: 'grant', grant: granted.data } : { kind: 'unclassified' };
+    if (granted.data.viewSession !== pinnedSession)
+      return { kind: 'label-lost' };
+    return acceptable(granted.data, episode)
+      ? { kind: 'grant', grant: granted.data }
+      : { kind: 'unclassified' };
   };
 
   // The application's seam to its server: the MCP Apps bridge itself. Progress from the host never
@@ -393,34 +458,52 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       app.callServerTool(
         {
           name: request.name,
-          ...(request.arguments === undefined ? {} : { arguments: { ...request.arguments } }),
-          ...(request._meta === undefined ? {} : { _meta: { ...request._meta } }),
+          ...(request.arguments === undefined
+            ? {}
+            : { arguments: { ...request.arguments } }),
+          ...(request._meta === undefined
+            ? {}
+            : { _meta: { ...request._meta } }),
         },
         { ...options, resetTimeoutOnProgress: false },
       ),
   };
 
   /** Selects the item a press acts on, or ignores the press. Runs in the event, before any effect. */
-  const pressable = (allowed: (current: PlaybackViewState['kind']) => boolean): { readonly episode: OpenedEpisode } => {
+  const pressable = (
+    allowed: (current: PlaybackViewState['kind']) => boolean,
+  ): { readonly episode: OpenedEpisode } => {
     if (retired() || !selected || !allowed(kind)) throw new PressIgnored();
     return { episode: selected };
   };
 
   // Prerequisites: a failure of either is a prerequisite-stage failure, and the host call never starts.
   const hostForwardsServerTools = prerequisite('host-server-tools', () =>
-    app.getHostCapabilities()?.serverTools ? proceed() : refuse('the host cannot proxy server tools'),
+    app.getHostCapabilities()?.serverTools
+      ? proceed()
+      : refuse('the host cannot proxy server tools'),
   );
-  const recipientKey = prerequisite('recipient-key', async () => proceed({ key: await createRecipientKey() }));
+  const recipientKey = prerequisite('recipient-key', async () =>
+    proceed({ key: await createRecipientKey() }),
+  );
 
   /** Presents what a Play that returned its result established. */
   const presentResult = (result: PlayResult, episode: OpenedEpisode): void => {
-    if (result.kind === 'gesture-needed') return present({ kind: 'gesture-needed', episode });
+    if (result.kind === 'gesture-needed')
+      return present({ kind: 'gesture-needed', episode });
     // Audio that is short enough can end before the player confirms it started. That end belongs
     // to this lease, so it wins over the late `started` result.
-    if (result.kind === 'playing') present({ kind: owner.hasEnded(result.lease) ? 'ended' : 'playing', episode });
+    if (result.kind === 'playing')
+      present({
+        kind: owner.hasEnded(result.lease) ? 'ended' : 'playing',
+        episode,
+      });
   };
 
-  const play: ActionDefinition<PlayControlEvents['play']> = Action.server<PlayControlEvents['play'], CallToolResult>('play', transport)
+  const play: ActionDefinition<PlayControlEvents['play']> = Action.server<
+    PlayControlEvents['play'],
+    CallToolResult
+  >('play', transport)
     .input(() => pressable((current) => !STATES_THAT_BLOCK_PLAY.has(current)))
     .atActivation(({ scope }): PlayActivation => {
       // Inside the user's activation: end the previous audio, unlock this press's, and own the lease.
@@ -432,55 +515,69 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     })
     .before(hostForwardsServerTools)
     .before(recipientKey)
-    .run(async ({ call, signal, current, params, provided, activation }): Promise<PlayResult> => {
-      const { episode } = params;
-      const { key } = provided;
-      const abandoned: PlayResult = { kind: 'abandoned' };
+    .run(
+      async ({
+        call,
+        signal,
+        current,
+        params,
+        provided,
+        activation,
+      }): Promise<PlayResult> => {
+        const { episode } = params;
+        const { key } = provided;
+        const abandoned: PlayResult = { kind: 'abandoned' };
 
-      activation.reached = 'request-sent';
-      let result: ToolResult;
-      try {
-        result = await call(
-          PLAY_TOOL_NAME,
-          { episodeId: episode.episodeId },
-          { timeoutMs: HOST_CALL_SAFEGUARD_MS, meta: { [RECIPIENT_KEY_META]: key.publicJwk } },
-        );
-      } catch (error) {
-        // A rejection, a timeout and an abort look the same from here: the host may or may not have
-        // forwarded the call, so this does not say the credential was refused.
-        throw new PlayFailure('unknown-effect', error);
-      }
-      // Classify before anything decides recovery, and before asking whether this press is still
-      // wanted: only a precise early refusal or a valid grant for this episode and sign-in
-      // establishes a known result, even for an answer that came back too late to be used.
-      const answer = classifyAnswer(result, episode);
-      if (answer.kind !== 'unclassified') activation.reached = 'grant-known';
-      if (!current()) return abandoned; // retired while waiting: a late success must not restore anything
-      if (answer.kind === 'unclassified') throw new PlayFailure('unknown-effect');
-      if (answer.kind === 'denied') throw new PlayFailure('denied');
-      if (answer.kind === 'unsupported') throw new PlayFailure('unsupported');
-      if (answer.kind === 'label-lost') throw new PlayFailure('label-lost');
+        activation.reached = 'request-sent';
+        let result: ToolResult;
+        try {
+          result = await call(
+            PLAY_TOOL_NAME,
+            { episodeId: episode.episodeId },
+            {
+              timeoutMs: HOST_CALL_SAFEGUARD_MS,
+              meta: { [RECIPIENT_KEY_META]: key.publicJwk },
+            },
+          );
+        } catch (error) {
+          // A rejection, a timeout and an abort look the same from here: the host may or may not have
+          // forwarded the call, so this does not say the credential was refused.
+          throw new PlayFailure('unknown-effect', error);
+        }
+        // Classify before anything decides recovery, and before asking whether this press is still
+        // wanted: only a precise early refusal or a valid grant for this episode and sign-in
+        // establishes a known result, even for an answer that came back too late to be used.
+        const answer = classifyAnswer(result, episode);
+        if (answer.kind !== 'unclassified') activation.reached = 'grant-known';
+        if (!current()) return abandoned; // retired while waiting: a late success must not restore anything
+        if (answer.kind === 'unclassified')
+          throw new PlayFailure('unknown-effect');
+        if (answer.kind === 'denied') throw new PlayFailure('denied');
+        if (answer.kind === 'unsupported') throw new PlayFailure('unsupported');
+        if (answer.kind === 'label-lost') throw new PlayFailure('label-lost');
 
-      const media = await acquire(answer.grant, key, signal, current);
-      if (!current()) return abandoned;
-      if (media.kind === 'refused') throw new PlayFailure('expired');
-      if (media.kind === 'failed') throw new PlayFailure('media-failed');
-
-      let started: 'started' | 'blocked';
-      try {
-        started = await owner.start(activation.lease, media.bytes);
-      } catch (error) {
-        // The bytes arrived; the browser could not play them. That is not a server denial.
+        const media = await acquire(answer.grant, key, signal, current);
         if (!current()) return abandoned;
-        throw new PlayFailure('media-failed', error);
-      }
-      if (!current()) return abandoned; // the scope releases this press's lease
-      // A browser that withheld audio needs a new gesture. Nothing plays, so nothing is handed over.
-      if (started === 'blocked') return { kind: 'gesture-needed' };
-      // Synchronous hand-off: the owner holds the lease from here, and nothing was awaited since the start.
-      if (!activation.held.transfer((lease) => owner.retain(lease))) return abandoned;
-      return { kind: 'playing', lease: activation.lease };
-    })
+        if (media.kind === 'refused') throw new PlayFailure('expired');
+        if (media.kind === 'failed') throw new PlayFailure('media-failed');
+
+        let started: 'started' | 'blocked';
+        try {
+          started = await owner.start(activation.lease, media.bytes);
+        } catch (error) {
+          // The bytes arrived; the browser could not play them. That is not a server denial.
+          if (!current()) return abandoned;
+          throw new PlayFailure('media-failed', error);
+        }
+        if (!current()) return abandoned; // the scope releases this press's lease
+        // A browser that withheld audio needs a new gesture. Nothing plays, so nothing is handed over.
+        if (started === 'blocked') return { kind: 'gesture-needed' };
+        // Synchronous hand-off: the owner holds the lease from here, and nothing was awaited since the start.
+        if (!activation.held.transfer((lease) => owner.retain(lease)))
+          return abandoned;
+        return { kind: 'playing', lease: activation.lease };
+      },
+    )
     .onSuccess(({ result, params, current }) => {
       if (!current()) return;
       presentResult(result, params.episode);
@@ -490,10 +587,17 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       // or disposal retired the view and presents nothing. What is left is this Play's own control
       // being retired (unmounted or replaced) while the view still shows it pending: with nothing
       // else to move it on, pending would stay for good and refuse every later press.
-      if (context.cause !== 'disposed' || retired() || kind !== 'pending' || selected !== context.params.episode) return;
+      if (
+        context.cause !== 'disposed' ||
+        retired() ||
+        kind !== 'pending' ||
+        selected !== context.params.episode
+      )
+        return;
       const { episode } = context.params;
       // Audio that already started under this press belongs to the owner and is reported as such.
-      if (context.stage === 'completing') return presentResult(context.result, episode);
+      if (context.stage === 'completing')
+        return presentResult(context.result, episode);
       // Say only what the progress supports. A request that may have reached the server has an
       // unknown effect, so no retry is invited; a new opener starts a fresh attempt. A grant whose
       // bytes were never fetched is a known result and offers a fresh Play, never the old capability.
@@ -501,7 +605,11 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         case 'nothing-sent':
           return present({ kind: 'ready', episode });
         case 'request-sent':
-          return present({ kind: 'unavailable', episode, requestOutcome: 'unknown' });
+          return present({
+            kind: 'unavailable',
+            episode,
+            requestOutcome: 'unknown',
+          });
         case 'grant-known':
           return present({ kind: 'unavailable', episode });
       }
@@ -512,21 +620,40 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         // A press the controller did not take changes nothing; a prefix that could not unlock audio
         // means nothing protected was requested.
         if (context.failure.kind === 'invalid-input') return;
-        return present({ kind: 'unsupported', ...(selected ? { episode: selected } : {}) });
+        return present({
+          kind: 'unsupported',
+          ...(selected ? { episode: selected } : {}),
+        });
       }
       const { episode } = context.params;
       if (context.stage === 'prerequisites') {
         // The protected play request was not sent. A refusal or a failed key is "this host cannot",
         // and a deadline that passed here is not an unknown remote effect.
-        return present(context.failure.kind === 'timeout' ? { kind: 'unavailable', episode } : { kind: 'unsupported', episode });
+        return present(
+          context.failure.kind === 'timeout'
+            ? { kind: 'unavailable', episode }
+            : { kind: 'unsupported', episode },
+        );
       }
       const { failure } = context;
       // The handler returned and the required success work failed: the audio keeps playing.
-      if (failure.kind === 'success-hook-error' || failure.kind === 'success-hook-timeout') return;
-      const unknownEffect = { kind: 'unavailable', episode, requestOutcome: 'unknown' } as const;
+      if (
+        failure.kind === 'success-hook-error' ||
+        failure.kind === 'success-hook-timeout'
+      )
+        return;
+      const unknownEffect = {
+        kind: 'unavailable',
+        episode,
+        requestOutcome: 'unknown',
+      } as const;
       if (failure.kind === 'timeout') {
         // Past the work deadline: a request that may have reached the server has an unknown effect.
-        return present(context.activation.reached === 'request-sent' ? unknownEffect : { kind: 'unavailable', episode });
+        return present(
+          context.activation.reached === 'request-sent'
+            ? unknownEffect
+            : { kind: 'unavailable', episode },
+        );
       }
       if (failure.error instanceof PlayFailure) {
         switch (failure.error.failure) {
@@ -545,7 +672,11 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
         }
       }
       // Any other failure of the handler: say only what the progress made supports.
-      present(context.activation.reached === 'request-sent' ? unknownEffect : { kind: 'unavailable', episode });
+      present(
+        context.activation.reached === 'request-sent'
+          ? unknownEffect
+          : { kind: 'unavailable', episode },
+      );
     })
     .build();
 
@@ -560,7 +691,8 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
     step: (lease: PlaybackLease) => Promise<T>,
     outcome: (result: T) => 'playing' | 'paused' | 'resume-blocked',
   ): ActionDefinition<PlayControlEvents['play']> {
-    const stillRelevant = (lease: PlaybackLease) => owner.isCurrent(lease) && allowed.includes(kind);
+    const stillRelevant = (lease: PlaybackLease) =>
+      owner.isCurrent(lease) && allowed.includes(kind);
     return Action.local<PlayControlEvents['play']>(label)
       .input(() => pressable((current) => allowed.includes(current)))
       .atActivation(() => {
@@ -574,10 +706,16 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
       })
       .run(({ activation }) => activation.pending)
       .onSuccess(({ result, params, activation, current }) => {
-        if (current() && stillRelevant(activation.lease)) present({ kind: outcome(result), episode: params.episode });
+        if (current() && stillRelevant(activation.lease))
+          present({ kind: outcome(result), episode: params.episode });
       })
       .onFailure((context) => {
-        if (context.stage === 'input' || !context.current() || !stillRelevant(context.activation.lease)) return;
+        if (
+          context.stage === 'input' ||
+          !context.current() ||
+          !stillRelevant(context.activation.lease)
+        )
+          return;
         // A player that cannot do it is a media failure, not a server denial.
         owner.end(context.activation.lease);
         present({ kind: 'media-failed', episode: context.params.episode });
@@ -612,15 +750,19 @@ export async function connectPlaybackView(deps: PlaybackViewDependencies): Promi
   });
 
   const attach = (view: InstanceView): void => {
-    view.watchById(PLAY_CONTROL_ID, PlayControl, (handle: InstanceHandle<PlayControlEvents>) => {
-      if (retired()) return;
-      // The selection is the subject of every press: a new opener changes it, which cancels an
-      // undecided invocation at its next checkpoint instead of letting it finish for the old item.
-      const options = { subject: () => selection };
-      bindings.add(handle.bindAction('play', play, options));
-      bindings.add(handle.bindAction('pause', pause, options));
-      bindings.add(handle.bindAction('resume', resume, options));
-    });
+    view.watchById(
+      PLAY_CONTROL_ID,
+      PlayControl,
+      (handle: InstanceHandle<PlayControlEvents>) => {
+        if (retired()) return;
+        // The selection is the subject of every press: a new opener changes it, which cancels an
+        // undecided invocation at its next checkpoint instead of letting it finish for the old item.
+        const options = { subject: () => selection };
+        bindings.add(handle.bindAction('play', play, options));
+        bindings.add(handle.bindAction('pause', pause, options));
+        bindings.add(handle.bindAction('resume', resume, options));
+      },
+    );
   };
 
   return {

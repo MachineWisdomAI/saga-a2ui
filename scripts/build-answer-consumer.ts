@@ -21,10 +21,26 @@ import {
 //
 //   npx tsx scripts/build-answer-consumer.ts            # writes apps/lit-host/dist/answer-consumer (ignored)
 
-export const answerConsumerSource = path.join(repoRoot, 'examples', 'answer-consumer');
-export const answerConsumerDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'answer-consumer');
+export const answerConsumerSource = path.join(
+  repoRoot,
+  'examples',
+  'answer-consumer',
+);
+export const answerConsumerDist = path.join(
+  repoRoot,
+  'apps',
+  'lit-host',
+  'dist',
+  'answer-consumer',
+);
 /** The consumer's MCP server, outside the served pages: it is code for the test's Node process, not a page. */
-export const answerConsumerServerDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'answer-consumer-server');
+export const answerConsumerServerDist = path.join(
+  repoRoot,
+  'apps',
+  'lit-host',
+  'dist',
+  'answer-consumer-server',
+);
 
 /** The packages the consumer imports itself, besides the SDK packages. */
 export const ANSWER_CONSUMER_OWN_DEPENDENCIES = [
@@ -44,8 +60,16 @@ export interface PreparedConsumer {
 /** Copies the consumer source into `work` and installs the packed SDK packages beside it. */
 export function prepareAnswerConsumer(work: string): PreparedConsumer {
   const consumer = path.join(work, 'consumer');
-  fs.cpSync(answerConsumerSource, consumer, { recursive: true, filter: (from) => !from.includes('node_modules') });
-  const sdk = installPackedSdk(work, consumer, ['core', 'lit', 'components', 'mcp']);
+  fs.cpSync(answerConsumerSource, consumer, {
+    recursive: true,
+    filter: (from) => !from.includes('node_modules'),
+  });
+  const sdk = installPackedSdk(work, consumer, [
+    'core',
+    'lit',
+    'components',
+    'mcp',
+  ]);
   linkDeclaredDependencies(consumer, sdk, ANSWER_CONSUMER_OWN_DEPENDENCIES);
   return { consumer, sdk };
 }
@@ -60,33 +84,68 @@ function sha256(file: string): string {
  * the browser tests connect to, which serves exactly that `mcp.html`). Returns the identities a
  * review needs: the source commit, the runtime and each artifact's digest.
  */
-export async function buildAnswerConsumer(outDir: string, serverOutDir: string): Promise<Record<string, unknown>> {
+export async function buildAnswerConsumer(
+  outDir: string,
+  serverOutDir: string,
+): Promise<Record<string, unknown>> {
   const work = createWorkDirectory('saga-answer-consumer-');
   try {
     const { consumer, sdk } = prepareAnswerConsumer(work);
     await buildConsumerApplication(consumer, outDir, [viteSingleFile()]);
-    await buildConsumerApplication(consumer, outDir, [viteSingleFile()], { page: 'mcp.html', emptyOutDir: false });
+    await buildConsumerApplication(consumer, outDir, [viteSingleFile()], {
+      page: 'mcp.html',
+      emptyOutDir: false,
+    });
     // Beside the repository's own node_modules, so the server's external dependencies resolve.
-    const server = await bundleConsumerServer(consumer, 'server/answer-server.ts');
+    const server = await bundleConsumerServer(
+      consumer,
+      'server/answer-server.ts',
+    );
     fs.mkdirSync(serverOutDir, { recursive: true });
     fs.copyFileSync(server.file, path.join(serverOutDir, 'server.mjs'));
     return {
-      sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
-      sourceDirty: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: repoRoot, encoding: 'utf8' }).trim() !== '',
+      sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+      sourceDirty:
+        execFileSync(
+          'git',
+          ['status', '--porcelain=v1', '--untracked-files=no'],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ).trim() !== '',
       node: process.version,
       npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
       packedTarballSha256: sdk.tarballSha256,
-      builtPage: { path: path.relative(repoRoot, path.join(outDir, 'index.html')), sha256: sha256(path.join(outDir, 'index.html')) },
-      builtMcpPage: { path: path.relative(repoRoot, path.join(outDir, 'mcp.html')), sha256: sha256(path.join(outDir, 'mcp.html')) },
-      builtServer: { path: path.relative(repoRoot, path.join(serverOutDir, 'server.mjs')), sha256: sha256(path.join(serverOutDir, 'server.mjs')) },
+      builtPage: {
+        path: path.relative(repoRoot, path.join(outDir, 'index.html')),
+        sha256: sha256(path.join(outDir, 'index.html')),
+      },
+      builtMcpPage: {
+        path: path.relative(repoRoot, path.join(outDir, 'mcp.html')),
+        sha256: sha256(path.join(outDir, 'mcp.html')),
+      },
+      builtServer: {
+        path: path.relative(repoRoot, path.join(serverOutDir, 'server.mjs')),
+        sha256: sha256(path.join(serverOutDir, 'server.mjs')),
+      },
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const identity = await buildAnswerConsumer(answerConsumerDist, answerConsumerServerDist);
-  fs.writeFileSync(path.join(answerConsumerDist, 'identity.json'), `${JSON.stringify(identity, null, 2)}\n`);
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  const identity = await buildAnswerConsumer(
+    answerConsumerDist,
+    answerConsumerServerDist,
+  );
+  fs.writeFileSync(
+    path.join(answerConsumerDist, 'identity.json'),
+    `${JSON.stringify(identity, null, 2)}\n`,
+  );
   console.log(JSON.stringify(identity, null, 2));
 }

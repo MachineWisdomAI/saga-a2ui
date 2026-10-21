@@ -18,14 +18,30 @@ import { z } from 'zod';
 // application listener does at admission. Nothing here imports a workspace path.
 
 const Input = z.object({ id: z.string().min(1).max(16) });
-const Output = z.strictObject({ id: z.string().max(16), text: z.string().max(64) });
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
-const FAILURES = { absent: 'Not found.', unavailable: 'Unavailable.', invalidOutput: 'Could not be shown.', signInRequired: 'Sign in.' } as const;
+const Output = z.strictObject({
+  id: z.string().max(16),
+  text: z.string().max(64),
+});
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+const FAILURES = {
+  absent: 'Not found.',
+  unavailable: 'Unavailable.',
+  invalidOutput: 'Could not be shown.',
+  signInRequired: 'Sign in.',
+} as const;
 
 export const FAILURE_TEXT = FAILURES;
 
 export interface Callbacks {
-  handle?(request: OperationRequest, accountId: string | undefined): OperationOutcome<string> | Promise<OperationOutcome<string>>;
+  handle?(
+    request: OperationRequest,
+    accountId: string | undefined,
+  ): OperationOutcome<string> | Promise<OperationOutcome<string>>;
   project?(record: string): Projection;
   identity?(authInfo: AuthInfo | undefined): unknown;
 }
@@ -36,7 +52,10 @@ export interface RequestConsumer {
   readonly lifetimes: RequestLifetime[];
 }
 
-export function createRequestConsumer(callbacks: Callbacks = {}, budgets?: BudgetSettings): RequestConsumer {
+export function createRequestConsumer(
+  callbacks: Callbacks = {},
+  budgets?: BudgetSettings,
+): RequestConsumer {
   const instance = createServerBudgets(budgets);
   const lifetimes: RequestLifetime[] = [];
   return {
@@ -44,9 +63,20 @@ export function createRequestConsumer(callbacks: Callbacks = {}, budgets?: Budge
     buildServer() {
       const lifetime = instance.startRequest();
       lifetimes.push(lifetime);
-      const server = new McpServer({ name: 'request-consumer', version: '0.0.0' });
-      const view = (name: string) => ({ uri: `ui://consumer/${name}.html`, title: `${name} view`, html: '<!doctype html>', csp: CLOSED_VIEW_CSP });
-      const project = (record: string): Projection => (callbacks.project ? callbacks.project(record) : { text: record, data: { id: record, text: 'ok' } });
+      const server = new McpServer({
+        name: 'request-consumer',
+        version: '0.0.0',
+      });
+      const view = (name: string) => ({
+        uri: `ui://consumer/${name}.html`,
+        title: `${name} view`,
+        html: '<!doctype html>',
+        csp: CLOSED_VIEW_CSP,
+      });
+      const project = (record: string): Projection =>
+        callbacks.project
+          ? callbacks.project(record)
+          : { text: record, data: { id: record, text: 'ok' } };
       registerPublicOperation(
         server,
         {
@@ -58,7 +88,10 @@ export function createRequestConsumer(callbacks: Callbacks = {}, budgets?: Budge
           output: Output,
           view: view('read'),
           failures: FAILURES,
-          handle: async (input, request) => (callbacks.handle ? callbacks.handle(request, undefined) : { kind: 'record', record: input.id }),
+          handle: async (input, request) =>
+            callbacks.handle
+              ? callbacks.handle(request, undefined)
+              : { kind: 'record', record: input.id },
           project,
         },
         { lifetime },
@@ -74,8 +107,15 @@ export function createRequestConsumer(callbacks: Callbacks = {}, budgets?: Budge
           output: Output,
           view: view('mine'),
           failures: FAILURES,
-          identity: (authInfo) => (callbacks.identity ? callbacks.identity(authInfo) : { accountId: authInfo?.extra?.accountId }) as { accountId: string } | undefined,
-          handle: async (input, identity, request) => (callbacks.handle ? callbacks.handle(request, identity.accountId) : { kind: 'record', record: input.id }),
+          identity: (authInfo) =>
+            (callbacks.identity
+              ? callbacks.identity(authInfo)
+              : { accountId: authInfo?.extra?.accountId }) as
+              { accountId: string } | undefined,
+          handle: async (input, identity, request) =>
+            callbacks.handle
+              ? callbacks.handle(request, identity.accountId)
+              : { kind: 'record', record: input.id },
           project: (record) => project(record),
         },
         { lifetime },

@@ -39,15 +39,40 @@ const claudeConnector = z
     slug: z.string(),
     documentationURL: z.string(),
     privacyPolicyURL: z.string(),
-    support: z.strictObject({ email: z.string().optional(), url: z.string().optional() }),
+    support: z.strictObject({
+      email: z.string().optional(),
+      url: z.string().optional(),
+    }),
     /** The connector icon: PNG or SVG. */
     icon: z.string(),
     /** Carousel screenshots of the app response (MCP Apps), each with the prompt that produced it. */
-    screenshots: z.array(z.strictObject({ file: z.string(), prompt: z.string() })),
-    useCases: z.strictObject({ primary: z.array(z.string()), prerequisites: z.string(), access: z.enum(['read', 'write', 'read-write']) }),
+    screenshots: z.array(
+      z.strictObject({ file: z.string(), prompt: z.string() }),
+    ),
+    useCases: z.strictObject({
+      primary: z.array(z.string()),
+      prerequisites: z.string(),
+      access: z.enum(['read', 'write', 'read-write']),
+    }),
     /** How users authenticate. The credentials themselves are entered in the portal and never belong here. */
-    authentication: z.strictObject({ mode: z.enum(['oauth_dcr', 'oauth_cimd', 'oauth_anthropic_creds', 'custom_connection', 'none']) }),
-    dataHandling: z.strictObject({ apiOwnership: z.enum(['first-party', 'proxied-with-permission', 'third-party']), personalHealthData: z.boolean(), sponsoredContent: z.boolean() }),
+    authentication: z.strictObject({
+      mode: z.enum([
+        'oauth_dcr',
+        'oauth_cimd',
+        'oauth_anthropic_creds',
+        'custom_connection',
+        'none',
+      ]),
+    }),
+    dataHandling: z.strictObject({
+      apiOwnership: z.enum([
+        'first-party',
+        'proxied-with-permission',
+        'third-party',
+      ]),
+      personalHealthData: z.boolean(),
+      sponsoredContent: z.boolean(),
+    }),
     /** Origins (`https://example.com`) and custom schemes (`myapp:`) the connector opens through `ui/open-link` without a prompt. */
     allowedLinkUris: z.array(z.string()),
     /** The primary contact for review updates. */
@@ -74,7 +99,11 @@ export const ReleaseInputSchema = z.strictObject({
   version: z.string(),
   description: z.string(),
   /** The application publisher: who the listing belongs to. The operator running the tool is not substituted for it. */
-  publisher: z.strictObject({ name: z.string(), url: z.string().optional(), email: z.string().optional() }),
+  publisher: z.strictObject({
+    name: z.string(),
+    url: z.string().optional(),
+    email: z.string().optional(),
+  }),
   /** Credited contributors. They are recorded and never become the publisher. */
   contributors: z.array(person).optional(),
   homepage: z.string().optional(),
@@ -99,9 +128,21 @@ export const ReleaseInputSchema = z.strictObject({
     })
     .optional(),
   /** The ChatGPT listing's PNG or SVG files, copied into the package under `assets/`. Needed with `listing`. */
-  assets: z.strictObject({ logo: z.string(), composerIcon: z.string(), logoDark: z.string().optional(), composerIconDark: z.string().optional() }).optional(),
+  assets: z
+    .strictObject({
+      logo: z.string(),
+      composerIcon: z.string(),
+      logoDark: z.string().optional(),
+      composerIconDark: z.string().optional(),
+    })
+    .optional(),
   /** The Claude connector submission. Needed to prepare the `claude` target; every field is a finding when it is missing, not a parse error. */
-  claude: z.strictObject({ connector: claudeConnector.optional(), pluginBundle: claudePluginBundle.optional() }).optional(),
+  claude: z
+    .strictObject({
+      connector: claudeConnector.optional(),
+      pluginBundle: claudePluginBundle.optional(),
+    })
+    .optional(),
   build: z.strictObject({
     /** The built application. */
     directory: z.string(),
@@ -112,12 +153,19 @@ export const ReleaseInputSchema = z.strictObject({
     /** The deployed MCP endpoint people reach: stable, public and HTTPS. */
     url: z.string(),
     /** What the deployment reports about itself in `initialize`. When present and equal, the deployment identity is established. */
-    expectedServer: z.strictObject({ name: z.string(), version: z.string() }).optional(),
+    expectedServer: z
+      .strictObject({ name: z.string(), version: z.string() })
+      .optional(),
   }),
   /** Review material the host asks for at submission. Reviewer credentials never belong here. */
   review: z
     .strictObject({
-      test_cases: z.strictObject({ positive: z.array(testCase).optional(), negative: z.array(testCase).optional() }).optional(),
+      test_cases: z
+        .strictObject({
+          positive: z.array(testCase).optional(),
+          negative: z.array(testCase).optional(),
+        })
+        .optional(),
       demo_recording_url: z.string().optional(),
       commerce: z.boolean().optional(),
       commerce_description: z.string().optional(),
@@ -127,16 +175,36 @@ export const ReleaseInputSchema = z.strictObject({
     .strictObject({
       countries: z.array(z.string()).optional(),
       release_notes: z.string().optional(),
-      translations: z.record(z.string(), z.strictObject({ subtitle: z.string().nullable().optional(), description: z.string().nullable().optional() })).optional(),
+      translations: z
+        .record(
+          z.string(),
+          z.strictObject({
+            subtitle: z.string().nullable().optional(),
+            description: z.string().nullable().optional(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
   /** Tool calls `--invoke-fixture` may make against a test fixture. Declaring them calls nothing. */
-  fixture: z.strictObject({ calls: z.array(z.strictObject({ tool: z.string(), arguments: z.record(z.string(), z.unknown()).optional() })) }).optional(),
+  fixture: z
+    .strictObject({
+      calls: z.array(
+        z.strictObject({
+          tool: z.string(),
+          arguments: z.record(z.string(), z.unknown()).optional(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 export type ReleaseInput = z.infer<typeof ReleaseInputSchema>;
 /** A release input that carries the ChatGPT listing and its assets, which the `chatgpt` target needs. */
-export type ChatgptReleaseInput = ReleaseInput & { readonly listing: NonNullable<ReleaseInput['listing']>; readonly assets: NonNullable<ReleaseInput['assets']> };
+export type ChatgptReleaseInput = ReleaseInput & {
+  readonly listing: NonNullable<ReleaseInput['listing']>;
+  readonly assets: NonNullable<ReleaseInput['assets']>;
+};
 export type ClaudeConnectorInput = z.infer<typeof claudeConnector>;
 export type ClaudePluginBundleInput = z.infer<typeof claudePluginBundle>;
 
@@ -148,25 +216,46 @@ export interface LoadedReleaseInput {
   readonly sha256: string;
 }
 
-export type ReleaseInputResult = { readonly ok: true; readonly loaded: LoadedReleaseInput } | { readonly ok: false; readonly problem: string };
+export type ReleaseInputResult =
+  | { readonly ok: true; readonly loaded: LoadedReleaseInput }
+  | { readonly ok: false; readonly problem: string };
 
 export function loadReleaseInput(file: string): ReleaseInputResult {
   let bytes: Buffer;
   try {
     bytes = fs.readFileSync(file);
   } catch (error) {
-    return { ok: false, problem: `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).` };
+    return {
+      ok: false,
+      problem: `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).`,
+    };
   }
   let value: unknown;
   try {
     value = JSON.parse(bytes.toString('utf8'));
   } catch {
-    return { ok: false, problem: `The release input ${file} is not valid JSON.` };
+    return {
+      ok: false,
+      problem: `The release input ${file} is not valid JSON.`,
+    };
   }
   const parsed = ReleaseInputSchema.safeParse(value);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => `${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`);
-    return { ok: false, problem: `The release input ${file} does not match ${RELEASE_INPUT_FORMAT}: ${issues.join('; ')}` };
+    const issues = parsed.error.issues.map(
+      (issue) =>
+        `${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
+    );
+    return {
+      ok: false,
+      problem: `The release input ${file} does not match ${RELEASE_INPUT_FORMAT}: ${issues.join('; ')}`,
+    };
   }
-  return { ok: true, loaded: { input: parsed.data, directory: path.dirname(path.resolve(file)), sha256: sha256(bytes) } };
+  return {
+    ok: true,
+    loaded: {
+      input: parsed.data,
+      directory: path.dirname(path.resolve(file)),
+      sha256: sha256(bytes),
+    },
+  };
 }

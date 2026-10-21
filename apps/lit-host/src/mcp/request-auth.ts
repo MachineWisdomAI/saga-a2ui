@@ -1,5 +1,10 @@
 import type { IncomingMessage } from 'node:http';
-import { OAuthError, OAuthErrorCode, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 // Application-owned request authentication for protected MCP endpoints. A pluggable
@@ -16,8 +21,14 @@ export interface AuthRequirement {
   readonly scope: string;
 }
 
-export const SUBSCRIPTIONS_REQUIREMENT: AuthRequirement = { realm: 'saga-a2ui-subscriptions', scope: SUBSCRIPTIONS_SCOPE };
-export const PLAYBACK_REQUIREMENT: AuthRequirement = { realm: 'saga-a2ui-playback', scope: PLAYBACK_SCOPE };
+export const SUBSCRIPTIONS_REQUIREMENT: AuthRequirement = {
+  realm: 'saga-a2ui-subscriptions',
+  scope: SUBSCRIPTIONS_SCOPE,
+};
+export const PLAYBACK_REQUIREMENT: AuthRequirement = {
+  realm: 'saga-a2ui-playback',
+  scope: PLAYBACK_SCOPE,
+};
 
 /** Who is calling, as established by the verifier for exactly one request. */
 export interface VerifiedIdentity {
@@ -37,15 +48,25 @@ export type AuthDecision =
       readonly fault?: unknown;
     };
 
-const IdentityClaims = z.object({ accountId: z.string().min(1), signInId: z.string().min(1) });
+const IdentityClaims = z.object({
+  accountId: z.string().min(1),
+  signInId: z.string().min(1),
+});
 
 /**
  * Reads the verified identity from the SDK's per-request auth context. A credential that was
  * verified but names no account (a service credential) yields `undefined`.
  */
-export function identityFromAuthInfo(authInfo: AuthInfo | undefined): VerifiedIdentity | undefined {
+export function identityFromAuthInfo(
+  authInfo: AuthInfo | undefined,
+): VerifiedIdentity | undefined {
   const claims = IdentityClaims.safeParse(authInfo?.extra);
-  return claims.success ? Object.freeze({ accountId: claims.data.accountId, signInId: claims.data.signInId }) : undefined;
+  return claims.success
+    ? Object.freeze({
+        accountId: claims.data.accountId,
+        signInId: claims.data.signInId,
+      })
+    : undefined;
 }
 
 /**
@@ -56,16 +77,33 @@ export function identityFromAuthInfo(authInfo: AuthInfo | undefined): VerifiedId
  * frozen so nothing downstream can mutate it either; the validated identity is written last so
  * it always describes the credential this request was authenticated with.
  */
-function snapshotAuthInfo(authInfo: AuthInfo, identity: VerifiedIdentity): AuthInfo {
+function snapshotAuthInfo(
+  authInfo: AuthInfo,
+  identity: VerifiedIdentity,
+): AuthInfo {
   return Object.freeze({
     ...authInfo,
     scopes: [...authInfo.scopes],
-    extra: Object.freeze({ ...authInfo.extra, accountId: identity.accountId, signInId: identity.signInId }),
+    extra: Object.freeze({
+      ...authInfo.extra,
+      accountId: identity.accountId,
+      signInId: identity.signInId,
+    }),
   });
 }
 
-function reject(requirement: AuthRequirement, status: 401 | 403, error: string, description: string, scope?: string): AuthDecision {
-  const parts = [`realm="${requirement.realm}"`, `error="${error}"`, `error_description="${description}"`];
+function reject(
+  requirement: AuthRequirement,
+  status: 401 | 403,
+  error: string,
+  description: string,
+  scope?: string,
+): AuthDecision {
+  const parts = [
+    `realm="${requirement.realm}"`,
+    `error="${error}"`,
+    `error_description="${description}"`,
+  ];
   if (scope) parts.push(`scope="${scope}"`);
   return { ok: false, status, challenge: `Bearer ${parts.join(', ')}`, error };
 }
@@ -87,26 +125,53 @@ export async function authenticate(
   nowSeconds: () => number = () => Date.now() / 1000,
 ): Promise<AuthDecision> {
   const header = request.headers.authorization;
-  if (header === undefined) return { ok: false, status: 401, challenge: `Bearer realm="${requirement.realm}"`, error: 'missing_token' };
+  if (header === undefined)
+    return {
+      ok: false,
+      status: 401,
+      challenge: `Bearer realm="${requirement.realm}"`,
+      error: 'missing_token',
+    };
 
   const match = /^Bearer ([^\s]+)$/i.exec(header);
-  if (!match?.[1]) return reject(requirement, 401, 'invalid_token', 'Malformed credential');
+  if (!match?.[1])
+    return reject(requirement, 401, 'invalid_token', 'Malformed credential');
 
   let authInfo: AuthInfo;
   try {
     authInfo = await verifier.verifyAccessToken(match[1]);
   } catch (error) {
-    if (OAuthError.isInstance(error) && error.code === OAuthErrorCode.InvalidToken) return reject(requirement, 401, 'invalid_token', 'Invalid credential');
+    if (
+      OAuthError.isInstance(error) &&
+      error.code === OAuthErrorCode.InvalidToken
+    )
+      return reject(requirement, 401, 'invalid_token', 'Invalid credential');
     return { ok: false, status: 500, error: 'server_error', fault: error };
   }
   if (gate.aborted) return { ok: false, status: 500, error: 'server_error' }; // a late identity is dropped, never snapshotted
-  if (typeof authInfo.expiresAt !== 'number' || authInfo.expiresAt <= nowSeconds()) {
+  if (
+    typeof authInfo.expiresAt !== 'number' ||
+    authInfo.expiresAt <= nowSeconds()
+  ) {
     return reject(requirement, 401, 'invalid_token', 'Token has expired');
   }
   if (!authInfo.scopes.includes(requirement.scope)) {
-    return reject(requirement, 403, 'insufficient_scope', 'User sign-in required', requirement.scope);
+    return reject(
+      requirement,
+      403,
+      'insufficient_scope',
+      'User sign-in required',
+      requirement.scope,
+    );
   }
   const identity = identityFromAuthInfo(authInfo);
-  if (!identity) return reject(requirement, 403, 'insufficient_scope', 'User sign-in required', requirement.scope);
+  if (!identity)
+    return reject(
+      requirement,
+      403,
+      'insufficient_scope',
+      'User sign-in required',
+      requirement.scope,
+    );
   return { ok: true, authInfo: snapshotAuthInfo(authInfo, identity) };
 }

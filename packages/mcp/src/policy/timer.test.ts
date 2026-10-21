@@ -34,7 +34,8 @@ describe('startBoundedTimer', () => {
   it('never hands the platform a delay above its maximum', () => {
     const spy = vi.spyOn(globalThis, 'setTimeout');
     startBoundedTimer(3_000_000_000, () => undefined);
-    for (const [, delay] of spy.mock.calls) expect(delay as number).toBeLessThanOrEqual(NATIVE_MAX);
+    for (const [, delay] of spy.mock.calls)
+      expect(delay as number).toBeLessThanOrEqual(NATIVE_MAX);
   });
 
   it('cancels, leaving no timer behind', () => {

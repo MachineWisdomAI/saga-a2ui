@@ -5,5 +5,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'e2e/faithful-card',
   base: './',
-  build: { outDir: '../../dist/faithful-card', emptyOutDir: true, target: 'es2022' },
+  build: {
+    outDir: '../../dist/faithful-card',
+    emptyOutDir: true,
+    target: 'es2022',
+  },
 });

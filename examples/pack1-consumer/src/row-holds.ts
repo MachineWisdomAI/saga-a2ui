@@ -8,9 +8,17 @@ type Phase = 'pending' | 'confirmed';
 
 export class RowHolds {
   #next = 0;
-  readonly #tokens = new Map<number, { readonly noteId: string; phase: Phase }>();
+  readonly #tokens = new Map<
+    number,
+    { readonly noteId: string; phase: Phase }
+  >();
 
-  constructor(private readonly changed: (pending: readonly string[], confirmed: readonly string[]) => void) {}
+  constructor(
+    private readonly changed: (
+      pending: readonly string[],
+      confirmed: readonly string[],
+    ) => void,
+  ) {}
 
   begin(noteId: string): number {
     const token = (this.#next += 1);
@@ -28,12 +36,16 @@ export class RowHolds {
 
   /** Gives an unconfirmed token back. A confirmed token, or one already given back, is left alone. */
   end(token: number): void {
-    if (this.#tokens.get(token)?.phase === 'pending') this.#tokens.delete(token);
+    if (this.#tokens.get(token)?.phase === 'pending')
+      this.#tokens.delete(token);
     this.#publish();
   }
 
   #publish(): void {
-    const ids = (phase: Phase) => [...this.#tokens.values()].filter((entry) => entry.phase === phase).map((entry) => entry.noteId);
+    const ids = (phase: Phase) =>
+      [...this.#tokens.values()]
+        .filter((entry) => entry.phase === phase)
+        .map((entry) => entry.noteId);
     this.changed(ids('pending'), ids('confirmed'));
   }
 }

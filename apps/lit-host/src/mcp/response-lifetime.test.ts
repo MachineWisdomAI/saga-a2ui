@@ -35,17 +35,28 @@ class StandInResponse extends EventEmitter {
 }
 
 function admit(requestMs: number) {
-  const lifetime = createServerBudgets({ operationMs: requestMs, requestMs }).startRequest();
+  const lifetime = createServerBudgets({
+    operationMs: requestMs,
+    requestMs,
+  }).startRequest();
   const res = new StandInResponse();
   const closed = vi.fn();
-  bindResponseToLifetime(new EventEmitter() as unknown as IncomingMessage, res as unknown as ServerResponse, lifetime, undefined, closed);
+  bindResponseToLifetime(
+    new EventEmitter() as unknown as IncomingMessage,
+    res as unknown as ServerResponse,
+    lifetime,
+    undefined,
+    closed,
+  );
   return { lifetime, res, closed };
 }
 
 describe('a finite response the deadline destroyed', () => {
   it('is not delivery even though the transport reports finish on forced destruction', async () => {
     const { lifetime, closed } = admit(40);
-    await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1), {
+      timeout: 2_000,
+    });
     expect(closed).toHaveBeenCalledWith(false); // the listener's observation: not delivered
     expect(lifetime.cause).toMatchObject({ kind: 'request-timeout' });
     expect(lifetime.causes).toHaveLength(1); // the timeout alone: not a completion, and no second cause

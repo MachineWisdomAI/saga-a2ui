@@ -1,8 +1,24 @@
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
-import type { AuthInfo, CallToolResult, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
+import type {
+  AuthInfo,
+  CallToolResult,
+  McpServer,
+  ServerContext,
+  ToolAnnotations,
+} from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 import type { ViewCsp } from '../policy/index.js';
-import { createServerBudgets, throwIfEnded, valueOrThrow, type BoundedScope, type RequestLifetime } from './lifetime.js';
+import {
+  createServerBudgets,
+  throwIfEnded,
+  valueOrThrow,
+  type BoundedScope,
+  type RequestLifetime,
+} from './lifetime.js';
 
 // Declared MCP operations. The application owns the listener, authentication, domain
 // authorization and every backend effect; it hands this module an operation declaration and an
@@ -66,7 +82,11 @@ export interface OperationRequest {
    * handler has left, and cannot renew either. Rejects with a `StageFailure` carrying the typed
    * cause when it does not finish; a handler may catch that and keep a known result.
    */
-  within<T>(stage: NestedStage, work: (signal: AbortSignal) => T | PromiseLike<T>, options?: { readonly limitMs?: number }): Promise<T>;
+  within<T>(
+    stage: NestedStage,
+    work: (signal: AbortSignal) => T | PromiseLike<T>,
+    options?: { readonly limitMs?: number },
+  ): Promise<T>;
   /**
    * Reports progress to a caller that asked for it. Reports after the operation has finished or
    * been retired are dropped quietly, so a late callback cannot reach the caller.
@@ -118,10 +138,16 @@ export interface OperationContext {
 }
 
 /** An explicitly public operation: the caller needs no credential and no identity exists. */
-export interface PublicOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found>
-  extends Declaration<Input, Output> {
+export interface PublicOperation<
+  Input extends z.ZodObject,
+  Output extends z.ZodObject,
+  Found,
+> extends Declaration<Input, Output> {
   readonly failures: OperationFailures;
-  handle(input: z.output<Input>, request: OperationRequest): OperationOutcome<Found> | Promise<OperationOutcome<Found>>;
+  handle(
+    input: z.output<Input>,
+    request: OperationRequest,
+  ): OperationOutcome<Found> | Promise<OperationOutcome<Found>>;
   project(record: Found): Projection;
 }
 
@@ -130,8 +156,12 @@ export interface PublicOperation<Input extends z.ZodObject, Output extends z.Zod
  * and the transport hands that context to the callback; `identity` turns it into the application's
  * own immutable value. No tool argument can name an identity.
  */
-export interface ProtectedOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found, Identity>
-  extends Declaration<Input, Output> {
+export interface ProtectedOperation<
+  Input extends z.ZodObject,
+  Output extends z.ZodObject,
+  Found,
+  Identity,
+> extends Declaration<Input, Output> {
   readonly failures: ProtectedFailures;
   /** `undefined` when the verified context names no acceptable principal (for example a service credential). */
   identity(authInfo: AuthInfo | undefined): Identity | undefined;
@@ -146,14 +176,20 @@ export interface ProtectedOperation<Input extends z.ZodObject, Output extends z.
 /** The declaration is incomplete or unusable. Names the missing requirement, never a credential. */
 export class OperationConfigurationError extends Error {
   constructor(operation: string, problems: readonly string[]) {
-    super(`Operation "${operation}" is not configured: ${problems.join('; ')}.`);
+    super(
+      `Operation "${operation}" is not configured: ${problems.join('; ')}.`,
+    );
     this.name = 'OperationConfigurationError';
   }
 }
 
 const isFunction = (value: unknown): boolean => typeof value === 'function';
-const isText = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
-const isSchema = (value: unknown): boolean => typeof value === 'object' && value !== null && isFunction((value as { safeParse?: unknown }).safeParse);
+const isText = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0;
+const isSchema = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  isFunction((value as { safeParse?: unknown }).safeParse);
 
 /** The fields registration checks, as an untrusted caller (plain JavaScript, a cast) might supply them. */
 interface UncheckedDeclaration {
@@ -163,7 +199,12 @@ interface UncheckedDeclaration {
   readonly annotations?: unknown;
   readonly input?: unknown;
   readonly output?: unknown;
-  readonly view?: { readonly uri?: unknown; readonly title?: unknown; readonly html?: unknown; readonly csp?: unknown };
+  readonly view?: {
+    readonly uri?: unknown;
+    readonly title?: unknown;
+    readonly html?: unknown;
+    readonly csp?: unknown;
+  };
   readonly failures?: {
     readonly absent?: unknown;
     readonly unavailable?: unknown;
@@ -177,20 +218,38 @@ interface UncheckedDeclaration {
 }
 
 /** Fails before anything is registered, so a misconfigured protected operation is never served. */
-function assertConfigured(declaration: UncheckedDeclaration, requireIdentity: boolean): void {
+function assertConfigured(
+  declaration: UncheckedDeclaration,
+  requireIdentity: boolean,
+): void {
   const problems: string[] = [];
   const needs = (present: boolean, requirement: string) => {
     if (!present) problems.push(`missing ${requirement}`);
   };
   needs(isText(declaration.name), 'name');
-  needs(isText(declaration.title) && isText(declaration.description), 'title and description');
+  needs(
+    isText(declaration.title) && isText(declaration.description),
+    'title and description',
+  );
   needs(declaration.annotations !== undefined, 'annotations');
   needs(isSchema(declaration.input), 'input contract');
   needs(isSchema(declaration.output), 'output contract');
   const view = declaration.view;
-  needs(view !== undefined && isText(view.uri) && isText(view.title) && typeof view.html === 'string' && view.csp !== undefined, 'view');
+  needs(
+    view !== undefined &&
+      isText(view.uri) &&
+      isText(view.title) &&
+      typeof view.html === 'string' &&
+      view.csp !== undefined,
+    'view',
+  );
   const failures = declaration.failures;
-  needs(isText(failures?.absent) && isText(failures?.unavailable) && isText(failures?.invalidOutput), 'failures (absent, unavailable, invalidOutput)');
+  needs(
+    isText(failures?.absent) &&
+      isText(failures?.unavailable) &&
+      isText(failures?.invalidOutput),
+    'failures (absent, unavailable, invalidOutput)',
+  );
   needs(isFunction(declaration.handle), 'handle callback');
   needs(isFunction(declaration.project), 'project callback');
   if (requireIdentity) {
@@ -198,30 +257,57 @@ function assertConfigured(declaration: UncheckedDeclaration, requireIdentity: bo
     needs(isText(failures?.signInRequired), 'failures.signInRequired');
   }
   const bound: unknown = declaration.boundMs;
-  if (bound !== undefined && !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)) problems.push('boundMs must be a finite positive number');
-  if (problems.length > 0) throw new OperationConfigurationError(isText(declaration.name) ? String(declaration.name) : '(unnamed)', problems);
+  if (
+    bound !== undefined &&
+    !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)
+  )
+    problems.push('boundMs must be a finite positive number');
+  if (problems.length > 0)
+    throw new OperationConfigurationError(
+      isText(declaration.name) ? String(declaration.name) : '(unnamed)',
+      problems,
+    );
 }
 
-const isThenable = (value: unknown): boolean => typeof value === 'object' && value !== null && isFunction((value as { then?: unknown }).then);
+const isThenable = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  isFunction((value as { then?: unknown }).then);
 
 /** A projection callback's answer, checked as the untrusted value it is. `data` is validated separately against the output contract. */
 const isProjection = (value: unknown): value is Projection =>
-  typeof value === 'object' && value !== null && typeof (value as { text?: unknown }).text === 'string';
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as { text?: unknown }).text === 'string';
 
 const SDK_DEFAULTS = createServerBudgets();
 
-const failure = (text: string) => ({ isError: true as const, content: [{ type: 'text' as const, text }] });
+const failure = (text: string) => ({
+  isError: true as const,
+  content: [{ type: 'text' as const, text }],
+});
 
-function requestFor(ctx: ServerContext, live: { open: boolean }, scope: BoundedScope): OperationRequest {
+function requestFor(
+  ctx: ServerContext,
+  live: { open: boolean },
+  scope: BoundedScope,
+): OperationRequest {
   const progressToken = ctx.mcpReq._meta?.progressToken;
   return {
     signal: scope.signal,
-    within: (stage, work, options) => scope.run(stage, (nested) => work(nested.signal), options).then(valueOrThrow),
+    within: (stage, work, options) =>
+      scope
+        .run(stage, (nested) => work(nested.signal), options)
+        .then(valueOrThrow),
     async reportProgress(update) {
-      if (!live.open || progressToken === undefined || scope.signal.aborted) return;
+      if (!live.open || progressToken === undefined || scope.signal.aborted)
+        return;
       const { progress, total, message } = update;
       await ctx.mcpReq
-        .notify({ method: 'notifications/progress', params: { progressToken, progress, total, message } })
+        .notify({
+          method: 'notifications/progress',
+          params: { progressToken, progress, total, message },
+        })
         .catch(() => undefined);
     },
   };
@@ -235,7 +321,10 @@ function requestFor(ctx: ServerContext, live: { open: boolean }, scope: BoundedS
  * its typed cause on the request lifetime and the caller sees only the declared unavailable text.
  */
 async function execute<Found>(
-  declaration: Pick<Declaration<z.ZodObject, z.ZodObject>, 'output' | 'boundMs'> & { readonly failures: OperationFailures },
+  declaration: Pick<
+    Declaration<z.ZodObject, z.ZodObject>,
+    'output' | 'boundMs'
+  > & { readonly failures: OperationFailures },
   ctx: ServerContext,
   lifetime: RequestLifetime,
   run: (request: OperationRequest) => {
@@ -257,14 +346,22 @@ async function execute<Found>(
         // refusal's text must be a real string before it can reach the SDK. Anything else is a contract
         // break, answered before the projection can run, never serialized as a success.
         const unchecked: unknown = outcome;
-        const kind = typeof unchecked === 'object' && unchecked !== null ? (unchecked as { kind?: unknown }).kind : undefined;
+        const kind =
+          typeof unchecked === 'object' && unchecked !== null
+            ? (unchecked as { kind?: unknown }).kind
+            : undefined;
         if (kind === 'absent') return failure(declaration.failures.absent);
         if (kind === 'refused') {
           const text = (unchecked as { text?: unknown }).text;
-          return failure(isText(text) ? text : declaration.failures.invalidOutput);
+          return failure(
+            isText(text) ? text : declaration.failures.invalidOutput,
+          );
         }
-        if (kind !== 'record') return failure(declaration.failures.invalidOutput);
-        const projection: unknown = project((unchecked as { record: Found }).record);
+        if (kind !== 'record')
+          return failure(declaration.failures.invalidOutput);
+        const projection: unknown = project(
+          (unchecked as { record: Found }).record,
+        );
         // Projections are synchronous. An asynchronous one is refused without being awaited, which
         // would renew the budget, and its eventual rejection is consumed so it cannot surface unhandled.
         if (isThenable(projection)) {
@@ -274,12 +371,19 @@ async function execute<Found>(
         throwIfEnded(scope);
         // The callback is application code: a projection that is not the declared shape is a contract
         // break like invalid data, not a thrown fault and never something the SDK serializes.
-        if (!isProjection(projection)) return failure(declaration.failures.invalidOutput);
+        if (!isProjection(projection))
+          return failure(declaration.failures.invalidOutput);
         const parsed = declaration.output.safeParse(projection.data);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
-        return { content: [{ type: 'text' as const, text: projection.text }], structuredContent: parsed.data };
+        return {
+          content: [{ type: 'text' as const, text: projection.text }],
+          structuredContent: parsed.data,
+        };
       },
-      { limitMs: declaration.boundMs ?? lifetime.operationMs, upstream: ctx.mcpReq.signal },
+      {
+        limitMs: declaration.boundMs ?? lifetime.operationMs,
+        upstream: ctx.mcpReq.signal,
+      },
     );
     if (bounded.ok) return bounded.value;
     lifetime.record(bounded.cause);
@@ -293,7 +397,10 @@ async function execute<Found>(
  * Starts a lifetime for the call when the adapter supplied none, and finishes it with the call, so
  * an operation registered without an adapter is still bounded by the SDK defaults.
  */
-async function withLifetime(context: OperationContext | undefined, call: (lifetime: RequestLifetime) => Promise<CallToolResult>): Promise<CallToolResult> {
+async function withLifetime(
+  context: OperationContext | undefined,
+  call: (lifetime: RequestLifetime) => Promise<CallToolResult>,
+): Promise<CallToolResult> {
   if (context) return call(context.lifetime);
   const own = SDK_DEFAULTS.startRequest();
   try {
@@ -308,7 +415,10 @@ async function withLifetime(context: OperationContext | undefined, call: (lifeti
  * comes only from the trusted declaration; the callbacks never produce `_meta`, so nothing the
  * caller, the handler's record or the projection supplies can select a different resource.
  */
-function linkedToView(result: CallToolResult, view: OperationView): CallToolResult {
+function linkedToView(
+  result: CallToolResult,
+  view: OperationView,
+): CallToolResult {
   return { ...result, _meta: { ui: { resourceUri: view.uri } } };
 }
 
@@ -335,16 +445,28 @@ function register(
       annotations: declaration.annotations,
       _meta: { ui: { resourceUri: declaration.view.uri } },
     },
-    async (args, ctx) => linkedToView(await callback(args, ctx), declaration.view),
+    async (args, ctx) =>
+      linkedToView(await callback(args, ctx), declaration.view),
   );
   const { view } = declaration;
   registerAppResource(server, view.title, view.uri, {}, async () => ({
-    contents: [{ uri: view.uri, mimeType: RESOURCE_MIME_TYPE, text: view.html, _meta: { ui: { csp: view.csp } } }],
+    contents: [
+      {
+        uri: view.uri,
+        mimeType: RESOURCE_MIME_TYPE,
+        text: view.html,
+        _meta: { ui: { csp: view.csp } },
+      },
+    ],
   }));
 }
 
 /** Declares an explicitly public operation and its view on an application-owned MCP server. */
-export function registerPublicOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found>(
+export function registerPublicOperation<
+  Input extends z.ZodObject,
+  Output extends z.ZodObject,
+  Found,
+>(
   server: McpServer,
   operation: PublicOperation<Input, Output, Found>,
   context?: OperationContext,
@@ -353,7 +475,9 @@ export function registerPublicOperation<Input extends z.ZodObject, Output extend
   register(server, operation, (args, ctx) =>
     withLifetime(context, (lifetime) =>
       execute(operation, ctx, lifetime, (request) => ({
-        handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, request)),
+        handling: Promise.resolve().then(() =>
+          operation.handle(args as z.output<Input>, request),
+        ),
         project: (record: Found) => operation.project(record),
       })),
     ),
@@ -366,7 +490,12 @@ export function registerPublicOperation<Input extends z.ZodObject, Output extend
  * are all configured. With no acceptable identity the handler never runs, and neither does it for a
  * call that was cancelled or whose request already ended before the handler could start.
  */
-export function registerProtectedOperation<Input extends z.ZodObject, Output extends z.ZodObject, Found, Identity>(
+export function registerProtectedOperation<
+  Input extends z.ZodObject,
+  Output extends z.ZodObject,
+  Found,
+  Identity,
+>(
   server: McpServer,
   operation: ProtectedOperation<Input, Output, Found, Identity>,
   context?: OperationContext,
@@ -374,7 +503,8 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
   assertConfigured(operation, true);
   register(server, operation, (args, ctx) =>
     withLifetime(context, async (lifetime) => {
-      if (ctx.mcpReq.signal.aborted || lifetime.check()) return failure(operation.failures.unavailable);
+      if (ctx.mcpReq.signal.aborted || lifetime.check())
+        return failure(operation.failures.unavailable);
       let identity: Identity | undefined;
       try {
         const resolved = operation.identity(ctx.http?.authInfo);
@@ -389,13 +519,21 @@ export function registerProtectedOperation<Input extends z.ZodObject, Output ext
         identity = resolved;
       } catch (error) {
         // The resolver is application code; whatever it threw may name the identity provider.
-        lifetime.record({ kind: 'dependency-failure', stage: 'authentication', effect: 'none', error });
+        lifetime.record({
+          kind: 'dependency-failure',
+          stage: 'authentication',
+          effect: 'none',
+          error,
+        });
         return failure(operation.failures.unavailable);
       }
-      if (identity === undefined) return failure(operation.failures.signInRequired);
+      if (identity === undefined)
+        return failure(operation.failures.signInRequired);
       const principal = identity;
       return execute(operation, ctx, lifetime, (request) => ({
-        handling: Promise.resolve().then(() => operation.handle(args as z.output<Input>, principal, request)),
+        handling: Promise.resolve().then(() =>
+          operation.handle(args as z.output<Input>, principal, request),
+        ),
         project: (record: Found) => operation.project(record, principal),
       }));
     }),

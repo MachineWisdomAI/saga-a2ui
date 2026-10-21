@@ -1,4 +1,8 @@
-import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import {
+  Catalog,
+  type ComponentApi,
+  type SurfaceModel,
+} from '@a2ui/web_core/v0_9';
 import { describe, expect, it } from 'vitest';
 import { z } from '../zod3.js';
 import { a2uiV0_9Decoder } from './decoder.js';
@@ -9,14 +13,27 @@ import { createMessageSession } from './session.js';
 const CATALOG_ID = 'https://example.test/catalog';
 const Panel: ComponentApi = {
   name: 'Panel',
-  schema: z.object({ title: z.string().optional(), description: z.string().optional() }).strict(),
+  schema: z
+    .object({
+      title: z.string().optional(),
+      description: z.string().optional(),
+    })
+    .strict(),
 };
 const catalog = new Catalog<ComponentApi>(CATALOG_ID, 'v0.9', [Panel]);
 
-const create = { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: CATALOG_ID } } as const;
+const create = {
+  version: 'v0.9',
+  createSurface: { surfaceId: 's', catalogId: CATALOG_ID },
+} as const;
 const components = (list: Record<string, unknown>[]) =>
-  ({ version: 'v0.9', updateComponents: { surfaceId: 's', components: list } }) as const;
-const rootPanel = components([{ id: 'root', component: 'Panel', title: 'T', description: 'D' }]);
+  ({
+    version: 'v0.9',
+    updateComponents: { surfaceId: 's', components: list },
+  }) as const;
+const rootPanel = components([
+  { id: 'root', component: 'Panel', title: 'T', description: 'D' },
+]);
 
 /** Names the case of each message, via the visitor interface only. */
 const caseName: A2uiMessageVisitor<string> = {
@@ -32,7 +49,8 @@ const valueOf: A2uiMessageVisitor<unknown> = {
   updateDataModel: (m) => m,
   deleteSurface: (m) => m,
 };
-const names = (messages: readonly ValidatedMessage[]) => messages.map((m) => m.accept(caseName));
+const names = (messages: readonly ValidatedMessage[]) =>
+  messages.map((m) => m.accept(caseName));
 
 describe('decoder', () => {
   const decode = (input: unknown) => a2uiV0_9Decoder.decode(input);
@@ -62,7 +80,12 @@ describe('decoder', () => {
   it('preserves supplied optional fields', () => {
     const input = {
       version: 'v0.9',
-      createSurface: { surfaceId: 's', catalogId: CATALOG_ID, theme: { primaryColor: '#fff' }, sendDataModel: true },
+      createSurface: {
+        surfaceId: 's',
+        catalogId: CATALOG_ID,
+        theme: { primaryColor: '#fff' },
+        sendDataModel: true,
+      },
     };
     const result = decode(input);
     if (!result.ok) throw new Error(result.failure.message);
@@ -70,7 +93,11 @@ describe('decoder', () => {
   });
 
   it('does not let later changes to the caller input alter validated messages', () => {
-    const entry: Record<string, unknown> = { id: 'root', component: 'Panel', title: 'Before' };
+    const entry: Record<string, unknown> = {
+      id: 'root',
+      component: 'Panel',
+      title: 'Before',
+    };
     const result = decode(components([entry]));
     entry.title = 'After';
     expect(result.ok && result.messages[0]!.accept(valueOf)).toEqual(
@@ -79,15 +106,39 @@ describe('decoder', () => {
   });
 
   it.each([
-    ['an unsupported version', { ...create, version: 'v0.8' }, 'unsupported-version'],
-    ['a missing version', { createSurface: create.createSurface }, 'unsupported-version'],
+    [
+      'an unsupported version',
+      { ...create, version: 'v0.8' },
+      'unsupported-version',
+    ],
+    [
+      'a missing version',
+      { createSurface: create.createSurface },
+      'unsupported-version',
+    ],
     ['a non-object', 'text', 'malformed'],
     ['null', null, 'malformed'],
     ['an unknown operation', { version: 'v0.9', notAMessage: {} }, 'malformed'],
-    ['a case with a missing field', { version: 'v0.9', createSurface: { surfaceId: 's' } }, 'malformed'],
-    ['two operations in one message', { ...create, deleteSurface: { surfaceId: 's' } }, 'malformed'],
-    ['a wrapper with extra keys', { messages: [create], extra: 1 }, 'malformed'],
-    ['a wrapper whose messages is not an array', { messages: create }, 'malformed'],
+    [
+      'a case with a missing field',
+      { version: 'v0.9', createSurface: { surfaceId: 's' } },
+      'malformed',
+    ],
+    [
+      'two operations in one message',
+      { ...create, deleteSurface: { surfaceId: 's' } },
+      'malformed',
+    ],
+    [
+      'a wrapper with extra keys',
+      { messages: [create], extra: 1 },
+      'malformed',
+    ],
+    [
+      'a wrapper whose messages is not an array',
+      { messages: create },
+      'malformed',
+    ],
   ])('rejects %s with a typed failure', (_name, input, kind) => {
     const result = decode(input);
     expect(result.ok).toBe(false);
@@ -111,16 +162,37 @@ describe('decoder', () => {
   it.each([
     [
       'a value that cannot be copied',
-      { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { unsupported: () => undefined } } },
+      {
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId: 's',
+          value: { unsupported: () => undefined },
+        },
+      },
       'malformed',
     ],
-    ['a bigint version', { version: 1n, deleteSurface: { surfaceId: 's' } }, 'unsupported-version'],
-    ['a cyclic version', (() => { const v: unknown[] = []; v.push(v); return { version: v, deleteSurface: { surfaceId: 's' } }; })(), 'unsupported-version'],
-  ])('returns a typed failure instead of throwing for %s', (_name, input, kind) => {
-    const result = decode(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.failure.kind).toBe(kind);
-  });
+    [
+      'a bigint version',
+      { version: 1n, deleteSurface: { surfaceId: 's' } },
+      'unsupported-version',
+    ],
+    [
+      'a cyclic version',
+      (() => {
+        const v: unknown[] = [];
+        v.push(v);
+        return { version: v, deleteSurface: { surfaceId: 's' } };
+      })(),
+      'unsupported-version',
+    ],
+  ])(
+    'returns a typed failure instead of throwing for %s',
+    (_name, input, kind) => {
+      const result = decode(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.failure.kind).toBe(kind);
+    },
+  );
 
   it('returns malformed instead of throwing when inspecting the input throws', () => {
     const throwingProperty = {
@@ -143,12 +215,15 @@ describe('decoder', () => {
   });
 
   it('rejects the whole input when any message in a batch is invalid', () => {
-    expect(decode([create, { version: 'v0.9', notAMessage: {} }]).ok).toBe(false);
+    expect(decode([create, { version: 'v0.9', notAMessage: {} }]).ok).toBe(
+      false,
+    );
   });
 });
 
 describe('message session', () => {
-  const newSession = () => createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
+  const newSession = () =>
+    createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
 
   const surfaceOf = (session: ReturnType<typeof newSession>) => {
     const surfaces: unknown[] = [];
@@ -170,8 +245,14 @@ describe('message session', () => {
       session.ingest([
         create,
         rootPanel,
-        { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { title: 'One' } } },
-        { version: 'v0.9', updateDataModel: { surfaceId: 's', path: '/title', value: 'Two' } },
+        {
+          version: 'v0.9',
+          updateDataModel: { surfaceId: 's', value: { title: 'One' } },
+        },
+        {
+          version: 'v0.9',
+          updateDataModel: { surfaceId: 's', path: '/title', value: 'Two' },
+        },
       ]),
     ).toEqual({ ok: true });
     const surface = created[0] as SurfaceModel<ComponentApi>;
@@ -182,9 +263,13 @@ describe('message session', () => {
     const session = newSession();
     const created = surfaceOf(session);
     session.ingest([create, rootPanel]);
-    const result = session.ingest(components([{ id: 'root', title: 'Partial title' }]));
+    const result = session.ingest(
+      components([{ id: 'root', title: 'Partial title' }]),
+    );
     expect(result).toEqual({ ok: true });
-    const root = (created[0] as SurfaceModel<ComponentApi>).componentsModel.get('root');
+    const root = (created[0] as SurfaceModel<ComponentApi>).componentsModel.get(
+      'root',
+    );
     expect(root?.type).toBe('Panel');
     expect(root?.properties).toMatchObject({ title: 'Partial title' });
   });
@@ -209,14 +294,20 @@ describe('message session', () => {
 
   it('rejects updates to an unknown surface', () => {
     const session = newSession();
-    const result = session.ingest(components([{ id: 'root', component: 'Panel' }]));
+    const result = session.ingest(
+      components([{ id: 'root', component: 'Panel' }]),
+    );
     expect(result.ok).toBe(false);
   });
 
   it('rejects a wrongly typed property', () => {
     const session = newSession();
     session.ingest(create);
-    expect(session.ingest(components([{ id: 'root', component: 'Panel', title: 42 }])).ok).toBe(false);
+    expect(
+      session.ingest(
+        components([{ id: 'root', component: 'Panel', title: 42 }]),
+      ).ok,
+    ).toBe(false);
   });
 
   it('reports decode failures through the same result type and keeps working afterwards', () => {
@@ -230,7 +321,10 @@ describe('message session', () => {
   it('reports uncopyable or odd input through ingest and still accepts valid input afterwards', () => {
     const session = newSession();
     for (const bad of [
-      { version: 'v0.9', updateDataModel: { surfaceId: 's', value: { f: () => undefined } } },
+      {
+        version: 'v0.9',
+        updateDataModel: { surfaceId: 's', value: { f: () => undefined } },
+      },
       { version: 1n, deleteSurface: { surfaceId: 's' } },
       {
         version: 'v0.9',

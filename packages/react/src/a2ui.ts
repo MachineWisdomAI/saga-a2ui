@@ -7,4 +7,4 @@ export {
   type ReactComponentImplementation,
   type NodeViewProps,
 } from '@a2ui/react/v0_9';
-export {Catalog, CommonSchemas, type SurfaceModel} from '@a2ui/web_core/v0_9';
+export { Catalog, CommonSchemas, type SurfaceModel } from '@a2ui/web_core/v0_9';

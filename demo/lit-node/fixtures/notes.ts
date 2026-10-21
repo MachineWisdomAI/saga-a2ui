@@ -15,7 +15,12 @@ export interface NoteOwners {
 }
 
 export function syntheticNotes(owners: NoteOwners): NoteRecord[] {
-  const note = (id: string, ownerAccountId: string, title: string, body: string): NoteRecord => ({
+  const note = (
+    id: string,
+    ownerAccountId: string,
+    title: string,
+    body: string,
+  ): NoteRecord => ({
     id,
     ownerAccountId,
     title,

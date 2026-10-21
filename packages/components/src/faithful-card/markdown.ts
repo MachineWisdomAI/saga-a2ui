@@ -30,8 +30,15 @@ export interface MarkdownSettings {
 export type InlineNode =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'code'; readonly text: string }
-  | { readonly kind: 'emphasis' | 'strong' | 'strikethrough'; readonly children: readonly InlineNode[] }
-  | { readonly kind: 'link'; readonly destination: string; readonly children: readonly InlineNode[] }
+  | {
+      readonly kind: 'emphasis' | 'strong' | 'strikethrough';
+      readonly children: readonly InlineNode[];
+    }
+  | {
+      readonly kind: 'link';
+      readonly destination: string;
+      readonly children: readonly InlineNode[];
+    }
   | { readonly kind: 'image'; readonly source: string; readonly alt: string }
   /** An HTML tag or comment inside a line, exactly as written. Never rendered as markup. */
   | { readonly kind: 'raw-html'; readonly text: string }
@@ -48,11 +55,24 @@ export interface TableCell {
 
 export type BlockNode =
   | { readonly kind: 'paragraph'; readonly children: readonly InlineNode[] }
-  | { readonly kind: 'heading'; readonly level: number; readonly children: readonly InlineNode[] }
+  | {
+      readonly kind: 'heading';
+      readonly level: number;
+      readonly children: readonly InlineNode[];
+    }
   | { readonly kind: 'quote'; readonly children: readonly BlockNode[] }
-  | { readonly kind: 'list'; readonly ordered: boolean; readonly start: number; readonly items: readonly (readonly BlockNode[])[] }
+  | {
+      readonly kind: 'list';
+      readonly ordered: boolean;
+      readonly start: number;
+      readonly items: readonly (readonly BlockNode[])[];
+    }
   /** A body row can hold more cells than the header: every cell written stays. */
-  | { readonly kind: 'table'; readonly header: readonly TableCell[]; readonly rows: readonly (readonly TableCell[])[] }
+  | {
+      readonly kind: 'table';
+      readonly header: readonly TableCell[];
+      readonly rows: readonly (readonly TableCell[])[];
+    }
   | { readonly kind: 'code-block'; readonly text: string }
   /** A block of raw HTML, exactly as written (without its final line ending). Never rendered as markup. */
   | { readonly kind: 'raw-html-block'; readonly text: string }
@@ -73,7 +93,11 @@ export interface ParsedMarkdown {
 export const MAX_NESTING_LEVEL = 20;
 
 export type ParseFailure =
-  | { readonly kind: 'too-long'; readonly limit: number; readonly length: number }
+  | {
+      readonly kind: 'too-long';
+      readonly limit: number;
+      readonly length: number;
+    }
   | { readonly kind: 'too-nested'; readonly limit: number };
 
 export type ParseResult =
@@ -90,14 +114,17 @@ function createParser(dialect: MarkdownDialect): Parser {
     typographer: false,
     maxNesting: MAX_NESTING_LEVEL,
   });
-  if (dialect === 'commonmark-tables-strikethrough') parser.enable(['table', 'strikethrough']);
+  if (dialect === 'commonmark-tables-strikethrough')
+    parser.enable(['table', 'strikethrough']);
   return parser;
 }
 
 // Parsers hold no per-document state, so one per dialect serves every read.
 const parsers: Record<MarkdownDialect, Parser> = {
   commonmark: createParser('commonmark'),
-  'commonmark-tables-strikethrough': createParser('commonmark-tables-strikethrough'),
+  'commonmark-tables-strikethrough': createParser(
+    'commonmark-tables-strikethrough',
+  ),
 };
 
 /**
@@ -109,7 +136,9 @@ const parsers: Record<MarkdownDialect, Parser> = {
  */
 function reachesNestingCeiling(tokens: readonly Token[]): boolean {
   return tokens.some(
-    (token) => (token.type === 'blockquote_open' || token.type === 'list_item_open') && token.level + 1 >= MAX_NESTING_LEVEL,
+    (token) =>
+      (token.type === 'blockquote_open' || token.type === 'list_item_open') &&
+      token.level + 1 >= MAX_NESTING_LEVEL,
   );
 }
 
@@ -135,7 +164,8 @@ function mergeText(nodes: InlineNode[]): InlineNode[] {
   for (const node of nodes) {
     if (node.kind === 'text' && node.text === '') continue;
     const last = merged[merged.length - 1];
-    if (node.kind === 'text' && last?.kind === 'text') merged[merged.length - 1] = { kind: 'text', text: last.text + node.text };
+    if (node.kind === 'text' && last?.kind === 'text')
+      merged[merged.length - 1] = { kind: 'text', text: last.text + node.text };
     else merged.push(node);
   }
   return merged;
@@ -156,13 +186,22 @@ function readInlines(reader: TokenReader, closeType?: string): InlineNode[] {
         nodes.push({ kind: 'hardbreak' });
         break;
       case 'em_open':
-        nodes.push({ kind: 'emphasis', children: readInlines(reader, 'em_close') });
+        nodes.push({
+          kind: 'emphasis',
+          children: readInlines(reader, 'em_close'),
+        });
         break;
       case 'strong_open':
-        nodes.push({ kind: 'strong', children: readInlines(reader, 'strong_close') });
+        nodes.push({
+          kind: 'strong',
+          children: readInlines(reader, 'strong_close'),
+        });
         break;
       case 's_open':
-        nodes.push({ kind: 'strikethrough', children: readInlines(reader, 's_close') });
+        nodes.push({
+          kind: 'strikethrough',
+          children: readInlines(reader, 's_close'),
+        });
         break;
       case 'link_open':
         nodes.push({
@@ -172,7 +211,11 @@ function readInlines(reader: TokenReader, closeType?: string): InlineNode[] {
         });
         break;
       case 'image':
-        nodes.push({ kind: 'image', source: stringAttribute(token, 'src'), alt: token.content });
+        nodes.push({
+          kind: 'image',
+          source: stringAttribute(token, 'src'),
+          alt: token.content,
+        });
         break;
       case 'html_inline':
         nodes.push({ kind: 'raw-html', text: token.content });
@@ -207,12 +250,17 @@ function cellsOfLine(line: string): string[] {
   const cells: string[] = [];
   let current = '';
   let escaped = false;
-  for (const character of line.replace(/^[\s>]*(?:(?:[-*+]|\d{1,9}[.)])\s+)*/, '').trim()) {
+  for (const character of line
+    .replace(/^[\s>]*(?:(?:[-*+]|\d{1,9}[.)])\s+)*/, '')
+    .trim()) {
     if (character === '|' && !escaped) {
       cells.push(current);
       current = '';
     } else {
-      current = escaped && character === '|' ? current.slice(0, -1) + character : current + character;
+      current =
+        escaped && character === '|'
+          ? current.slice(0, -1) + character
+          : current + character;
     }
     escaped = character === '\\';
   }
@@ -239,7 +287,10 @@ interface Recovery {
  * is done here; the supplied string itself is never changed.
  */
 function normalizedLines(source: string): string[] {
-  return source.replace(/\r\n?|\n/g, '\n').replace(/\0/g, '\uFFFD').split('\n');
+  return source
+    .replace(/\r\n?|\n/g, '\n')
+    .replace(/\0/g, '\uFFFD')
+    .split('\n');
 }
 
 /**
@@ -254,7 +305,11 @@ function readTable(reader: TokenReader, recovery: Recovery): BlockNode {
   let row: TableCell[] | undefined;
   let rowLine: number | undefined;
   let inHeader = false;
-  for (let token = reader.next(); token !== undefined && token.type !== 'table_close'; token = reader.next()) {
+  for (
+    let token = reader.next();
+    token !== undefined && token.type !== 'table_close';
+    token = reader.next()
+  ) {
     switch (token.type) {
       case 'thead_open':
         inHeader = true;
@@ -269,7 +324,10 @@ function readTable(reader: TokenReader, recovery: Recovery): BlockNode {
       case 'th_open':
       case 'td_open': {
         const align = alignmentOf(token);
-        row?.push({ ...(align === undefined ? {} : { align }), children: inlineChildren(reader.next()) });
+        row?.push({
+          ...(align === undefined ? {} : { align }),
+          children: inlineChildren(reader.next()),
+        });
         reader.next(); // th_close or td_close
         break;
       }
@@ -285,9 +343,14 @@ function readTable(reader: TokenReader, recovery: Recovery): BlockNode {
   return { kind: 'table', header, rows };
 }
 
-function withDroppedCells(row: TableCell[], line: number | undefined, recovery: Recovery): TableCell[] {
+function withDroppedCells(
+  row: TableCell[],
+  line: number | undefined,
+  recovery: Recovery,
+): TableCell[] {
   const { parser, env, sourceLines } = recovery;
-  const written = line === undefined ? [] : cellsOfLine(sourceLines[line] ?? '');
+  const written =
+    line === undefined ? [] : cellsOfLine(sourceLines[line] ?? '');
   const dropped = written.slice(row.length);
   if (dropped.length === 0) return row;
   const extra = dropped.map((text): TableCell => {
@@ -297,31 +360,53 @@ function withDroppedCells(row: TableCell[], line: number | undefined, recovery: 
   return [...row, ...extra];
 }
 
-function readBlocks(reader: TokenReader, recovery: Recovery, closeType?: string): BlockNode[] {
+function readBlocks(
+  reader: TokenReader,
+  recovery: Recovery,
+  closeType?: string,
+): BlockNode[] {
   const blocks: BlockNode[] = [];
   for (let token = reader.next(); token !== undefined; token = reader.next()) {
     if (token.type === closeType) break;
     switch (token.type) {
       case 'paragraph_open': {
-        blocks.push({ kind: 'paragraph', children: inlineChildren(reader.next()) });
+        blocks.push({
+          kind: 'paragraph',
+          children: inlineChildren(reader.next()),
+        });
         reader.next(); // paragraph_close
         break;
       }
       case 'heading_open': {
         const level = Number(token.tag.slice(1));
-        blocks.push({ kind: 'heading', level, children: inlineChildren(reader.next()) });
+        blocks.push({
+          kind: 'heading',
+          level,
+          children: inlineChildren(reader.next()),
+        });
         reader.next(); // heading_close
         break;
       }
       case 'blockquote_open':
-        blocks.push({ kind: 'quote', children: readBlocks(reader, recovery, 'blockquote_close') });
+        blocks.push({
+          kind: 'quote',
+          children: readBlocks(reader, recovery, 'blockquote_close'),
+        });
         break;
       case 'bullet_list_open':
       case 'ordered_list_open': {
-        const closing = token.type === 'bullet_list_open' ? 'bullet_list_close' : 'ordered_list_close';
+        const closing =
+          token.type === 'bullet_list_open'
+            ? 'bullet_list_close'
+            : 'ordered_list_close';
         const items: BlockNode[][] = [];
-        for (let item = reader.next(); item !== undefined && item.type !== closing; item = reader.next()) {
-          if (item.type === 'list_item_open') items.push(readBlocks(reader, recovery, 'list_item_close'));
+        for (
+          let item = reader.next();
+          item !== undefined && item.type !== closing;
+          item = reader.next()
+        ) {
+          if (item.type === 'list_item_open')
+            items.push(readBlocks(reader, recovery, 'list_item_close'));
         }
         blocks.push({
           kind: 'list',
@@ -339,14 +424,21 @@ function readBlocks(reader: TokenReader, recovery: Recovery, closeType?: string)
         blocks.push({ kind: 'code-block', text: token.content });
         break;
       case 'html_block':
-        blocks.push({ kind: 'raw-html-block', text: token.content.replace(/\n$/, '') });
+        blocks.push({
+          kind: 'raw-html-block',
+          text: token.content.replace(/\n$/, ''),
+        });
         break;
       case 'hr':
         blocks.push({ kind: 'rule' });
         break;
       default:
         // An unrecognised block keeps whatever text it carries rather than disappearing.
-        if (token.content !== '') blocks.push({ kind: 'paragraph', children: [{ kind: 'text', text: token.content }] });
+        if (token.content !== '')
+          blocks.push({
+            kind: 'paragraph',
+            children: [{ kind: 'text', text: token.content }],
+          });
     }
   }
   return blocks;
@@ -371,17 +463,26 @@ export function fragmentsOf(parsed: ParsedMarkdown): MarkdownFragments {
       if (node.kind === 'link') {
         links += 1;
         inlines(node.children);
-      } else if (node.kind === 'emphasis' || node.kind === 'strong' || node.kind === 'strikethrough') inlines(node.children);
+      } else if (
+        node.kind === 'emphasis' ||
+        node.kind === 'strong' ||
+        node.kind === 'strikethrough'
+      )
+        inlines(node.children);
       else if (node.kind === 'image') images.push(node.source);
       else if (node.kind === 'raw-html') rawHtml += 1;
     }
   };
   const blocks = (nodes: readonly BlockNode[]): void => {
     for (const node of nodes) {
-      if (node.kind === 'paragraph' || node.kind === 'heading') inlines(node.children);
+      if (node.kind === 'paragraph' || node.kind === 'heading')
+        inlines(node.children);
       else if (node.kind === 'quote') blocks(node.children);
-      else if (node.kind === 'list') for (const item of node.items) blocks(item);
-      else if (node.kind === 'table') for (const cell of [...node.header, ...node.rows.flat()]) inlines(cell.children);
+      else if (node.kind === 'list')
+        for (const item of node.items) blocks(item);
+      else if (node.kind === 'table')
+        for (const cell of [...node.header, ...node.rows.flat()])
+          inlines(cell.children);
       else if (node.kind === 'raw-html-block') rawHtml += 1;
     }
   };
@@ -404,14 +505,32 @@ function deepFreeze<T>(value: T): T {
  * truncated or silently dropped and no partial result is returned. The returned value is deeply
  * immutable and keeps the supplied string as `source`.
  */
-export function parseMarkdown(source: string, settings: MarkdownSettings): ParseResult {
+export function parseMarkdown(
+  source: string,
+  settings: MarkdownSettings,
+): ParseResult {
   if (source.length > settings.maxLength) {
-    return { ok: false, failure: { kind: 'too-long', limit: settings.maxLength, length: source.length } };
+    return {
+      ok: false,
+      failure: {
+        kind: 'too-long',
+        limit: settings.maxLength,
+        length: source.length,
+      },
+    };
   }
   const parser = parsers[settings.dialect];
   const env: Record<string, unknown> = {};
   const tokens = parser.parse(source, env);
-  if (reachesNestingCeiling(tokens)) return { ok: false, failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL } };
-  const blocks = readBlocks(new TokenReader(tokens), { parser, env, sourceLines: normalizedLines(source) });
+  if (reachesNestingCeiling(tokens))
+    return {
+      ok: false,
+      failure: { kind: 'too-nested', limit: MAX_NESTING_LEVEL },
+    };
+  const blocks = readBlocks(new TokenReader(tokens), {
+    parser,
+    env,
+    sourceLines: normalizedLines(source),
+  });
   return { ok: true, parsed: deepFreeze({ source, blocks }) };
 }

@@ -16,7 +16,9 @@ export interface IngestFailure {
   readonly message: string;
 }
 
-export type IngestResult = { readonly ok: true } | { readonly ok: false; readonly failure: IngestFailure };
+export type IngestResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: IngestFailure };
 
 /**
  * Owns one upstream `MessageProcessor` and the mutable surface state inside it.
@@ -44,7 +46,9 @@ export interface MessageSessionOptions<T extends ComponentApi> {
   readonly decoder: MessageDecoder;
 }
 
-export function createMessageSession<T extends ComponentApi>(options: MessageSessionOptions<T>): MessageSession<T> {
+export function createMessageSession<T extends ComponentApi>(
+  options: MessageSessionOptions<T>,
+): MessageSession<T> {
   const processor = new MessageProcessor<T>([...options.catalogs], undefined, {
     validationConfig: STRICT_VALIDATION,
   });
@@ -56,10 +60,14 @@ export function createMessageSession<T extends ComponentApi>(options: MessageSes
   // Upstream keeps supplied objects (e.g. the data-model value) and mutates them in place on
   // later updates, so it gets its own copy; the validated, frozen message stays unchanged.
   const apply: A2uiMessageVisitor<void> = {
-    createSurface: (message) => processor.processMessages(structuredClone(message)),
-    updateComponents: (message) => processor.processMessages(structuredClone(message)),
-    updateDataModel: (message) => processor.processMessages(structuredClone(message)),
-    deleteSurface: (message) => processor.processMessages(structuredClone(message)),
+    createSurface: (message) =>
+      processor.processMessages(structuredClone(message)),
+    updateComponents: (message) =>
+      processor.processMessages(structuredClone(message)),
+    updateDataModel: (message) =>
+      processor.processMessages(structuredClone(message)),
+    deleteSurface: (message) =>
+      processor.processMessages(structuredClone(message)),
   };
 
   const applyAll = (messages: readonly ValidatedMessage[]): IngestResult => {
@@ -69,16 +77,25 @@ export function createMessageSession<T extends ComponentApi>(options: MessageSes
     } catch (error) {
       return {
         ok: false,
-        failure: { kind: 'rejected', message: error instanceof Error ? error.message : 'Unknown error' },
+        failure: {
+          kind: 'rejected',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
       };
     }
   };
 
   return {
     ingest(input) {
-      if (disposed) return { ok: false, failure: { kind: 'rejected', message: 'The session was disposed.' } };
+      if (disposed)
+        return {
+          ok: false,
+          failure: { kind: 'rejected', message: 'The session was disposed.' },
+        };
       const decoded = options.decoder.decode(input);
-      return decoded.ok ? applyAll(decoded.messages) : { ok: false, failure: decoded.failure };
+      return decoded.ok
+        ? applyAll(decoded.messages)
+        : { ok: false, failure: decoded.failure };
     },
     onSurfaceCreated: (handler) => processor.onSurfaceCreated(handler),
     onSurfaceDeleted: (handler) => processor.onSurfaceDeleted(handler),

@@ -27,7 +27,8 @@ export const RENDERERS: readonly RendererChoice[] = [
   {
     id: 'lit',
     label: 'Lit',
-    evidence: 'The full renderer. The notes application, its action definitions and its view run here as qualified for the demonstration.',
+    evidence:
+      'The full renderer. The notes application, its action definitions and its view run here as qualified for the demonstration.',
   },
   {
     id: 'react',
@@ -37,7 +38,15 @@ export const RENDERERS: readonly RendererChoice[] = [
   },
 ];
 
-export type ScenarioKind = 'allowed' | 'refused' | 'denied' | 'missing-credential' | 'unknown' | 'independent' | 'obsolete' | 'canceled';
+export type ScenarioKind =
+  | 'allowed'
+  | 'refused'
+  | 'denied'
+  | 'missing-credential'
+  | 'unknown'
+  | 'independent'
+  | 'obsolete'
+  | 'canceled';
 
 export interface Scenario {
   readonly id: string;
@@ -62,13 +71,21 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'allowed',
     person: 'alice',
     controls: [],
-    summary: 'The whole path of one press: the session check, the protected archive request, the server’s own decision and the application’s hand-over of the hold.',
+    summary:
+      'The whole path of one press: the session check, the protected archive request, the server’s own decision and the application’s hand-over of the hold.',
     steps: ['Press Archive under Alpha.'],
     expect:
       'The row says “Archived at 1001”. The simulated backend shows n-1 archived after 1 session check and 1 archive request, and the hold on n-1 is confirmed: the invocation handed it to the application for good.',
-    limit: 'The session check is a simulated answer. It does not authenticate anyone, and a simulated allow shows nothing about a real server.',
+    limit:
+      'The session check is a simulated answer. It does not authenticate anyone, and a simulated allow shows nothing about a real server.',
     guide: 'trace',
-    sources: ['layout', 'definition', 'prerequisite', 'attachment-lit', 'cleanup-success'],
+    sources: [
+      'layout',
+      'definition',
+      'prerequisite',
+      'attachment-lit',
+      'cleanup-success',
+    ],
   },
   {
     id: 'session-ended',
@@ -76,10 +93,13 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'refused',
     person: 'alice',
     controls: ['end-notes-session'],
-    summary: 'A prerequisite that refuses ends the press before the protected request exists.',
+    summary:
+      'A prerequisite that refuses ends the press before the protected request exists.',
     steps: ['Press Archive under Alpha.'],
-    expect: 'The row says “Not archived: sign-in-required”. The simulated backend shows 1 session check and 0 archive requests: the archive request was never sent. The hold was given back.',
-    limit: 'A prerequisite stops a press on the client as a convenience. It authorizes nothing: a real server decides again for every protected request.',
+    expect:
+      'The row says “Not archived: sign-in-required”. The simulated backend shows 1 session check and 0 archive requests: the archive request was never sent. The hold was given back.',
+    limit:
+      'A prerequisite stops a press on the client as a convenience. It authorizes nothing: a real server decides again for every protected request.',
     guide: 'prerequisites',
     sources: ['prerequisite', 'ownership'],
   },
@@ -89,10 +109,13 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'denied',
     person: 'alice',
     controls: ['revoke-archive-permission'],
-    summary: 'The session check still says yes, and the protected request is refused anyway, because the server decides again.',
+    summary:
+      'The session check still says yes, and the protected request is refused anyway, because the server decides again.',
     steps: ['Press Archive under Alpha.'],
-    expect: 'The row says “The server declined; nothing changed”. The simulated backend shows 1 session check and 1 archive request, and nothing archived. The reply declared that nothing changed, so the view could say so.',
-    limit: 'This denial is a simulated outcome you chose. It does not prove that any real server enforces permission; the linked server source is exercised by the repository’s own tests, not by this page.',
+    expect:
+      'The row says “The server declined; nothing changed”. The simulated backend shows 1 session check and 1 archive request, and nothing archived. The reply declared that nothing changed, so the view could say so.',
+    limit:
+      'This denial is a simulated outcome you chose. It does not prove that any real server enforces permission; the linked server source is exercised by the repository’s own tests, not by this page.',
     guide: 'trace',
     sources: ['server-decision', 'simulated-decision', 'cleanup-success'],
   },
@@ -102,10 +125,16 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'allowed',
     person: 'bob',
     controls: [],
-    summary: 'The list shows only the notes of the person the request names, and only three fields of each note.',
-    steps: ['Look at the list: only Delta is there.', 'Press Archive under Delta.'],
-    expect: 'The row says “Archived at 1001”. Alice’s notes were never listed for Bob.',
-    limit: 'Choosing Bob changes who the next simulated call names. There is no sign-in, token or account on this page.',
+    summary:
+      'The list shows only the notes of the person the request names, and only three fields of each note.',
+    steps: [
+      'Look at the list: only Delta is there.',
+      'Press Archive under Delta.',
+    ],
+    expect:
+      'The row says “Archived at 1001”. Alice’s notes were never listed for Bob.',
+    limit:
+      'Choosing Bob changes who the next simulated call names. There is no sign-in, token or account on this page.',
     guide: 'trace',
     sources: ['server-decision', 'simulated-decision'],
   },
@@ -115,10 +144,16 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'missing-credential',
     person: 'nobody',
     controls: [],
-    summary: 'A request with no verified identity is refused before any backend is asked.',
-    steps: ['Open the view and read its status line.', 'Choose Alice under “Who is asking”, then open the view again to see her notes.'],
-    expect: 'The status line says “Your notes could not be shown.” and no note appears. The simulated backend shows 0 session checks and 0 archive requests.',
-    limit: '“No credential” is a simulated choice. A real application refuses a missing credential at its HTTP listener, which this tour does not run.',
+    summary:
+      'A request with no verified identity is refused before any backend is asked.',
+    steps: [
+      'Open the view and read its status line.',
+      'Choose Alice under “Who is asking”, then open the view again to see her notes.',
+    ],
+    expect:
+      'The status line says “Your notes could not be shown.” and no note appears. The simulated backend shows 0 session checks and 0 archive requests.',
+    limit:
+      '“No credential” is a simulated choice. A real application refuses a missing credential at its HTTP listener, which this tour does not run.',
     guide: 'trace',
     sources: ['server-decision', 'simulated-decision'],
   },
@@ -128,10 +163,16 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'unknown',
     person: 'alice',
     controls: ['fail-after-write'],
-    summary: 'A failed answer to a write says nothing about whether the write happened, so the view must not claim it did not.',
-    steps: ['Press Archive under Alpha.', 'Read the row and the simulated backend.'],
-    expect: 'The row says “Archive status unknown”, and the simulated backend shows n-1 archived. Nothing retried the request: the archive request count stays at 1.',
-    limit: 'The page cannot show a real timeout. The 30 s work deadline, 5 s hooks, 3 s server operation and 10 s server request are not exercised here; see the guide’s four clocks.',
+    summary:
+      'A failed answer to a write says nothing about whether the write happened, so the view must not claim it did not.',
+    steps: [
+      'Press Archive under Alpha.',
+      'Read the row and the simulated backend.',
+    ],
+    expect:
+      'The row says “Archive status unknown”, and the simulated backend shows n-1 archived. Nothing retried the request: the archive request count stays at 1.',
+    limit:
+      'The page cannot show a real timeout. The 30 s work deadline, 5 s hooks, 3 s server operation and 10 s server request are not exercised here; see the guide’s four clocks.',
     guide: 'clocks',
     sources: ['definition', 'cleanup-success'],
   },
@@ -141,20 +182,28 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'independent',
     person: 'alice',
     controls: ['hold-archives'],
-    summary: 'The same action definition is attached directly to each rendered row. Each attachment keeps its own state.',
-    steps: ['Press Archive under Alpha, then under Beta. Both archive requests wait at the simulated backend.', 'Press “Release held archives”.'],
-    expect: 'While held, the page lists both holds as pending (n-1,n-2). After the release both rows say “Archived at …” and both holds are confirmed. A pending press on one row never disables or cancels the other.',
-    limit: '“Held” is a simulated slow backend that waits until you release it.',
+    summary:
+      'The same action definition is attached directly to each rendered row. Each attachment keeps its own state.',
+    steps: [
+      'Press Archive under Alpha, then under Beta. Both archive requests wait at the simulated backend.',
+      'Press “Release held archives”.',
+    ],
+    expect:
+      'While held, the page lists both holds as pending (n-1,n-2). After the release both rows say “Archived at …” and both holds are confirmed. A pending press on one row never disables or cancels the other.',
+    limit:
+      '“Held” is a simulated slow backend that waits until you release it.',
     guide: 'rows',
     sources: ['attachment-lit', 'attachment-react', 'ownership', 'holds'],
   },
   {
     id: 'obsolete',
-    title: 'Obsolete completion: the row shows another note when the answer arrives',
+    title:
+      'Obsolete completion: the row shows another note when the answer arrives',
     kind: 'obsolete',
     person: 'alice',
     controls: ['hold-archives'],
-    summary: 'A row may be reused for another note while a press is undecided. The late answer must not be written onto it.',
+    summary:
+      'A row may be reused for another note while a press is undecided. The late answer must not be written onto it.',
     steps: [
       'Press Archive under Alpha. The request waits at the simulated backend.',
       'Press “List the notes in the opposite order”, then “Refresh the open view”. The first row now shows Gamma.',
@@ -162,7 +211,8 @@ export const SCENARIOS: readonly Scenario[] = [
     ],
     expect:
       'Gamma’s row stays empty. The press ended as canceled when its row changed, so the hold was given back rather than confirmed. The simulated backend nevertheless archived n-1: cancellation did not stop it.',
-    limit: 'Cancelling ends the client’s wait. It does not prove the server’s effect was undone or stopped. The opposite order is the simulated server listing the same notes differently.',
+    limit:
+      'Cancelling ends the client’s wait. It does not prove the server’s effect was undone or stopped. The opposite order is the simulated server listing the same notes differently.',
     guide: 'outcomes',
     sources: ['attachment-lit', 'cleanup-canceled', 'holds'],
   },
@@ -172,10 +222,17 @@ export const SCENARIOS: readonly Scenario[] = [
     kind: 'canceled',
     person: 'alice',
     controls: ['hold-archives'],
-    summary: 'The application ends its bindings when the view ends. That stops the control from reacting; it does not reach the server.',
-    steps: ['Press Archive under Alpha.', 'Press “Close the view”, then “Release held archives”.', 'Press “Open the view” again.'],
-    expect: 'Alpha is missing from the list: the simulated backend archived it although the view had been closed. Nothing was shown on the closed view.',
-    limit: 'Local cancellation does not prove a remote effect was undone, and nothing in this tour can show a real host forwarding a cancellation.',
+    summary:
+      'The application ends its bindings when the view ends. That stops the control from reacting; it does not reach the server.',
+    steps: [
+      'Press Archive under Alpha.',
+      'Press “Close the view”, then “Release held archives”.',
+      'Press “Open the view” again.',
+    ],
+    expect:
+      'Alpha is missing from the list: the simulated backend archived it although the view had been closed. Nothing was shown on the closed view.',
+    limit:
+      'Local cancellation does not prove a remote effect was undone, and nothing in this tour can show a real host forwarding a cancellation.',
     guide: 'ownership',
     sources: ['cleanup-canceled', 'holds'],
   },

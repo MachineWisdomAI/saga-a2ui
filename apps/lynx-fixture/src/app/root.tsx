@@ -1,7 +1,20 @@
-import { A2UI, Button, Column, List, Text, functionRegistry, registerBasicFunctions, type CatalogInput, type Surface } from '@lynx-js/genui/a2ui';
+import {
+  A2UI,
+  Button,
+  Column,
+  List,
+  Text,
+  functionRegistry,
+  registerBasicFunctions,
+  type CatalogInput,
+  type Surface,
+} from '@lynx-js/genui/a2ui';
 import { SignalStore } from '@lynx-js/genui/a2ui/store';
 import { useEffect, useSyncExternalStore } from '@lynx-js/react';
-import { ActionHostContext, createActionControl } from '../adapter/action-control.js';
+import {
+  ActionHostContext,
+  createActionControl,
+} from '../adapter/action-control.js';
 import { countOnMainThread, trace } from '../trace.js';
 import { installHarness } from './harness.js';
 import { createSessionHolder } from './session.js';
@@ -38,7 +51,10 @@ const ITEM_KEY_PROPS: Readonly<Record<string, string>> = {
 const actionButton = createActionControl({
   itemKeyProp: (sourceComponentId) => ITEM_KEY_PROPS[sourceComponentId],
   onActivationError(error) {
-    trace({ ev: 'activation-error', message: error instanceof Error ? error.message : String(error) });
+    trace({
+      ev: 'activation-error',
+      message: error instanceof Error ? error.message : String(error),
+    });
   },
   probe: driver.probe,
   onMount: driver.onMount,
@@ -47,18 +63,33 @@ const actionButton = createActionControl({
 // The upstream built-ins declare narrower props than `ComponentType<GenericComponentProps>`, so
 // the array does not satisfy `CatalogInput` under `strictFunctionTypes`. The assertion is limited
 // to this one list of upstream components and the control above.
-const catalogs = [actionButton, Button, Column, List, Text] as unknown as readonly CatalogInput[];
+const catalogs = [
+  actionButton,
+  Button,
+  Column,
+  List,
+  Text,
+] as unknown as readonly CatalogInput[];
 
 // The first screen is rendered on the main thread before any message has been processed, so
 // `<A2UI>` shows its empty state there. Rendering a real control as that empty state is the one
 // way to put the control's render path on the main thread: it must construct an inert slot,
 // capture no token and open nothing, and the background effect opens it afterwards.
-const FIRST_SCREEN_SURFACE = { surfaceId: 'first-screen', components: new Map(), resources: new Map(), store: new SignalStore() } as unknown as Surface;
+const FIRST_SCREEN_SURFACE = {
+  surfaceId: 'first-screen',
+  components: new Map(),
+  resources: new Map(),
+  store: new SignalStore(),
+} as unknown as Surface;
 const FirstScreenControl = actionButton.firstScreenProbe;
 
 export function Root() {
   countOnMainThread('roots');
-  const session = useSyncExternalStore(holder.subscribe, holder.current, holder.current);
+  const session = useSyncExternalStore(
+    holder.subscribe,
+    holder.current,
+    holder.current,
+  );
 
   // Background only: effects never run on the main thread. The registration ends, and the host
   // closes, when the session does.
@@ -77,10 +108,19 @@ export function Root() {
       <A2UI
         key={session.generation}
         messageStore={session.store}
-        renderEmpty={() => <FirstScreenControl id='first-screen-control' surface={FIRST_SCREEN_SURFACE} />}
+        renderEmpty={() => (
+          <FirstScreenControl
+            id="first-screen-control"
+            surface={FIRST_SCREEN_SURFACE}
+          />
+        )}
         catalogs={catalogs}
         onAction={(action) => {
-          trace({ ev: 'protocol-action', name: action.name, sourceComponentId: action.sourceComponentId });
+          trace({
+            ev: 'protocol-action',
+            name: action.name,
+            sourceComponentId: action.sourceComponentId,
+          });
         }}
       />
     </ActionHostContext.Provider>

@@ -10,7 +10,11 @@ export interface AccountIdentity {
  * no account (a service credential, for example) yields `undefined`, and a protected operation
  * then fails closed without running its handler.
  */
-export function identityOf(authInfo: AuthInfo | undefined): AccountIdentity | undefined {
+export function identityOf(
+  authInfo: AuthInfo | undefined,
+): AccountIdentity | undefined {
   const accountId = authInfo?.extra?.accountId;
-  return typeof accountId === 'string' && accountId !== '' ? Object.freeze({ accountId }) : undefined;
+  return typeof accountId === 'string' && accountId !== ''
+    ? Object.freeze({ accountId })
+    : undefined;
 }

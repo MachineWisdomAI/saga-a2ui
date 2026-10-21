@@ -13,7 +13,8 @@ import { onBackground, trace } from '../trace.js';
 export const presentation = new Map<string, string>();
 
 function requireString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value === '') throw new Error(`no ${name} selected`);
+  if (typeof value !== 'string' || value === '')
+    throw new Error(`no ${name} selected`);
   return value;
 }
 
@@ -24,7 +25,13 @@ export const submitOrder = Action.local<ActionButtonActivation>('submit-order')
   })
   .run(({ params }) => {
     presentation.set(params.orderId, 'submitted');
-    trace({ ev: 'invoke', definition: 'submit-order', item: params.orderId, marker: 'SAGA_MARKER_DEFINITION_SUBMIT', background: onBackground() });
+    trace({
+      ev: 'invoke',
+      definition: 'submit-order',
+      item: params.orderId,
+      marker: 'SAGA_MARKER_DEFINITION_SUBMIT',
+      background: onBackground(),
+    });
   })
   .build();
 
@@ -35,7 +42,13 @@ export const cancelOrder = Action.local<ActionButtonActivation>('cancel-order')
   })
   .run(({ params }) => {
     presentation.set(params.orderId, 'cancelled');
-    trace({ ev: 'invoke', definition: 'cancel-order', item: params.orderId, marker: 'SAGA_MARKER_DEFINITION_CANCEL', background: onBackground() });
+    trace({
+      ev: 'invoke',
+      definition: 'cancel-order',
+      item: params.orderId,
+      marker: 'SAGA_MARKER_DEFINITION_CANCEL',
+      background: onBackground(),
+    });
   })
   .build();
 
@@ -46,7 +59,13 @@ export const archiveNote = Action.local<ActionButtonActivation>('archive-note')
   })
   .run(({ params }) => {
     presentation.set(params.noteId, 'archived');
-    trace({ ev: 'invoke', definition: 'archive-note', item: params.noteId, marker: 'SAGA_MARKER_DEFINITION_ARCHIVE', background: onBackground() });
+    trace({
+      ev: 'invoke',
+      definition: 'archive-note',
+      item: params.noteId,
+      marker: 'SAGA_MARKER_DEFINITION_ARCHIVE',
+      background: onBackground(),
+    });
   })
   .build();
 
@@ -64,32 +83,62 @@ export const failingAction = Action.local<ActionButtonActivation>('failing')
 // ---------------------------------------------------------------------------------------------
 
 /** One entry per pending session request. Answering it is the test's choice. */
-export const pendingSessions: Array<(answer: 'signed-in' | 'signed-out') => void> = [];
+export const pendingSessions: Array<
+  (answer: 'signed-in' | 'signed-out') => void
+> = [];
 
 /** One entry per pending row's work. */
-export const pendingRows: Array<{ readonly noteId: string; readonly release: () => void }> = [];
+export const pendingRows: Array<{
+  readonly noteId: string;
+  readonly release: () => void;
+}> = [];
 
 const requireSession = prerequisite(
   'session',
   () =>
-    new Promise<ReturnType<typeof proceed<{ readonly user: string }>> | ReturnType<typeof refuse>>((resolve) => {
-      pendingSessions.push((answer) => resolve(answer === 'signed-in' ? proceed({ user: 'u-1' }) : refuse('sign-in-required')));
+    new Promise<
+      | ReturnType<typeof proceed<{ readonly user: string }>>
+      | ReturnType<typeof refuse>
+    >((resolve) => {
+      pendingSessions.push((answer) =>
+        resolve(
+          answer === 'signed-in'
+            ? proceed({ user: 'u-1' })
+            : refuse('sign-in-required'),
+        ),
+      );
     }),
 );
 
 /** A fixed control: it waits for a session, then records the order it reviewed. */
 export const reviewOrder = Action.local<ActionButtonActivation>('review-order')
-  .input((event) => ({ orderId: requireString(event.read('orderId'), 'order') }))
+  .input((event) => ({
+    orderId: requireString(event.read('orderId'), 'order'),
+  }))
   .before(requireSession)
   .run(({ params, provided }) => {
     presentation.set(params.orderId, `reviewed by ${provided.user}`);
-    trace({ ev: 'invoke', definition: 'review-order', item: params.orderId, background: onBackground() });
+    trace({
+      ev: 'invoke',
+      definition: 'review-order',
+      item: params.orderId,
+      background: onBackground(),
+    });
     return params.orderId;
   })
   .onFailure(({ failure, current }) => {
     if (current()) trace({ ev: 'hook', hook: 'failure', kind: failure.kind });
   })
-  .onCanceled(({ cause, stage }) => void trace({ ev: 'hook', hook: 'canceled', definition: 'review-order', cause, stage }))
+  .onCanceled(
+    ({ cause, stage }) =>
+      void trace({
+        ev: 'hook',
+        hook: 'canceled',
+        definition: 'review-order',
+        cause,
+        stage,
+      }),
+  )
   .build();
 
 /** A template row: the work waits for the test, and the position's own item is its subject. */
@@ -98,7 +147,12 @@ export const stageNote = Action.local<ActionButtonActivation>('stage-note')
   .run(
     ({ params }) =>
       new Promise<void>((resolve) => {
-        trace({ ev: 'invoke', definition: 'stage-note', item: params.noteId, background: onBackground() });
+        trace({
+          ev: 'invoke',
+          definition: 'stage-note',
+          item: params.noteId,
+          background: onBackground(),
+        });
         pendingRows.push({ noteId: params.noteId, release: resolve });
       }),
   )
@@ -107,6 +161,13 @@ export const stageNote = Action.local<ActionButtonActivation>('stage-note')
   })
   .onCanceled(({ params, cause, stage }) => {
     presentation.set(params.noteId, `canceled: ${cause}`);
-    trace({ ev: 'hook', hook: 'canceled', definition: 'stage-note', item: params.noteId, cause, stage });
+    trace({
+      ev: 'hook',
+      hook: 'canceled',
+      definition: 'stage-note',
+      item: params.noteId,
+      cause,
+      stage,
+    });
   })
   .build();

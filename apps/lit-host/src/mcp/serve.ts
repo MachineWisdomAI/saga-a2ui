@@ -15,22 +15,49 @@ import type { AccountSubscriptions } from './subscriptions-server.js';
 // public tokens, which is acceptable only because this process listens on loopback. A remote
 // host must pass its own configured `OAuthTokenVerifier` instead.
 const episodes: readonly EpisodeRecord[] = [
-  { id: 'ep-001', title: 'The first synthetic episode', description: 'Plain text, shown exactly as written.' },
-  { id: 'ep-002', title: 'The second synthetic episode', description: 'Another public description.' },
+  {
+    id: 'ep-001',
+    title: 'The first synthetic episode',
+    description: 'Plain text, shown exactly as written.',
+  },
+  {
+    id: 'ep-002',
+    title: 'The second synthetic episode',
+    description: 'Another public description.',
+  },
 ];
-const catalog: EpisodeCatalog = { find: (id) => episodes.find((episode) => episode.id === id) };
+const catalog: EpisodeCatalog = {
+  find: (id) => episodes.find((episode) => episode.id === id),
+};
 
 const accounts: Readonly<Record<string, AccountSubscriptions>> = {
   [DEV_ACCOUNTS.alice]: {
     displayName: 'Alice (synthetic)',
     subscriptions: [
-      { subscriptionId: 'sub-a1', creator: 'Synthetic Creator One', tier: 'Gold', status: 'active' },
-      { subscriptionId: 'sub-a2', creator: 'Synthetic Creator Two', tier: 'Basic', status: 'paused' },
+      {
+        subscriptionId: 'sub-a1',
+        creator: 'Synthetic Creator One',
+        tier: 'Gold',
+        status: 'active',
+      },
+      {
+        subscriptionId: 'sub-a2',
+        creator: 'Synthetic Creator Two',
+        tier: 'Basic',
+        status: 'paused',
+      },
     ],
   },
   [DEV_ACCOUNTS.bob]: {
     displayName: 'Bob (synthetic)',
-    subscriptions: [{ subscriptionId: 'sub-b1', creator: 'Synthetic Creator Three', tier: 'Silver', status: 'active' }],
+    subscriptions: [
+      {
+        subscriptionId: 'sub-b1',
+        creator: 'Synthetic Creator Three',
+        tier: 'Silver',
+        status: 'active',
+      },
+    ],
   },
 };
 
@@ -40,11 +67,14 @@ const playableEntitlements: Readonly<Record<string, ReadonlySet<string>>> = {
   [DEV_ACCOUNTS.bob]: new Set(),
 };
 const playbackBackend: PlaybackBackend = {
-  findEpisode: (episodeId) => episodes.find((episode) => episode.id === episodeId),
+  findEpisode: (episodeId) =>
+    episodes.find((episode) => episode.id === episodeId),
   checkEntitlement: async (accountId, episodeId) =>
     playableEntitlements[accountId]?.has(episodeId) ? 'entitled' : 'denied',
 };
-const mediaStore: MediaStore = { read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }) };
+const mediaStore: MediaStore = {
+  read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }),
+};
 
 // Synthetic public answers. The "knowledge base" is two fixed sentences; the short pauses and
 // progress reports stand in for a real backend that takes its time.
@@ -54,10 +84,18 @@ const knowledge: Readonly<Record<string, string>> = {
 };
 const answerBackend: AnswerBackend = {
   async answer(question, request) {
-    await request.reportProgress({ progress: 1, total: 2, message: 'Looking up the question' });
+    await request.reportProgress({
+      progress: 1,
+      total: 2,
+      message: 'Looking up the question',
+    });
     await new Promise((resolve) => setTimeout(resolve, 300));
     if (request.signal.aborted) return undefined;
-    await request.reportProgress({ progress: 2, total: 2, message: 'Writing the answer' });
+    await request.reportProgress({
+      progress: 2,
+      total: 2,
+      message: 'Writing the answer',
+    });
     return knowledge[question];
   },
 };
@@ -66,10 +104,15 @@ const answerBackend: AnswerBackend = {
 // of serving a listener without its view. `SAGA_VIEWS_DIR` names the directory that holds them
 // (`view/view.html`, ...); an installed copy of this application, run outside the repository
 // (PACK1, scripts/build-installed-lit-host.ts), points it at the views built beside it. Unset, it is `dist` here.
-const viewsDirectory = process.env.SAGA_VIEWS_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url));
-const readView = (relativePath: string) => readFile(path.join(viewsDirectory, relativePath), 'utf8');
+const viewsDirectory =
+  process.env.SAGA_VIEWS_DIR ??
+  fileURLToPath(new URL('../../dist/', import.meta.url));
+const readView = (relativePath: string) =>
+  readFile(path.join(viewsDirectory, relativePath), 'utf8');
 const viewHtml = await readView('view/view.html');
-const subscriptionsViewHtml = await readView('subscriptions-view/subscriptions.html');
+const subscriptionsViewHtml = await readView(
+  'subscriptions-view/subscriptions.html',
+);
 const playbackViewHtml = await readView('playback-view/playback.html');
 const answerViewHtml = await readView('answer-view/answer.html');
 const listener = await startEpisodeListener({
@@ -82,7 +125,11 @@ const listener = await startEpisodeListener({
     verifier: createDevelopmentVerifier(),
   },
   // Public: no verifier, because the operation reads no credential and has no identity.
-  answer: { viewHtml: answerViewHtml, backend: answerBackend, responseMode: 'event-stream' },
+  answer: {
+    viewHtml: answerViewHtml,
+    backend: answerBackend,
+    responseMode: 'event-stream',
+  },
   playback: {
     viewHtml: playbackViewHtml,
     backend: playbackBackend,
@@ -91,6 +138,10 @@ const listener = await startEpisodeListener({
   },
 });
 console.log(`MCP server listening at ${listener.url}`);
-console.log(`Protected subscriptions endpoint (development tokens only): ${listener.subscriptionsUrl}`);
-console.log(`Protected playback endpoint (development tokens only): ${listener.playbackUrl}`);
+console.log(
+  `Protected subscriptions endpoint (development tokens only): ${listener.subscriptionsUrl}`,
+);
+console.log(
+  `Protected playback endpoint (development tokens only): ${listener.playbackUrl}`,
+);
 console.log(`Public answer endpoint (no credential): ${listener.answerUrl}`);

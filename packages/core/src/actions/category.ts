@@ -17,7 +17,8 @@ export type KnownErrorCategory =
  * Open on purpose: a consumer must handle a category it does not know, and `'unknown'` is the
  * fallback when nothing established a cause. `(string & {})` keeps the known names in editors.
  */
-export type ErrorCategory = KnownErrorCategory | (string & Record<never, never>);
+export type ErrorCategory =
+  KnownErrorCategory | (string & Record<never, never>);
 
 /**
  * A cause that says what happened. An application's handler, prerequisite or hook throws it when
@@ -30,7 +31,11 @@ export type ErrorCategory = KnownErrorCategory | (string & Record<never, never>)
 export class ActionError extends Error {
   readonly category: ErrorCategory;
 
-  constructor(category: ErrorCategory, message: string, options?: { readonly cause?: unknown }) {
+  constructor(
+    category: ErrorCategory,
+    message: string,
+    options?: { readonly cause?: unknown },
+  ) {
     super(message, options);
     if (typeof category !== 'string' || category === '') {
       throw new TypeError('An ActionError needs a non-empty category.');
@@ -45,12 +50,16 @@ export class ActionError extends Error {
  * failure the runtime itself decided on (for example input that could not be read) is that
  * evidence and is passed in as the fallback.
  */
-export function categorize(error: unknown, fallback: ErrorCategory = 'unknown'): ErrorCategory {
+export function categorize(
+  error: unknown,
+  fallback: ErrorCategory = 'unknown',
+): ErrorCategory {
   if (error instanceof ActionError) return error.category;
   // The platform's own typed errors (what `AbortSignal.timeout` and `fetch` reject with) are
   // DOMExceptions with these exact names. A plain Error that merely carries the same `name` is
   // not typed evidence.
-  const platform: unknown = (globalThis as { DOMException?: unknown }).DOMException;
+  const platform: unknown = (globalThis as { DOMException?: unknown })
+    .DOMException;
   if (typeof platform === 'function' && error instanceof platform) {
     const { name } = error as { name?: unknown };
     if (name === 'TimeoutError') return 'timeout';

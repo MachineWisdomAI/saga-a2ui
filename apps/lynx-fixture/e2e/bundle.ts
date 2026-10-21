@@ -31,7 +31,9 @@ function readBinaryMap(buffer: Buffer): Record<string, string> {
     offset += keyLength;
     const valueLength = buffer.readUInt32LE(offset);
     offset += 4;
-    result[key] = buffer.subarray(offset, offset + valueLength).toString('utf8');
+    result[key] = buffer
+      .subarray(offset, offset + valueLength)
+      .toString('utf8');
     offset += valueLength;
   }
   return result;
@@ -39,7 +41,8 @@ function readBinaryMap(buffer: Buffer): Record<string, string> {
 
 export function readTemplate(file: string): TemplateSections {
   const buffer = fs.readFileSync(file);
-  if (buffer.subarray(0, 8).toString('latin1') !== MAGIC) throw new Error('not a Lynx Web template');
+  if (buffer.subarray(0, 8).toString('latin1') !== MAGIC)
+    throw new Error('not a Lynx Web template');
   let background: Record<string, string> = {};
   let mainThread: Record<string, string> = {};
   let configuration: Record<string, string> = {};
@@ -52,12 +55,23 @@ export function readTemplate(file: string): TemplateSections {
     if (label === SECTION.manifest) background = readBinaryMap(content);
     else if (label === SECTION.lepusCode) mainThread = readBinaryMap(content);
     else if (label === SECTION.configurations) {
-      configuration = JSON.parse(content.toString('utf16le')) as Record<string, string>;
+      configuration = JSON.parse(content.toString('utf16le')) as Record<
+        string,
+        string
+      >;
     }
   }
   return { background, mainThread, configuration };
 }
 
-export const builtBundle = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'main.web.bundle');
+export const builtBundle = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'dist',
+  'main.web.bundle',
+);
 
-export const contains = (code: Readonly<Record<string, string>>, needle: string): boolean => Object.values(code).some((chunk) => chunk.includes(needle));
+export const contains = (
+  code: Readonly<Record<string, string>>,
+  needle: string,
+): boolean => Object.values(code).some((chunk) => chunk.includes(needle));

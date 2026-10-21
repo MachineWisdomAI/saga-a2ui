@@ -40,7 +40,8 @@ export function defineElements(
   const missing = new Map<string, CustomElementConstructor>();
   for (const { tagName, element } of definitions) {
     const existing = registry.get(tagName) ?? missing.get(tagName);
-    if (existing !== undefined && existing !== element) throw new ElementConflictError(tagName);
+    if (existing !== undefined && existing !== element)
+      throw new ElementConflictError(tagName);
     if (existing === undefined) missing.set(tagName, element);
   }
   for (const [tagName, element] of missing) registry.define(tagName, element);

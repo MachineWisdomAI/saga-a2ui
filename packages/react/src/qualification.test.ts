@@ -12,8 +12,11 @@ import { describe, expect, it } from 'vitest';
 // version nothing ran on, or an install that drifted from the manifest, fails here.
 
 const readJson = (relative: string): Record<string, any> =>
-  JSON.parse(fs.readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8'));
-const installed = (name: string): string => readJson(`../../../node_modules/${name}/package.json`).version;
+  JSON.parse(
+    fs.readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8'),
+  );
+const installed = (name: string): string =>
+  readJson(`../../../node_modules/${name}/package.json`).version;
 const manifest = readJson('../package.json');
 const consumer = readJson('../../../apps/lit-host/package.json');
 
@@ -28,8 +31,12 @@ describe('the supported React and upstream A2UI versions', () => {
     expect(manifest.peerDependencies['react-dom']).toBe('19.3.1');
     expect(manifest.devDependencies.react).toBe('19.3.1');
     expect(manifest.devDependencies['react-dom']).toBe('19.3.1');
-    expect(installed('@types/react')).toBe(manifest.devDependencies['@types/react']);
-    expect(installed('@types/react-dom')).toBe(manifest.devDependencies['@types/react-dom']);
+    expect(installed('@types/react')).toBe(
+      manifest.devDependencies['@types/react'],
+    );
+    expect(installed('@types/react-dom')).toBe(
+      manifest.devDependencies['@types/react-dom'],
+    );
   });
 
   it('pin the upstream A2UI packages exactly to the installed copies', () => {

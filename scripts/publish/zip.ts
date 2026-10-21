@@ -33,20 +33,35 @@ const REGULAR_FILE = 0o100000;
 
 /** A path an extractor may place inside the archive root and nowhere else. */
 export function safeArchivePath(entryPath: string): boolean {
-  if (entryPath === '' || entryPath.startsWith('/') || entryPath.includes('\\') || entryPath.includes('\0') || entryPath.endsWith('/')) return false;
-  return entryPath.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+  if (
+    entryPath === '' ||
+    entryPath.startsWith('/') ||
+    entryPath.includes('\\') ||
+    entryPath.includes('\0') ||
+    entryPath.endsWith('/')
+  )
+    return false;
+  return entryPath
+    .split('/')
+    .every((part) => part !== '' && part !== '.' && part !== '..');
 }
 
 /** The bytes of a ZIP holding exactly `entries`, byte-for-byte reproducible from them. */
 export function writeZip(entries: readonly ZipEntry[]): Buffer {
-  const sorted = [...entries].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const sorted = [...entries].sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
   const seen = new Set<string>();
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const entry of sorted) {
-    if (!safeArchivePath(entry.path)) throw new ZipError(`${JSON.stringify(entry.path)} is not a path that can be placed in an archive.`);
-    if (seen.has(entry.path)) throw new ZipError(`${entry.path} appears twice.`);
+    if (!safeArchivePath(entry.path))
+      throw new ZipError(
+        `${JSON.stringify(entry.path)} is not a path that can be placed in an archive.`,
+      );
+    if (seen.has(entry.path))
+      throw new ZipError(`${entry.path} appears twice.`);
     seen.add(entry.path);
     const name = Buffer.from(entry.path, 'utf8');
     const data = Buffer.from(entry.data);
@@ -103,13 +118,20 @@ export function writeZip(entries: readonly ZipEntry[]): Buffer {
 export function readZip(bytes: Uint8Array): ZipEntry[] {
   const archive = Buffer.from(bytes);
   const endAt = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  if (endAt < 0 || archive.length - endAt < 22) throw new ZipError('The file is not a ZIP archive: its end record is missing.');
+  if (endAt < 0 || archive.length - endAt < 22)
+    throw new ZipError(
+      'The file is not a ZIP archive: its end record is missing.',
+    );
   const count = archive.readUInt16LE(endAt + 10);
   let cursor = archive.readUInt32LE(endAt + 16);
   const entries: ZipEntry[] = [];
   const seen = new Set<string>();
   for (let index = 0; index < count; index += 1) {
-    if (cursor + 46 > archive.length || archive.readUInt32LE(cursor) !== CENTRAL_HEADER) throw new ZipError('The archive directory is damaged.');
+    if (
+      cursor + 46 > archive.length ||
+      archive.readUInt32LE(cursor) !== CENTRAL_HEADER
+    )
+      throw new ZipError('The archive directory is damaged.');
     const flags = archive.readUInt16LE(cursor + 8);
     const method = archive.readUInt16LE(cursor + 10);
     const expectedCrc = archive.readUInt32LE(cursor + 16);
@@ -120,24 +142,46 @@ export function readZip(bytes: Uint8Array): ZipEntry[] {
     const commentLength = archive.readUInt16LE(cursor + 32);
     const attributes = archive.readUInt32LE(cursor + 38);
     const localAt = archive.readUInt32LE(cursor + 42);
-    const entryPath = archive.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8');
+    const entryPath = archive
+      .subarray(cursor + 46, cursor + 46 + nameLength)
+      .toString('utf8');
     cursor += 46 + nameLength + extraLength + commentLength;
 
-    if (!safeArchivePath(entryPath)) throw new ZipError(`The archive contains ${JSON.stringify(entryPath)}, which is not a path inside the archive root.`);
-    if (seen.has(entryPath)) throw new ZipError(`The archive contains ${entryPath} twice.`);
+    if (!safeArchivePath(entryPath))
+      throw new ZipError(
+        `The archive contains ${JSON.stringify(entryPath)}, which is not a path inside the archive root.`,
+      );
+    if (seen.has(entryPath))
+      throw new ZipError(`The archive contains ${entryPath} twice.`);
     seen.add(entryPath);
     const fileType = (attributes >>> 16) & FILE_TYPE_MASK;
-    if (fileType !== 0 && fileType !== REGULAR_FILE) throw new ZipError(`${entryPath} is not a regular file (a link or special file).`);
+    if (fileType !== 0 && fileType !== REGULAR_FILE)
+      throw new ZipError(
+        `${entryPath} is not a regular file (a link or special file).`,
+      );
     if ((flags & 1) !== 0) throw new ZipError(`${entryPath} is encrypted.`);
-    if (localAt + 30 > archive.length || archive.readUInt32LE(localAt) !== LOCAL_HEADER) throw new ZipError(`The record for ${entryPath} is damaged.`);
-    const dataAt = localAt + 30 + archive.readUInt16LE(localAt + 26) + archive.readUInt16LE(localAt + 28);
+    if (
+      localAt + 30 > archive.length ||
+      archive.readUInt32LE(localAt) !== LOCAL_HEADER
+    )
+      throw new ZipError(`The record for ${entryPath} is damaged.`);
+    const dataAt =
+      localAt +
+      30 +
+      archive.readUInt16LE(localAt + 26) +
+      archive.readUInt16LE(localAt + 28);
     const raw = archive.subarray(dataAt, dataAt + compressed);
-    if (raw.length !== compressed) throw new ZipError(`The data of ${entryPath} is truncated.`);
+    if (raw.length !== compressed)
+      throw new ZipError(`The data of ${entryPath} is truncated.`);
     let data: Buffer;
     if (method === 0) data = raw;
     else if (method === 8) data = inflateRawSync(raw);
-    else throw new ZipError(`${entryPath} uses compression method ${method}, which is not supported.`);
-    if (data.length !== size || crc32(data) !== expectedCrc) throw new ZipError(`${entryPath} does not match its recorded checksum.`);
+    else
+      throw new ZipError(
+        `${entryPath} uses compression method ${method}, which is not supported.`,
+      );
+    if (data.length !== size || crc32(data) !== expectedCrc)
+      throw new ZipError(`${entryPath} does not match its recorded checksum.`);
     entries.push({ path: entryPath, data });
   }
   return entries;

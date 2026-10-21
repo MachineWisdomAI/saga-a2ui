@@ -1,8 +1,16 @@
 import type { InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
 import { LitElement, css, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
-import { presentationFor, type PlayControlAction } from '../playback/play-presentation.js';
-import { PLAY_CONTROL_ID, PlayControl, type PlayControlEvents, type PlaybackViewState } from '../playback/playback-view.js';
+import {
+  presentationFor,
+  type PlayControlAction,
+} from '../playback/play-presentation.js';
+import {
+  PLAY_CONTROL_ID,
+  PlayControl,
+  type PlayControlEvents,
+  type PlaybackViewState,
+} from '../playback/playback-view.js';
 
 /**
  * The Play control: one button and one status line for the controller's current state.
@@ -59,7 +67,9 @@ export class PlayControlElement extends LitElement {
     }
   `;
 
-  @property({ attribute: false }) state: PlaybackViewState = { kind: 'no-selection' };
+  @property({ attribute: false }) state: PlaybackViewState = {
+    kind: 'no-selection',
+  };
 
   private buttonHadFocus = false;
   #host: InstanceHost | undefined;
@@ -107,7 +117,8 @@ export class PlayControlElement extends LitElement {
 
   protected override willUpdate(): void {
     const button = this.renderRoot.querySelector('button');
-    this.buttonHadFocus = button !== null && button === this.shadowRoot?.activeElement;
+    this.buttonHadFocus =
+      button !== null && button === this.shadowRoot?.activeElement;
   }
 
   protected override updated(): void {
@@ -116,7 +127,11 @@ export class PlayControlElement extends LitElement {
     }
   }
 
-  private press(action: PlayControlAction, busy: boolean | undefined, event: Event): void {
+  private press(
+    action: PlayControlAction,
+    busy: boolean | undefined,
+    event: Event,
+  ): void {
     if (busy) return; // a pending request ignores the press; the bound action's busy policy also does
     // Synchronous, inside the click: the bound action's activation prefix runs in this call stack.
     this.#instance?.activate(action, event);
@@ -124,19 +139,33 @@ export class PlayControlElement extends LitElement {
 
   protected override render() {
     const shown = presentationFor(this.state);
-    return html`<div class="root" data-testid="play-root" data-state=${this.state.kind}>
-      ${shown.button
-        ? html`<button
-            type="button"
-            data-testid="play-button"
-            aria-disabled=${shown.busy ? 'true' : 'false'}
-            aria-busy=${shown.busy ? 'true' : 'false'}
-            @click=${(event: Event) => this.press(shown.button?.action ?? 'play', shown.busy, event)}
-          >
-            ${shown.button.label}
-          </button>`
-        : nothing}
-      <p class="status" data-testid="play-status" role="status" aria-live="polite" tabindex="-1">${shown.status}</p>
+    return html`<div
+      class="root"
+      data-testid="play-root"
+      data-state=${this.state.kind}
+    >
+      ${
+        shown.button
+          ? html`<button
+              type="button"
+              data-testid="play-button"
+              aria-disabled=${shown.busy ? 'true' : 'false'}
+              aria-busy=${shown.busy ? 'true' : 'false'}
+              @click=${(event: Event) => this.press(shown.button?.action ?? 'play', shown.busy, event)}
+            >
+              ${shown.button.label}
+            </button>`
+          : nothing
+      }
+      <p
+        class="status"
+        data-testid="play-status"
+        role="status"
+        aria-live="polite"
+        tabindex="-1"
+      >
+        ${shown.status}
+      </p>
     </div>`;
   }
 }

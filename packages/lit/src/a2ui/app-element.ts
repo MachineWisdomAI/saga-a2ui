@@ -1,6 +1,9 @@
 import { A2uiSurface, type LitComponentApi } from '@a2ui/lit/v0_9';
 import type { Subscription, SurfaceModel } from '@a2ui/web_core/v0_9';
-import type { IngestResult, MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import type {
+  IngestResult,
+  MessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { LitElement, html, nothing } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 
@@ -76,9 +79,9 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
       failure: { state: true },
       presentationFailure: { state: true },
     };
-    private declare surface?: SurfaceModel<LitComponentApi>;
-    private declare failure?: string;
-    private declare presentationFailure?: string;
+    declare private surface?: SurfaceModel<LitComponentApi>;
+    declare private failure?: string;
+    declare private presentationFailure?: string;
 
     private session?: A2uiSession;
     private subscriptions: Subscription[] = [];
@@ -89,7 +92,10 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
     ingest(input: unknown): IngestResult {
       const result = this.session?.ingest(input) ?? {
         ok: false as const,
-        failure: { kind: 'rejected' as const, message: 'The app is not connected.' },
+        failure: {
+          kind: 'rejected' as const,
+          message: 'The app is not connected.',
+        },
       };
       this.failure = result.ok ? undefined : result.failure.message;
       return result;
@@ -106,7 +112,8 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
             mount: () => this.mount.value,
           });
         } catch {
-          this.presentationFailure = 'The actions for this content could not be attached.';
+          this.presentationFailure =
+            'The actions for this content could not be attached.';
           return;
         }
       }
@@ -156,11 +163,15 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
       const failure = this.failure ?? this.presentationFailure;
       if (failure !== undefined) {
         return html`<div role="alert" data-testid="failure">
-          Could not render this content: <span data-testid="failure-detail">${failure}</span>
+          Could not render this content:
+          <span data-testid="failure-detail">${failure}</span>
         </div>`;
       }
       return this.surface
-        ? html`<a2ui-surface ${ref(this.mount)} .surface=${this.surface}></a2ui-surface>`
+        ? html`<a2ui-surface
+            ${ref(this.mount)}
+            .surface=${this.surface}
+          ></a2ui-surface>`
         : nothing;
     }
   }

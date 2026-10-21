@@ -13,12 +13,24 @@ import {
   type DeclaredSubscriptionRead,
   type SubscriptionsResult,
 } from './subscriptions.js';
-import { connectToolResultView, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
+import {
+  connectToolResultView,
+  type ToolResult,
+  type ToolResultViewConnection,
+} from '@saga-a2ui/mcp/view';
 
 /** What the view presents. Only `subscriptions` carries private subscription rows. */
 export type SubscriptionsViewState =
-  | { readonly kind: 'subscriptions'; readonly subscriptions: SubscriptionsResult; readonly selectedId?: string }
-  | { readonly kind: 'empty'; readonly displayName: string; readonly message: string }
+  | {
+      readonly kind: 'subscriptions';
+      readonly subscriptions: SubscriptionsResult;
+      readonly selectedId?: string;
+    }
+  | {
+      readonly kind: 'empty';
+      readonly displayName: string;
+      readonly message: string;
+    }
   | { readonly kind: 'sign-in-required' }
   | { readonly kind: 'retry'; readonly message: string }
   | { readonly kind: 'problem'; readonly message: string };
@@ -94,7 +106,9 @@ function incomingBytes(value: unknown): number {
  * The label says only whether the data on screen is still from the sign-in it started with. It
  * never grants access; the server authorizes every call from the verified request.
  */
-export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): Promise<SubscriptionsViewConnection> {
+export function connectSubscriptionsView(
+  deps: SubscriptionsViewDependencies,
+): Promise<SubscriptionsViewConnection> {
   let pinnedSession: string | undefined;
   let shown: SubscriptionsResult | undefined;
   let selectedId: string | undefined;
@@ -140,13 +154,24 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     | { readonly kind: 'current'; readonly data: SubscriptionsResult };
 
   const readIncoming = (result: ToolResult): IncomingResult => {
-    if (result.isError) return { kind: 'error', text: knownFailureText(result) };
-    if (result.structuredContent !== undefined && incomingBytes(result.structuredContent) > SUBSCRIPTION_LIMITS.maxIncomingStateBytes) {
+    if (result.isError)
+      return { kind: 'error', text: knownFailureText(result) };
+    if (
+      result.structuredContent !== undefined &&
+      incomingBytes(result.structuredContent) >
+        SUBSCRIPTION_LIMITS.maxIncomingStateBytes
+    ) {
       return { kind: 'unreadable' };
     }
-    const parsed = SubscriptionsResultSchema.safeParse(result.structuredContent);
+    const parsed = SubscriptionsResultSchema.safeParse(
+      result.structuredContent,
+    );
     if (!parsed.success) return { kind: 'unreadable' };
-    if (pinnedSession !== undefined && parsed.data.viewSession !== pinnedSession) return { kind: 'changed-session' };
+    if (
+      pinnedSession !== undefined &&
+      parsed.data.viewSession !== pinnedSession
+    )
+      return { kind: 'changed-session' };
     return { kind: 'current', data: parsed.data };
   };
 
@@ -156,17 +181,27 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     if (data.subscriptions.length === 0) {
       shown = undefined;
       selectedId = undefined;
-      if (!retired()) deps.show({ kind: 'empty', displayName: data.displayName, message: EMPTY_SUBSCRIPTIONS_TEXT });
+      if (!retired())
+        deps.show({
+          kind: 'empty',
+          displayName: data.displayName,
+          message: EMPTY_SUBSCRIPTIONS_TEXT,
+        });
       return;
     }
     shown = data;
-    if (selectedId !== undefined && !data.subscriptions.some((item) => item.subscriptionId === selectedId)) {
+    if (
+      selectedId !== undefined &&
+      !data.subscriptions.some((item) => item.subscriptionId === selectedId)
+    ) {
       selectedId = undefined;
     }
     if (retired()) return;
-    deps.show(selectedId === undefined
-      ? { kind: 'subscriptions', subscriptions: data }
-      : { kind: 'subscriptions', subscriptions: data, selectedId });
+    deps.show(
+      selectedId === undefined
+        ? { kind: 'subscriptions', subscriptions: data }
+        : { kind: 'subscriptions', subscriptions: data, selectedId },
+    );
   };
 
   const apply = (result: ToolResult) => {
@@ -175,17 +210,36 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     switch (incoming.kind) {
       case 'error':
         invalidated = true;
-        if (incoming.text === SIGN_IN_REQUIRED_TEXT) return clear({ kind: 'sign-in-required' });
-        if (incoming.text === SUBSCRIPTIONS_UNAVAILABLE_TEXT) return clear({ kind: 'retry', message: SUBSCRIPTIONS_UNAVAILABLE_TEXT });
-        if (incoming.text === INVALID_OUTPUT_TEXT) return clear({ kind: 'problem', message: INVALID_OUTPUT_TEXT });
-        if (incoming.text === INVALID_SUBSCRIPTION_INPUT_TEXT) return clear({ kind: 'problem', message: INVALID_SUBSCRIPTION_INPUT_TEXT });
-        return clear({ kind: 'problem', message: 'The tool reported an error.' });
+        if (incoming.text === SIGN_IN_REQUIRED_TEXT)
+          return clear({ kind: 'sign-in-required' });
+        if (incoming.text === SUBSCRIPTIONS_UNAVAILABLE_TEXT)
+          return clear({
+            kind: 'retry',
+            message: SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+          });
+        if (incoming.text === INVALID_OUTPUT_TEXT)
+          return clear({ kind: 'problem', message: INVALID_OUTPUT_TEXT });
+        if (incoming.text === INVALID_SUBSCRIPTION_INPUT_TEXT)
+          return clear({
+            kind: 'problem',
+            message: INVALID_SUBSCRIPTION_INPUT_TEXT,
+          });
+        return clear({
+          kind: 'problem',
+          message: 'The tool reported an error.',
+        });
       case 'unreadable':
         invalidated = true;
-        return clear({ kind: 'problem', message: 'The tool result was not a subscriptions result.' });
+        return clear({
+          kind: 'problem',
+          message: 'The tool result was not a subscriptions result.',
+        });
       case 'changed-session':
         invalidated = true;
-        return clear({ kind: 'problem', message: 'Your session changed. Reload to see your subscriptions.' });
+        return clear({
+          kind: 'problem',
+          message: 'Your session changed. Reload to see your subscriptions.',
+        });
       case 'current':
         presentCurrent(incoming.data);
         return;
@@ -215,16 +269,20 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
         clear({ kind: 'retry', message: SUBSCRIPTIONS_UNAVAILABLE_TEXT });
       });
     }, readBoundMs);
-    void deps.app.callServerTool({
-      name: SUBSCRIPTIONS_TOOL_NAME,
-      arguments: declared.kind === 'filtered' ? { status: declared.status } : {},
-    }).then(
-      (result) => settleRead(generation, () => apply(result)),
-      () => settleRead(generation, () => {
-        invalidated = true;
-        clear({ kind: 'sign-in-required' });
-      }),
-    );
+    void deps.app
+      .callServerTool({
+        name: SUBSCRIPTIONS_TOOL_NAME,
+        arguments:
+          declared.kind === 'filtered' ? { status: declared.status } : {},
+      })
+      .then(
+        (result) => settleRead(generation, () => apply(result)),
+        () =>
+          settleRead(generation, () => {
+            invalidated = true;
+            clear({ kind: 'sign-in-required' });
+          }),
+      );
   };
 
   return connectToolResultView({
@@ -269,7 +327,12 @@ export function connectSubscriptionsView(deps: SubscriptionsViewDependencies): P
     },
     select(subscriptionId) {
       if (retired() || shown === undefined) return;
-      if (!shown.subscriptions.some((item) => item.subscriptionId === subscriptionId)) return;
+      if (
+        !shown.subscriptions.some(
+          (item) => item.subscriptionId === subscriptionId,
+        )
+      )
+        return;
       selectedId = subscriptionId;
       deps.show({ kind: 'subscriptions', subscriptions: shown, selectedId });
     },

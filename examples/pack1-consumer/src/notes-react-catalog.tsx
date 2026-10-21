@@ -1,4 +1,7 @@
-import { createComponentImplementation, type ReactCatalogComponent } from '@a2ui/react/v0_9';
+import {
+  createComponentImplementation,
+  type ReactCatalogComponent,
+} from '@a2ui/react/v0_9';
 import { ColumnApi, ListApi, RowApi } from '@a2ui/web_core/v0_9/basic_catalog';
 import { ActionButtonEntry } from '@saga-a2ui/react/actions';
 import type { ReactNode } from 'react';
@@ -11,12 +14,20 @@ import { LineApi } from './notes-line.js';
 // (notes-line.ts) and renders the same elements; `ActionButton` is SAGA's opt-in control. Nothing
 // else is in the catalog.
 
-type ChildReference = string | { readonly id: string; readonly basePath: string };
+type ChildReference =
+  string | { readonly id: string; readonly basePath: string };
 
 // The generated view hands a child list over as tokens, or `{ id, basePath }` for a template item.
-function childrenOf(buildChild: (id: string, basePath?: string) => ReactNode, value: unknown): ReactNode[] {
+function childrenOf(
+  buildChild: (id: string, basePath?: string) => ReactNode,
+  value: unknown,
+): ReactNode[] {
   const list = Array.isArray(value) ? (value as ChildReference[]) : [];
-  return list.map((child) => (typeof child === 'string' ? buildChild(child) : buildChild(child.id, child.basePath)));
+  return list.map((child) =>
+    typeof child === 'string'
+      ? buildChild(child)
+      : buildChild(child.id, child.basePath),
+  );
 }
 
 const Line = createComponentImplementation(LineApi, ({ props }) => {
@@ -36,8 +47,23 @@ const Line = createComponentImplementation(LineApi, ({ props }) => {
   }
 });
 
-const Column = createComponentImplementation(ColumnApi, ({ props, buildChild }) => <div>{childrenOf(buildChild, props.children)}</div>);
-const Row = createComponentImplementation(RowApi, ({ props, buildChild }) => <div>{childrenOf(buildChild, props.children)}</div>);
-const List = createComponentImplementation(ListApi, ({ props, buildChild }) => <div>{childrenOf(buildChild, props.children)}</div>);
+const Column = createComponentImplementation(
+  ColumnApi,
+  ({ props, buildChild }) => (
+    <div>{childrenOf(buildChild, props.children)}</div>
+  ),
+);
+const Row = createComponentImplementation(RowApi, ({ props, buildChild }) => (
+  <div>{childrenOf(buildChild, props.children)}</div>
+));
+const List = createComponentImplementation(ListApi, ({ props, buildChild }) => (
+  <div>{childrenOf(buildChild, props.children)}</div>
+));
 
-export const notesReactEntries: readonly ReactCatalogComponent[] = [Column, Row, List, Line, ActionButtonEntry];
+export const notesReactEntries: readonly ReactCatalogComponent[] = [
+  Column,
+  Row,
+  List,
+  Line,
+  ActionButtonEntry,
+];

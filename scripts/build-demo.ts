@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PACK1_CONSUMERS } from './build-pack1-consumers.js';
-import { externalImportsOf, classifyModules } from './build-installed-lit-host.js';
+import {
+  externalImportsOf,
+  classifyModules,
+} from './build-installed-lit-host.js';
 import {
   buildConsumerFromConfig,
   bundleConsumerServer,
@@ -16,7 +19,12 @@ import {
 } from './packed-consumer.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
 import { DOWNLOAD_SCRIPTS } from '../demo/lit-node/download-scripts.js';
-import { exportTemplate, readTemplateMetadata, templateDirectory, type OutputFile } from './starter-template.js';
+import {
+  exportTemplate,
+  readTemplateMetadata,
+  templateDirectory,
+  type OutputFile,
+} from './starter-template.js';
 
 // DEMO1: builds the standalone synthetic demonstration (`demo/lit-node`) the way a download of it is
 // made. The SDK packages are packed as the release candidate's tarballs and unpacked as installed
@@ -54,20 +62,46 @@ export const DEMO_OWN_DEPENDENCIES = [
   'zod',
 ];
 /** The starter files the demonstration imports as its glue. They are used as the starter ships them. */
-export const STARTER_GLUE = ['server/authenticate.ts', 'server/identity.ts'] as const;
+export const STARTER_GLUE = [
+  'server/authenticate.ts',
+  'server/identity.ts',
+] as const;
 
 /** The application's Vite configurations that build the three views the demonstration serves, and where each writes its page. */
 const APPLICATION_PAGES = [
-  { config: 'vite.view.config.ts', built: 'dist/view/view.html', as: 'episode.html' },
-  { config: 'vite.subscriptions-view.config.ts', built: 'dist/subscriptions-view/subscriptions.html', as: 'subscriptions.html' },
-  { config: 'vite.playback-view.config.ts', built: 'dist/playback-view/playback.html', as: 'playback.html' },
+  {
+    config: 'vite.view.config.ts',
+    built: 'dist/view/view.html',
+    as: 'episode.html',
+  },
+  {
+    config: 'vite.subscriptions-view.config.ts',
+    built: 'dist/subscriptions-view/subscriptions.html',
+    as: 'subscriptions.html',
+  },
+  {
+    config: 'vite.playback-view.config.ts',
+    built: 'dist/playback-view/playback.html',
+    as: 'playback.html',
+  },
 ] as const;
 /** What of `apps/lit-host` the three views and the listener need. Tests are never copied. */
-const APPLICATION_ENTRIES = ['src', 'e2e/host-fixture', 'tsconfig.json', 'view.html', 'subscriptions.html', 'playback.html', ...APPLICATION_PAGES.map((page) => page.config)];
+const APPLICATION_ENTRIES = [
+  'src',
+  'e2e/host-fixture',
+  'tsconfig.json',
+  'view.html',
+  'subscriptions.html',
+  'playback.html',
+  ...APPLICATION_PAGES.map((page) => page.config),
+];
 
-const isTest = (from: string): boolean => /\.(test|spec)\.ts$/.test(from) || /\.test-support\.ts$/.test(from);
-const notDependencies = (from: string): boolean => !from.includes('node_modules');
-const sha256 = (file: string): string => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const isTest = (from: string): boolean =>
+  /\.(test|spec)\.ts$/.test(from) || /\.test-support\.ts$/.test(from);
+const notDependencies = (from: string): boolean =>
+  !from.includes('node_modules');
+const sha256 = (file: string): string =>
+  createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 export interface PreparedDemo {
   /** The clean directory whose layout mirrors the repository's, so the demo's relative imports resolve the same way. */
@@ -86,37 +120,74 @@ export function prepareDemo(work: string): PreparedDemo {
 
   const application = path.join(root, 'apps', 'lit-host');
   for (const entry of APPLICATION_ENTRIES) {
-    fs.mkdirSync(path.dirname(path.join(application, entry)), { recursive: true });
-    fs.cpSync(path.join(repoRoot, 'apps', 'lit-host', entry), path.join(application, entry), {
+    fs.mkdirSync(path.dirname(path.join(application, entry)), {
       recursive: true,
-      filter: (from) => notDependencies(from) && !isTest(from),
     });
+    fs.cpSync(
+      path.join(repoRoot, 'apps', 'lit-host', entry),
+      path.join(application, entry),
+      {
+        recursive: true,
+        filter: (from) => notDependencies(from) && !isTest(from),
+      },
+    );
   }
   // The example's own-catalog consumer: the card consumer, the file that uses the optional component and the React consumer stay out.
   const example = path.join(root, 'examples', 'pack1-consumer');
-  const skipped = PACK1_CONSUMERS.own.leaveOut.map((file) => path.join(repoRoot, 'examples', 'pack1-consumer', file));
-  fs.cpSync(path.join(repoRoot, 'examples', 'pack1-consumer'), example, { recursive: true, filter: (from) => notDependencies(from) && !skipped.includes(from) });
+  const skipped = PACK1_CONSUMERS.own.leaveOut.map((file) =>
+    path.join(repoRoot, 'examples', 'pack1-consumer', file),
+  );
+  fs.cpSync(path.join(repoRoot, 'examples', 'pack1-consumer'), example, {
+    recursive: true,
+    filter: (from) => notDependencies(from) && !skipped.includes(from),
+  });
 
-  const exported = exportTemplate(templateDirectory(DEMO_TEMPLATE), path.join(root, 'templates', DEMO_TEMPLATE), { sdkVersion: sdk.version });
+  const exported = exportTemplate(
+    templateDirectory(DEMO_TEMPLATE),
+    path.join(root, 'templates', DEMO_TEMPLATE),
+    { sdkVersion: sdk.version },
+  );
   const starterGlue: Record<string, string> = {};
   for (const file of STARTER_GLUE) {
-    if (!exported.files.includes(file)) throw new Error(`the starter no longer ships ${file}, which the demonstration uses as its glue`);
+    if (!exported.files.includes(file))
+      throw new Error(
+        `the starter no longer ships ${file}, which the demonstration uses as its glue`,
+      );
     const shipped = path.join(exported.directory, file);
-    if (!fs.readFileSync(shipped).equals(fs.readFileSync(path.join(templateDirectory(DEMO_TEMPLATE), file)))) {
-      throw new Error(`${file} was altered on export; the demonstration must use the starter's glue as it ships`);
+    if (
+      !fs
+        .readFileSync(shipped)
+        .equals(
+          fs.readFileSync(path.join(templateDirectory(DEMO_TEMPLATE), file)),
+        )
+    ) {
+      throw new Error(
+        `${file} was altered on export; the demonstration must use the starter's glue as it ships`,
+      );
     }
     starterGlue[file] = sha256(shipped);
   }
 
-  fs.cpSync(demoSource, path.join(root, 'demo', 'lit-node'), { recursive: true, filter: notDependencies });
-  fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({ private: true, type: 'module' })}\n`);
+  fs.cpSync(demoSource, path.join(root, 'demo', 'lit-node'), {
+    recursive: true,
+    filter: notDependencies,
+  });
+  fs.writeFileSync(
+    path.join(root, 'package.json'),
+    `${JSON.stringify({ private: true, type: 'module' })}\n`,
+  );
   linkDeclaredDependencies(root, sdk, DEMO_OWN_DEPENDENCIES);
   return { root, sdk, starterGlue };
 }
 
 /** The exact version of an installed third-party package, from the repository's installed copy that was linked in. */
 function installedVersion(name: string): string {
-  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'node_modules', name, 'package.json'), 'utf8')) as { version: string };
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(repoRoot, 'node_modules', name, 'package.json'),
+      'utf8',
+    ),
+  ) as { version: string };
   return manifest.version;
 }
 
@@ -136,7 +207,10 @@ export interface BuiltDemo extends PreparedDemo {
  * its next stage (each page, then the server) with the abort error; what was built stays in `root`
  * for the caller to remove.
  */
-export async function buildDemo(prepared: PreparedDemo, signal?: AbortSignal): Promise<BuiltDemo> {
+export async function buildDemo(
+  prepared: PreparedDemo,
+  signal?: AbortSignal,
+): Promise<BuiltDemo> {
   const { root } = prepared;
   const application = path.join(root, 'apps', 'lit-host');
   const demo = path.join(root, 'demo', 'lit-node');
@@ -152,43 +226,79 @@ export async function buildDemo(prepared: PreparedDemo, signal?: AbortSignal): P
   signal?.throwIfAborted();
   await buildConsumerFromConfig(demo, 'vite.host.config.ts');
   pages['host.html'] = path.join(demo, 'dist', 'host', 'index.html');
-  for (const [name, file] of Object.entries(pages)) if (!fs.existsSync(file)) throw new Error(`the demonstration build did not write ${name}`);
+  for (const [name, file] of Object.entries(pages))
+    if (!fs.existsSync(file))
+      throw new Error(`the demonstration build did not write ${name}`);
 
   signal?.throwIfAborted();
-  const bundled = await bundleConsumerServer(root, 'demo/lit-node/server/main.ts');
+  const bundled = await bundleConsumerServer(
+    root,
+    'demo/lit-node/server/main.ts',
+  );
   const serverProvenance = classifyModules(root, bundled.modules);
-  if (serverProvenance.unexpected.length > 0) throw new Error(`the demonstration server loaded modules from outside the installed packages: ${serverProvenance.unexpected.join(', ')}`);
+  if (serverProvenance.unexpected.length > 0)
+    throw new Error(
+      `the demonstration server loaded modules from outside the installed packages: ${serverProvenance.unexpected.join(', ')}`,
+    );
   const externalImports = externalImportsOf(bundled.file);
-  const sdkImports = externalImports.filter((name) => name.startsWith('@saga-a2ui/'));
-  if (sdkImports.length > 0) throw new Error(`the demonstration server still imports ${sdkImports.join(', ')} at run time instead of carrying the installed copies`);
-  return { ...prepared, server: bundled.file, serverProvenance, externalImports, pages };
+  const sdkImports = externalImports.filter((name) =>
+    name.startsWith('@saga-a2ui/'),
+  );
+  if (sdkImports.length > 0)
+    throw new Error(
+      `the demonstration server still imports ${sdkImports.join(', ')} at run time instead of carrying the installed copies`,
+    );
+  return {
+    ...prepared,
+    server: bundled.file,
+    serverProvenance,
+    externalImports,
+    pages,
+  };
 }
 
 const DOWNLOAD_NAME = 'saga-lit-node-demo';
 
 /** Writes the download into `outDir` and returns its manifest, which is also written as `release.json`. */
-export function writeDownload(built: BuiltDemo, outDir: string): Record<string, unknown> {
+export function writeDownload(
+  built: BuiltDemo,
+  outDir: string,
+): Record<string, unknown> {
   const { sdk } = built;
   const metadata = readTemplateMetadata(templateDirectory(DEMO_TEMPLATE));
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'views'), { recursive: true });
   fs.copyFileSync(built.server, path.join(outDir, 'server.mjs'));
-  for (const [name, file] of Object.entries(built.pages)) fs.copyFileSync(file, path.join(outDir, 'views', name));
-  fs.copyFileSync(path.join(demoSource, 'README.md'), path.join(outDir, 'README.md'));
+  for (const [name, file] of Object.entries(built.pages))
+    fs.copyFileSync(file, path.join(outDir, 'views', name));
+  fs.copyFileSync(
+    path.join(demoSource, 'README.md'),
+    path.join(outDir, 'README.md'),
+  );
   // Apache-2.0 travels with the code, and the notices of the Markdown parser the views bundle.
-  for (const notice of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) fs.copyFileSync(path.join(repoRoot, notice), path.join(outDir, notice));
+  for (const notice of ['LICENSE', 'THIRD_PARTY_NOTICES.md'])
+    fs.copyFileSync(path.join(repoRoot, notice), path.join(outDir, notice));
 
   // The packages the server still imports at run time. An installed SDK package's own declaration
   // wins (it may be an alias such as `zod3`); any other is pinned to the version this build was linked against.
-  const declared = (name: string): string | undefined => Object.values(sdk.manifests).find((manifest) => manifest.dependencies?.[name] !== undefined)?.dependencies?.[name];
-  const dependencies = Object.fromEntries(built.externalImports.map((name) => [name, declared(name) ?? installedVersion(name)]));
+  const declared = (name: string): string | undefined =>
+    Object.values(sdk.manifests).find(
+      (manifest) => manifest.dependencies?.[name] !== undefined,
+    )?.dependencies?.[name];
+  const dependencies = Object.fromEntries(
+    built.externalImports.map((name) => [
+      name,
+      declared(name) ?? installedVersion(name),
+    ]),
+  );
   fs.writeFileSync(
     path.join(outDir, 'package.json'),
     `${JSON.stringify(
       {
         name: DOWNLOAD_NAME,
         private: true,
-        description: 'A synthetic, local-only demonstration of a SAGA A2UI application: browse, descriptions at both content levels, protected Play, notes actions, expiry and recovery.',
+        description:
+          'A synthetic, local-only demonstration of a SAGA A2UI application: browse, descriptions at both content levels, protected Play, notes actions, expiry and recovery.',
         license: 'Apache-2.0',
         type: 'module',
         scripts: DOWNLOAD_SCRIPTS,
@@ -202,30 +312,58 @@ export function writeDownload(built: BuiltDemo, outDir: string): Record<string, 
   );
 
   const files = Object.fromEntries(
-    ['server.mjs', ...Object.keys(built.pages).map((name) => `views/${name}`)].map((name) => [name, sha256(path.join(outDir, name))]),
+    [
+      'server.mjs',
+      ...Object.keys(built.pages).map((name) => `views/${name}`),
+    ].map((name) => [name, sha256(path.join(outDir, name))]),
   );
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+  const git = (args: string[]): string =>
+    execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
   const manifest = {
     download: DOWNLOAD_NAME,
     sourceCommit: git(['rev-parse', 'HEAD']),
-    sourceDirty: git(['status', '--porcelain=v1', '--untracked-files=no']) !== '',
+    sourceDirty:
+      git(['status', '--porcelain=v1', '--untracked-files=no']) !== '',
     // The qualified pair the demonstration runs on, and the starter files it uses as its glue.
-    pair: { template: `templates/${DEMO_TEMPLATE}`, stack: metadata.stack, server: metadata.server, serverAdapter: metadata.serverAdapter },
+    pair: {
+      template: `templates/${DEMO_TEMPLATE}`,
+      stack: metadata.stack,
+      server: metadata.server,
+      serverAdapter: metadata.serverAdapter,
+    },
     starterGlue: built.starterGlue,
     // The candidate build the installed SDK packages came from: the same version and tarballs `npm run candidate:pack` makes for this revision.
-    candidate: { version: sdk.version, packedTarballSha256: sdk.tarballSha256, installedPackages: Object.keys(sdk.manifests).sort() },
+    candidate: {
+      version: sdk.version,
+      packedTarballSha256: sdk.tarballSha256,
+      installedPackages: Object.keys(sdk.manifests).sort(),
+    },
     files,
     runtimeDependencies: dependencies,
-    serverModules: { installedSdkFiles: built.serverProvenance.installedSdkFiles.length, applicationModules: built.serverProvenance.applicationModules, thirdPartyPackages: built.serverProvenance.thirdPartyPackages },
-    builtWith: { node: process.version, npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(), platform: `${process.platform}-${process.arch}` },
-    authentication: 'local-only: fixed, public development credentials; no OAuth flow, no real account',
+    serverModules: {
+      installedSdkFiles: built.serverProvenance.installedSdkFiles.length,
+      applicationModules: built.serverProvenance.applicationModules,
+      thirdPartyPackages: built.serverProvenance.thirdPartyPackages,
+    },
+    builtWith: {
+      node: process.version,
+      npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
+      platform: `${process.platform}-${process.arch}`,
+    },
+    authentication:
+      'local-only: fixed, public development credentials; no OAuth flow, no real account',
   };
-  fs.writeFileSync(path.join(outDir, 'release.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(outDir, 'release.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
   return manifest;
 }
 
 /** Builds the demonstration from packed candidate tarballs into `outDir` and returns the manifest of what was written. */
-export async function buildDemoInto(outDir: string): Promise<Record<string, unknown>> {
+export async function buildDemoInto(
+  outDir: string,
+): Promise<Record<string, unknown>> {
   const work = createWorkDirectory('saga-demo-');
   try {
     const built = await buildDemo(prepareDemo(work));
@@ -251,12 +389,18 @@ function filesBelow(directory: string): OutputFile[] {
     fs.readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) return walk(full);
-      if (!entry.isFile()) throw new Error(`the demonstration download contains ${path.relative(directory, full)}, which is neither a file nor a directory`);
+      if (!entry.isFile())
+        throw new Error(
+          `the demonstration download contains ${path.relative(directory, full)}, which is neither a file nor a directory`,
+        );
       return [path.relative(directory, full).split(path.sep).join('/')];
     });
   return walk(directory)
     .sort()
-    .map((file) => ({ path: file, content: () => fs.readFileSync(path.join(directory, file)) }));
+    .map((file) => ({
+      path: file,
+      content: () => fs.readFileSync(path.join(directory, file)),
+    }));
 }
 
 /**
@@ -272,7 +416,11 @@ export async function stageDemo(signal?: AbortSignal): Promise<StagedDemo> {
     const built = await buildDemo(prepareDemo(work), signal);
     const download = path.join(work, 'download');
     writeDownload(built, download);
-    return { sdkVersion: built.sdk.version, files: filesBelow(download), dispose };
+    return {
+      sdkVersion: built.sdk.version,
+      files: filesBelow(download),
+      dispose,
+    };
   } catch (error) {
     dispose();
     throw error;
@@ -296,8 +444,13 @@ const READY_MS = 30_000;
  * repository's installed copies (a download would `npm install` them), the environment carries no
  * credential, and the process is ready only when it printed the host page's address.
  */
-export async function startDownload(dir: string, env: Record<string, string> = {}): Promise<RunningDemoProcess> {
-  const dependencies = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
+export async function startDownload(
+  dir: string,
+  env: Record<string, string> = {},
+): Promise<RunningDemoProcess> {
+  const dependencies = JSON.parse(
+    fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+  ) as { dependencies: Record<string, string> };
   for (const name of Object.keys(dependencies.dependencies)) {
     const target = path.join(dir, 'node_modules', name);
     if (fs.existsSync(target)) continue;
@@ -310,25 +463,43 @@ export async function startDownload(dir: string, env: Record<string, string> = {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let written = '';
-  child.stdout.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
-  child.stderr.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
-  const exited = new Promise<number | null>((resolve) => child.once('exit', resolve));
+  child.stdout
+    .setEncoding('utf8')
+    .on('data', (chunk: string) => void (written += chunk));
+  child.stderr
+    .setEncoding('utf8')
+    .on('data', (chunk: string) => void (written += chunk));
+  const exited = new Promise<number | null>((resolve) =>
+    child.once('exit', resolve),
+  );
   const stop = async (): Promise<void> => {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill('SIGTERM');
     await exited;
   };
   const deadline = Date.now() + READY_MS;
   while (Date.now() < deadline) {
-    const host = /Open the demo host page: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(written);
-    if (host?.[1] && /MCP endpoint notes: /.test(written)) return { hostUrl: host[1], output: () => written, stop };
-    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`the demonstration ended before it was ready (exit ${child.exitCode ?? child.signalCode}):\n${written}`);
+    const host = /Open the demo host page: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(
+      written,
+    );
+    if (host?.[1] && /MCP endpoint notes: /.test(written))
+      return { hostUrl: host[1], output: () => written, stop };
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(
+        `the demonstration ended before it was ready (exit ${child.exitCode ?? child.signalCode}):\n${written}`,
+      );
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   await stop();
-  throw new Error(`the demonstration was not ready within ${READY_MS} ms:\n${written}`);
+  throw new Error(
+    `the demonstration was not ready within ${READY_MS} ms:\n${written}`,
+  );
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   const manifest = await buildDemoInto(demoDist);
   console.log(JSON.stringify(manifest, null, 2));
 }

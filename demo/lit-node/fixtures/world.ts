@@ -1,10 +1,22 @@
-import type { EpisodeCatalog, EpisodeRecord } from '../../../apps/lit-host/src/mcp/server.js';
+import type {
+  EpisodeCatalog,
+  EpisodeRecord,
+} from '../../../apps/lit-host/src/mcp/server.js';
 import { DEV_ACCOUNTS } from '../../../apps/lit-host/src/mcp/dev-auth.js';
-import type { AccountSubscriptions, SubscriptionBackend } from '../../../apps/lit-host/src/mcp/subscriptions-server.js';
-import type { EntitlementDecision, MediaStore } from '../../../apps/lit-host/src/playback/media-service.js';
+import type {
+  AccountSubscriptions,
+  SubscriptionBackend,
+} from '../../../apps/lit-host/src/mcp/subscriptions-server.js';
+import type {
+  EntitlementDecision,
+  MediaStore,
+} from '../../../apps/lit-host/src/playback/media-service.js';
 import type { PlaybackBackend } from '../../../apps/lit-host/src/playback/playback-server.js';
 import { toneWav } from '../../../apps/lit-host/src/playback/synthetic-media.js';
-import { createFixtureBackend, type FixtureBackend } from '../../../examples/pack1-consumer/server/index.js';
+import {
+  createFixtureBackend,
+  type FixtureBackend,
+} from '../../../examples/pack1-consumer/server/index.js';
 import { syntheticNotes } from './notes.js';
 
 // DEMO-OWNED synthetic business data: the fictional podcast service the demonstration runs. Nothing
@@ -12,7 +24,10 @@ import { syntheticNotes } from './notes.js';
 // accounts are the application's development accounts (apps/lit-host/src/mcp/dev-auth.ts); the
 // "protected media" is a generated tone; no real person, subscriber, recording or service is involved.
 
-export const EPISODE_IDS = { entitled: 'ep-001', unavailable: 'ep-002' } as const;
+export const EPISODE_IDS = {
+  entitled: 'ep-001',
+  unavailable: 'ep-002',
+} as const;
 
 /**
  * Descriptions are Markdown, read under the listener's content policy. The first carries each kind
@@ -34,7 +49,8 @@ const episodes: readonly EpisodeRecord[] = [
   {
     id: EPISODE_IDS.unavailable,
     title: 'The second synthetic episode',
-    description: 'No synthetic account may play this one, so Play always ends in the same safe denial.',
+    description:
+      'No synthetic account may play this one, so Play always ends in the same safe denial.',
   },
 ];
 
@@ -42,13 +58,30 @@ const subscriptions: Readonly<Record<string, AccountSubscriptions>> = {
   [DEV_ACCOUNTS.alice]: {
     displayName: 'Alice (synthetic)',
     subscriptions: [
-      { subscriptionId: 'sub-a1', creator: 'Synthetic Creator One', tier: 'Gold', status: 'active' },
-      { subscriptionId: 'sub-a2', creator: 'Synthetic Creator Two', tier: 'Basic', status: 'paused' },
+      {
+        subscriptionId: 'sub-a1',
+        creator: 'Synthetic Creator One',
+        tier: 'Gold',
+        status: 'active',
+      },
+      {
+        subscriptionId: 'sub-a2',
+        creator: 'Synthetic Creator Two',
+        tier: 'Basic',
+        status: 'paused',
+      },
     ],
   },
   [DEV_ACCOUNTS.bob]: {
     displayName: 'Bob (synthetic)',
-    subscriptions: [{ subscriptionId: 'sub-b1', creator: 'Synthetic Creator Three', tier: 'Silver', status: 'active' }],
+    subscriptions: [
+      {
+        subscriptionId: 'sub-b1',
+        creator: 'Synthetic Creator Three',
+        tier: 'Silver',
+        status: 'active',
+      },
+    ],
   },
 };
 
@@ -70,7 +103,9 @@ export const CONTROL_NAMES = [
 ] as const;
 export type ControlName = (typeof CONTROL_NAMES)[number];
 
-export const isControlName = (value: unknown): value is ControlName => typeof value === 'string' && (CONTROL_NAMES as readonly string[]).includes(value);
+export const isControlName = (value: unknown): value is ControlName =>
+  typeof value === 'string' &&
+  (CONTROL_NAMES as readonly string[]).includes(value);
 
 export interface ControlState {
   /** Alice's right to play the first episode. `after-next-grant` revokes it right after the next Play is granted. */
@@ -104,29 +139,50 @@ export function createDemoWorld(): DemoWorld {
   const backend = createFixtureBackend(
     {
       before: async (call) => {
-        if (call === 'archive' && held) await new Promise<void>((resolve) => release.push(resolve));
+        if (call === 'archive' && held)
+          await new Promise<void>((resolve) => release.push(resolve));
       },
     },
     syntheticNotes(DEV_ACCOUNTS),
   );
-  const aliceMay = (): boolean => entitlements.get(DEV_ACCOUNTS.alice)?.has(EPISODE_IDS.entitled) === true;
+  const aliceMay = (): boolean =>
+    entitlements.get(DEV_ACCOUNTS.alice)?.has(EPISODE_IDS.entitled) === true;
 
   const state = (): ControlState => ({
-    playAccess: revokeAfterNextGrant ? 'revoke-after-next-grant' : aliceMay() ? 'granted' : 'revoked',
-    notesSession: backend.signedOut.has(DEV_ACCOUNTS.alice) ? 'signed-out' : 'signed-in',
-    archivePermission: backend.revoked.has(DEV_ACCOUNTS.alice) ? 'revoked' : 'granted',
+    playAccess: revokeAfterNextGrant
+      ? 'revoke-after-next-grant'
+      : aliceMay()
+        ? 'granted'
+        : 'revoked',
+    notesSession: backend.signedOut.has(DEV_ACCOUNTS.alice)
+      ? 'signed-out'
+      : 'signed-in',
+    archivePermission: backend.revoked.has(DEV_ACCOUNTS.alice)
+      ? 'revoked'
+      : 'granted',
     archives: held ? 'held' : 'immediate',
   });
 
   return {
     catalog: { find: (id) => episodes.find((episode) => episode.id === id) },
-    subscriptions: { listSubscriptions: async (accountId) => subscriptions[accountId] },
+    subscriptions: {
+      listSubscriptions: async (accountId) => subscriptions[accountId],
+    },
     playback: {
-      findEpisode: (episodeId) => episodes.find((episode) => episode.id === episodeId),
+      findEpisode: (episodeId) =>
+        episodes.find((episode) => episode.id === episodeId),
       // Asked again on every protected acquisition, so a change here reaches an issued capability.
-      checkEntitlement: async (accountId, episodeId): Promise<EntitlementDecision> => {
+      checkEntitlement: async (
+        accountId,
+        episodeId,
+      ): Promise<EntitlementDecision> => {
         const entitled = entitlements.get(accountId)?.has(episodeId) === true;
-        if (entitled && revokeAfterNextGrant && accountId === DEV_ACCOUNTS.alice && episodeId === EPISODE_IDS.entitled) {
+        if (
+          entitled &&
+          revokeAfterNextGrant &&
+          accountId === DEV_ACCOUNTS.alice &&
+          episodeId === EPISODE_IDS.entitled
+        ) {
           // This answer grants; the next lookup (the media acquisition for that grant) is refused.
           revokeAfterNextGrant = false;
           entitlements.get(accountId)?.delete(episodeId);
@@ -134,7 +190,9 @@ export function createDemoWorld(): DemoWorld {
         return entitled ? 'entitled' : 'denied';
       },
     },
-    media: { read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }) },
+    media: {
+      read: async () => ({ contentType: 'audio/wav', bytes: toneWav() }),
+    },
     notes: backend,
     state,
     control(name) {

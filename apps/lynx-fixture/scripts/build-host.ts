@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 // pinned `@lynx-js/web-core` (its production client, styles and wasm, exactly as published), and a
 // page that mounts the bundle in a `<lynx-view>`.
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const appRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const dist = path.join(appRoot, 'dist');
 const require = createRequire(import.meta.url);
 
@@ -19,5 +22,10 @@ const target = path.join(dist, 'static');
 fs.rmSync(target, { recursive: true, force: true });
 fs.cpSync(staticDir, target, { recursive: true });
 
-fs.writeFileSync(path.join(dist, 'index.html'), fs.readFileSync(path.join(appRoot, 'host', 'index.html')));
-console.log(`web-core runtime copied from ${path.relative(appRoot, staticDir)}`);
+fs.writeFileSync(
+  path.join(dist, 'index.html'),
+  fs.readFileSync(path.join(appRoot, 'host', 'index.html')),
+);
+console.log(
+  `web-core runtime copied from ${path.relative(appRoot, staticDir)}`,
+);

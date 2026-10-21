@@ -7,7 +7,10 @@ export type PlayControlAction = keyof PlayControlEvents;
 export interface Presentation {
   readonly status: string;
   /** Absent when there is nothing the user can usefully press. */
-  readonly button?: { readonly label: string; readonly action: PlayControlAction };
+  readonly button?: {
+    readonly label: string;
+    readonly action: PlayControlAction;
+  };
   /** Pending keeps the button in place and focusable, but a press does nothing. */
   readonly busy?: boolean;
 }
@@ -18,18 +21,32 @@ export function titleFor(state: PlaybackViewState): string {
 }
 
 export function presentationFor(state: PlaybackViewState): Presentation {
-  const title = 'episode' in state && state.episode ? state.episode.title : 'this episode';
+  const title =
+    'episode' in state && state.episode ? state.episode.title : 'this episode';
   switch (state.kind) {
     case 'no-selection':
       return { status: 'Waiting for an episode…' };
     case 'ready':
-      return { status: `Ready to play ${title}.`, button: { label: 'Play', action: 'play' } };
+      return {
+        status: `Ready to play ${title}.`,
+        button: { label: 'Play', action: 'play' },
+      };
     case 'pending':
-      return { status: 'Checking access…', button: { label: 'Play', action: 'play' }, busy: true };
+      return {
+        status: 'Checking access…',
+        button: { label: 'Play', action: 'play' },
+        busy: true,
+      };
     case 'playing':
-      return { status: `Playing ${title}.`, button: { label: 'Pause', action: 'pause' } };
+      return {
+        status: `Playing ${title}.`,
+        button: { label: 'Pause', action: 'pause' },
+      };
     case 'paused':
-      return { status: 'Paused.', button: { label: 'Resume', action: 'resume' } };
+      return {
+        status: 'Paused.',
+        button: { label: 'Resume', action: 'resume' },
+      };
     case 'resume-blocked':
       // The audio is still paused where it stopped; another press, not a new authorization, retries.
       return {
@@ -37,11 +54,15 @@ export function presentationFor(state: PlaybackViewState): Presentation {
         button: { label: 'Resume', action: 'resume' },
       };
     case 'ended':
-      return { status: 'Finished playing.', button: { label: 'Play again', action: 'play' } };
+      return {
+        status: 'Finished playing.',
+        button: { label: 'Play again', action: 'play' },
+      };
     case 'denied':
       // Signing in again does not grant a subscription, so this offers a retry, not a sign-in.
       return {
-        status: 'Playback denied: this account does not have access to this episode.',
+        status:
+          'Playback denied: this account does not have access to this episode.',
         button: { label: 'Try again', action: 'play' },
       };
     case 'expired':
@@ -55,17 +76,28 @@ export function presentationFor(state: PlaybackViewState): Presentation {
       // The request may have reached the server and nothing says what it did, so pressing again is
       // not offered: opening the episode again starts a fresh attempt with a fresh view of access.
       if (state.requestOutcome === 'unknown') {
-        return { status: 'Playback could not be confirmed. Open this episode again to try playing it.' };
+        return {
+          status:
+            'Playback could not be confirmed. Open this episode again to try playing it.',
+        };
       }
-      return { status: 'Playback is unavailable right now.', button: { label: 'Try again', action: 'play' } };
+      return {
+        status: 'Playback is unavailable right now.',
+        button: { label: 'Try again', action: 'play' },
+      };
     case 'media-failed':
-      return { status: 'The audio could not be played.', button: { label: 'Try again', action: 'play' } };
+      return {
+        status: 'The audio could not be played.',
+        button: { label: 'Try again', action: 'play' },
+      };
     case 'gesture-needed':
       return {
         status: 'Your browser needs another press to start the audio.',
         button: { label: 'Play', action: 'play' },
       };
     case 'session-changed':
-      return { status: 'Your session changed. Open a new view or reload to continue.' };
+      return {
+        status: 'Your session changed. Open a new view or reload to continue.',
+      };
   }
 }

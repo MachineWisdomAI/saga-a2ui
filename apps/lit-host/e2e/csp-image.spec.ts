@@ -13,7 +13,8 @@ const builtView = new URL('../dist/view/view.html', import.meta.url);
 
 // A minimal, valid image served with a matching content type: an allowed request can only
 // succeed when the CSP permits it.
-const IMAGE_BODY = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+const IMAGE_BODY =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
 const IMAGE_TYPE = 'image/svg+xml';
 
 interface LocalImageServer {
@@ -28,12 +29,16 @@ function startImageServer(): Promise<LocalImageServer> {
     let requests = 0;
     const server = createServer((_request, response) => {
       requests += 1;
-      response.writeHead(200, { 'content-type': IMAGE_TYPE, 'cache-control': 'no-store' });
+      response.writeHead(200, {
+        'content-type': IMAGE_TYPE,
+        'cache-control': 'no-store',
+      });
       response.end(IMAGE_BODY);
     });
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();
-      if (address === null || typeof address === 'string') throw new Error('image server has no port');
+      if (address === null || typeof address === 'string')
+        throw new Error('image server has no port');
       const origin = `http://127.0.0.1:${address.port}`;
       resolve({
         origin,
@@ -71,17 +76,26 @@ test.describe('host fixture image policy', () => {
 
   async function mount(page: Page, resourceDomains: string[]): Promise<Frame> {
     await page.goto('/host-fixture/index.html');
-    const resource: HostedResource = { html: viewHtml, csp: { connectDomains: [], resourceDomains } };
+    const resource: HostedResource = {
+      html: viewHtml,
+      csp: { connectDomains: [], resourceDomains },
+    };
     await page.evaluate((value) => window.mountView?.(value), resource);
-    const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
-    if (frame === undefined) throw new Error('the host fixture did not mount a view frame');
+    const frame = page
+      .frames()
+      .find((candidate) => candidate !== page.mainFrame());
+    if (frame === undefined)
+      throw new Error('the host fixture did not mount a view frame');
     return frame;
   }
 
   // The policy actually applied to the mounted document, not the fixture's source text.
   function policyOf(frame: Frame): Promise<string> {
     return frame.evaluate(
-      () => document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') ?? '',
+      () =>
+        document
+          .querySelector('meta[http-equiv="Content-Security-Policy"]')
+          ?.getAttribute('content') ?? '',
     );
   }
 
@@ -91,7 +105,11 @@ test.describe('host fixture image policy', () => {
     return frame.evaluate(
       (source) =>
         new Promise<ImageOutcome>((resolve) => {
-          const outcome: { loaded: boolean; errored: boolean; violatedDirective: string } = {
+          const outcome: {
+            loaded: boolean;
+            errored: boolean;
+            violatedDirective: string;
+          } = {
             loaded: false,
             errored: false,
             violatedDirective: '',
@@ -114,7 +132,9 @@ test.describe('host fixture image policy', () => {
     );
   }
 
-  test('an empty image allowlist emits the embedded baseline and no network origin', async ({ page }) => {
+  test('an empty image allowlist emits the embedded baseline and no network origin', async ({
+    page,
+  }) => {
     const frame = await mount(page, []);
     const policy = await policyOf(frame);
     expect(policy).toContain("default-src 'none'");
@@ -123,7 +143,9 @@ test.describe('host fixture image policy', () => {
     expect(policy).toContain('img-src data: blob:;');
   });
 
-  test('an empty image allowlist blocks a reachable network image', async ({ page }) => {
+  test('an empty image allowlist blocks a reachable network image', async ({
+    page,
+  }) => {
     const frame = await mount(page, []);
     // The server answers, so only the CSP can be stopping the view from loading it.
     const reachable = await fetch(allowed.imageUrl);
@@ -139,7 +161,9 @@ test.describe('host fixture image policy', () => {
     expect(allowed.requestCount()).toBe(requestsBefore);
   });
 
-  test('a populated allowlist loads its named origin and blocks another', async ({ page }) => {
+  test('a populated allowlist loads its named origin and blocks another', async ({
+    page,
+  }) => {
     const frame = await mount(page, [allowed.origin]);
     const policy = await policyOf(frame);
     expect(policy).toContain(`img-src data: blob: ${allowed.origin}`);

@@ -21,9 +21,9 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 
 ## Local tooling
 
-Keep automatic formatting hooks disabled until the operator explicitly enables them after the codebase is stable. Run `npm run hooks:install` only on that explicit request; a fresh clone/worktree or a missing formatter hook is not authorization to install it. Preserve the existing pre-commit and pre-push safety guards. Leave source formatting unchanged during routine setup.
+Set up formatting hooks in every development checkout or worktree, including Hermes Helmet worker checkouts. Install missing pinned root tools with `npm ci --workspaces=false --ignore-scripts`, run `npm run hooks:install`, and verify with `npm run hooks:check` before committing. Hooks are shared by linked worktrees, but root dependencies must be installed in each committing worktree. Preserve the existing pre-commit and pre-push safety guards. The hook formats whole staged source/configuration files; keep the formatting baseline current so later changes avoid unrelated formatting hunks.
 
-Install pinned root tools when needed with `npm ci --workspaces=false --ignore-scripts`. Optional correctness feedback: `npm run lint -- PATH...` (see the development guide for pinned actionlint setup). Findings and analyzer failures are advisory; assess concrete defects through ordinary review. See [formatting and hooks](docs/development-reference.md#formatting-and-hooks) for the operator-approved installation procedure and troubleshooting.
+Install pinned root tools when needed with `npm ci --workspaces=false --ignore-scripts`. Optional correctness feedback: `npm run lint -- PATH...` (see the development guide for pinned actionlint setup). Findings and analyzer failures are advisory; assess concrete defects through ordinary review. See [formatting and hooks](docs/development-reference.md#formatting-and-hooks) for the installation procedure and troubleshooting.
 
 ## Coding Standards
 

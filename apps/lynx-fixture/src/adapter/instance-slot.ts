@@ -1,5 +1,15 @@
-import type { ActionBinding, ComponentKind, InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
-import { ItemWatch, readLive, type Where, type WatchEvent } from './item-key.js';
+import type {
+  ActionBinding,
+  ComponentKind,
+  InstanceHost,
+  OpenInstance,
+} from '@saga-a2ui/core/actions';
+import {
+  ItemWatch,
+  readLive,
+  type Where,
+  type WatchEvent,
+} from './item-key.js';
 import { countOnMainThread } from '../trace.js';
 import type { ActionButtonEvents, LynxTap } from './kind.js';
 
@@ -30,15 +40,23 @@ export interface TapToken {
   readonly shownKey: unknown;
 }
 
-export type Activation = 'delivered' | 'failed' | 'unbound' | 'retired' | 'stale';
+export type Activation =
+  'delivered' | 'failed' | 'unbound' | 'retired' | 'stale';
 
 export type SlotProbe =
   | WatchEvent
   | { readonly type: 'opened'; readonly where: Where }
   | { readonly type: 'closed' }
-  | { readonly type: 'render'; readonly shownKey: unknown; readonly epoch: number }
+  | {
+      readonly type: 'render';
+      readonly shownKey: unknown;
+      readonly epoch: number;
+    }
   | { readonly type: 'commit' }
-  | { readonly type: 'refused'; readonly outcome: Exclude<Activation, 'delivered' | 'failed'> };
+  | {
+      readonly type: 'refused';
+      readonly outcome: Exclude<Activation, 'delivered' | 'failed'>;
+    };
 
 export interface SlotConfig {
   /** The presentation's host. Without one the control stays unbound and refuses every tap. */
@@ -67,7 +85,12 @@ export class InstanceSlot {
   #where: OpenWhere | undefined;
   #keyProp: string | undefined;
   #watch: ItemWatch | undefined;
-  #snapshot: SlotSnapshot = Object.freeze({ installation: undefined, keyProp: undefined, epoch: 0, binding: undefined });
+  #snapshot: SlotSnapshot = Object.freeze({
+    installation: undefined,
+    keyProp: undefined,
+    epoch: 0,
+    binding: undefined,
+  });
   readonly #listeners = new Set<() => void>();
   readonly #wakeUps = new Set<() => void>();
 
@@ -118,7 +141,10 @@ export class InstanceSlot {
       dataPath: where.dataContextPath ?? '/',
       events: ['activate'],
       isLive: () => installation.live,
-      read: (prop) => (installation.live && this.#where !== undefined ? readLive(this.#where, prop) : undefined),
+      read: (prop) =>
+        installation.live && this.#where !== undefined
+          ? readLive(this.#where, prop)
+          : undefined,
       // The runtime holds this only while an invocation is not settled. The item watch is this
       // adapter's own observation, kept while idle for tap admission; it keeps its epoch whatever the
       // runtime does with its subscription. Signals notify inside a batch, so the microtask lets the
@@ -170,14 +196,18 @@ export class InstanceSlot {
    * Runs in render, on both threads, so it reads only the published snapshot and the render's own
    * props and returns a plain object.
    */
-  tapToken(snapshot: SlotSnapshot, shown: Readonly<Record<string, unknown>>): TapToken | undefined {
+  tapToken(
+    snapshot: SlotSnapshot,
+    shown: Readonly<Record<string, unknown>>,
+  ): TapToken | undefined {
     if (snapshot.installation === undefined) return undefined;
     countOnMainThread('tokensCaptured');
     return {
       installation: snapshot.installation,
       epoch: snapshot.epoch,
       binding: snapshot.binding,
-      shownKey: snapshot.keyProp === undefined ? undefined : shown[snapshot.keyProp],
+      shownKey:
+        snapshot.keyProp === undefined ? undefined : shown[snapshot.keyProp],
     };
   }
 
@@ -190,7 +220,11 @@ export class InstanceSlot {
    */
   activate(token: TapToken, native: LynxTap): Activation {
     const installation = this.#installation;
-    if (installation === undefined || !installation.live || token.installation !== installation) {
+    if (
+      installation === undefined ||
+      !installation.live ||
+      token.installation !== installation
+    ) {
       return this.#refuse('stale');
     }
     if (token.epoch !== (this.#watch?.epoch ?? 0)) return this.#refuse('stale');
@@ -199,7 +233,11 @@ export class InstanceSlot {
     const attached = opened.attached('activate');
     if (attached === undefined) return this.#refuse('unbound');
     if (token.binding !== attached) return this.#refuse('stale');
-    if (this.#keyProp !== undefined && this.#where !== undefined && readLive(this.#where, this.#keyProp) !== token.shownKey) {
+    if (
+      this.#keyProp !== undefined &&
+      this.#where !== undefined &&
+      readLive(this.#where, this.#keyProp) !== token.shownKey
+    ) {
       return this.#refuse('stale');
     }
     try {
@@ -215,7 +253,11 @@ export class InstanceSlot {
   /** Test instrumentation for the render path: reports what a render showed. Writes nothing. */
   noteRender(shownKey: unknown): void {
     countOnMainThread('renders');
-    this.config.probe(this, { type: 'render', shownKey, epoch: this.#watch?.epoch ?? 0 });
+    this.config.probe(this, {
+      type: 'render',
+      shownKey,
+      epoch: this.#watch?.epoch ?? 0,
+    });
   }
 
   /** Tells every wake-up the runtime holds that what this instance shows changed, once the batch is done. */

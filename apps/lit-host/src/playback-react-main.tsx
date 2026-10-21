@@ -2,7 +2,10 @@ import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import { createInstanceHost } from '@saga-a2ui/core/actions';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
-import { connectPlaybackView, type PlaybackViewState } from './playback/playback-view.js';
+import {
+  connectPlaybackView,
+  type PlaybackViewState,
+} from './playback/playback-view.js';
 import { createWebAudioPlayer } from './playback/web-audio-player.js';
 import { PlayerPage } from './react/play-control.js';
 
@@ -13,7 +16,8 @@ import { PlayerPage } from './react/play-control.js';
 // capability arrive only through the host's bridge. The optional description card is a separate
 // slice and is not part of this page, so the controller is told of no card.
 const container = document.getElementById('root');
-if (container === null) throw new Error('playback-react.html is missing its #root element');
+if (container === null)
+  throw new Error('playback-react.html is missing its #root element');
 
 const app = new App({ name: 'saga-a2ui-playback-view', version: '0.0.0' });
 

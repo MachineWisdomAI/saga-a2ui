@@ -31,7 +31,10 @@ export interface PlayerOwner {
    * needs a new gesture. Rejects with `LeaseEndedError` when the lease was superseded or ended
    * meanwhile, and with the player's own error when the bytes cannot be played.
    */
-  start(lease: PlaybackLease, bytes: ArrayBuffer): Promise<'started' | 'blocked'>;
+  start(
+    lease: PlaybackLease,
+    bytes: ArrayBuffer,
+  ): Promise<'started' | 'blocked'>;
   /**
    * Synchronous hand-off from an invocation: the owner now holds `lease` as the running player and
    * the invocation's scope must not release it. Throws `LeaseEndedError` when the lease is no
@@ -64,7 +67,8 @@ export function createPlayerOwner(player: AudioPlayer): PlayerOwner {
   let held: Held | undefined;
   let endedListener: ((lease: PlaybackLease) => void) | undefined;
 
-  const mine = (lease: PlaybackLease): lease is Held => held !== undefined && lease === held;
+  const mine = (lease: PlaybackLease): lease is Held =>
+    held !== undefined && lease === held;
 
   player.onEnded(() => {
     const lease = held;

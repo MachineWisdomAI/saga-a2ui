@@ -11,7 +11,12 @@ import type {
 import { readLimits, type Limits } from './limits.js';
 import type { Prerequisite } from './prerequisite.js';
 import type { ActivationScope, InvocationScope } from './scope.js';
-import { checkTransport, type ServerCalls, type ServerReply, type ServerTransport } from './server.js';
+import {
+  checkTransport,
+  type ServerCalls,
+  type ServerReply,
+  type ServerTransport,
+} from './server.js';
 import type { Synchronous } from './thenable.js';
 
 /** What `atActivation` receives, in the event's own call stack. */
@@ -22,7 +27,11 @@ export interface ActivationContext<Event> {
 }
 
 /** What the handler receives for one activation. */
-export interface HandlerContext<Params, Activation, Provided = unknown> extends Freshness {
+export interface HandlerContext<
+  Params,
+  Activation,
+  Provided = unknown,
+> extends Freshness {
   /** What `input` copied out of the event, or `undefined` for an action without `input`. */
   readonly params: Params;
   /** What `atActivation` returned, or `undefined` for an action without it. */
@@ -51,7 +60,12 @@ interface HookContext extends Freshness {
 // the resource this invocation took, whatever stage the outcome was decided in. A failure of the
 // prefix itself has none: `atActivation` did not return one.
 
-export interface SuccessContext<Params, Activation, Provided, Result> extends HookContext {
+export interface SuccessContext<
+  Params,
+  Activation,
+  Provided,
+  Result,
+> extends HookContext {
   readonly params: Params;
   readonly activation: Activation;
   readonly provided: Provided;
@@ -76,30 +90,31 @@ export type FailureContext<Params, Activation, Provided, Result> = HookContext &
       }
   );
 
-export type CanceledContext<Params, Activation, Provided, Result> = HookContext &
-  (
-    | {
-        readonly stage: 'prerequisites';
-        readonly cause: CancelCause;
-        readonly params: Params;
-        readonly activation: Activation;
-      }
-    | {
-        readonly stage: 'running';
-        readonly cause: CancelCause;
-        readonly params: Params;
-        readonly activation: Activation;
-        readonly provided: Provided;
-      }
-    | {
-        readonly stage: 'completing';
-        readonly cause: CancelCause;
-        readonly params: Params;
-        readonly activation: Activation;
-        readonly provided: Provided;
-        readonly result: Result;
-      }
-  );
+export type CanceledContext<Params, Activation, Provided, Result> =
+  HookContext &
+    (
+      | {
+          readonly stage: 'prerequisites';
+          readonly cause: CancelCause;
+          readonly params: Params;
+          readonly activation: Activation;
+        }
+      | {
+          readonly stage: 'running';
+          readonly cause: CancelCause;
+          readonly params: Params;
+          readonly activation: Activation;
+          readonly provided: Provided;
+        }
+      | {
+          readonly stage: 'completing';
+          readonly cause: CancelCause;
+          readonly params: Params;
+          readonly activation: Activation;
+          readonly provided: Provided;
+          readonly result: Result;
+        }
+    );
 
 /**
  * What final reporting can know: the immutable primary outcome as earlier hooks received it, plus
@@ -131,7 +146,10 @@ export interface ActionDefinition<Event> {
  * any number of `before`, then `run`. `Calls` is what `run` also receives: nothing for a local
  * action, the server call for a server action.
  */
-export interface ActionDraft<Event, Calls = unknown> extends ActionDraftAfterInput<Event, undefined, Calls> {
+export interface ActionDraft<
+  Event,
+  Calls = unknown,
+> extends ActionDraftAfterInput<Event, undefined, Calls> {
   /**
    * Copies what the handler needs out of the event, once, when it occurs. It runs synchronously
    * in the event's own call stack and must not perform effects. A thrown error, or a returned
@@ -143,7 +161,11 @@ export interface ActionDraft<Event, Calls = unknown> extends ActionDraftAfterInp
   ): ActionDraftAfterInput<Event, Params, Calls>;
 }
 
-export interface ActionDraftAfterInput<Event, Params, Calls = unknown> extends ActionDraftChain<Event, Params, undefined, unknown, Calls> {
+export interface ActionDraftAfterInput<
+  Event,
+  Params,
+  Calls = unknown,
+> extends ActionDraftChain<Event, Params, undefined, unknown, Calls> {
   /**
    * Work that an API requires inside the event's own call stack, such as taking a lease before
    * anything is awaited. It runs synchronously after `input`, in the environment and event stack
@@ -159,7 +181,13 @@ export interface ActionDraftAfterInput<Event, Params, Calls = unknown> extends A
   ): ActionDraftChain<Event, Params, Activation, unknown, Calls>;
 }
 
-export interface ActionDraftChain<Event, Params, Activation, Provided = unknown, Calls = unknown> {
+export interface ActionDraftChain<
+  Event,
+  Params,
+  Activation,
+  Provided = unknown,
+  Calls = unknown,
+> {
   /**
    * A prerequisite: application work that must finish before the handler and may stop it. They
    * run strictly in the order written, each after the previous one proceeded. The compiler
@@ -174,14 +202,32 @@ export interface ActionDraftChain<Event, Params, Activation, Provided = unknown,
    * server action's handler also receives `call`, which sends its request through the transport.
    */
   run<Result>(
-    handler: (context: HandlerContext<Params, Activation, Provided> & Calls) => Result | PromiseLike<Result>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, never, Calls>;
+    handler: (
+      context: HandlerContext<Params, Activation, Provided> & Calls,
+    ) => Result | PromiseLike<Result>,
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    never,
+    Calls
+  >;
 }
 
 type HookName = 'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally';
 type TailName = 'limits' | 'whenBusy' | 'observe' | HookName;
 
-interface TailMembers<Event, Params, Activation, Provided, Result, Used extends TailName, Calls> {
+interface TailMembers<
+  Event,
+  Params,
+  Activation,
+  Provided,
+  Result,
+  Used extends TailName,
+  Calls,
+> {
   /**
    * Overrides the bounds for this action alone, for a local and a server action alike. Each
    * setting is optional and resolves on its own: this override, then the owning SDK instance's
@@ -192,27 +238,89 @@ interface TailMembers<Event, Params, Activation, Provided, Result, Used extends 
    */
   limits(
     limits: Limits,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'limits', Calls>;
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'limits',
+    Calls
+  >;
   /** `ignore` (the default) drops an activation while busy; `replace` cancels the running invocation. */
   whenBusy(
     policy: BusyPolicy,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'whenBusy', Calls>;
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'whenBusy',
+    Calls
+  >;
   observe(
     observer: ActionObserver,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'observe', Calls>;
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'observe',
+    Calls
+  >;
   /** Required client work that decides success. Its exception or overrun fails the invocation. */
   onSuccess(
-    hook: (context: SuccessContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onSuccess', Calls>;
+    hook: (
+      context: SuccessContext<Params, Activation, Provided, Result>,
+    ) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'onSuccess',
+    Calls
+  >;
   onFailure(
-    hook: (context: FailureContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFailure', Calls>;
+    hook: (
+      context: FailureContext<Params, Activation, Provided, Result>,
+    ) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'onFailure',
+    Calls
+  >;
   onCanceled(
-    hook: (context: CanceledContext<Params, Activation, Provided, Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onCanceled', Calls>;
+    hook: (
+      context: CanceledContext<Params, Activation, Provided, Result>,
+    ) => void | PromiseLike<void>,
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'onCanceled',
+    Calls
+  >;
   onFinally(
     hook: (context: FinallyContext<Result>) => void | PromiseLike<void>,
-  ): ActionDraftWithHandler<Event, Params, Activation, Provided, Result, Used | 'onFinally', Calls>;
+  ): ActionDraftWithHandler<
+    Event,
+    Params,
+    Activation,
+    Provided,
+    Result,
+    Used | 'onFinally',
+    Calls
+  >;
   build(): ActionDefinition<Event>;
 }
 
@@ -225,7 +333,10 @@ export type ActionDraftWithHandler<
   Result = unknown,
   Used extends TailName = never,
   Calls = unknown,
-> = Omit<TailMembers<Event, Params, Activation, Provided, Result, Used, Calls>, Used>;
+> = Omit<
+  TailMembers<Event, Params, Activation, Provided, Result, Used, Calls>,
+  Used
+>;
 
 // ---------------------------------------------------------------------------------------------
 // What the runtime reads. Internal: authors only see the definition.
@@ -233,9 +344,15 @@ export type ActionDraftWithHandler<
 
 /** Hooks with their types erased: the builder's types are what tie them to a result. */
 export interface ErasedHooks {
-  readonly onSuccess?: (context: SuccessContext<unknown, unknown, unknown, unknown>) => unknown;
-  readonly onFailure?: (context: FailureContext<unknown, unknown, unknown, unknown>) => unknown;
-  readonly onCanceled?: (context: CanceledContext<unknown, unknown, unknown, unknown>) => unknown;
+  readonly onSuccess?: (
+    context: SuccessContext<unknown, unknown, unknown, unknown>,
+  ) => unknown;
+  readonly onFailure?: (
+    context: FailureContext<unknown, unknown, unknown, unknown>,
+  ) => unknown;
+  readonly onCanceled?: (
+    context: CanceledContext<unknown, unknown, unknown, unknown>,
+  ) => unknown;
   readonly onFinally?: (context: FinallyContext<unknown>) => unknown;
 }
 
@@ -243,9 +360,12 @@ export interface ErasedHooks {
 export interface ActionPlan<Event> {
   readonly label: string;
   readonly extract: ((event: Event) => unknown) | undefined;
-  readonly activate: ((context: ActivationContext<Event>) => unknown) | undefined;
+  readonly activate:
+    ((context: ActivationContext<Event>) => unknown) | undefined;
   readonly prerequisites: readonly Prerequisite<object, unknown, unknown>[];
-  readonly handler: (context: HandlerContext<unknown, unknown, unknown>) => unknown;
+  readonly handler: (
+    context: HandlerContext<unknown, unknown, unknown>,
+  ) => unknown;
   /** This action's own overrides: what the definition declared, validated and copied. Possibly empty. */
   readonly limits: Limits;
   readonly hooks: ErasedHooks;
@@ -265,9 +385,13 @@ class BuiltAction<Event> implements ActionDefinition<Event> {
 }
 
 /** The plan behind a definition. Refuses a value that `Action` did not build. */
-export function planOf<Event>(definition: ActionDefinition<Event>): ActionPlan<Event> {
+export function planOf<Event>(
+  definition: ActionDefinition<Event>,
+): ActionPlan<Event> {
   if (definition instanceof BuiltAction) return definition.plan;
-  throw new TypeError('This is not an action definition. Build one with Action.local(...).run(...).build().');
+  throw new TypeError(
+    'This is not an action definition. Build one with Action.local(...).run(...).build().',
+  );
 }
 
 type HookKey = keyof ErasedHooks;
@@ -304,7 +428,8 @@ class Draft {
   }
 
   private mustFollowRun(step: string): void {
-    if (this.declared.handler === undefined) throw new Error(`Action '${this.label}': ${step} can only follow run.`);
+    if (this.declared.handler === undefined)
+      throw new Error(`Action '${this.label}': ${step} can only follow run.`);
   }
 
   input(extract: unknown): Draft {
@@ -315,66 +440,106 @@ class Draft {
       declared.prerequisites.length > 0 ||
       declared.handler !== undefined
     ) {
-      throw new Error(`Action '${this.label}': input can be declared once, and only before atActivation, before and run.`);
+      throw new Error(
+        `Action '${this.label}': input can be declared once, and only before atActivation, before and run.`,
+      );
     }
-    if (typeof extract !== 'function') throw new TypeError(`Action '${this.label}': input needs a function.`);
+    if (typeof extract !== 'function')
+      throw new TypeError(`Action '${this.label}': input needs a function.`);
     return this.next({ extract: extract as Declared['extract'] });
   }
 
   atActivation(perform: unknown): Draft {
     const { declared } = this;
-    if (declared.activate !== undefined || declared.prerequisites.length > 0 || declared.handler !== undefined) {
-      throw new Error(`Action '${this.label}': atActivation can be declared once, and only before before and run.`);
+    if (
+      declared.activate !== undefined ||
+      declared.prerequisites.length > 0 ||
+      declared.handler !== undefined
+    ) {
+      throw new Error(
+        `Action '${this.label}': atActivation can be declared once, and only before before and run.`,
+      );
     }
-    if (typeof perform !== 'function') throw new TypeError(`Action '${this.label}': atActivation needs a function.`);
+    if (typeof perform !== 'function')
+      throw new TypeError(
+        `Action '${this.label}': atActivation needs a function.`,
+      );
     return this.next({ activate: perform as Declared['activate'] });
   }
 
   before(candidate: unknown): Draft {
     const { declared } = this;
-    if (declared.handler !== undefined) throw new Error(`Action '${this.label}': before can only precede run.`);
-    const { label, run } = (candidate ?? {}) as { label?: unknown; run?: unknown };
-    if (typeof label !== 'string' || label === '' || typeof run !== 'function') {
-      throw new TypeError(`Action '${this.label}': before needs a prerequisite with a label and a run function.`);
+    if (declared.handler !== undefined)
+      throw new Error(`Action '${this.label}': before can only precede run.`);
+    const { label, run } = (candidate ?? {}) as {
+      label?: unknown;
+      run?: unknown;
+    };
+    if (
+      typeof label !== 'string' ||
+      label === '' ||
+      typeof run !== 'function'
+    ) {
+      throw new TypeError(
+        `Action '${this.label}': before needs a prerequisite with a label and a run function.`,
+      );
     }
-    const kept = Object.freeze({ label, run }) as Prerequisite<object, unknown, unknown>;
-    return this.next({ prerequisites: Object.freeze([...declared.prerequisites, kept]) });
+    const kept = Object.freeze({ label, run }) as Prerequisite<
+      object,
+      unknown,
+      unknown
+    >;
+    return this.next({
+      prerequisites: Object.freeze([...declared.prerequisites, kept]),
+    });
   }
 
   run(handler: unknown): Draft {
-    if (this.declared.handler !== undefined) throw new Error(`Action '${this.label}': run can be declared once.`);
-    if (typeof handler !== 'function') throw new TypeError(`Action '${this.label}': run needs a function.`);
+    if (this.declared.handler !== undefined)
+      throw new Error(`Action '${this.label}': run can be declared once.`);
+    if (typeof handler !== 'function')
+      throw new TypeError(`Action '${this.label}': run needs a function.`);
     return this.next({ handler: handler as Declared['handler'] });
   }
 
   limits(limits: unknown): Draft {
     this.mustFollowRun('limits');
-    if (this.declared.limits !== undefined) throw new Error(`Action '${this.label}': limits can be declared once.`);
+    if (this.declared.limits !== undefined)
+      throw new Error(`Action '${this.label}': limits can be declared once.`);
     // Checked now, copied, and kept apart from the caller's object.
     return this.next({ limits: readLimits(`Action '${this.label}'`, limits) });
   }
 
   whenBusy(policy: unknown): Draft {
     this.mustFollowRun('whenBusy');
-    if (this.declared.busy !== undefined) throw new Error(`Action '${this.label}': whenBusy can be declared once.`);
+    if (this.declared.busy !== undefined)
+      throw new Error(`Action '${this.label}': whenBusy can be declared once.`);
     if (policy !== 'ignore' && policy !== 'replace') {
-      throw new TypeError(`Action '${this.label}': whenBusy takes 'ignore' or 'replace'.`);
+      throw new TypeError(
+        `Action '${this.label}': whenBusy takes 'ignore' or 'replace'.`,
+      );
     }
     return this.next({ busy: policy });
   }
 
   observe(observer: unknown): Draft {
     this.mustFollowRun('observe');
-    if (this.declared.observer !== undefined) throw new Error(`Action '${this.label}': observe can be declared once.`);
-    if (typeof observer !== 'function') throw new TypeError(`Action '${this.label}': observe needs a function.`);
+    if (this.declared.observer !== undefined)
+      throw new Error(`Action '${this.label}': observe can be declared once.`);
+    if (typeof observer !== 'function')
+      throw new TypeError(`Action '${this.label}': observe needs a function.`);
     return this.next({ observer: observer as ActionObserver });
   }
 
   private withHook(key: HookKey, hook: unknown): Draft {
     this.mustFollowRun(key);
-    if (this.declared.hooks[key] !== undefined) throw new Error(`Action '${this.label}': ${key} can be declared once.`);
-    if (typeof hook !== 'function') throw new TypeError(`Action '${this.label}': ${key} needs a function.`);
-    return this.next({ hooks: Object.freeze({ ...this.declared.hooks, [key]: hook }) });
+    if (this.declared.hooks[key] !== undefined)
+      throw new Error(`Action '${this.label}': ${key} can be declared once.`);
+    if (typeof hook !== 'function')
+      throw new TypeError(`Action '${this.label}': ${key} needs a function.`);
+    return this.next({
+      hooks: Object.freeze({ ...this.declared.hooks, [key]: hook }),
+    });
   }
 
   onSuccess(hook: unknown): Draft {
@@ -393,7 +558,8 @@ class Draft {
   build(): ActionDefinition<never> {
     const { label, declared } = this;
     const { handler } = declared;
-    if (handler === undefined) throw new Error(`Action '${label}' cannot be built before run.`);
+    if (handler === undefined)
+      throw new Error(`Action '${label}' cannot be built before run.`);
     return new BuiltAction<never>(label, {
       label,
       // Interop assertions, the only ones in this module. The typed interfaces above are what tie
@@ -413,8 +579,12 @@ class Draft {
   }
 }
 
-function startDraft(label: string, transport: ServerTransport | undefined): Draft {
-  if (typeof label !== 'string' || label === '') throw new TypeError('An action needs a non-empty label.');
+function startDraft(
+  label: string,
+  transport: ServerTransport | undefined,
+): Draft {
+  if (typeof label !== 'string' || label === '')
+    throw new TypeError('An action needs a non-empty label.');
   return new Draft(label, {
     extract: undefined,
     activate: undefined,
@@ -449,6 +619,9 @@ export const Action = {
     transport: ServerTransport<Reply>,
   ): ActionDraft<Event, ServerCalls<Reply>> {
     // Interop assertion, as for `local`.
-    return startDraft(label, checkTransport(label, transport)) as unknown as ActionDraft<Event, ServerCalls<Reply>>;
+    return startDraft(
+      label,
+      checkTransport(label, transport),
+    ) as unknown as ActionDraft<Event, ServerCalls<Reply>>;
   },
 };

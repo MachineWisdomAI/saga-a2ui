@@ -1,6 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
-import { connectToolResultView, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
+import {
+  connectToolResultView,
+  type ToolResultViewConnection,
+} from '@saga-a2ui/mcp/view';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
@@ -30,7 +33,9 @@ export interface EpisodeViewDependencies {
 /** A connected episode view. */
 export type EpisodeViewConnection = ToolResultViewConnection;
 
-const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: { surfaceId: SURFACE_ID } }];
+const removePanel: readonly A2uiMessage[] = [
+  { version: 'v0.9', deleteSurface: { surfaceId: SURFACE_ID } },
+];
 
 /**
  * Renders each delivered tool result through the A2UI session.
@@ -48,7 +53,9 @@ const removePanel: readonly A2uiMessage[] = [{ version: 'v0.9', deleteSurface: {
  * - Image consent is revoked before any result is applied, and retired for good on host teardown
  *   and on dispose.
  */
-export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise<EpisodeViewConnection> {
+export async function connectEpisodeView(
+  deps: EpisodeViewDependencies,
+): Promise<EpisodeViewConnection> {
   let panelShown = true;
 
   const showFailure = (problem: string) => {
@@ -67,10 +74,13 @@ export async function connectEpisodeView(deps: EpisodeViewDependencies): Promise
       deps.revokeImageConsent();
       if (result.isError) return showFailure('The tool reported an error.');
       const episode = PublicEpisodeSchema.safeParse(result.structuredContent);
-      if (!episode.success) return showFailure('The tool result was not a public episode.');
+      if (!episode.success)
+        return showFailure('The tool result was not a public episode.');
 
       const data = panelData(episode.data);
-      const outcome = deps.deliver(panelShown ? data : [...panelSurface, ...data]);
+      const outcome = deps.deliver(
+        panelShown ? data : [...panelSurface, ...data],
+      );
       if (!outcome.ok) return showFailure(outcome.failure.message);
       panelShown = true;
       deps.showProblem(undefined);

@@ -1,4 +1,8 @@
-import { OAuthError, OAuthErrorCode, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
 
 // APPLICATION-OWNED. This is the one place that decides who a bearer credential belongs to.
 //
@@ -13,6 +17,9 @@ import { OAuthError, OAuthErrorCode, type OAuthTokenVerifier } from '@modelconte
 
 export const verifier: OAuthTokenVerifier = {
   async verifyAccessToken() {
-    throw new OAuthError(OAuthErrorCode.InvalidToken, 'No identity provider is configured');
+    throw new OAuthError(
+      OAuthErrorCode.InvalidToken,
+      'No identity provider is configured',
+    );
   },
 };

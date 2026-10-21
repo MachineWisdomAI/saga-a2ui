@@ -1,7 +1,10 @@
 import { createA2uiAppElement, type A2uiAppDependencies } from '@saga-a2ui/lit';
 import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { html } from 'lit';
-import { provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
+import {
+  provideContentView,
+  type ContentView,
+} from '@saga-a2ui/lit/faithful-card';
 
 declare global {
   interface Window {
@@ -26,7 +29,8 @@ export interface SagaAppDependencies extends A2uiAppDependencies {
  */
 export function createSagaAppElement(deps: SagaAppDependencies) {
   class SagaApp extends createA2uiAppElement(deps) {
-    private readonly send = (input: unknown): IngestResult => this.ingest(input);
+    private readonly send = (input: unknown): IngestResult =>
+      this.ingest(input);
 
     // Answers cards inside this view with this view's own content settings.
     private endContentView?: () => void;

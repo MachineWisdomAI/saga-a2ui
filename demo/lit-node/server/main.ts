@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DemoConfigurationError, startDemo, type DemoViews } from './demo-server.js';
+import {
+  DemoConfigurationError,
+  startDemo,
+  type DemoViews,
+} from './demo-server.js';
 
 // The process entry of the downloaded demonstration (`npm start`). It reads every built page before
 // it opens a port, so a missing page ends the process instead of serving a half-working demo.
@@ -15,12 +19,18 @@ function integer(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined) return fallback;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) throw new DemoConfigurationError(`${name} must be a whole number of zero or more, got "${raw}".`);
+  if (!Number.isInteger(value) || value < 0)
+    throw new DemoConfigurationError(
+      `${name} must be a whole number of zero or more, got "${raw}".`,
+    );
   return value;
 }
 
-const viewsDirectory = process.env.SAGA_DEMO_VIEWS_DIR ?? fileURLToPath(new URL('./views/', import.meta.url));
-const read = (name: string): Promise<string> => readFile(path.join(viewsDirectory, name), 'utf8');
+const viewsDirectory =
+  process.env.SAGA_DEMO_VIEWS_DIR ??
+  fileURLToPath(new URL('./views/', import.meta.url));
+const read = (name: string): Promise<string> =>
+  readFile(path.join(viewsDirectory, name), 'utf8');
 const views: DemoViews = {
   episode: await read('episode.html'),
   subscriptions: await read('subscriptions.html'),
@@ -33,13 +43,22 @@ const ttl = process.env.SAGA_DEMO_CAPABILITY_TTL_SECONDS;
 const demo = await startDemo({
   views,
   port: integer('PORT', 3000),
-  ...(ttl === undefined ? {} : { capabilityTtlSeconds: integer('SAGA_DEMO_CAPABILITY_TTL_SECONDS', 60) }),
-  ...(process.env.SAGA_DEMO_IMAGE_HOST === undefined ? {} : { imageHost: process.env.SAGA_DEMO_IMAGE_HOST }),
+  ...(ttl === undefined
+    ? {}
+    : {
+        capabilityTtlSeconds: integer('SAGA_DEMO_CAPABILITY_TTL_SECONDS', 60),
+      }),
+  ...(process.env.SAGA_DEMO_IMAGE_HOST === undefined
+    ? {}
+    : { imageHost: process.env.SAGA_DEMO_IMAGE_HOST }),
 });
 
-console.log('LOCAL DEMONSTRATION ONLY: synthetic data and fixed, public sign-in credentials. This is not authentication.');
+console.log(
+  'LOCAL DEMONSTRATION ONLY: synthetic data and fixed, public sign-in credentials. This is not authentication.',
+);
 console.log(`Open the demo host page: ${demo.hostUrl}`);
-for (const [id, url] of Object.entries(demo.endpoints)) console.log(`MCP endpoint ${id}: ${url}`);
+for (const [id, url] of Object.entries(demo.endpoints))
+  console.log(`MCP endpoint ${id}: ${url}`);
 
 const stop = (): void => void demo.close().finally(() => process.exit(0));
 process.once('SIGINT', stop);

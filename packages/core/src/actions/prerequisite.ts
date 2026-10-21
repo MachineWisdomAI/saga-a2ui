@@ -17,23 +17,31 @@ export interface PrerequisiteContext<Needs, Input> extends Freshness {
   readonly scope: InvocationScope;
 }
 
-export type Proceed<Provides> = { readonly kind: 'proceed'; readonly provides: Provides };
+export type Proceed<Provides> = {
+  readonly kind: 'proceed';
+  readonly provides: Provides;
+};
 export type Refuse = { readonly kind: 'refuse'; readonly reason: string };
 export type PrerequisiteResult<Provides> = Proceed<Provides> | Refuse;
 
 /** Continues to the next prerequisite, or the handler, adding `provides` for everything after it. */
 export function proceed(): Proceed<NoValues>;
-export function proceed<Provides extends object>(provides: Provides): Proceed<Provides>;
+export function proceed<Provides extends object>(
+  provides: Provides,
+): Proceed<Provides>;
 export function proceed(provides: object = {}): Proceed<object> {
   if (typeof provides !== 'object' || provides === null) {
-    throw new TypeError('proceed() takes an object of provided values, or nothing.');
+    throw new TypeError(
+      'proceed() takes an object of provided values, or nothing.',
+    );
   }
   return Object.freeze({ kind: 'proceed', provides });
 }
 
 /** Ends the invocation as a refusal: the handler never runs. `reason` is for the failure hook. */
 export function refuse(reason: string): Refuse {
-  if (typeof reason !== 'string') throw new TypeError('refuse() takes a reason string.');
+  if (typeof reason !== 'string')
+    throw new TypeError('refuse() takes a reason string.');
   return Object.freeze({ kind: 'refuse', reason });
 }
 
@@ -46,12 +54,18 @@ export interface Prerequisite<Provides, Needs = unknown, Input = unknown> {
 }
 
 /** Fixes the type parameters from the callback; a plain `{ label, run }` object is equally valid. */
-export function prerequisite<Provides extends object = NoValues, Needs = unknown, Input = unknown>(
+export function prerequisite<
+  Provides extends object = NoValues,
+  Needs = unknown,
+  Input = unknown,
+>(
   label: string,
   run: Prerequisite<Provides, Needs, Input>['run'],
 ): Prerequisite<Provides, Needs, Input> {
-  if (typeof label !== 'string' || label === '') throw new TypeError('A prerequisite needs a non-empty label.');
-  if (typeof run !== 'function') throw new TypeError(`Prerequisite '${label}' needs a function.`);
+  if (typeof label !== 'string' || label === '')
+    throw new TypeError('A prerequisite needs a non-empty label.');
+  if (typeof run !== 'function')
+    throw new TypeError(`Prerequisite '${label}' needs a function.`);
   return Object.freeze({ label, run });
 }
 
@@ -64,10 +78,19 @@ export type Answer =
 /** Reads the unchecked value a prerequisite returned. Unknown shapes are the prerequisite's error. */
 export function readAnswer(value: unknown): Answer {
   if (typeof value !== 'object' || value === null) return { kind: 'malformed' };
-  const answer = value as { kind?: unknown; provides?: unknown; reason?: unknown };
-  if (answer.kind === 'proceed' && typeof answer.provides === 'object' && answer.provides !== null) {
+  const answer = value as {
+    kind?: unknown;
+    provides?: unknown;
+    reason?: unknown;
+  };
+  if (
+    answer.kind === 'proceed' &&
+    typeof answer.provides === 'object' &&
+    answer.provides !== null
+  ) {
     return { kind: 'proceed', provides: answer.provides };
   }
-  if (answer.kind === 'refuse' && typeof answer.reason === 'string') return { kind: 'refuse', reason: answer.reason };
+  if (answer.kind === 'refuse' && typeof answer.reason === 'string')
+    return { kind: 'refuse', reason: answer.reason };
   return { kind: 'malformed' };
 }

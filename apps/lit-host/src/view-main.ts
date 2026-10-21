@@ -4,12 +4,17 @@ import { registerLitElements, sagaCatalog } from './lit/integration.js';
 import { createSagaAppElement } from './lit/saga-app.js';
 import { createAppHostLinks } from './mcp/host-links.js';
 import { connectEpisodeView } from './mcp/view.js';
-import { a2uiV0_9Decoder, createMessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { panelSurface, SURFACE_ID } from './saga-panel/fixture.js';
 
 // Composition root of the MCP Apps view (built into one HTML resource by vite.view.config.ts).
 // It contains no server code: data arrives only through the host's bridge.
-const problem = document.querySelector<HTMLElement>('[data-testid="view-problem"]');
+const problem = document.querySelector<HTMLElement>(
+  '[data-testid="view-problem"]',
+);
 if (!problem) throw new Error('view.html has no problem element');
 
 const app = new App({ name: 'saga-a2ui-episode-view', version: '0.0.0' });
@@ -24,7 +29,11 @@ if (!content.ok) {
   customElements.define(
     'saga-app',
     createSagaAppElement({
-      createSession: () => createMessageSession({ catalogs: [sagaCatalog], decoder: a2uiV0_9Decoder }),
+      createSession: () =>
+        createMessageSession({
+          catalogs: [sagaCatalog],
+          decoder: a2uiV0_9Decoder,
+        }),
       initialInput: panelSurface,
       surfaceId: SURFACE_ID,
       content: content.view,

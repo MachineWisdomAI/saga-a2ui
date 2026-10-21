@@ -1,5 +1,8 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import { connectSubscriptionsView, type SubscriptionsViewState } from './mcp/subscriptions-view.js';
+import {
+  connectSubscriptionsView,
+  type SubscriptionsViewState,
+} from './mcp/subscriptions-view.js';
 import { SIGN_IN_REQUIRED_TEXT } from './mcp/subscriptions.js';
 
 // Composition root of the subscriptions view. No server code: data arrives only through the
@@ -14,13 +17,17 @@ const status = element<HTMLElement>('subscriptions-status');
 const list = element<HTMLUListElement>('subscriptions-list');
 const retryButton = element<HTMLButtonElement>('subscriptions-retry');
 
-let connection: { retry(): void; select(subscriptionId: string): void } | undefined;
+let connection:
+  { retry(): void; select(subscriptionId: string): void } | undefined;
 retryButton.addEventListener('click', () => connection?.retry());
 
 function show(state: SubscriptionsViewState): void {
   list.replaceChildren(); // never leave a previous user's rows beside a new state
   list.hidden = true;
-  retryButton.hidden = state.kind !== 'empty' && state.kind !== 'retry' && state.kind !== 'problem';
+  retryButton.hidden =
+    state.kind !== 'empty' &&
+    state.kind !== 'retry' &&
+    state.kind !== 'problem';
   root.dataset.state = state.kind;
   switch (state.kind) {
     case 'subscriptions': {
@@ -29,8 +36,11 @@ function show(state: SubscriptionsViewState): void {
         const row = document.createElement('li');
         row.textContent = `${item.creator} — ${item.tier} (${item.status})`;
         row.dataset.subscriptionId = item.subscriptionId;
-        if (state.selectedId === item.subscriptionId) row.dataset.selected = 'true';
-        row.addEventListener('click', () => connection?.select(item.subscriptionId));
+        if (state.selectedId === item.subscriptionId)
+          row.dataset.selected = 'true';
+        row.addEventListener('click', () =>
+          connection?.select(item.subscriptionId),
+        );
         list.append(row);
       }
       list.hidden = false;

@@ -8,8 +8,12 @@ export const STATUS_TOOL = 'get_status';
 /** Protected: the view shows the account the server verified for this request. */
 export const ACCOUNT_TOOL = 'get_account';
 
-export const StatusOutputSchema = z.strictObject({ status: z.literal('running') });
-export const AccountOutputSchema = z.strictObject({ accountId: z.string().min(1).max(200) });
+export const StatusOutputSchema = z.strictObject({
+  status: z.literal('running'),
+});
+export const AccountOutputSchema = z.strictObject({
+  accountId: z.string().min(1).max(200),
+});
 
 /** Fixed sentences. A failure never repeats a backend message, an identifier or a credential. */
 export const TEXT = {
@@ -21,4 +25,9 @@ export const TEXT = {
   noStatus: 'There is no status to show.',
 } as const;
 
-export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+export const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;

@@ -7,7 +7,10 @@ import { contentSecurityPolicy } from './csp.js';
 
 describe('contentSecurityPolicy', () => {
   it('emits the embedded image baseline and an explicit none connect directive for empty lists', () => {
-    const policy = contentSecurityPolicy({ connectDomains: [], resourceDomains: [] });
+    const policy = contentSecurityPolicy({
+      connectDomains: [],
+      resourceDomains: [],
+    });
     expect(policy).toContain("default-src 'none'");
     // An empty resource list still lets a view show `data:` and `blob:` images, and nothing from the network.
     expect(policy).toContain('img-src data: blob:;');
@@ -29,11 +32,19 @@ describe('contentSecurityPolicy', () => {
   });
 
   it('grants resource origins to fonts and media too, as the broad resourceDomains permission does', () => {
-    const empty = contentSecurityPolicy({ connectDomains: [], resourceDomains: [] });
+    const empty = contentSecurityPolicy({
+      connectDomains: [],
+      resourceDomains: [],
+    });
     expect(empty).toContain('font-src data: blob:;');
     expect(empty).toContain("media-src 'none'");
-    const populated = contentSecurityPolicy({ connectDomains: [], resourceDomains: ['https://cdn.example.test'] });
-    expect(populated).toContain('font-src data: blob: https://cdn.example.test');
+    const populated = contentSecurityPolicy({
+      connectDomains: [],
+      resourceDomains: ['https://cdn.example.test'],
+    });
+    expect(populated).toContain(
+      'font-src data: blob: https://cdn.example.test',
+    );
     expect(populated).toContain('media-src https://cdn.example.test');
   });
 

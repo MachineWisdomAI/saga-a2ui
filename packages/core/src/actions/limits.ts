@@ -22,7 +22,10 @@ export interface ResolvedLimits {
 }
 
 /** Documented product defaults for usable behavior, not measured latency guarantees. */
-const defaults: ResolvedLimits = Object.freeze({ deadlineMs: 30_000, hookMs: 5_000 });
+const defaults: ResolvedLimits = Object.freeze({
+  deadlineMs: 30_000,
+  hookMs: 5_000,
+});
 
 /** The longest delay one `setTimeout` honors; a longer one would fire at once instead of later. */
 const longestTimerMs = 2_147_483_647;
@@ -65,10 +68,16 @@ export function startTimer(ms: number, onExpire: () => void): LimitTimer {
   };
 }
 
-function readSetting(owner: string, name: keyof Limits, value: unknown): number | undefined {
+function readSetting(
+  owner: string,
+  name: keyof Limits,
+  value: unknown,
+): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError(`${owner}: ${name} must be a finite number greater than zero.`);
+    throw new TypeError(
+      `${owner}: ${name} must be a finite number greater than zero.`,
+    );
   }
   return value;
 }
@@ -81,9 +90,14 @@ function readSetting(owner: string, name: keyof Limits, value: unknown): number 
 export function readLimits(owner: string, given: unknown): Limits {
   if (given === undefined) return Object.freeze({});
   if (typeof given !== 'object' || given === null || Array.isArray(given)) {
-    throw new TypeError(`${owner}: limits must be an object with optional deadlineMs and hookMs.`);
+    throw new TypeError(
+      `${owner}: limits must be an object with optional deadlineMs and hookMs.`,
+    );
   }
-  const { deadlineMs, hookMs } = given as { deadlineMs?: unknown; hookMs?: unknown };
+  const { deadlineMs, hookMs } = given as {
+    deadlineMs?: unknown;
+    hookMs?: unknown;
+  };
   const checkedDeadline = readSetting(owner, 'deadlineMs', deadlineMs);
   const checkedHook = readSetting(owner, 'hookMs', hookMs);
   return Object.freeze({
@@ -102,7 +116,10 @@ export function snapshotLimits(limits?: Limits): Limits {
 }
 
 /** Per-setting resolution: the action's override, then the instance configuration, then the default. */
-export function resolveLimits(action: Limits, instance: Limits): ResolvedLimits {
+export function resolveLimits(
+  action: Limits,
+  instance: Limits,
+): ResolvedLimits {
   return Object.freeze({
     deadlineMs: action.deadlineMs ?? instance.deadlineMs ?? defaults.deadlineMs,
     hookMs: action.hookMs ?? instance.hookMs ?? defaults.hookMs,
