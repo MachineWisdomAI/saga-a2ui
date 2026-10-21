@@ -157,5 +157,8 @@
         }
       ]
     }
+  ],
+  "release_paths": [
+    "templates/lit-*/**"
   ]
 }

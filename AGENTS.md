@@ -11,7 +11,7 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 - Inspect the exact repo, branch, worktrees, and dirty state before editing. Preserve unrelated changes.
 - Make tracked edits only on a dedicated worktree or feature branch. Keep the default checkout clean. Never commit or push directly to the default branch; land tracked changes through a pull request.
 - Never force-push or amend a pushed commit. Stage explicit paths only; do not use `git add -A` or `git add .`.
-- Versioned PRs: use Conventional Commits and the repo-local `docs/version-policy.md` updater before review and after updating from main. When introducing an owned version, enroll through the repo bootstrap. Version updates are separate from publication.
+- Versioned PRs: follow `docs/version-policy.md` before review and after syncing main. Docs, tests, CI, and development checks alone need no bump. Use Conventional Commits; enroll owned versions through bootstrap. Publication stays separate.
 - Resolve exact targets before destructive work. Do not discard changes, delete material data, merge, deploy, publish, post externally, or alter access without authority for that action.
 - Never expose secrets. Keep provider credentials and user data within their authorized boundary.
 - Treat `~/git/vendor/` checkouts as read-only. Develop in an owned repository or worktree.
