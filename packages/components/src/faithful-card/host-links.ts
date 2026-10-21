@@ -26,7 +26,7 @@ export interface HostLinks {
 export const NO_HOST_LINKS: HostLinks = Object.freeze({ open: () => Promise.resolve<LinkOpenOutcome>('unavailable') });
 
 const LINK_OUTCOME_MESSAGES: Record<LinkOpenOutcome, string> = {
-  opened: 'The host was asked to open this link.',
+  opened: '',
   denied: 'The host did not open this link.',
   unavailable: 'This host cannot open links.',
   failed: 'The link could not be opened.',

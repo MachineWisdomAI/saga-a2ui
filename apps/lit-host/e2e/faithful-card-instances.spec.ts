@@ -146,7 +146,7 @@ test.describe('two cards with different trusted policies', () => {
     await a.getByRole('button', { name: /guide/ }).click();
     await expect.poll(() => linkCalls(page, 'a')).toEqual([GUIDE_A, `${GUIDE_A}&v=2`]);
     await page.evaluate(() => window.cards?.a?.settle('opened'));
-    await expect(a.getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(a.getByTestId('md-link-status')).toHaveText('');
     expect(await linkCalls(page, 'b')).toEqual([GUIDE_B]);
     await expect(b.getByTestId('md-link-status')).toHaveText('');
   });

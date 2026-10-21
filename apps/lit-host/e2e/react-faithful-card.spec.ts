@@ -187,7 +187,7 @@ test.describe('Standard links in a browser', () => {
     expect(await requests(page)).toEqual([]);
 
     await link.click();
-    await expect(card(page, 'first').getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(card(page, 'first').getByTestId('md-link-status')).toHaveText('');
     expect(await requests(page)).toEqual(['https://docs.example.com/guide?a=1']);
     expect(navigations).toEqual([]);
     expect(popups).toEqual([]);

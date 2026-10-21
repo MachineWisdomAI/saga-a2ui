@@ -213,7 +213,7 @@ test.describe('Standard and Strict effects, observed', () => {
     const link = card(page, 'a').getByRole('button', { name: /the guide/ });
     await expect(link).toContainText('(docs.example.com)');
     await link.click();
-    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
     expect(await linkCalls(page, 'a')).toEqual([LINK]);
     await expect(card(page, 'a').getByTestId('md-image')).toHaveCount(1);
     await expect.poll(imageRequests).toEqual([IMAGE]);
@@ -260,7 +260,7 @@ test.describe('Standard and Strict effects, observed', () => {
     await expect(standard.getByTestId('md-image')).toHaveCount(1);
     await expect(strict.getByTestId('md-image')).toHaveCount(0);
     await standard.getByRole('button', { name: /the guide/ }).click();
-    await expect(standard.getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(standard.getByTestId('md-link-status')).toHaveText('');
     expect(await linkCalls(page, 'standard')).toEqual([LINK]);
     expect(await linkCalls(page, 'strict')).toEqual([]);
     await expect.poll(imageRequests).toEqual([IMAGE]);
@@ -370,7 +370,7 @@ test.describe('a link control belongs to the card revision it was rendered for',
     await linkButton(page, 'a').click();
     await expect.poll(() => linkCalls(page, 'a')).toEqual([OLD_LINK]);
     await page.evaluate(() => window.cards?.a?.settle('opened'));
-    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(card(page, 'a').getByTestId('md-link-status')).toHaveText('');
 
     // A delayed answer to a link of replaced content is dropped: the same-position link of the new content shows nothing.
     await set(page, 'a', `[old link](${OLD_LINK}) again`);

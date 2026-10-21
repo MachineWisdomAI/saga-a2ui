@@ -142,7 +142,7 @@ test('Standard: the shipped Content-Security-Policy lets the one listed host loa
   const popup = page.waitForEvent('popup');
   await link.click();
   expect(await (await popup).evaluate(() => 'popped')).toBe('popped');
-  await expect(card(page).getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+  await expect(card(page).getByTestId('md-link-status')).toHaveText('');
   await expect.poll(() => requests).toContain(GUIDE);
 });
 

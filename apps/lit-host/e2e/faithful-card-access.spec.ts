@@ -91,7 +91,7 @@ test.describe('light and dark follow the host, not the card', () => {
         await page.addStyleTag({ content: hostTheme(withTokens) });
         const hostile = fixture('hostile-references');
         const mixed = fixture('structured');
-        await mount(page, 'standard', { level: 'standard', imageHosts: [LISTED_IMAGE_HOST], markdown: `${hostile.markdown}\n\n---\n\n${mixed.markdown}`, dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 });
+        await mount(page, 'standard', { level: 'standard', imageHosts: [LISTED_IMAGE_HOST], markdown: `${hostile.markdown}\n\n---\n\n${mixed.markdown}`, dialect: 'commonmark-tables-strikethrough', maxLength: 50_000, links: 'unavailable' });
         await mount(page, 'strict', { level: 'strict', imageHosts: [LISTED_IMAGE_HOST], markdown: `${hostile.markdown}\n\n---\n\n${mixed.markdown}`, dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 });
         for (const id of ['standard', 'strict']) await expect(card(page, id).getByTestId('card-content')).toBeVisible();
         await card(page, 'strict').getByRole('button', { name: 'Show images' }).click();
