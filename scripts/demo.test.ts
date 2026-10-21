@@ -77,6 +77,11 @@ function rawRequest(pathName: string, headers: Record<string, string>, method = 
 }
 
 describe('the download', () => {
+  it('ships the runnable command the setup guide documents', () => {
+    const { scripts } = JSON.parse(fs.readFileSync(path.join(download, 'package.json'), 'utf8'));
+    expect(scripts).toEqual({ start: 'node server.mjs' });
+  });
+
   it('is the bundled server, the five pages and the notices, tied to the candidate build and the qualified pair', () => {
     // `node_modules` is what installing the download's dependencies adds; it is not part of the download.
     const listing = fs.readdirSync(download).filter((name) => name !== 'node_modules').sort();

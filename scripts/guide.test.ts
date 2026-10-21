@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { checkRecipes, dedent, renderRecipes, RECIPES_FILE, REQUIRED_SERVERS } from './guide-recipes.js';
 import { repoRoot } from './packed-consumer.js';
 import { QUALIFIED_STARTERS } from './qualified-starters.js';
+import { DOWNLOAD_SCRIPTS } from '../demo/lit-node/download-scripts.js';
 import { SUPPORTED_PAIRS, runCli } from './saga.js';
 import { extractSnippets, readTemplateMetadata, templateDirectory, templateFiles } from './starter-template.js';
 
@@ -186,10 +187,8 @@ describe('the commands the guide tells a reader to type', () => {
     expect(shown.filter((line) => line !== 'npm run typecheck')).toEqual(printed.map((line) => (line.startsWith('cd ') ? 'cd my-app' : line)));
   });
 
-  it('run in the demo download only the scripts the built download declares', () => {
-    const download = path.join(repoRoot, 'apps/lit-host/dist/demo/package.json');
-    expect(fs.existsSync(download), 'run `npm run build:demo` first').toBe(true);
-    const scripts = (JSON.parse(fs.readFileSync(download, 'utf8')) as { scripts: Record<string, string> }).scripts;
+  it('run in the demo download only its declared scripts, without requiring a build', () => {
+    const scripts = DOWNLOAD_SCRIPTS;
     const shown = commandsOf(guide, 'demo');
     expect(shown.length).toBeGreaterThan(0);
     for (const line of shown) {

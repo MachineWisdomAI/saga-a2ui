@@ -80,7 +80,6 @@ describe('the five owned packages, packed', () => {
       expect(shipped.includes('THIRD_PARTY_NOTICES.md'), name).toBe(name === 'components');
       expect(shipped.filter((file) => /\.test(-support)?\.tsx?$|\.test-support\./.test(file)), name).toEqual([]);
     }
-    expect(fs.readFileSync(path.join(repoRoot, 'THIRD_PARTY_NOTICES.md'), 'utf8')).toContain('markdown-it');
   });
 
   it('declares no workspace, file, link, git or relative dependency, and every SDK-to-SDK range is the exact candidate version of an installed copy', () => {

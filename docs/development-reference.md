@@ -64,15 +64,20 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
 ### CI checks and release qualification
 
 CI (`.github/workflows/ci.yml`) runs on pull requests, pushes to main and manual
-runs. **Documentation artifacts, policy tests and CI routing** always checks Git
+runs. **Documentation, artifacts, policy tests and CI routing** always checks Git
 LFS pointers, version enrollment, Python version-policy integration and CI path
-routing. It installs no npm workspace, Lynx fixture, browser or pnpm dependency.
+routing. It also runs `npm run test:docs`: existing checks for guide
+commands, source snippets, generated recipes, local links/headings, tour
+references and third-party notices. It installs root tools only, using
+`npm ci --workspaces=false --ignore-scripts`; no SDK/application workspace,
+Lynx fixture, browser or pnpm dependency is installed. The full application's
+headless suite also includes these document tests.
 The separate **Version policy** PR check still validates the intended versions
 against the current base.
 
 | Changes | Application types, builds, tests and release qualification |
 | --- | --- |
-| Root Markdown; Markdown in `docs/`, `blueprints/` or `diagrams/`; README/CHANGELOG files elsewhere; PNG/JPEG/GIF/WebP/AVIF/SVG/ICO under `assets/brand/`, `docs/` or `diagrams/` | Skipped; lightweight checks run |
+| Root Markdown; Markdown in `docs/`, `blueprints/` or `diagrams/`; README/CHANGELOG files elsewhere; PNG/JPEG/GIF/WebP/AVIF/SVG/ICO under `assets/brand/`, `docs/` or `diagrams/` | Skipped; focused document and artifact checks run |
 | Only those documents and the exact version-policy paths listed in `scripts/ci-scope.py` | Skipped; focused policy checks run |
 | All other paths, including source/fixture Markdown, runtime images, executable files in `docs/`, retained evidence/deliverables, dependencies and CI routing/workflow changes | Full qualification |
 | Manual CI run, unavailable Git history or an empty/unknown change set | Full qualification |
@@ -83,6 +88,9 @@ uses its merge-base diff; a main push checks its complete before/after diff.
 This CI decision is deliberately more conservative than the version-bump
 documentation exemption. It does not exempt an entire documentation directory.
 Run its real-Git routing cases locally with `python3 scripts/test-ci-scope.py`.
+Guide or notice changes remain on the fast path and must pass the focused
+document checks; a broken generated recipe or source quote cannot pass merely
+because no application build ran.
 
 The full check retains the entire existing route: packed React pnpm consumer,
 `npm run verify`, `candidate:pack`, `candidate:rehearse`, and the SHA-named

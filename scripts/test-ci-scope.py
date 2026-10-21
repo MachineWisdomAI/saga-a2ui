@@ -55,6 +55,8 @@ class CiScopeTests(unittest.TestCase):
 
     def test_root_nested_markdown_and_documentation_artwork_skip_application(self):
         for name in ["README.md", "docs/setup.MD", "docs/nested/guide.md",
+                     "docs/getting-started.md", "docs/attach-to-existing-backend.md",
+                     "docs/actions.md", "docs/candidate-update-and-rollback.md", "THIRD_PARTY_NOTICES.md",
                      "blueprints/features/card.md", "packages/core/README.md",
                      "assets/brand/logo.SVG", "docs/nested/banner.PNG", "diagrams/flow.svg"]:
             self.write(name, "updated")

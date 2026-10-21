@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   changes:
-    name: Documentation artifacts, policy tests and CI routing
+    name: Documentation, artifacts, policy tests and CI routing
     runs-on: ubuntu-latest
     outputs:
       application: ${{ steps.scope.outputs.application }}
@@ -38,12 +38,21 @@ jobs:
           CI_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python3 scripts/ci-scope.py --event "$CI_EVENT" --base "$CI_BASE" --head "$CI_HEAD"
+      - name: Set up Node for focused documentation checks
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install root documentation tools without SDK workspaces or lifecycle scripts
+        run: npm ci --workspaces=false --ignore-scripts
+      - name: Check guide commands, snippets, links, tour references and notices
+        run: npm run test:docs
       - name: Explain selected checks
         env:
           CI_SCOPE: ${{ steps.scope.outputs.scope }}
         run: |
           echo "Qualification scope: $CI_SCOPE" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Documentation/artifact and Python policy checks always run. Full application and release qualification runs for all other changes and every manual run.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Focused documentation, artifact and Python policy checks always run. All other changes and every manual run also retain application and release qualification.' >> "$GITHUB_STEP_SUMMARY"
   app:
     name: Application types, builds, tests and release qualification
     needs: changes

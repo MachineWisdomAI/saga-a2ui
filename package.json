@@ -25,14 +25,16 @@
     "candidate:rehearse": "tsx scripts/candidate-rehearsal.ts",
     "verify": "tsx scripts/verify.ts",
     "test:pnpm-react": "tsx scripts/check-react-pnpm.ts",
-    "release:pack": "tsx scripts/release-packages.ts"
+    "release:pack": "tsx scripts/release-packages.ts",
+    "test:docs": "vitest run scripts/guide.test.ts scripts/guide-actions-document.test.ts scripts/tour-document.test.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "jsdom": "28.1.0"
+    "jsdom": "28.1.0",
+    "vitest": "5.0.4"
   },
   "overrides": {
     "@a2ui/markdown-it": "0.2.1"
