@@ -1,0 +1,81 @@
+name: Advisory lint
+
+on:
+  pull_request:
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Advisory correctness feedback
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install root analyzer tools only
+        id: dependencies
+        continue-on-error: true
+        run: npm ci --workspaces=false --ignore-scripts
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Install pinned actionlint
+        id: workflow-tool
+        continue-on-error: true
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Check relevant source and workflows
+        id: analysis
+        if: always()
+        continue-on-error: true
+        env:
+          LINT_BASE: ${{ github.event.pull_request.base.sha }}
+          LINT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -n "$LINT_BASE" ]; then
+            npm run lint -- --base "$LINT_BASE" "$LINT_HEAD" --merge-base
+          else
+            npm run lint
+          fi
+      - name: Verify diagnostic and analyzer-failure behavior
+        id: tests
+        if: always()
+        continue-on-error: true
+        run: npm run test:lint
+      - name: Report findings and tool failures without a merge gate
+        if: always()
+        env:
+          DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          WORKFLOW_TOOL: ${{ steps.workflow-tool.outcome }}
+          ANALYSIS: ${{ steps.analysis.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+        run: |
+          {
+            echo '### Advisory lint'
+            echo "Root tools: $DEPENDENCIES; actionlint installation: $WORKFLOW_TOOL"
+            echo "Analysis: $ANALYSIS; diagnostic qualification: $TESTS"
+            echo 'Findings, parse errors and analyzer failures are visible in the log. This job is optional and must not become a required status, approval condition or repair trigger.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DEPENDENCIES" != success ] || [ "$WORKFLOW_TOOL" != success ] || [ "$ANALYSIS" != success ] || [ "$TESTS" != success ]; then
+            echo '::warning::Advisory lint reported findings or could not complete. Inspect the step logs; existing correctness and safety gates remain independent.'
+          fi

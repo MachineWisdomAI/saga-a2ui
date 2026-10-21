@@ -21,7 +21,7 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 
 ## Local tooling
 
-In a fresh clone/worktree, install pinned root tools with `npm ci --workspaces=false --ignore-scripts`. Run `npm run hooks:check`; if absent, run `npm run hooks:install` and check again for `SAGA formatter hook verified`. The hook formats staged source/configuration with local Prettier; use `npm run format -- PATH...` for explicit files. See [formatting and hooks](docs/development-reference.md#formatting-and-hooks) for guard preservation and troubleshooting.
+In a fresh clone/worktree, install pinned root tools with `npm ci --workspaces=false --ignore-scripts`. Run `npm run hooks:check`; if absent, run `npm run hooks:install` and check again for `SAGA formatter hook verified`. The hook formats staged source/configuration with local Prettier; use `npm run format -- PATH...` for explicit files. Optional correctness feedback: `npm run lint -- PATH...` (see the development guide for pinned actionlint setup). Findings and analyzer failures are advisory; assess concrete defects through ordinary review. See [formatting and hooks](docs/development-reference.md#formatting-and-hooks) for guard preservation and troubleshooting.
 
 ## Coding Standards
 
