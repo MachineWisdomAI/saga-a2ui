@@ -56,7 +56,7 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates; the React integration provides action controls and FaithfulCard.
 
-For Hapi, the [integration map](templates/lit-hapi/README.md#reuse-the-bridge-in-your-hapi-app) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example and the standalone listener’s responsibilities.
+For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 
 The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [components](https://www.npmjs.com/package/@saga-a2ui/components) packages are available on npm at `0.1.0-rc.1`. They export TypeScript source for applications that use a bundler. See the [React integration guide](docs/react-consumers.md) for imports and dependency configuration.
 

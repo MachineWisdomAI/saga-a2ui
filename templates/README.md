@@ -19,10 +19,12 @@ The synthetic demonstration of the `lit-node` pair is [`demo/lit-node`](../demo/
 
 `lit-hono` is `lit-node` with only the server adapter files replaced (`server/listener.ts`, `server/authenticate.ts`, `package.json` and its README); a test fails if any other file differs.
 
-[`lit-hapi`](lit-hapi/README.md#reuse-the-bridge-in-your-hapi-app) is maintained here too: it reuses the bridge over the official Node/server SDK,
+[`lit-hapi`](lit-hapi/README.md#existing-hapi-app-register-an-endpoint) is maintained here too: it reuses the bridge over the official Node/server SDK,
 with Hapi route authentication and request-local immutable identity. [The bridge](lit-hapi/server/bridge.ts) owns
-Hapi/raw-response integration and the transport protections; [the listener](lit-hapi/server/listener.ts) owns the
-application's verifier, budgets and body handling. No external repository or adapter package is
+Hapi/raw-response integration, admission lifetimes, bounded body reads, deadlines and transport
+cleanup; [the listener](lit-hapi/server/listener.ts) prepares the view, configures authentication
+and registers the endpoints. Authentication reads the admitted lifetime through `mcpRequestLifetime(request)`;
+the factory receives that same `lifetime` explicitly. No external repository or adapter package is
 required. Its view, operations, domain identity and policy seams reuse `lit-node` unchanged.
 
 A pair is offered only while CI qualifies it:

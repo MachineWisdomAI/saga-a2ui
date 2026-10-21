@@ -401,15 +401,18 @@ Servers have the same limits. `node`, `express`, `fastify` and `hono` are qualif
 
 The Hapi identity handoff starts in the authentication strategy in
 [`templates/lit-hapi/server/listener.ts`](../templates/lit-hapi/server/listener.ts).
-`authenticate` copies and freezes the verified account before the body wait. Hapi stores that
+The bridge admits one request lifetime before authentication. The strategy accesses it through
+`mcpRequestLifetime(request)`; `authenticate` uses it to bound verification and copies and freezes
+the verified account before the body wait. Hapi stores that
 context in `request.auth.credentials.authInfo`; the maintained
-[`bridge.ts`](../templates/lit-hapi/server/bridge.ts) passes it to `createServer` and the Node
-transport as request-local auth. The protected operation’s `identityOf` hook reads that auth,
+[`bridge.ts`](../templates/lit-hapi/server/bridge.ts) passes `{ authInfo, lifetime, request }` to `createServer` and the auth to the Node
+transport. The bridge owns bounded parsing, deadlines, disconnect handling and shutdown cleanup. The protected operation’s `identityOf` hook reads that auth,
 and its handler applies the application’s policy. Tool arguments cannot name the account.
 An explicitly public route reads no credential and receives no identity.
 
 The [generated Hapi recipe](attach-to-existing-backend.md#hapi-with-lit-mcp) uses those template
-files. `scripts/starter-hapi-identity.test.ts` checks the real Hapi/MCP factory and callback;
+files. `scripts/starter-hapi-lifecycle.test.ts` qualifies direct registration and ordinary-route isolation;
+`scripts/starter-hapi-identity.test.ts` checks the real Hapi/MCP factory and callback;
 `scripts/starter-hapi.test.ts` runs the packed-starter allowed, denied, missing-auth, public and
 overlapping-principal cases, including reused credential records. The built Lit view is exercised
 by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
