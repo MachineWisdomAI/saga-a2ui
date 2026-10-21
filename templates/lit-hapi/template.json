@@ -1,0 +1,14 @@
+{
+  "stack": "lit-mcp",
+  "server": "hapi",
+  "serverAdapter": {
+    "package": "@modelcontextprotocol/node",
+    "version": "2.1.1"
+  },
+  "sdkPackages": ["core", "lit", "mcp"],
+  "snippets": [
+    "register-protected-operation",
+    "identity-handoff",
+    "bind-action"
+  ]
+}

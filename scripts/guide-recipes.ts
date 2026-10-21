@@ -4,7 +4,12 @@ import { pathToFileURL } from 'node:url';
 import { repoRoot } from './packed-consumer.js';
 import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import { SUPPORTED_PAIRS } from './saga.js';
-import { extractSnippets, readTemplateMetadata, templateDirectory, templateFiles } from './starter-template.js';
+import {
+  extractSnippets,
+  readTemplateMetadata,
+  templateDirectory,
+  templateFiles,
+} from './starter-template.js';
 
 // The attach-to-an-existing-backend recipes (GUIDE1), rendered from the maintained templates that CI
 // qualifies. Nothing here retypes a snippet: each one is the template's own lines, cut by
@@ -21,11 +26,15 @@ export const RECIPES_FILE = 'docs/attach-to-existing-backend.md';
  * The server targets the application-setup design requires. Plain data: the target is covered when a
  * qualified template declares it, and is listed as without a recipe until then.
  */
-export const REQUIRED_SERVERS = ['node', 'express', 'hono', 'fastify', 'hapi'] as const;
+export const REQUIRED_SERVERS = [
+  'node',
+  'express',
+  'hono',
+  'fastify',
+  'hapi',
+] as const;
 
-const OPEN_WORK: Readonly<Record<string, string>> = {
-  hapi: 'The Hapi bridge and its identity handoff are [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65). Hapi has no official adapter, and route authentication does not yet reach the bridge callback, so the identity handoff is work that issue owns.',
-};
+const OPEN_WORK: Readonly<Record<string, string>> = {};
 
 const SNIPPET_TITLES: Readonly<Record<string, string>> = {
   'identity-handoff': 'Hand the verified identity to the transport',
@@ -33,40 +42,77 @@ const SNIPPET_TITLES: Readonly<Record<string, string>> = {
   'bind-action': 'Attach an action to a rendered control',
 };
 
-const SNIPPET_ORDER = ['identity-handoff', 'register-protected-operation', 'bind-action'];
+const SNIPPET_ORDER = [
+  'identity-handoff',
+  'register-protected-operation',
+  'bind-action',
+];
 
 /** Removes the indentation every non-blank line shares, so a snippet cut from a nested position reads from the margin. */
 export function dedent(text: string): string {
   const lines = text.split('\n');
-  const indents = lines.filter((line) => line.trim() !== '').map((line) => /^ */.exec(line)?.[0].length ?? 0);
+  const indents = lines
+    .filter((line) => line.trim() !== '')
+    .map((line) => /^ */.exec(line)?.[0].length ?? 0);
   const common = indents.length === 0 ? 0 : Math.min(...indents);
-  return lines.map((line) => line.slice(Math.min(common, /^ */.exec(line)?.[0].length ?? 0))).join('\n');
+  return lines
+    .map((line) =>
+      line.slice(Math.min(common, /^ */.exec(line)?.[0].length ?? 0)),
+    )
+    .join('\n');
 }
 
-const GLUE_NOT_SHOWN = new Set(['server/listener.ts', 'server/main.ts', 'server/operations.ts']);
+const GLUE_NOT_SHOWN = new Set([
+  'server/listener.ts',
+  'server/main.ts',
+  'server/operations.ts',
+]);
 
 function pairTable(): string {
   const rows = QUALIFIED_STARTERS.map((name) => {
     const metadata = readTemplateMetadata(templateDirectory(name));
-    const offered = SUPPORTED_PAIRS.some((pair) => pair.stack === metadata.stack && pair.server === metadata.server && pair.template === name);
+    const offered = SUPPORTED_PAIRS.some(
+      (pair) =>
+        pair.stack === metadata.stack &&
+        pair.server === metadata.server &&
+        pair.template === name,
+    );
     return `| \`${metadata.stack}\` | \`${metadata.server}\` | [\`${name}\`](../templates/${name}/) | ${offered ? 'offered' : 'not offered'} |`;
   });
-  return ['| Stack | Server | Maintained template | `saga init` |', '| --- | --- | --- | --- |', ...rows].join('\n');
+  return [
+    '| Stack | Server | Maintained template | `saga init` |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+  ].join('\n');
 }
 
 function uncoveredList(): string {
-  const covered = new Set(QUALIFIED_STARTERS.map((name) => readTemplateMetadata(templateDirectory(name)).server));
+  const covered = new Set(
+    QUALIFIED_STARTERS.map(
+      (name) => readTemplateMetadata(templateDirectory(name)).server,
+    ),
+  );
   const uncovered = REQUIRED_SERVERS.filter((server) => !covered.has(server));
-  if (uncovered.length === 0) return 'Every required server target has a qualified template above.';
-  return uncovered.map((server) => `- \`${server}\`: ${OPEN_WORK[server] ?? 'It has no qualified template yet.'}`).join('\n');
+  if (uncovered.length === 0)
+    return 'Every required server target has a qualified template above.';
+  return uncovered
+    .map(
+      (server) =>
+        `- \`${server}\`: ${OPEN_WORK[server] ?? 'It has no qualified template yet.'}`,
+    )
+    .join('\n');
 }
 
 function recipe(name: string): string {
   const template = templateDirectory(name);
   const metadata = readTemplateMetadata(template);
   const snippets = extractSnippets(template);
-  const declared = [...metadata.snippets].sort((a, b) => SNIPPET_ORDER.indexOf(a) - SNIPPET_ORDER.indexOf(b));
-  const glue = templateFiles(template).filter((file) => file.startsWith('server/') && !GLUE_NOT_SHOWN.has(file));
+  const declared = [...metadata.snippets].sort(
+    (a, b) => SNIPPET_ORDER.indexOf(a) - SNIPPET_ORDER.indexOf(b),
+  );
+  const glue = templateFiles(template).filter(
+    (file) => file.startsWith('server/') && !GLUE_NOT_SHOWN.has(file),
+  );
   const parts = [
     `<!-- recipe:${name} -->`,
     `## \`${metadata.server}\` with \`${metadata.stack}\``,
@@ -77,8 +123,20 @@ function recipe(name: string): string {
   ];
   for (const snippetName of declared) {
     const snippet = snippets.find((one) => one.name === snippetName);
-    if (snippet === undefined) throw new Error(`${name} declares the snippet ${snippetName}, which the template does not contain.`);
-    parts.push('', `### ${SNIPPET_TITLES[snippetName] ?? snippetName}`, '', `From \`templates/${name}/${snippet.file}\`:`, '', '```ts', dedent(snippet.text), '```');
+    if (snippet === undefined)
+      throw new Error(
+        `${name} declares the snippet ${snippetName}, which the template does not contain.`,
+      );
+    parts.push(
+      '',
+      `### ${SNIPPET_TITLES[snippetName] ?? snippetName}`,
+      '',
+      `From \`templates/${name}/${snippet.file}\`:`,
+      '',
+      '```ts',
+      dedent(snippet.text),
+      '```',
+    );
   }
   parts.push(`<!-- /recipe:${name} -->`);
   return parts.join('\n');
@@ -125,11 +183,15 @@ export function renderRecipes(): string {
     .replace(/\n+$/, '\n');
 }
 
-export type RecipesCheck = { readonly current: true } | { readonly current: false; readonly message: string };
+export type RecipesCheck =
+  | { readonly current: true }
+  | { readonly current: false; readonly message: string };
 
 /** Compares a written recipes file with what the templates render now. */
 export function checkRecipes(file: string): RecipesCheck {
-  const written = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+  const written = fs.existsSync(file)
+    ? fs.readFileSync(file, 'utf8')
+    : undefined;
   if (written === renderRecipes()) return { current: true };
   return {
     current: false,
@@ -137,7 +199,10 @@ export function checkRecipes(file: string): RecipesCheck {
   };
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   const file = path.join(repoRoot, RECIPES_FILE);
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--check') {

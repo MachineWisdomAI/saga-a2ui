@@ -18,8 +18,13 @@ The synthetic demonstration of the `lit-node` pair is [`demo/lit-node`](../demo/
 
 `lit-hono` is `lit-node` with only the server adapter files replaced (`server/listener.ts`, `server/authenticate.ts`, `package.json` and its README); a test fails if any other file differs.
 
-The `hapi` server target is a separate required slice
-([#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)). A pair is offered only while CI qualifies it:
+`lit-hapi` is maintained here too: it reuses the bridge over the official Node/server SDK,
+with Hapi route authentication and request-local immutable identity. `server/bridge.ts` owns
+Hapi/raw-response integration and the transport protections; `server/listener.ts` owns the
+application's verifier, budgets and body handling. No external repository or adapter package is
+required. Its view, operations, domain identity and policy seams reuse `lit-node` unchanged.
+
+A pair is offered only while CI qualifies it:
 [`scripts/qualified-starters.ts`](../scripts/qualified-starters.ts) lists the qualified templates, the
 shared headless suite is [`scripts/starter-qualification.ts`](../scripts/starter-qualification.ts) and
 a template directory that is not listed fails `scripts/starter-template.test.ts`. A template is a
@@ -57,8 +62,8 @@ yields to the event loop between files, which a synchronous copy cannot do.
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
 ```
 
-`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all four
-templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`) are offered, each with `--a2ui-stack lit-mcp` and its
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all five
+templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`, `lit-hapi`) are offered, each with `--a2ui-stack lit-mcp` and its
 own `--server`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
 
 `saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the
