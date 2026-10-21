@@ -62,18 +62,6 @@ jobs:
         if: always()
         continue-on-error: true
         run: npm run test:lint
-      - name: Demonstrate workflow findings remain advisory
-        id: finding-demonstration
-        if: always()
-        continue-on-error: true
-        run: |
-          printf '%s\n' 'name: probe' 'on: push' 'jobs:' '  probe:' '    runs-on: ubuntu-latest' '    invalid-property: true' '    steps:' '      - run: echo probe' > "$RUNNER_TEMP/advisory-probe.yml"
-          npm run lint:workflows -- "$RUNNER_TEMP/advisory-probe.yml"
-      - name: Demonstrate analyzer failure isolation
-        id: demonstration
-        if: always()
-        continue-on-error: true
-        run: ACTIONLINT=/nonexistent/actionlint npm run lint:workflows -- .github/workflows/lint.yml
       - name: Report findings and tool failures without a merge gate
         if: always()
         env:
@@ -81,12 +69,11 @@ jobs:
           WORKFLOW_TOOL: ${{ steps.workflow-tool.outcome }}
           ANALYSIS: ${{ steps.analysis.outcome }}
           TESTS: ${{ steps.tests.outcome }}
-          DEMONSTRATION: ${{ steps.demonstration.outcome }}
         run: |
           {
             echo '### Advisory lint'
             echo "Root tools: $DEPENDENCIES; actionlint installation: $WORKFLOW_TOOL"
-            echo "Analysis: $ANALYSIS; diagnostic qualification: $TESTS; deliberate failure demonstration: $DEMONSTRATION"
+            echo "Analysis: $ANALYSIS; diagnostic qualification: $TESTS"
             echo 'Findings, parse errors and analyzer failures are visible in the log. This job is optional and must not become a required status, approval condition or repair trigger.'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$DEPENDENCIES" != success ] || [ "$WORKFLOW_TOOL" != success ] || [ "$ANALYSIS" != success ] || [ "$TESTS" != success ]; then
