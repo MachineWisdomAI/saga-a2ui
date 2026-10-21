@@ -25,6 +25,7 @@ NON_RELEASE_PATHS = (
     "test_*.py", "*/test_*.py", "*_test.py", "conftest.py", "*/conftest.py",
     ".github/**", ".gitignore", ".gitattributes", ".editorconfig",
     CONFIG, "scripts/mw-version.py", "scripts/test-*", "scripts/check-*", "scripts/verify.sh",
+    "scripts/starter-qualification.ts",
 )
 NON_RELEASE_PATHS += tuple(
     prefix + "*" + suffix
