@@ -131,8 +131,9 @@ no SDK build, browser, fixture service or release rehearsal.
 The development baseline is Node 22.23.3, the current Node 22 patch checked on
 2026-10-21. ESLint 10.13.0 needs Node 22.13+ (or supported newer majors); ESLint
 9.39.5 is marked unsupported, so the root tools use maintained ESLint 10 and
-pinned typescript-eslint 8.72.0/TypeScript 6.0.3. SDK package consumer engine
-requirements are unchanged. To install the workflow analyzer locally with Go:
+pinned typescript-eslint 8.72.0 with the existing TypeScript 5.9.3 compiler. The root TypeScript pin also controls root scripts and example typechecks; keeping
+5.9.3 preserves those existing checks. SDK package consumer engine requirements
+are unchanged. To install the workflow analyzer locally with Go:
 
 ```sh
 go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
