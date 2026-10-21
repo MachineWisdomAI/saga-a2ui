@@ -3,9 +3,7 @@
   "units": [
     {
       "name": "packages/core",
-      "paths": [
-        "packages/core/**"
-      ],
+      "paths": ["packages/core/**"],
       "files": [
         {
           "path": "packages/core/package.json",
@@ -14,19 +12,12 @@
         {
           "path": "package-lock.json",
           "kind": "json",
-          "key": [
-            "packages",
-            "packages/core",
-            "version"
-          ]
+          "key": ["packages", "packages/core", "version"]
         },
         {
           "path": "packages/components/package.json",
           "kind": "json",
-          "key": [
-            "dependencies",
-            "@saga-a2ui/core"
-          ]
+          "key": ["dependencies", "@saga-a2ui/core"]
         },
         {
           "path": "package-lock.json",
@@ -41,10 +32,7 @@
         {
           "path": "packages/react/package.json",
           "kind": "json",
-          "key": [
-            "dependencies",
-            "@saga-a2ui/core"
-          ]
+          "key": ["dependencies", "@saga-a2ui/core"]
         },
         {
           "path": "package-lock.json",
@@ -60,9 +48,7 @@
     },
     {
       "name": "packages/components",
-      "paths": [
-        "packages/components/**"
-      ],
+      "paths": ["packages/components/**"],
       "files": [
         {
           "path": "packages/components/package.json",
@@ -71,19 +57,12 @@
         {
           "path": "package-lock.json",
           "kind": "json",
-          "key": [
-            "packages",
-            "packages/components",
-            "version"
-          ]
+          "key": ["packages", "packages/components", "version"]
         },
         {
           "path": "packages/react/package.json",
           "kind": "json",
-          "key": [
-            "peerDependencies",
-            "@saga-a2ui/components"
-          ]
+          "key": ["peerDependencies", "@saga-a2ui/components"]
         },
         {
           "path": "package-lock.json",
@@ -98,10 +77,7 @@
         {
           "path": "packages/react/package.json",
           "kind": "json",
-          "key": [
-            "devDependencies",
-            "@saga-a2ui/components"
-          ]
+          "key": ["devDependencies", "@saga-a2ui/components"]
         },
         {
           "path": "package-lock.json",
@@ -117,9 +93,7 @@
     },
     {
       "name": "packages/mcp",
-      "paths": [
-        "packages/mcp/**"
-      ],
+      "paths": ["packages/mcp/**"],
       "files": [
         {
           "path": "packages/mcp/package.json",
@@ -128,19 +102,13 @@
         {
           "path": "package-lock.json",
           "kind": "json",
-          "key": [
-            "packages",
-            "packages/mcp",
-            "version"
-          ]
+          "key": ["packages", "packages/mcp", "version"]
         }
       ]
     },
     {
       "name": "packages/react",
-      "paths": [
-        "packages/react/**"
-      ],
+      "paths": ["packages/react/**"],
       "files": [
         {
           "path": "packages/react/package.json",
@@ -149,13 +117,10 @@
         {
           "path": "package-lock.json",
           "kind": "json",
-          "key": [
-            "packages",
-            "packages/react",
-            "version"
-          ]
+          "key": ["packages", "packages/react", "version"]
         }
       ]
     }
-  ]
+  ],
+  "release_paths": ["templates/lit-*/**"]
 }
