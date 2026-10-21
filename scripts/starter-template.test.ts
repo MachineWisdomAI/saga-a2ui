@@ -40,15 +40,23 @@ function scratchTemplate(files: Record<string, string>): string {
 
 describe('exporting a starter', () => {
   it('writes the template files into a new directory, pins every SDK package to the given build and leaves out its maintenance files and markers', () => {
-    const exported = exportTemplate(template, path.join(work, 'fresh'), { sdkVersion: SDK_VERSION });
+    const exported = exportTemplate(template, path.join(work, 'fresh'), {
+      sdkVersion: SDK_VERSION,
+    });
 
     expect(exported.files).toEqual(templateFiles(template));
     expect(exported.files).not.toContain('template.json');
-    const manifest = JSON.parse(fs.readFileSync(path.join(exported.directory, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(exported.directory, 'package.json'), 'utf8'),
+    ) as { dependencies: Record<string, string> };
     expect(manifest.dependencies['@saga-a2ui/core']).toBe(SDK_VERSION);
     expect(manifest.dependencies['@saga-a2ui/lit']).toBe(SDK_VERSION);
     expect(manifest.dependencies['@saga-a2ui/mcp']).toBe(SDK_VERSION);
-    for (const file of exported.files) expect(fs.readFileSync(path.join(exported.directory, file), 'utf8'), file).not.toContain('saga-snippet');
+    for (const file of exported.files)
+      expect(
+        fs.readFileSync(path.join(exported.directory, file), 'utf8'),
+        file,
+      ).not.toContain('saga-snippet');
   });
 
   it('refuses a path that exists, whether a directory or a symbolic link, and changes nothing there', () => {
@@ -58,10 +66,16 @@ describe('exporting a starter', () => {
     const link = path.join(work, 'link');
     fs.symlinkSync(existing, link);
 
-    expect(() => exportTemplate(template, existing, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
-    expect(() => exportTemplate(template, link, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+    expect(() =>
+      exportTemplate(template, existing, { sdkVersion: SDK_VERSION }),
+    ).toThrow(TemplateError);
+    expect(() =>
+      exportTemplate(template, link, { sdkVersion: SDK_VERSION }),
+    ).toThrow(TemplateError);
     expect(fs.readdirSync(existing)).toEqual(['keep.txt']);
-    expect(fs.readFileSync(path.join(existing, 'keep.txt'), 'utf8')).toBe('mine');
+    expect(fs.readFileSync(path.join(existing, 'keep.txt'), 'utf8')).toBe(
+      'mine',
+    );
   });
 
   it('does not merge into, or remove, a directory that appeared after the existence check', () => {
@@ -70,9 +84,15 @@ describe('exporting a starter', () => {
     fs.mkdirSync(raced);
     fs.writeFileSync(path.join(raced, 'keep.txt'), 'mine');
     const exists = fs.existsSync.bind(fs);
-    const spy = vi.spyOn(fs, 'existsSync').mockImplementation((candidate) => (candidate === raced ? false : exists(candidate)));
+    const spy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((candidate) =>
+        candidate === raced ? false : exists(candidate),
+      );
     try {
-      expect(() => exportTemplate(template, raced, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+      expect(() =>
+        exportTemplate(template, raced, { sdkVersion: SDK_VERSION }),
+      ).toThrow(TemplateError);
     } finally {
       spy.mockRestore();
     }
@@ -83,13 +103,22 @@ describe('exporting a starter', () => {
   it('writes nothing for a directory that is not a template, and removes only its own output when the export fails part-way', () => {
     const notATemplate = fs.mkdtempSync(path.join(work, 'plain-'));
     const target = path.join(work, 'never-written');
-    expect(() => exportTemplate(notATemplate, target, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+    expect(() =>
+      exportTemplate(notATemplate, target, { sdkVersion: SDK_VERSION }),
+    ).toThrow(TemplateError);
     expect(fs.existsSync(target)).toBe(false);
 
     // A manifest that declares an SDK package with a range other than "*" fails after other files were written.
-    const bad = scratchTemplate({ 'a.ts': 'export {};\n', 'package.json': JSON.stringify({ dependencies: { '@saga-a2ui/core': '^1.0.0' } }) });
+    const bad = scratchTemplate({
+      'a.ts': 'export {};\n',
+      'package.json': JSON.stringify({
+        dependencies: { '@saga-a2ui/core': '^1.0.0' },
+      }),
+    });
     const partial = path.join(work, 'partial');
-    expect(() => exportTemplate(bad, partial, { sdkVersion: SDK_VERSION })).toThrow(TemplateError);
+    expect(() =>
+      exportTemplate(bad, partial, { sdkVersion: SDK_VERSION }),
+    ).toThrow(TemplateError);
     expect(fs.existsSync(partial)).toBe(false);
   });
 
@@ -98,17 +127,24 @@ describe('exporting a starter', () => {
     const target = path.join(work, 'swapped');
     const write = fs.writeFileSync.bind(fs);
     let writes = 0;
-    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
-      if (!String(args[0]).startsWith(`${target}${path.sep}`)) return write(...args);
-      writes += 1;
-      if (writes < 4) return write(...args);
-      fs.renameSync(target, `${target}.moved`);
-      fs.mkdirSync(target);
-      write(path.join(target, 'keep.txt'), 'mine');
-      throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
-    });
+    const spy = vi
+      .spyOn(fs, 'writeFileSync')
+      .mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+        if (!String(args[0]).startsWith(`${target}${path.sep}`))
+          return write(...args);
+        writes += 1;
+        if (writes < 4) return write(...args);
+        fs.renameSync(target, `${target}.moved`);
+        fs.mkdirSync(target);
+        write(path.join(target, 'keep.txt'), 'mine');
+        throw Object.assign(new Error('ENOSPC: no space left on device'), {
+          code: 'ENOSPC',
+        });
+      });
     try {
-      expect(() => exportTemplate(template, target, { sdkVersion: SDK_VERSION })).toThrow(/no space left.*was replaced meanwhile/);
+      expect(() =>
+        exportTemplate(template, target, { sdkVersion: SDK_VERSION }),
+      ).toThrow(/no space left.*was replaced meanwhile/);
     } finally {
       spy.mockRestore();
     }
@@ -123,13 +159,20 @@ describe('exporting a starter', () => {
     // A callback scheduled from a synchronous write runs only when the export hands control back; the export must do so.
     const write = fs.writeFileSync.bind(fs);
     let writes = 0;
-    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
-      writes += 1;
-      if (writes === 3) setImmediate(() => interrupt.abort());
-      return write(...args);
-    });
+    const spy = vi
+      .spyOn(fs, 'writeFileSync')
+      .mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+        writes += 1;
+        if (writes === 3) setImmediate(() => interrupt.abort());
+        return write(...args);
+      });
     try {
-      await expect(exportTemplateInterruptibly(template, target, { sdkVersion: SDK_VERSION, signal: interrupt.signal })).rejects.toBeInstanceOf(ExportInterrupted);
+      await expect(
+        exportTemplateInterruptibly(template, target, {
+          sdkVersion: SDK_VERSION,
+          signal: interrupt.signal,
+        }),
+      ).rejects.toBeInstanceOf(ExportInterrupted);
     } finally {
       spy.mockRestore();
     }
@@ -146,28 +189,56 @@ describe('exporting a starter', () => {
 
     expect(await createDirectoryInterruptibly(target, files)).toBe(target);
     expect(fs.readFileSync(path.join(target, 'a.txt'), 'utf8')).toBe('a');
-    expect([...fs.readFileSync(path.join(target, 'nested', 'b.bin'))]).toEqual([0, 255, 7]);
+    expect([...fs.readFileSync(path.join(target, 'nested', 'b.bin'))]).toEqual([
+      0, 255, 7,
+    ]);
 
-    fs.symlinkSync(path.join(work, 'nowhere'), path.join(work, 'dangling-link'));
+    fs.symlinkSync(
+      path.join(work, 'nowhere'),
+      path.join(work, 'dangling-link'),
+    );
     for (const taken of [target, path.join(work, 'dangling-link')]) {
-      await expect(createDirectoryInterruptibly(taken, files)).rejects.toThrow(/already exists/);
+      await expect(createDirectoryInterruptibly(taken, files)).rejects.toThrow(
+        /already exists/,
+      );
     }
     expect(fs.existsSync(path.join(work, 'nowhere'))).toBe(false);
     expect(fs.readdirSync(target).sort()).toEqual(['a.txt', 'nested']);
   });
 
-  it.each([['../outside.txt'], ['/etc/outside.txt'], ['nested/../../outside.txt']])('refuses the file path %s before creating anything', async (escaping) => {
+  it.each([
+    ['../outside.txt'],
+    ['/etc/outside.txt'],
+    ['nested/../../outside.txt'],
+  ])('refuses the file path %s before creating anything', async (escaping) => {
     const target = path.join(work, `escape-${escaping.replaceAll(/\W/g, '-')}`);
 
-    await expect(createDirectoryInterruptibly(target, [{ path: 'ok.txt', content: () => 'ok' }, { path: escaping, content: () => 'no' }])).rejects.toThrow(/not inside the new directory/);
+    await expect(
+      createDirectoryInterruptibly(target, [
+        { path: 'ok.txt', content: () => 'ok' },
+        { path: escaping, content: () => 'no' },
+      ]),
+    ).rejects.toThrow(/not inside the new directory/);
 
     expect(fs.existsSync(target)).toBe(false);
     expect(fs.existsSync(path.join(work, 'outside.txt'))).toBe(false);
   });
 
   it('rejects an SDK range other than "*" rather than rewriting it', () => {
-    expect(() => stampSdkVersion({ dependencies: { '@saga-a2ui/core': 'workspace:*' } }, SDK_VERSION)).toThrow(TemplateError);
-    expect(stampSdkVersion({ dependencies: { '@saga-a2ui/core': '*', zod: '4.6.7' } }, SDK_VERSION)).toEqual({ dependencies: { '@saga-a2ui/core': SDK_VERSION, zod: '4.6.7' } });
+    expect(() =>
+      stampSdkVersion(
+        { dependencies: { '@saga-a2ui/core': 'workspace:*' } },
+        SDK_VERSION,
+      ),
+    ).toThrow(TemplateError);
+    expect(
+      stampSdkVersion(
+        { dependencies: { '@saga-a2ui/core': '*', zod: '4.6.7' } },
+        SDK_VERSION,
+      ),
+    ).toEqual({
+      dependencies: { '@saga-a2ui/core': SDK_VERSION, zod: '4.6.7' },
+    });
   });
 });
 
@@ -181,18 +252,25 @@ describe('the maintained templates say what they are', () => {
     expect(directories).toEqual([...QUALIFIED_STARTERS].sort());
   });
 
-  it.each(QUALIFIED_STARTERS)('%s declares the server adapter and the SDK packages it actually depends on', (name) => {
-    const directory = templateDirectory(name);
-    const metadata = readTemplateMetadata(directory);
-    const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
+  it.each(QUALIFIED_STARTERS)(
+    '%s declares the server adapter and the SDK packages it actually depends on',
+    (name) => {
+      const directory = templateDirectory(name);
+      const metadata = readTemplateMetadata(directory);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),
+      ) as { dependencies: Record<string, string> };
 
-    expect(manifest.dependencies[metadata.serverAdapter.package]).toBe(metadata.serverAdapter.version);
-    const declaredSdk = Object.keys(manifest.dependencies)
-      .filter((dependency) => dependency.startsWith('@saga-a2ui/'))
-      .map((dependency) => dependency.slice('@saga-a2ui/'.length))
-      .sort();
-    expect(declaredSdk).toEqual([...metadata.sdkPackages].sort());
-  });
+      expect(manifest.dependencies[metadata.serverAdapter.package]).toBe(
+        metadata.serverAdapter.version,
+      );
+      const declaredSdk = Object.keys(manifest.dependencies)
+        .filter((dependency) => dependency.startsWith('@saga-a2ui/'))
+        .map((dependency) => dependency.slice('@saga-a2ui/'.length))
+        .sort();
+      expect(declaredSdk).toEqual([...metadata.sdkPackages].sort());
+    },
+  );
 
   it('give each pair its own stack and server, so one pair is never offered twice', () => {
     const pairs = QUALIFIED_STARTERS.map((name) => {
@@ -204,51 +282,90 @@ describe('the maintained templates say what they are', () => {
 });
 
 describe('snippets', () => {
-  it.each(QUALIFIED_STARTERS)('%s: are exactly the lines the exported starter contains, and every declared snippet exists', (name) => {
-    const directory = templateDirectory(name);
-    const metadata = readTemplateMetadata(directory);
-    const snippets = extractSnippets(directory);
-    expect(snippets.map((snippet) => snippet.name).sort()).toEqual([...metadata.snippets].sort());
+  it.each(QUALIFIED_STARTERS)(
+    '%s: are exactly the lines the exported starter contains, and every declared snippet exists',
+    (name) => {
+      const directory = templateDirectory(name);
+      const metadata = readTemplateMetadata(directory);
+      const snippets = extractSnippets(directory);
+      expect(snippets.map((snippet) => snippet.name).sort()).toEqual(
+        [...metadata.snippets].sort(),
+      );
 
-    const exported = exportTemplate(directory, path.join(work, `for-snippets-${name}`), { sdkVersion: SDK_VERSION });
-    for (const snippet of snippets) {
-      expect(snippet.text.trim(), snippet.name).not.toBe('');
-      expect(fs.readFileSync(path.join(exported.directory, snippet.file), 'utf8'), snippet.name).toContain(snippet.text);
-    }
-  });
+      const exported = exportTemplate(
+        directory,
+        path.join(work, `for-snippets-${name}`),
+        { sdkVersion: SDK_VERSION },
+      );
+      for (const snippet of snippets) {
+        expect(snippet.text.trim(), snippet.name).not.toBe('');
+        expect(
+          fs.readFileSync(path.join(exported.directory, snippet.file), 'utf8'),
+          snippet.name,
+        ).toContain(snippet.text);
+      }
+    },
+  );
 
   it.each([
     ['lit-node', 'auth: decision.authInfo'],
     ['lit-express', 'req.auth = decision.authInfo'],
     ['lit-fastify', 'reply.code(decision.status)'],
     ['lit-hono', 'decision.authInfo'],
-  ] as const)('%s: carry the identity handoff and the direct attachment a developer is meant to copy', (name, handoff) => {
-    const byName = Object.fromEntries(extractSnippets(templateDirectory(name)).map((snippet) => [snippet.name, snippet.text]));
-    expect(byName['identity-handoff']).toContain('authenticate(');
-    expect(byName['identity-handoff']).toContain(handoff);
-    expect(byName['bind-action']).toContain("bindAction('activate'");
-    expect(byName['register-protected-operation']).toContain('registerProtectedOperation(');
-  });
+  ] as const)(
+    '%s: carry the identity handoff and the direct attachment a developer is meant to copy',
+    (name, handoff) => {
+      const byName = Object.fromEntries(
+        extractSnippets(templateDirectory(name)).map((snippet) => [
+          snippet.name,
+          snippet.text,
+        ]),
+      );
+      expect(byName['identity-handoff']).toContain('authenticate(');
+      expect(byName['identity-handoff']).toContain(handoff);
+      expect(byName['bind-action']).toContain("bindAction('activate'");
+      expect(byName['register-protected-operation']).toContain(
+        'registerProtectedOperation(',
+      );
+    },
+  );
 
   it('are written as files into a new directory, never over an existing one', () => {
     const target = path.join(work, 'snippet-files');
     const written = writeSnippets(template, target);
 
-    expect(written.map((file) => path.basename(file)).sort()).toEqual(['bind-action.ts', 'identity-handoff.ts', 'prepare-view.ts', 'register-protected-operation.ts']);
-    for (const snippet of extractSnippets(template)) expect(fs.readFileSync(path.join(target, `${snippet.name}.ts`), 'utf8')).toBe(`${snippet.text}\n`);
+    expect(written.map((file) => path.basename(file)).sort()).toEqual([
+      'bind-action.ts',
+      'identity-handoff.ts',
+      'prepare-view.ts',
+      'register-protected-operation.ts',
+    ]);
+    for (const snippet of extractSnippets(template))
+      expect(
+        fs.readFileSync(path.join(target, `${snippet.name}.ts`), 'utf8'),
+      ).toBe(`${snippet.text}\n`);
     expect(() => writeSnippets(template, target)).toThrow(TemplateError);
   });
 
   it('refuse a region that is unclosed, unopened, nested or repeated instead of cutting something else', () => {
-    const open = scratchTemplate({ 'a.ts': '// #region saga-snippet:one\nconst a = 1;\n' });
+    const open = scratchTemplate({
+      'a.ts': '// #region saga-snippet:one\nconst a = 1;\n',
+    });
     expect(() => extractSnippets(open)).toThrow(/never closed/);
-    const unopened = scratchTemplate({ 'a.ts': 'const a = 1;\n// #endregion saga-snippet:one\n' });
+    const unopened = scratchTemplate({
+      'a.ts': 'const a = 1;\n// #endregion saga-snippet:one\n',
+    });
     expect(() => extractSnippets(unopened)).toThrow(/does not match/);
-    const nested = scratchTemplate({ 'a.ts': '// #region saga-snippet:one\n// #region saga-snippet:two\n// #endregion saga-snippet:two\n// #endregion saga-snippet:one\n' });
+    const nested = scratchTemplate({
+      'a.ts':
+        '// #region saga-snippet:one\n// #region saga-snippet:two\n// #endregion saga-snippet:two\n// #endregion saga-snippet:one\n',
+    });
     expect(() => extractSnippets(nested)).toThrow(/opens inside/);
     const repeated = scratchTemplate({
-      'a.ts': '// #region saga-snippet:one\nx\n// #endregion saga-snippet:one\n',
-      'b.ts': '// #region saga-snippet:one\ny\n// #endregion saga-snippet:one\n',
+      'a.ts':
+        '// #region saga-snippet:one\nx\n// #endregion saga-snippet:one\n',
+      'b.ts':
+        '// #region saga-snippet:one\ny\n// #endregion saga-snippet:one\n',
     });
     expect(() => extractSnippets(repeated)).toThrow(/defined twice/);
   });

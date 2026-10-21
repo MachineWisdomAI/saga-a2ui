@@ -1,5 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { registerPublicOperation, type OperationOutcome, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import {
+  registerPublicOperation,
+  type OperationOutcome,
+  type RequestLifetime,
+} from '@saga-a2ui/mcp/server';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { contentResource } from './content-resource.js';
 import {
@@ -41,7 +45,11 @@ export interface EpisodeServerOptions {
 
 /** Copy only the public fields; the explicit projection is what keeps other fields private. */
 function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
-  return { episodeId: record.id, title: record.title, description: record.description };
+  return {
+    episodeId: record.id,
+    title: record.title,
+    description: record.description,
+  };
 }
 
 /**
@@ -49,16 +57,29 @@ function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
  * links to. No authentication, playback or other tools exist here: the data is public and synthetic.
  */
 export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-a2ui-episode-demo', version: '0.0.0' });
-  const view = contentResource(options.viewHtml, options.contentPolicy, options.viewFilename);
+  const server = new McpServer({
+    name: 'saga-a2ui-episode-demo',
+    version: '0.0.0',
+  });
+  const view = contentResource(
+    options.viewHtml,
+    options.contentPolicy,
+    options.viewFilename,
+  );
 
   registerPublicOperation(
     server,
     {
       name: EPISODE_TOOL_NAME,
       title: 'Get episode',
-      description: 'Returns the public title and description of one synthetic episode.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      description:
+        'Returns the public title and description of one synthetic episode.',
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       input: EpisodeRequestSchema,
       output: PublicEpisodeSchema,
       view: { ...view, title: 'Episode view' },
@@ -73,7 +94,10 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
       },
       project: (record) => {
         const episode = toPublicEpisode(record);
-        return { text: `${episode.title} (${episode.episodeId})`, data: episode };
+        return {
+          text: `${episode.title} (${episode.episodeId})`,
+          data: episode,
+        };
       },
     },
     { lifetime: options.lifetime },

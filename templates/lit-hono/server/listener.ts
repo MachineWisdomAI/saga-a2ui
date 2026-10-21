@@ -1,13 +1,34 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getRequestListener, type HttpBindings } from '@hono/node-server';
-import { hostHeaderValidation, localhostOriginValidation } from '@modelcontextprotocol/hono';
-import { readRequestBody, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import {
+  hostHeaderValidation,
+  localhostOriginValidation,
+} from '@modelcontextprotocol/hono';
+import {
+  readRequestBody,
+  type AuthInfo,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
+import {
+  createServerBudgets,
+  type BudgetSettings,
+  type LifetimeCause,
+  type RequestLifetime,
+} from '@saga-a2ui/mcp/server';
 import { Hono, type Context } from 'hono';
 import { createEndpoint, type Endpoint } from './endpoint.js';
 import { authenticate } from './authenticate.js';
-import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
+import {
+  createAccountServer,
+  createStatusServer,
+  prepareStarterView,
+  type AccountServerOptions,
+} from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers: a Hono application on a loopback Node listener,
 // stateless Streamable HTTP (a persistent handler per endpoint, a fresh server per request, modern auto responses) and DNS-rebinding
@@ -65,24 +86,36 @@ interface Environment {
 
 type RequestContext = Context<Environment>;
 
-export async function startListener(options: ListenerOptions): Promise<Listener> {
+export async function startListener(
+  options: ListenerOptions,
+): Promise<Listener> {
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
   // #region saga-snippet:prepare-view
   const view = prepareStarterView(options.html, options.filename);
-  const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
-  const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+  const status = createEndpoint(
+    (lifetime) => createStatusServer({ view, lifetime }),
+    { maxRequestBodySize: MAX_REQUEST_BYTES },
+  );
+  const account = createEndpoint(
+    (lifetime) =>
+      createAccountServer({ view, lifetime, authorize: options.authorize }),
+    { maxRequestBodySize: MAX_REQUEST_BYTES },
+  );
   // #endregion saga-snippet:prepare-view
   const active = new Set<RequestLifetime>();
   let stopping = false;
   let closing: Promise<void> | undefined;
-  function track(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+  function track(
+    req: IncomingMessage,
+    res: ServerResponse,
+    lifetime: RequestLifetime,
+  ): void {
     active.add(lifetime);
     res.once('close', () => active.delete(lifetime));
     bindResponseToLifetime(req, res, lifetime);
   }
-
 
   const app = new Hono<Environment>();
 
@@ -108,7 +141,11 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   const unanswered = (): Response => new Response(null, { status: 408 });
 
   /** Answers, then drops the connection: the rest of the request body is not wanted. */
-  function refuseAndClose(c: RequestContext, status: 408 | 413, body: object): Response {
+  function refuseAndClose(
+    c: RequestContext,
+    status: 408 | 413,
+    body: object,
+  ): Response {
     const { incoming, outgoing } = c.env;
     if (outgoing.writableFinished) incoming.destroy();
     else outgoing.once('finish', () => incoming.destroy());
@@ -119,37 +156,68 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   function bodyFailed(c: RequestContext, cause: LifetimeCause): Response {
     const lifetime = c.get('lifetime');
     // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
-    if (cause.kind !== 'request-timeout' && cause.kind !== 'disconnected' && cause.kind !== 'completed') lifetime.record(cause);
-    if (cause.kind === 'disconnected' || cause.kind === 'cancelled' || cause.kind === 'completed') return unanswered();
-    return mayAnswer(lifetime, c.env.outgoing) ? refuseAndClose(c, 408, { error: 'request_timeout' }) : unanswered();
+    if (
+      cause.kind !== 'request-timeout' &&
+      cause.kind !== 'disconnected' &&
+      cause.kind !== 'completed'
+    )
+      lifetime.record(cause);
+    if (
+      cause.kind === 'disconnected' ||
+      cause.kind === 'cancelled' ||
+      cause.kind === 'completed'
+    )
+      return unanswered();
+    return mayAnswer(lifetime, c.env.outgoing)
+      ? refuseAndClose(c, 408, { error: 'request_timeout' })
+      : unanswered();
   }
 
   /**
    * Reads and parses a POST body as one bounded stage of the request. A `Response` means the
    * request has been dealt with (or the caller has gone) and nothing may be built for it.
    */
-  async function readJsonBody(c: RequestContext): Promise<{ readonly value: unknown } | Response> {
+  async function readJsonBody(
+    c: RequestContext,
+  ): Promise<{ readonly value: unknown } | Response> {
     const lifetime = c.get('lifetime');
     // The adapter's own bounded reader (it refuses a declared or observed size over the limit); the
     // stage stops waiting when the budget ends, and the connection is closed behind it.
-    const read = await lifetime.run('body', () => readRequestBody(c.req.raw, MAX_REQUEST_BYTES));
+    const read = await lifetime.run('body', () =>
+      readRequestBody(c.req.raw, MAX_REQUEST_BYTES),
+    );
     if (!read.ok) return bodyFailed(c, read.cause);
     if (!mayAnswer(lifetime, c.env.outgoing)) return unanswered();
-    if (read.value.tooLarge) return refuseAndClose(c, 413, { error: 'payload_too_large' });
+    if (read.value.tooLarge)
+      return refuseAndClose(c, 413, { error: 'payload_too_large' });
     try {
       return { value: JSON.parse(read.value.text) as unknown };
     } catch {
-      return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
+      return c.json(
+        {
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error' },
+        },
+        400,
+      );
     }
   }
 
-  async function serve(c: RequestContext, endpoint: Endpoint, authInfo?: AuthInfo): Promise<Response> {
+  async function serve(
+    c: RequestContext,
+    endpoint: Endpoint,
+    authInfo?: AuthInfo,
+  ): Promise<Response> {
     // The body is the application's wait, so it runs under the request's lifetime and is bounded
     // before any server or transport exists. Nothing is built for a request that has ended.
     const body = c.req.method === 'POST' ? await readJsonBody(c) : undefined;
     if (body instanceof Response) return body;
     if (c.get('lifetime').check() !== undefined) return unanswered();
-    return endpoint.fetch(c.req.raw, c.get('lifetime'), { ...(body === undefined ? {} : { parsedBody: body.value }), ...(authInfo === undefined ? {} : { authInfo }) });
+    return endpoint.fetch(c.req.raw, c.get('lifetime'), {
+      ...(body === undefined ? {} : { parsedBody: body.value }),
+      ...(authInfo === undefined ? {} : { authInfo }),
+    });
   }
 
   app.all(STATUS_PATH, (c) => {
@@ -162,8 +230,19 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     // #region saga-snippet:identity-handoff
     // Who is asking is decided before any server is built. The verified context travels to the tool
     // only as the transport's per-request auth; no tool argument can name an account.
-    const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
-    if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
+    const decision = await authenticate(
+      c.req.header('authorization'),
+      options.verifier,
+      lifetime,
+    );
+    if (!decision.ok)
+      return new Response(null, {
+        status: decision.status,
+        headers:
+          decision.challenge === undefined
+            ? {}
+            : { 'WWW-Authenticate': decision.challenge },
+      });
     return serve(c, account, decision.authInfo);
     // #endregion saga-snippet:identity-handoff
   });
@@ -181,15 +260,16 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   return {
     statusUrl: `http://${HOST}:${port}${STATUS_PATH}`,
     accountUrl: `http://${HOST}:${port}${ACCOUNT_PATH}`,
-    close: () => closing ??= (async () => {
-      stopping = true;
-      for (const lifetime of active) lifetime.disconnect();
-      await Promise.all([status.close(), account.close()]);
-      await new Promise<void>((resolve, reject) => {
-        http.close((error) => error ? reject(error) : resolve());
-        http.closeAllConnections();
-      });
-    })(),
+    close: () =>
+      (closing ??= (async () => {
+        stopping = true;
+        for (const lifetime of active) lifetime.disconnect();
+        await Promise.all([status.close(), account.close()]);
+        await new Promise<void>((resolve, reject) => {
+          http.close((error) => (error ? reject(error) : resolve()));
+          http.closeAllConnections();
+        });
+      })()),
   };
 }
 
@@ -199,7 +279,11 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
  * a request deadline that passes before the response is delivered destroys the response, which
  * releases the connection and the transport's listeners. A response is never given a second status.
  */
-function bindResponseToLifetime(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+function bindResponseToLifetime(
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): void {
   // A write to a response this listener destroyed must not escape as an unhandled error.
   res.on('error', () => undefined);
   req.on('error', () => undefined);

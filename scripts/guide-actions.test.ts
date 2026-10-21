@@ -3,16 +3,26 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Client } from '@modelcontextprotocol/client';
 import type { CallToolResult } from '@modelcontextprotocol/client';
-import type { ActionBinding, InstanceEvent, ServerTransport } from '@saga-a2ui/core/actions';
+import type {
+  ActionBinding,
+  InstanceEvent,
+  ServerTransport,
+} from '@saga-a2ui/core/actions';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type * as NotesActions from '../examples/pack1-consumer/src/notes-actions.js';
 import type * as NotesContract from '../examples/pack1-consumer/src/notes-contract.js';
 import type * as RowHoldsModule from '../examples/pack1-consumer/src/row-holds.js';
 import type * as Pack1Server from '../examples/pack1-consumer/server/index.js';
 import type * as Guarded from './guide-actions/guarded-archive.js';
-import { startTestHost, type TestHost } from '../packages/mcp/src/server/http-host.test-support.js';
+import {
+  startTestHost,
+  type TestHost,
+} from '../packages/mcp/src/server/http-host.test-support.js';
 import { preparePack1Consumer } from './build-pack1-consumers.js';
-import { bundleConsumerServer, createWorkDirectory } from './packed-consumer.js';
+import {
+  bundleConsumerServer,
+  createWorkDirectory,
+} from './packed-consumer.js';
 
 // GUIDE2 (docs/actions.md): the allowed, denied and missing-authentication calls and the action
 // outcomes the guide traces, run against the notes application installed from packed candidate
@@ -45,14 +55,28 @@ export * as guarded from './guarded-archive.js';
 let entry: Entry;
 beforeAll(async () => {
   const { consumer } = preparePack1Consumer(work, 'own');
-  fs.copyFileSync(fileURLToPath(new URL('./guide-actions/guarded-archive.ts', import.meta.url)), path.join(consumer, 'guarded-archive.ts'));
+  fs.copyFileSync(
+    fileURLToPath(
+      new URL('./guide-actions/guarded-archive.ts', import.meta.url),
+    ),
+    path.join(consumer, 'guarded-archive.ts'),
+  );
   fs.writeFileSync(path.join(consumer, 'guide-entry.ts'), ENTRY);
   const { file } = await bundleConsumerServer(consumer, 'guide-entry.ts');
   entry = (await import(pathToFileURL(file).href)) as Entry;
 }, 180_000);
 
-const auth = (accountId: string) => ({ token: 't', clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId } });
-const AUTH: Record<string, ReturnType<typeof auth>> = { alice: auth('acct-alice'), bob: auth('acct-bob') };
+const auth = (accountId: string) => ({
+  token: 't',
+  clientId: 'c',
+  scopes: [],
+  expiresAt: 9_999_999_999,
+  extra: { accountId },
+});
+const AUTH: Record<string, ReturnType<typeof auth>> = {
+  alice: auth('acct-alice'),
+  bob: auth('acct-bob'),
+};
 
 type Call = 'isSignedIn' | 'archive';
 
@@ -86,11 +110,14 @@ async function start(): Promise<Running> {
     },
   });
   // The view artifact only has to carry the marker the server requires: this test never renders it.
-  const html = '<!doctype html><title>notes</title><p data-testid="view-status"></p>';
+  const html =
+    '<!doctype html><title>notes</title><p data-testid="view-status"></p>';
   const host = await startTestHost({
     jsonResponse: true,
-    buildServer: () => entry.server.createNotesServer({ html, filename: 'own.html', backend }),
-    authenticate: (credential) => (credential === undefined ? undefined : AUTH[credential]),
+    buildServer: () =>
+      entry.server.createNotesServer({ html, filename: 'own.html', backend }),
+    authenticate: (credential) =>
+      credential === undefined ? undefined : AUTH[credential],
   });
   running = {
     host,
@@ -106,15 +133,20 @@ async function start(): Promise<Running> {
   return running;
 }
 
-const archive = (client: Client, args: Record<string, unknown>) => client.callTool({ name: 'archive_note', arguments: args });
-const textOf = (result: { content?: unknown }) => JSON.stringify(result.content);
+const archive = (client: Client, args: Record<string, unknown>) =>
+  client.callTool({ name: 'archive_note', arguments: args });
+const textOf = (result: { content?: unknown }) =>
+  JSON.stringify(result.content);
 
 describe('the server operations the guide traces: allowed, denied and missing authentication', () => {
   it('archives the signed-in account\u2019s own note: verified identity, then the application\u2019s own check, then one write', async () => {
     const { alice, backend } = await start();
     const result = await archive(alice, { noteId: 'n-1' });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toEqual({ noteId: 'n-1', archivedAt: 1_001 });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n-1',
+      archivedAt: 1_001,
+    });
     expect(backend.archived).toEqual(['n-1']);
   });
 
@@ -124,8 +156,12 @@ describe('the server operations the guide traces: allowed, denied and missing au
     const nonexistent = await archive(alice, { noteId: 'n-404' });
     for (const refused of [someoneElses, nonexistent]) {
       expect(refused.isError).toBe(true);
-      expect(refused.content).toEqual([{ type: 'text', text: entry.contract.TEXT.cannotArchive }]);
-      expect(entry.contract.declaresNoEffect(refused as CallToolResult)).toBe(true);
+      expect(refused.content).toEqual([
+        { type: 'text', text: entry.contract.TEXT.cannotArchive },
+      ]);
+      expect(entry.contract.declaresNoEffect(refused as CallToolResult)).toBe(
+        true,
+      );
       expect(refused.structuredContent).toBeUndefined();
     }
     expect(backend.archived).toEqual([]);
@@ -136,15 +172,22 @@ describe('the server operations the guide traces: allowed, denied and missing au
     const { anonymous, backend } = await start();
     const refused = await archive(anonymous, { noteId: 'n-1' });
     expect(refused.isError).toBe(true);
-    expect(refused.content).toEqual([{ type: 'text', text: entry.contract.TEXT.signInRequired }]);
-    expect(entry.contract.declaresNoEffect(refused as CallToolResult)).toBe(true);
+    expect(refused.content).toEqual([
+      { type: 'text', text: entry.contract.TEXT.signInRequired },
+    ]);
+    expect(entry.contract.declaresNoEffect(refused as CallToolResult)).toBe(
+      true,
+    );
     expect(backend.calls).toEqual({ notesFor: 0, isSignedIn: 0, archive: 0 });
   });
 
   it('withdrawn permission is the server\u2019s decision for every request: a signed-in session does not carry it', async () => {
     const { alice, backend } = await start();
     backend.revoked.add('acct-alice');
-    const session = await alice.callTool({ name: 'check_session', arguments: {} });
+    const session = await alice.callTool({
+      name: 'check_session',
+      arguments: {},
+    });
     expect(session.structuredContent).toEqual({ signedIn: true }); // the prerequisite's question still says yes
     const refused = await archive(alice, { noteId: 'n-1' });
     expect(refused.isError).toBe(true); // the protected request is decided again
@@ -153,10 +196,18 @@ describe('the server operations the guide traces: allowed, denied and missing au
 
   it('checks runtime input, not types: a forged account or a wrong type is rejected before any handler runs', async () => {
     const { alice, backend } = await start();
-    const forged = await archive(alice, { noteId: 'n-1', accountId: 'acct-bob' }).catch(() => ({ isError: true }));
-    const wrongType = await archive(alice, { noteId: 42 }).catch(() => ({ isError: true }));
-    const empty = await archive(alice, { noteId: '' }).catch(() => ({ isError: true }));
-    for (const rejected of [forged, wrongType, empty]) expect(rejected.isError).toBe(true);
+    const forged = await archive(alice, {
+      noteId: 'n-1',
+      accountId: 'acct-bob',
+    }).catch(() => ({ isError: true }));
+    const wrongType = await archive(alice, { noteId: 42 }).catch(() => ({
+      isError: true,
+    }));
+    const empty = await archive(alice, { noteId: '' }).catch(() => ({
+      isError: true,
+    }));
+    for (const rejected of [forged, wrongType, empty])
+      expect(rejected.isError).toBe(true);
     expect(backend.calls.archive).toBe(0);
     expect(backend.archived).toEqual([]);
   });
@@ -188,12 +239,21 @@ interface MountOptions {
   /** Binds the guide's guarded archive (confirmation and audit after the session check) instead of the example's. */
   readonly guard?: Guarded.GuardEnvironment;
   /** Replaces what the transport returns for a request, after the server handled it (a lossy or foreign intermediary). */
-  readonly reply?: (request: { readonly name: string }, reply: CallToolResult) => CallToolResult;
+  readonly reply?: (
+    request: { readonly name: string },
+    reply: CallToolResult,
+  ) => CallToolResult;
 }
 
-function mount(client: Client, paths: readonly string[], options: MountOptions = {}): Mounted {
+function mount(
+  client: Client,
+  paths: readonly string[],
+  options: MountOptions = {},
+): Mounted {
   const lines = new Map<string, string>();
-  const rows = new Map<string, string>(paths.map((dataPath, index) => [dataPath, `n-${index + 1}`]));
+  const rows = new Map<string, string>(
+    paths.map((dataPath, index) => [dataPath, `n-${index + 1}`]),
+  );
   const published = { pending: [] as string[], confirmed: [] as string[] };
   const errors: unknown[] = [];
   const holds = new entry.holds.RowHolds((pending, confirmed) => {
@@ -202,8 +262,15 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
   });
   const transport: ServerTransport<CallToolResult> = {
     callServerTool: async (request, requestOptions) => {
-      const reply = (await client.callTool({ name: request.name, arguments: { ...request.arguments } }, requestOptions?.signal === undefined ? {} : { signal: requestOptions.signal })) as CallToolResult;
-      return options.reply === undefined ? reply : options.reply(request, reply);
+      const reply = (await client.callTool(
+        { name: request.name, arguments: { ...request.arguments } },
+        requestOptions?.signal === undefined
+          ? {}
+          : { signal: requestOptions.signal },
+      )) as CallToolResult;
+      return options.reply === undefined
+        ? reply
+        : options.reply(request, reply);
     },
   };
   const actions = entry.actions.createNotesActions({
@@ -214,26 +281,44 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
   });
 
   const archiveAction =
-    options.guard === undefined ? actions.archiveNote : entry.guarded.createGuardedArchive({
-            transport,
-            requireSession: entry.actions.createSessionPrerequisite(transport),
-            environment: options.guard,
-            parseArchived: (reply) => entry.contract.ArchiveOutputSchema.parse(reply.structuredContent),
-          });
+    options.guard === undefined
+      ? actions.archiveNote
+      : entry.guarded.createGuardedArchive({
+          transport,
+          requireSession: entry.actions.createSessionPrerequisite(transport),
+          environment: options.guard,
+          parseArchived: (reply) =>
+            entry.contract.ArchiveOutputSchema.parse(reply.structuredContent),
+        });
   const Archive = entry.componentKind<RowEvents>('ActionButton');
-  const host = entry.createInstanceHost({ onSetupError: (error) => void errors.push(error), ...(options.limits === undefined ? {} : { limits: options.limits }) });
+  const host = entry.createInstanceHost({
+    onSetupError: (error) => void errors.push(error),
+    ...(options.limits === undefined ? {} : { limits: options.limits }),
+  });
   const bindings = new Map<string, ActionBinding>();
   const instances = new Map<string, ReturnType<typeof host.open<RowEvents>>>();
   host.register((view) => {
     view.watchById('row-archive', Archive, (handle) => {
       // The same definition on every row, each attachment with its own state and its own subject reader.
-      bindings.set(handle.dataPath, handle.bindAction('activate', archiveAction, { subject: () => handle.read('id') }));
+      bindings.set(
+        handle.dataPath,
+        handle.bindAction('activate', archiveAction, {
+          subject: () => handle.read('id'),
+        }),
+      );
     });
   });
   for (const dataPath of paths) {
     instances.set(
       dataPath,
-      host.open<RowEvents>({ kind: Archive, componentId: 'row-archive', dataPath, events: ['activate'], isLive: () => true, read: (field) => (field === 'id' ? rows.get(dataPath) : undefined) }),
+      host.open<RowEvents>({
+        kind: Archive,
+        componentId: 'row-archive',
+        dataPath,
+        events: ['activate'],
+        isLive: () => true,
+        read: (field) => (field === 'id' ? rows.get(dataPath) : undefined),
+      }),
     );
   }
 
@@ -251,7 +336,8 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
         resolve();
       });
     });
-  const startPress = (dataPath: string): void => void instances.get(dataPath)?.activate('activate', new Event('click'));
+  const startPress = (dataPath: string): void =>
+    void instances.get(dataPath)?.activate('activate', new Event('click'));
   return {
     lines,
     rows,
@@ -268,7 +354,8 @@ function mount(client: Client, paths: readonly string[], options: MountOptions =
 }
 
 async function eventually(check: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 200 && !check(); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  for (let attempt = 0; attempt < 200 && !check(); attempt += 1)
+    await new Promise((resolve) => setTimeout(resolve, 10));
   expect(check()).toBe(true);
 }
 
@@ -302,7 +389,9 @@ describe('the notes actions the guide traces, on a real instance host', () => {
     await rows.press('/notes/0');
     expect(backend.calls).toMatchObject({ isSignedIn: 1, archive: 1 });
     expect(backend.archived).toEqual([]);
-    expect(rows.lines.get('/notes/0')).toBe('The server declined; nothing changed');
+    expect(rows.lines.get('/notes/0')).toBe(
+      'The server declined; nothing changed',
+    );
     expect(rows.holds).toEqual({ pending: [], confirmed: [] });
     rows.close();
   });
@@ -314,7 +403,9 @@ describe('the notes actions the guide traces, on a real instance host', () => {
     await rows.press('/notes/0');
     expect(backend.calls).toMatchObject({ isSignedIn: 1, archive: 1 });
     expect(backend.archived).toEqual([]);
-    expect(rows.lines.get('/notes/0')).toBe('The server declined; nothing changed');
+    expect(rows.lines.get('/notes/0')).toBe(
+      'The server declined; nothing changed',
+    );
     expect(rows.holds).toEqual({ pending: [], confirmed: [] });
     rows.close();
   });
@@ -397,11 +488,26 @@ describe('the notes actions the guide traces, on a real instance host', () => {
     const { backend } = await start();
     const errors: unknown[] = [];
     const Archive = entry.componentKind<RowEvents>('ActionButton');
-    const host = entry.createInstanceHost({ onSetupError: (error) => void errors.push(error) });
+    const host = entry.createInstanceHost({
+      onSetupError: (error) => void errors.push(error),
+    });
     const found: string[] = [];
-    host.register((view) => view.watchById('row-archive', Archive, (handle) => void found.push(handle.id)));
+    host.register((view) =>
+      view.watchById(
+        'row-archive',
+        Archive,
+        (handle) => void found.push(handle.id),
+      ),
+    );
     // The layout renamed the control; the setup still watches for the old ID.
-    const renamed = host.open<RowEvents>({ kind: Archive, componentId: 'row-archive-renamed', dataPath: '/notes/0', events: ['activate'], isLive: () => true, read: () => undefined });
+    const renamed = host.open<RowEvents>({
+      kind: Archive,
+      componentId: 'row-archive-renamed',
+      dataPath: '/notes/0',
+      events: ['activate'],
+      isLive: () => true,
+      read: () => undefined,
+    });
     expect(renamed.activate('activate', new Event('click'))).toBe('unbound');
     expect(found).toEqual([]);
     expect(errors).toEqual([]);
@@ -410,9 +516,23 @@ describe('the notes actions the guide traces, on a real instance host', () => {
   });
 
   it('refuses invalid explicit limits instead of replacing them with defaults', () => {
-    expect(() => entry.createInstanceHost({ onSetupError: () => undefined, limits: { deadlineMs: 0 } })).toThrow(TypeError);
-    expect(() => entry.createInstanceHost({ onSetupError: () => undefined, limits: { hookMs: Number.NaN } })).toThrow(TypeError);
-    expect(() => entry.Action.local('x').run(() => undefined).limits({ deadlineMs: -1 })).toThrow(TypeError);
+    expect(() =>
+      entry.createInstanceHost({
+        onSetupError: () => undefined,
+        limits: { deadlineMs: 0 },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      entry.createInstanceHost({
+        onSetupError: () => undefined,
+        limits: { hookMs: Number.NaN },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      entry.Action.local('x')
+        .run(() => undefined)
+        .limits({ deadlineMs: -1 }),
+    ).toThrow(TypeError);
   });
 });
 
@@ -424,7 +544,9 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     readonly environment: Guarded.GuardEnvironment;
   }
 
-  function trace(options: { decline?: boolean; auditDown?: boolean } = {}): Trace {
+  function trace(
+    options: { decline?: boolean; auditDown?: boolean } = {},
+  ): Trace {
     const asked: string[] = [];
     const audit = new Map<string, { noteId: string; result: string }>();
     return {
@@ -436,12 +558,17 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
           return options.decline !== true;
         },
         record: async ({ noteId }) => {
-          if (options.auditDown === true) throw new Error('the audit store is down');
+          if (options.auditDown === true)
+            throw new Error('the audit store is down');
           const id = `audit-${audit.size + 1}`;
           audit.set(id, { noteId, result: 'pending' });
           return id;
         },
-        settle: (auditId, result) => void audit.set(auditId, { noteId: audit.get(auditId)?.noteId ?? '', result }),
+        settle: (auditId, result) =>
+          void audit.set(auditId, {
+            noteId: audit.get(auditId)?.noteId ?? '',
+            result,
+          }),
       },
     };
   }
@@ -452,7 +579,9 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     const rows = mount(alice, ['/notes/0'], { guard: guard.environment });
     await rows.press('/notes/0');
     expect(guard.asked).toEqual(['n-1']);
-    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'archived' }]);
+    expect([...guard.audit.values()]).toEqual([
+      { noteId: 'n-1', result: 'archived' },
+    ]);
     expect(backend.calls).toMatchObject({ isSignedIn: 1, archive: 1 });
     expect(backend.archived).toEqual(['n-1']);
     rows.close();
@@ -495,11 +624,17 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     const { alice, backend } = await start();
     const guard = trace();
     // The server archived; what came back is an empty, structure-less success.
-    const rows = mount(alice, ['/notes/0'], { guard: guard.environment, reply: (request, reply) => (request.name === 'archive_note' ? { content: [] } : reply) });
+    const rows = mount(alice, ['/notes/0'], {
+      guard: guard.environment,
+      reply: (request, reply) =>
+        request.name === 'archive_note' ? { content: [] } : reply,
+    });
     await rows.press('/notes/0');
     expect(backend.calls.archive).toBe(1); // one protected request, never repeated
     expect(backend.archived).toEqual(['n-1']); // the write did happen: only the acknowledgement was lost
-    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'unknown' }]);
+    expect([...guard.audit.values()]).toEqual([
+      { noteId: 'n-1', result: 'unknown' },
+    ]);
     rows.close();
   });
 
@@ -508,11 +643,19 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     const guard = trace();
     const rows = mount(alice, ['/notes/0'], {
       guard: guard.environment,
-      reply: (request, reply) => (request.name === 'archive_note' ? { content: [], structuredContent: { noteId: 'n-1', archivedAt: 'yesterday' } } : reply),
+      reply: (request, reply) =>
+        request.name === 'archive_note'
+          ? {
+              content: [],
+              structuredContent: { noteId: 'n-1', archivedAt: 'yesterday' },
+            }
+          : reply,
     });
     await rows.press('/notes/0');
     expect(backend.calls.archive).toBe(1);
-    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'unknown' }]);
+    expect([...guard.audit.values()]).toEqual([
+      { noteId: 'n-1', result: 'unknown' },
+    ]);
     rows.close();
   });
 
@@ -524,7 +667,9 @@ describe('the guide\u2019s second and third prerequisites: confirmation and a du
     await rows.press('/notes/0');
     expect(backend.calls.archive).toBe(1);
     expect(backend.archived).toEqual([]);
-    expect([...guard.audit.values()]).toEqual([{ noteId: 'n-1', result: 'unknown' }]);
+    expect([...guard.audit.values()]).toEqual([
+      { noteId: 'n-1', result: 'unknown' },
+    ]);
     rows.close();
   });
 });

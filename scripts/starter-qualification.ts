@@ -3,13 +3,38 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { OAuthError, OAuthErrorCode, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { Action, componentKind, createInstanceHost, prerequisite, proceed, refuse, type InstanceEvent, type ServerTransport } from '@saga-a2ui/core/actions';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
+import {
+  Action,
+  componentKind,
+  createInstanceHost,
+  prerequisite,
+  proceed,
+  refuse,
+  type InstanceEvent,
+  type ServerTransport,
+} from '@saga-a2ui/core/actions';
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { Listener, ListenerOptions } from '../templates/lit-node/server/listener.js';
-import { buildStarter, prepareStarter, typecheckStarter, type BuiltStarter } from './build-starter.js';
+import type {
+  Listener,
+  ListenerOptions,
+} from '../templates/lit-node/server/listener.js';
+import {
+  buildStarter,
+  prepareStarter,
+  typecheckStarter,
+  type BuiltStarter,
+} from './build-starter.js';
 import { createWorkDirectory } from './packed-consumer.js';
 import type { QualifiedStarter } from './qualified-starters.js';
 
@@ -33,7 +58,10 @@ export interface StarterHarness {
   /** The exported, installed and built starter; available inside a case, not while cases are registered. */
   built(): BuiltStarter;
   /** Starts the built listener with the suite's test application. */
-  start(options?: { budgets?: ListenerOptions['budgets'] }): Promise<{ readonly listener: Listener; readonly calls: { verifier: number; authorize: number } }>;
+  start(options?: { budgets?: ListenerOptions['budgets'] }): Promise<{
+    readonly listener: Listener;
+    readonly calls: { verifier: number; authorize: number };
+  }>;
   /** A raw protected request, so a refusal can be read as the HTTP answer it is. */
   rawCall(url: string, authorization?: string): Promise<Response>;
   /** The bearer credential the suite's verifier accepts for its allowed account. */
@@ -45,7 +73,10 @@ export interface StarterHarness {
  * a test file registers the whole headless suite for that template. `framework` registers the
  * cases only that template's server framework has, with the same listener and credentials.
  */
-export function qualifyStarter(template: QualifiedStarter, framework?: (harness: StarterHarness) => void): void {
+export function qualifyStarter(
+  template: QualifiedStarter,
+  framework?: (harness: StarterHarness) => void,
+): void {
   interface Entry {
     startListener(options: ListenerOptions): Promise<Listener>;
     readonly ACCOUNT_SCOPE: string;
@@ -74,7 +105,9 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     // Type-check before building: the starter's own `npm run typecheck`, against the installed packages.
     typecheckStarter(prepared.consumer);
     built = await buildStarter(prepared);
-    entry = (await import(pathToFileURL(built.qualificationServer).href)) as Entry;
+    entry = (await import(
+      pathToFileURL(built.qualificationServer).href
+    )) as Entry;
     html = fs.readFileSync(built.view, 'utf8');
   }, 180_000);
   afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
@@ -85,7 +118,10 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
 
   interface Hooks {
     beforeVerify?(token: string): Promise<void> | void;
-    beforeAuthorize?(accountId: string, signal: AbortSignal): Promise<void> | void;
+    beforeAuthorize?(
+      accountId: string,
+      signal: AbortSignal,
+    ): Promise<void> | void;
   }
 
   interface Running {
@@ -97,13 +133,18 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
   const running: Running[] = [];
   afterEach(async () => {
     for (const one of running.splice(0)) await one.listener.close();
-    for (const client of clients.splice(0)) await client.close().catch(() => undefined);
+    for (const client of clients.splice(0))
+      await client.close().catch(() => undefined);
   });
 
   const nowSeconds = (): number => Date.now() / 1000;
 
   function credentialFor(token: string, scope: string): AuthInfo | undefined {
-    const user = (accountId: string | undefined, scopes: string[], expiresAt = nowSeconds() + 3600): AuthInfo => ({
+    const user = (
+      accountId: string | undefined,
+      scopes: string[],
+      expiresAt = nowSeconds() + 3600,
+    ): AuthInfo => ({
       token,
       clientId: 'qualification-client',
       scopes,
@@ -128,21 +169,33 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     }
   }
 
-  async function start(options: { hooks?: Hooks; verifier?: (calls: Running['calls'], hooks: Hooks) => OAuthTokenVerifier; budgets?: ListenerOptions['budgets']; html?: string } = {}): Promise<Running> {
+  async function start(
+    options: {
+      hooks?: Hooks;
+      verifier?: (calls: Running['calls'], hooks: Hooks) => OAuthTokenVerifier;
+      budgets?: ListenerOptions['budgets'];
+      html?: string;
+    } = {},
+  ): Promise<Running> {
     const calls = { verifier: 0, authorize: 0 };
     const hooks: Hooks = options.hooks ?? {};
-    const verifier: OAuthTokenVerifier =
-      options.verifier?.(calls, hooks) ?? {
-        async verifyAccessToken(token) {
-          calls.verifier += 1;
-          await hooks.beforeVerify?.(token);
-          const credential = credentialFor(token, entry.ACCOUNT_SCOPE);
-          if (credential === undefined) throw new OAuthError(OAuthErrorCode.InvalidToken, 'unknown credential');
-          return credential;
-        },
-      };
+    const verifier: OAuthTokenVerifier = options.verifier?.(calls, hooks) ?? {
+      async verifyAccessToken(token) {
+        calls.verifier += 1;
+        await hooks.beforeVerify?.(token);
+        const credential = credentialFor(token, entry.ACCOUNT_SCOPE);
+        if (credential === undefined)
+          throw new OAuthError(
+            OAuthErrorCode.InvalidToken,
+            'unknown credential',
+          );
+        return credential;
+      },
+    };
     const listener = await entry.startListener({
-      get html() { return options.html ?? html; },
+      get html() {
+        return options.html ?? html;
+      },
       verifier,
       authorize: async (identity, signal) => {
         calls.authorize += 1;
@@ -159,43 +212,141 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
 
   const clients: Client[] = [];
   async function connect(url: string, token?: string): Promise<Client> {
-    const client = new Client({ name: 'starter-qualification', version: '0.0.0' });
-    await client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit: token === undefined ? {} : { headers: { Authorization: `Bearer ${token}` } } }));
+    const client = new Client({
+      name: 'starter-qualification',
+      version: '0.0.0',
+    });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(url), {
+        requestInit:
+          token === undefined
+            ? {}
+            : { headers: { Authorization: `Bearer ${token}` } },
+      }),
+    );
     clients.push(client);
     return client;
   }
 
-  const callAccount = (client: Client) => client.callTool({ name: 'get_account', arguments: {} });
-  const textOf = (result: { content?: unknown }): string => JSON.stringify(result.content);
+  const callAccount = (client: Client) =>
+    client.callTool({ name: 'get_account', arguments: {} });
+  const textOf = (result: { content?: unknown }): string =>
+    JSON.stringify(result.content);
 
-  async function wireCall(url: string, modern: boolean, name: string, token?: string): Promise<{ response: Response; result: { structuredContent?: unknown; isError?: boolean } }> {
+  async function wireCall(
+    url: string,
+    modern: boolean,
+    name: string,
+    token?: string,
+  ): Promise<{
+    response: Response;
+    result: { structuredContent?: unknown; isError?: boolean };
+  }> {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(token === undefined ? {} : { authorization: `Bearer ${token}` }), ...(modern ? { 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'tools/call', 'Mcp-Name': name } : {}) },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {}, ...(modern ? { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } } : {}) } }),
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        ...(modern
+          ? {
+              'MCP-Protocol-Version': '2026-07-28',
+              'Mcp-Method': 'tools/call',
+              'Mcp-Name': name,
+            }
+          : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: {},
+          ...(modern
+            ? {
+                _meta: {
+                  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                  'io.modelcontextprotocol/clientCapabilities': {},
+                },
+              }
+            : {}),
+        },
+      }),
     });
     const text = await response.text();
     expect(response.status, text).toBe(200);
-    const messages = response.headers.get('content-type')?.startsWith('text/event-stream') ? text.split('\n').filter((line) => line.startsWith('data: ')).map((line) => JSON.parse(line.slice(6))) : [JSON.parse(text)];
+    const messages = response.headers
+      .get('content-type')
+      ?.startsWith('text/event-stream')
+      ? text
+          .split('\n')
+          .filter((line) => line.startsWith('data: '))
+          .map((line) => JSON.parse(line.slice(6)))
+      : [JSON.parse(text)];
     const message = messages.find((one) => one.id === 1);
     expect(message?.error, text).toBeUndefined();
     return { response, result: message.result };
   }
 
   describe('the persistent HTTP endpoints', () => {
-    it.each([true, false])('shutdown cancels an active modern=%s request and is safe to repeat', async (modern) => {
-      let admitted!: (signal: AbortSignal) => void;
-      const entered = new Promise<AbortSignal>((resolve) => { admitted = resolve; });
-      const { listener } = await start({ hooks: { beforeAuthorize: async (_id, signal) => { admitted(signal); await new Promise<void>(() => undefined); } } });
-      const pending = fetch(listener.accountUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${TOKEN.a}`, ...(modern ? { 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'tools/call', 'Mcp-Name': 'get_account' } : {}) },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_account', arguments: {}, ...(modern ? { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } } : {}) } }),
-      }).then(async (response) => { await response.text().catch(() => undefined); }, () => undefined);
-      const signal = await entered;
-      await Promise.all([listener.close(), listener.close(), pending]);
-      expect(signal.aborted).toBe(true);
-    });
+    it.each([true, false])(
+      'shutdown cancels an active modern=%s request and is safe to repeat',
+      async (modern) => {
+        let admitted!: (signal: AbortSignal) => void;
+        const entered = new Promise<AbortSignal>((resolve) => {
+          admitted = resolve;
+        });
+        const { listener } = await start({
+          hooks: {
+            beforeAuthorize: async (_id, signal) => {
+              admitted(signal);
+              await new Promise<void>(() => undefined);
+            },
+          },
+        });
+        const pending = fetch(listener.accountUrl, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            authorization: `Bearer ${TOKEN.a}`,
+            ...(modern
+              ? {
+                  'MCP-Protocol-Version': '2026-07-28',
+                  'Mcp-Method': 'tools/call',
+                  'Mcp-Name': 'get_account',
+                }
+              : {}),
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name: 'get_account',
+              arguments: {},
+              ...(modern
+                ? {
+                    _meta: {
+                      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                      'io.modelcontextprotocol/clientCapabilities': {},
+                    },
+                  }
+                : {}),
+            },
+          }),
+        }).then(
+          async (response) => {
+            await response.text().catch(() => undefined);
+          },
+          () => undefined,
+        );
+        const signal = await entered;
+        await Promise.all([listener.close(), listener.close(), pending]);
+        expect(signal.aborted).toBe(true);
+      },
+    );
 
     it('reads on another replica the resource discovered on the first', async () => {
       const first = await start();
@@ -203,32 +354,58 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       const discovery = await connect(first.listener.statusUrl);
       const reader = await connect(second.listener.statusUrl);
       const { tools } = await discovery.listTools();
-      const uri = (tools[0]?._meta as { ui?: { resourceUri?: string } } | undefined)?.ui?.resourceUri;
+      const uri = (
+        tools[0]?._meta as { ui?: { resourceUri?: string } } | undefined
+      )?.ui?.resourceUri;
       expect(typeof uri).toBe('string');
       const { contents } = await reader.readResource({ uri: String(uri) });
       expect(contents[0]).toMatchObject({ uri, text: html });
     });
 
-    it.each([true, false])('serves modern=%s requests through both mounted endpoints with their admitted identity', async (modern) => {
-      const { listener, calls } = await start();
-      const status = await wireCall(listener.statusUrl, modern, 'get_status');
-      const account = await wireCall(listener.accountUrl, modern, 'get_account', TOKEN.a);
-      expect(status.result.structuredContent).toEqual({ status: 'running' });
-      expect(account.result.structuredContent).toEqual({ accountId: ACCOUNT_A });
-      for (const { response } of [status, account]) {
-        expect(response.headers.get('mcp-session-id')).toBeNull();
-        expect(response.headers.get('content-type')).toContain(modern ? 'application/json' : 'text/event-stream');
-      }
-      expect(calls).toEqual({ verifier: 1, authorize: 1 });
-    });
+    it.each([true, false])(
+      'serves modern=%s requests through both mounted endpoints with their admitted identity',
+      async (modern) => {
+        const { listener, calls } = await start();
+        const status = await wireCall(listener.statusUrl, modern, 'get_status');
+        const account = await wireCall(
+          listener.accountUrl,
+          modern,
+          'get_account',
+          TOKEN.a,
+        );
+        expect(status.result.structuredContent).toEqual({ status: 'running' });
+        expect(account.result.structuredContent).toEqual({
+          accountId: ACCOUNT_A,
+        });
+        for (const { response } of [status, account]) {
+          expect(response.headers.get('mcp-session-id')).toBeNull();
+          expect(response.headers.get('content-type')).toContain(
+            modern ? 'application/json' : 'text/event-stream',
+          );
+        }
+        expect(calls).toEqual({ verifier: 1, authorize: 1 });
+      },
+    );
   });
 
   /** A raw protected request, so a refusal can be read as the HTTP answer it is. */
-  async function rawCall(url: string, authorization?: string): Promise<Response> {
+  async function rawCall(
+    url: string,
+    authorization?: string,
+  ): Promise<Response> {
     return fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(authorization === undefined ? {} : { authorization }) },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_account', arguments: {} } }),
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(authorization === undefined ? {} : { authorization }),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_account', arguments: {} },
+      }),
     });
   }
 
@@ -239,15 +416,21 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       const { listener, calls } = await start();
       const client = await connect(listener.statusUrl);
 
-      const result = await client.callTool({ name: 'get_status', arguments: {} });
+      const result = await client.callTool({
+        name: 'get_status',
+        arguments: {},
+      });
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({ status: 'running' });
-      const uri = (result._meta as { ui: { resourceUri: string } }).ui.resourceUri;
+      const uri = (result._meta as { ui: { resourceUri: string } }).ui
+        .resourceUri;
       expect(uri).toBe(viewUriForHtml(html, 'index.html'));
 
       const { contents } = await client.readResource({ uri });
       const [content] = contents;
-      expect(content && 'text' in content ? content.text : undefined).toBe(html);
+      expect(content && 'text' in content ? content.text : undefined).toBe(
+        html,
+      );
       expect(calls).toEqual({ verifier: 0, authorize: 0 }); // no identity was asked for, none was fabricated
     });
   });
@@ -255,17 +438,25 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
   describe('the protected operation', () => {
     it('shows an allowed account only its own account', async () => {
       const { listener } = await start();
-      const result = await callAccount(await connect(listener.accountUrl, TOKEN.a));
+      const result = await callAccount(
+        await connect(listener.accountUrl, TOKEN.a),
+      );
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual({ accountId: ACCOUNT_A });
     });
 
     it('refuses an account the application denies, with a fixed sentence that names no account', async () => {
       const { listener, calls } = await start();
-      const result = await callAccount(await connect(listener.accountUrl, TOKEN.denied));
+      const result = await callAccount(
+        await connect(listener.accountUrl, TOKEN.denied),
+      );
       expect(result.isError).toBe(true);
       expect(result.structuredContent).toBeUndefined();
-      expect(textOf(result)).toBe(JSON.stringify([{ type: 'text', text: 'This account may not see this.' }]));
+      expect(textOf(result)).toBe(
+        JSON.stringify([
+          { type: 'text', text: 'This account may not see this.' },
+        ]),
+      );
       expect(calls.authorize).toBe(1); // the policy was asked, for this request's identity
     });
 
@@ -274,16 +465,29 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       ['a malformed credential', 'Token abc', 401],
       ['a credential the verifier does not know', 'Bearer nobody', 401],
       ['an expired credential', `Bearer ${TOKEN.expired}`, 401],
-      ['a credential without the required scope', `Bearer ${TOKEN.otherScope}`, 403],
-      ['a service credential that names no account', `Bearer ${TOKEN.service}`, 403],
-    ] as const)('fails closed for %s: it is refused at HTTP with a challenge and no protected work starts', async (_label, authorization, status) => {
-      const { listener, calls } = await start();
-      const response = await rawCall(listener.accountUrl, authorization);
-      expect(response.status).toBe(status);
-      expect(response.headers.get('www-authenticate')).toMatch(/^Bearer realm="saga-starter"/);
-      expect(await response.text()).toBe('');
-      expect(calls.authorize).toBe(0);
-    });
+      [
+        'a credential without the required scope',
+        `Bearer ${TOKEN.otherScope}`,
+        403,
+      ],
+      [
+        'a service credential that names no account',
+        `Bearer ${TOKEN.service}`,
+        403,
+      ],
+    ] as const)(
+      'fails closed for %s: it is refused at HTTP with a challenge and no protected work starts',
+      async (_label, authorization, status) => {
+        const { listener, calls } = await start();
+        const response = await rawCall(listener.accountUrl, authorization);
+        expect(response.status).toBe(status);
+        expect(response.headers.get('www-authenticate')).toMatch(
+          /^Bearer realm="saga-starter"/,
+        );
+        expect(await response.text()).toBe('');
+        expect(calls.authorize).toBe(0);
+      },
+    );
 
     it('does not so much as ask the verifier when there is no credential', async () => {
       const { listener, calls } = await start();
@@ -308,7 +512,10 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       const clientA = await connect(listener.accountUrl, TOKEN.a);
       const clientB = await connect(listener.accountUrl, TOKEN.b);
 
-      const [a, b] = await Promise.all([callAccount(clientA), callAccount(clientB)]);
+      const [a, b] = await Promise.all([
+        callAccount(clientA),
+        callAccount(clientB),
+      ]);
 
       expect([...arrived].sort()).toEqual([ACCOUNT_A, ACCOUNT_B]);
       expect(a.structuredContent).toEqual({ accountId: ACCOUNT_A });
@@ -319,25 +526,48 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       // One record, rewritten for every credential. The first request's body is still arriving when
       // the second request is verified, so a request that kept the verifier's own object would read
       // the second request's account.
-      const record: AuthInfo = { token: 'shared', clientId: 'qualification-client', scopes: [], expiresAt: nowSeconds() + 3600, extra: {} };
+      const record: AuthInfo = {
+        token: 'shared',
+        clientId: 'qualification-client',
+        scopes: [],
+        expiresAt: nowSeconds() + 3600,
+        extra: {},
+      };
       const { listener } = await start({
         verifier: () => ({
           async verifyAccessToken(token) {
             record.scopes = [entry.ACCOUNT_SCOPE];
-            record.extra = { accountId: token === TOKEN.a ? ACCOUNT_A : ACCOUNT_B };
+            record.extra = {
+              accountId: token === TOKEN.a ? ACCOUNT_A : ACCOUNT_B,
+            };
             return record;
           },
         }),
       });
       const url = new URL(listener.accountUrl);
-      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_account', arguments: {} } });
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_account', arguments: {} },
+      });
 
-      const slow = http.request(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${TOKEN.a}`, 'content-length': String(Buffer.byteLength(body)) } });
+      const slow = http.request(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${TOKEN.a}`,
+          'content-length': String(Buffer.byteLength(body)),
+        },
+      });
       const answered = new Promise<string>((resolve, reject) => {
         slow.on('response', (response) => {
           const chunks: Buffer[] = [];
           response.on('data', (chunk: Buffer) => chunks.push(chunk));
-          response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+          response.on('end', () =>
+            resolve(Buffer.concat(chunks).toString('utf8')),
+          );
         });
         slow.on('error', reject);
       });
@@ -358,26 +588,43 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     it('a verifier that never answers is cut off by the authentication budget, and the public endpoint keeps working', async () => {
       const { listener } = await start({
         budgets: { operationMs: 150, requestMs: 1_000 },
-        verifier: () => ({ verifyAccessToken: () => new Promise<AuthInfo>(() => undefined) }),
+        verifier: () => ({
+          verifyAccessToken: () => new Promise<AuthInfo>(() => undefined),
+        }),
       });
       const began = Date.now();
       const response = await rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`);
       expect(response.status).toBe(503);
       expect(Date.now() - began).toBeLessThan(900); // the operation limit, not the request's
 
-      const result = await (await connect(listener.statusUrl)).callTool({ name: 'get_status', arguments: {} });
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
       expect(result.structuredContent).toEqual({ status: 'running' });
     });
 
     it('refuses an invalid budget before it opens a port', async () => {
-      await expect(entry.startListener({ html, verifier: { verifyAccessToken: () => Promise.reject(new Error('unused')) }, authorize: async () => true, port: 0, budgets: { operationMs: 0 } })).rejects.toMatchObject({
+      await expect(
+        entry.startListener({
+          html,
+          verifier: {
+            verifyAccessToken: () => Promise.reject(new Error('unused')),
+          },
+          authorize: async () => true,
+          port: 0,
+          budgets: { operationMs: 0 },
+        }),
+      ).rejects.toMatchObject({
         name: 'BudgetConfigurationError',
       });
     });
   });
 
   describe('the request lifetime at the HTTP body and delivery boundary', () => {
-    const JSON_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' } as const;
+    const JSON_HEADERS = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    } as const;
 
     interface Raw {
       status: number | undefined;
@@ -392,11 +639,24 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
      * POSTs with a declared length that is never fulfilled: only `sent` is written, then nothing. It
      * resolves when the connection closes, or `windowMs` passes, and says what the client saw.
      */
-    async function stalledBody(url: string, sent: string, headers: Record<string, string>, windowMs: number): Promise<Raw> {
+    async function stalledBody(
+      url: string,
+      sent: string,
+      headers: Record<string, string>,
+      windowMs: number,
+    ): Promise<Raw> {
       const began = Date.now();
       return new Promise<Raw>((resolve) => {
-        const raw: Raw = { status: undefined, closed: false, complete: false, elapsedMs: 0 };
-        const request = http.request(url, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': '1000', ...headers } });
+        const raw: Raw = {
+          status: undefined,
+          closed: false,
+          complete: false,
+          elapsedMs: 0,
+        };
+        const request = http.request(url, {
+          method: 'POST',
+          headers: { ...JSON_HEADERS, 'content-length': '1000', ...headers },
+        });
         const done = () => {
           clearTimeout(timer);
           raw.elapsedMs = Date.now() - began;
@@ -421,17 +681,27 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     it.each([
       ['the operation limit', { operationMs: 50, requestMs: 100 }],
       ['the request limit alone', { operationMs: 5_000, requestMs: 100 }],
-    ] as const)('a public body that stalls is bounded by %s: one 408 and a closed connection', async (_label, budgets) => {
-      const { listener } = await start({ budgets });
-      const raw = await stalledBody(listener.statusUrl, '{', {}, 1_500);
-      expect(raw.status).toBe(408);
-      expect(raw.closed).toBe(true);
-      expect(raw.elapsedMs).toBeLessThan(700);
-    });
+    ] as const)(
+      'a public body that stalls is bounded by %s: one 408 and a closed connection',
+      async (_label, budgets) => {
+        const { listener } = await start({ budgets });
+        const raw = await stalledBody(listener.statusUrl, '{', {}, 1_500);
+        expect(raw.status).toBe(408);
+        expect(raw.closed).toBe(true);
+        expect(raw.elapsedMs).toBeLessThan(700);
+      },
+    );
 
     it('a protected body that stalls does no protected work and releases the connection', async () => {
-      const { listener, calls } = await start({ budgets: { operationMs: 50, requestMs: 100 } });
-      const raw = await stalledBody(listener.accountUrl, '{', { authorization: `Bearer ${TOKEN.a}` }, 1_500);
+      const { listener, calls } = await start({
+        budgets: { operationMs: 50, requestMs: 100 },
+      });
+      const raw = await stalledBody(
+        listener.accountUrl,
+        '{',
+        { authorization: `Bearer ${TOKEN.a}` },
+        1_500,
+      );
       expect(raw.status).toBe(408);
       expect(raw.closed).toBe(true);
       expect(raw.elapsedMs).toBeLessThan(700);
@@ -442,38 +712,76 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     });
 
     it('a caller that goes away mid-body leaves the listener serving others', async () => {
-      const { listener } = await start({ budgets: { operationMs: 5_000, requestMs: 10_000 } });
+      const { listener } = await start({
+        budgets: { operationMs: 5_000, requestMs: 10_000 },
+      });
       const url = new URL(listener.statusUrl);
-      const request = http.request(url, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': '1000' } });
+      const request = http.request(url, {
+        method: 'POST',
+        headers: { ...JSON_HEADERS, 'content-length': '1000' },
+      });
       request.on('error', () => undefined);
       request.write('{');
       await new Promise((resolve) => setTimeout(resolve, 50));
       request.destroy();
-      const result = await (await connect(listener.statusUrl)).callTool({ name: 'get_status', arguments: {} });
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
       expect(result.structuredContent).toEqual({ status: 'running' });
     });
 
     it('refuses a declared body that is too large, and a body that is not JSON, without building a server', async () => {
       const { listener } = await start();
-      const tooLarge = await stalledBody(listener.statusUrl, '{', { 'content-length': String(2 * 1024 * 1024) }, 1_000);
+      const tooLarge = await stalledBody(
+        listener.statusUrl,
+        '{',
+        { 'content-length': String(2 * 1024 * 1024) },
+        1_000,
+      );
       expect(tooLarge.status).toBe(413);
       expect(tooLarge.closed).toBe(true);
 
-      const notJson = await fetch(listener.statusUrl, { method: 'POST', headers: JSON_HEADERS, body: '{not json' });
+      const notJson = await fetch(listener.statusUrl, {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: '{not json',
+      });
       expect(notJson.status).toBe(400);
-      expect(await notJson.json()).toMatchObject({ jsonrpc: '2.0', error: { code: -32700 } });
+      expect(await notJson.json()).toMatchObject({
+        jsonrpc: '2.0',
+        error: { code: -32700 },
+      });
     });
 
     it('a finite response that cannot be delivered in time is destroyed, not left holding the connection', async () => {
       // A built page padded to tens of megabytes, read by a client that stops reading: the answer is
       // committed, but the transport can never finish it inside the 600 ms request budget.
       const padded = `${html}<!--${'x'.repeat(48 * 1024 * 1024)}-->`;
-      const { listener } = await start({ html: padded, budgets: { operationMs: 500, requestMs: 600 } });
-      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: viewUriForHtml(padded, 'index.html') } });
+      const { listener } = await start({
+        html: padded,
+        budgets: { operationMs: 500, requestMs: 600 },
+      });
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/read',
+        params: { uri: viewUriForHtml(padded, 'index.html') },
+      });
 
-      const outcome = await new Promise<{ status: number | undefined; complete: boolean; received: number; closedAfterMs: number }>((resolve) => {
+      const outcome = await new Promise<{
+        status: number | undefined;
+        complete: boolean;
+        received: number;
+        closedAfterMs: number;
+      }>((resolve) => {
         const began = Date.now();
-        const request = http.request(listener.statusUrl, { method: 'POST', headers: { ...JSON_HEADERS, 'content-length': String(Buffer.byteLength(body)) } });
+        const request = http.request(listener.statusUrl, {
+          method: 'POST',
+          headers: {
+            ...JSON_HEADERS,
+            'content-length': String(Buffer.byteLength(body)),
+          },
+        });
         request.on('error', () => undefined);
         request.on('response', (response) => {
           let received = 0;
@@ -481,7 +789,14 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
           response.on('error', () => undefined);
           response.pause(); // the peer stops reading while the answer is still being delivered
           setTimeout(() => response.resume(), 1_200); // and picks up whatever is left after the budget has gone
-          response.on('close', () => resolve({ status: response.statusCode, complete: response.complete, received, closedAfterMs: Date.now() - began }));
+          response.on('close', () =>
+            resolve({
+              status: response.statusCode,
+              complete: response.complete,
+              received,
+              closedAfterMs: Date.now() - began,
+            }),
+          );
         });
         request.end(body);
       });
@@ -492,7 +807,9 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       expect(outcome.closedAfterMs).toBeLessThan(4_000);
 
       // The listener is unharmed.
-      const result = await (await connect(listener.statusUrl)).callTool({ name: 'get_status', arguments: {} });
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
       expect(result.structuredContent).toEqual({ status: 'running' });
     }, 30_000);
   });
@@ -500,19 +817,31 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
   describe('the built view is required', () => {
     it('prepares the view before listening and reuses it across requests', async () => {
       let reads = 0;
-      const { listener } = await start({ get html() { reads += 1; return html; } });
+      const { listener } = await start({
+        get html() {
+          reads += 1;
+          return html;
+        },
+      });
       expect(reads).toBe(1);
       const client = await connect(listener.statusUrl);
       const listed = await client.listResources();
-      const resource = await client.readResource({ uri: listed.resources[0]!.uri });
-      const result = await client.callTool({ name: 'get_status', arguments: {} });
+      const resource = await client.readResource({
+        uri: listed.resources[0]!.uri,
+      });
+      const result = await client.callTool({
+        name: 'get_status',
+        arguments: {},
+      });
       expect(result.structuredContent).toEqual({ status: 'running' });
       expect((resource.contents[0] as { text: string }).text).toBe(html);
       expect(reads).toBe(1);
     });
 
     it('will not start without the built page', async () => {
-      await expect(start({ html: '<!doctype html><title>not the view</title>' })).rejects.toBeInstanceOf(entry.ViewArtifactMissing);
+      await expect(
+        start({ html: '<!doctype html><title>not the view</title>' }),
+      ).rejects.toBeInstanceOf(entry.ViewArtifactMissing);
     });
   });
 
@@ -527,21 +856,33 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     const Press = componentKind<PressEvents>('Press');
 
     /** One rendered control bound to a server action that shows the account, behind `session`. */
-    async function press(client: Client, session: ReturnType<typeof prerequisite>) {
+    async function press(
+      client: Client,
+      session: ReturnType<typeof prerequisite>,
+    ) {
       type Reply = Awaited<ReturnType<Client['callTool']>>;
       const transport: ServerTransport<Reply> = {
-        callServerTool: (request, options) => client.callTool({ name: request.name, arguments: { ...request.arguments } }, options?.signal === undefined ? {} : { signal: options.signal }),
+        callServerTool: (request, options) =>
+          client.callTool(
+            { name: request.name, arguments: { ...request.arguments } },
+            options?.signal === undefined ? {} : { signal: options.signal },
+          ),
       };
       const failures: string[] = [];
       const results: unknown[] = [];
-      const show = Action.server<InstanceEvent<string>, Reply>('show-account', transport)
+      const show = Action.server<InstanceEvent<string>, Reply>(
+        'show-account',
+        transport,
+      )
         .before(session)
         .run(({ call }) => call('get_account', {}))
         .onSuccess(({ result }) => void results.push(result.structuredContent))
         .onFailure((context) => void failures.push(context.stage))
         .build();
 
-      const host = createInstanceHost({ onSetupError: (error) => void failures.push(`setup: ${String(error)}`) });
+      const host = createInstanceHost({
+        onSetupError: (error) => void failures.push(`setup: ${String(error)}`),
+      });
       let settled!: () => void;
       const done = new Promise<void>((resolve) => (settled = resolve));
       host.register((view) => {
@@ -552,7 +893,14 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
           });
         });
       });
-      const control = host.open<PressEvents>({ kind: Press, componentId: 'show', dataPath: '/', events: ['activate'], isLive: () => true, read: () => undefined });
+      const control = host.open<PressEvents>({
+        kind: Press,
+        componentId: 'show',
+        dataPath: '/',
+        events: ['activate'],
+        isLive: () => true,
+        read: () => undefined,
+      });
       control.activate('activate', 'click');
       await done;
       host.close();
@@ -564,12 +912,18 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
       const client = await connect(listener.accountUrl, TOKEN.a);
       const before = { ...calls };
 
-      const refused = await press(client, prerequisite('session', async () => refuse('not-signed-in')));
+      const refused = await press(
+        client,
+        prerequisite('session', async () => refuse('not-signed-in')),
+      );
       expect(refused.failures).toEqual(['prerequisites']);
       expect(refused.results).toEqual([]);
       expect(calls).toEqual(before); // the protected handler was never asked, and neither was the verifier
 
-      const allowed = await press(client, prerequisite('session', async () => proceed()));
+      const allowed = await press(
+        client,
+        prerequisite('session', async () => proceed()),
+      );
       expect(allowed.failures).toEqual([]);
       expect(allowed.results).toEqual([{ accountId: ACCOUNT_A }]);
       expect(calls.authorize).toBe(before.authorize + 1);
@@ -585,48 +939,92 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
     afterEach(() => void child?.kill());
 
     it('serves the public status and refuses every protected request, because it ships no identity provider', async () => {
-      child = spawn(process.execPath, [built.server], { cwd: built.consumer, env: { ...process.env, PORT: '0' } });
-      let output = '';
-      const urls = await new Promise<{ status: string; account: string }>((resolve, reject) => {
-        child?.stdout?.on('data', (chunk: Buffer) => {
-          output += chunk.toString('utf8');
-          const status = /Public status endpoint: (\S+)/.exec(output)?.[1];
-          const account = /Protected account endpoint[^:]*: (\S+)/.exec(output)?.[1];
-          if (status !== undefined && account !== undefined) resolve({ status, account });
-        });
-        child?.on('error', reject);
-        child?.on('exit', (code) => reject(new Error(`the starter's server exited with ${String(code)} before it listened`)));
+      child = spawn(process.execPath, [built.server], {
+        cwd: built.consumer,
+        env: { ...process.env, PORT: '0' },
       });
+      let output = '';
+      const urls = await new Promise<{ status: string; account: string }>(
+        (resolve, reject) => {
+          child?.stdout?.on('data', (chunk: Buffer) => {
+            output += chunk.toString('utf8');
+            const status = /Public status endpoint: (\S+)/.exec(output)?.[1];
+            const account = /Protected account endpoint[^:]*: (\S+)/.exec(
+              output,
+            )?.[1];
+            if (status !== undefined && account !== undefined)
+              resolve({ status, account });
+          });
+          child?.on('error', reject);
+          child?.on('exit', (code) =>
+            reject(
+              new Error(
+                `the starter's server exited with ${String(code)} before it listened`,
+              ),
+            ),
+          );
+        },
+      );
 
-      const result = await (await connect(urls.status)).callTool({ name: 'get_status', arguments: {} });
+      const result = await (
+        await connect(urls.status)
+      ).callTool({ name: 'get_status', arguments: {} });
       expect(result.structuredContent).toEqual({ status: 'running' });
-      for (const token of Object.values(TOKEN)) expect((await rawCall(urls.account, `Bearer ${token}`)).status).toBe(401);
+      for (const token of Object.values(TOKEN))
+        expect((await rawCall(urls.account, `Bearer ${token}`)).status).toBe(
+          401,
+        );
     });
 
     it('contains no test identity, no demo verifier and no copy of an SDK implementation', () => {
-      const exported = built.exported.files.map((file) => ({ file, text: fs.readFileSync(path.join(built.exported.directory, file), 'utf8') }));
-      const artifacts = [built.view, built.server].map((file) => ({ file: path.relative(built.consumer, file), text: fs.readFileSync(file, 'utf8') }));
+      const exported = built.exported.files.map((file) => ({
+        file,
+        text: fs.readFileSync(
+          path.join(built.exported.directory, file),
+          'utf8',
+        ),
+      }));
+      const artifacts = [built.view, built.server].map((file) => ({
+        file: path.relative(built.consumer, file),
+        text: fs.readFileSync(file, 'utf8'),
+      }));
 
       for (const { file, text } of [...exported, ...artifacts]) {
         expect(text, file).not.toMatch(/qualification-(account|token|client)/);
-        expect(text, file).not.toMatch(/vitest|playwright|dev-only|DEV_TOKENS/i);
+        expect(text, file).not.toMatch(
+          /vitest|playwright|dev-only|DEV_TOKENS/i,
+        );
       }
       // The only way identity enters is the application's verifier: a file that refuses every credential.
-      expect(exported.find((one) => one.file === 'server/verifier.ts')?.text).toContain('throw new OAuthError(OAuthErrorCode.InvalidToken');
+      expect(
+        exported.find((one) => one.file === 'server/verifier.ts')?.text,
+      ).toContain('throw new OAuthError(OAuthErrorCode.InvalidToken');
       // SDK behavior is imported, not reimplemented: no copy of the runtime's modules in the starter's own source.
-      const own = exported.filter((one) => one.file.endsWith('.ts')).map((one) => one.text).join('\n');
+      const own = exported
+        .filter((one) => one.file.endsWith('.ts'))
+        .map((one) => one.text)
+        .join('\n');
       expect(own).toMatch(/from '@saga-a2ui\/core\/actions'/);
-      expect(own).not.toMatch(/function\s+(createBinding|createInstanceHost|registerProtectedOperation|createMessageSession)\b/);
+      expect(own).not.toMatch(
+        /function\s+(createBinding|createInstanceHost|registerProtectedOperation|createMessageSession)\b/,
+      );
       // Every SDK package in the exported manifest is the exact installed build, and nothing resolves outside a registry.
-      const manifest = JSON.parse(exported.find((one) => one.file === 'package.json')?.text ?? '{}') as { dependencies: Record<string, string> };
+      const manifest = JSON.parse(
+        exported.find((one) => one.file === 'package.json')?.text ?? '{}',
+      ) as { dependencies: Record<string, string> };
       for (const [name, range] of Object.entries(manifest.dependencies)) {
-        if (name.startsWith('@saga-a2ui/')) expect(range, name).toBe(built.sdk.version);
-        expect(range, name).not.toMatch(/^(workspace:|file:|link:|git|https?:|\.|\/)/);
+        if (name.startsWith('@saga-a2ui/'))
+          expect(range, name).toBe(built.sdk.version);
+        expect(range, name).not.toMatch(
+          /^(workspace:|file:|link:|git|https?:|\.|\/)/,
+        );
       }
     });
 
     it('keeps server code out of the view: the built page carries the view connection and no listener, transport or verifier', () => {
-      expect(html).not.toMatch(/NodeStreamableHTTPServerTransport|verifyAccessToken|registerProtectedOperation|@modelcontextprotocol\/(node|express)|localhostHostValidation/);
+      expect(html).not.toMatch(
+        /NodeStreamableHTTPServerTransport|verifyAccessToken|registerProtectedOperation|@modelcontextprotocol\/(node|express)|localhostHostValidation/,
+      );
       expect(html).not.toMatch(/(?:from|import|require)\s*\(?\s*["']node:/);
       expect(html).toContain('<starter-app');
     });
@@ -635,5 +1033,11 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
   // ---------------------------------------------------------------------------------------------
   // The cases only this template's server framework has.
   // ---------------------------------------------------------------------------------------------
-  framework?.({ template, built: () => built, start, rawCall, allowedToken: TOKEN.a });
+  framework?.({
+    template,
+    built: () => built,
+    start,
+    rawCall,
+    allowedToken: TOKEN.a,
+  });
 }

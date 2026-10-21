@@ -49,8 +49,15 @@ From `templates/lit-node/server/listener.ts`:
 
 ```ts
 const view = prepareStarterView(options.html, options.filename);
-const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
-const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
 ```
 
 ### Hand the verified identity to the transport
@@ -62,7 +69,14 @@ From `templates/lit-node/server/listener.ts`:
 // only as the transport's per-request auth; no tool argument can name an account.
 const decision = await authenticate(req, options.verifier, lifetime);
 if (!decision.ok) {
-  res.writeHead(decision.status, decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge }).end();
+  res
+    .writeHead(
+      decision.status,
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+    )
+    .end();
   return;
 }
 Object.assign(req, { auth: decision.authInfo });
@@ -79,8 +93,15 @@ From `templates/lit-node/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -91,14 +112,27 @@ export function createAccountServer({ view, lifetime, authorize }: AccountServer
       input: z.strictObject({}),
       output: AccountOutputSchema,
       view,
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -136,8 +170,15 @@ From `templates/lit-express/server/listener.ts`:
 
 ```ts
 const view = prepareStarterView(options.html, options.filename);
-const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
-const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
 ```
 
 ### Hand the verified identity to the transport
@@ -150,7 +191,14 @@ From `templates/lit-express/server/listener.ts`:
 const identify: RequestHandler = async (req, res, next) => {
   const decision = await authenticate(req, options.verifier, lifetimeOf(res));
   if (!decision.ok) {
-    res.writeHead(decision.status, decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge }).end();
+    res
+      .writeHead(
+        decision.status,
+        decision.challenge === undefined
+          ? {}
+          : { 'WWW-Authenticate': decision.challenge },
+      )
+      .end();
     return;
   }
   req.auth = decision.authInfo;
@@ -169,8 +217,15 @@ From `templates/lit-express/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -181,14 +236,27 @@ export function createAccountServer({ view, lifetime, authorize }: AccountServer
       input: z.strictObject({}),
       output: AccountOutputSchema,
       view,
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -226,8 +294,15 @@ From `templates/lit-fastify/server/listener.ts`:
 
 ```ts
 const view = prepareStarterView(options.html, options.filename);
-const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
-const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
 ```
 
 ### Hand the verified identity to the transport
@@ -237,10 +312,18 @@ From `templates/lit-fastify/server/listener.ts`:
 ```ts
 // Who is asking is decided before any server is built or any body is read. The verified context
 // travels to the tool only as the transport's per-request auth; no tool argument can name an account.
-const identityHandoff = async (request: FastifyRequest, reply: FastifyReply) => {
-  const decision = await authenticate(request.raw, options.verifier, lifetimeOf(request));
+const identityHandoff = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const decision = await authenticate(
+    request.raw,
+    options.verifier,
+    lifetimeOf(request),
+  );
   if (!decision.ok) {
-    if (decision.challenge !== undefined) reply.header('WWW-Authenticate', decision.challenge);
+    if (decision.challenge !== undefined)
+      reply.header('WWW-Authenticate', decision.challenge);
     return reply.code(decision.status).send();
   }
   Object.assign(request.raw, { auth: decision.authInfo });
@@ -258,8 +341,15 @@ From `templates/lit-fastify/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -270,14 +360,27 @@ export function createAccountServer({ view, lifetime, authorize }: AccountServer
       input: z.strictObject({}),
       output: AccountOutputSchema,
       view,
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -315,8 +418,15 @@ From `templates/lit-hono/server/listener.ts`:
 
 ```ts
 const view = prepareStarterView(options.html, options.filename);
-const status = createEndpoint((lifetime) => createStatusServer({ view, lifetime }), { maxRequestBodySize: MAX_REQUEST_BYTES });
-const account = createEndpoint((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), { maxRequestBodySize: MAX_REQUEST_BYTES });
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
 ```
 
 ### Hand the verified identity to the transport
@@ -326,8 +436,19 @@ From `templates/lit-hono/server/listener.ts`:
 ```ts
 // Who is asking is decided before any server is built. The verified context travels to the tool
 // only as the transport's per-request auth; no tool argument can name an account.
-const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
-if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
+const decision = await authenticate(
+  c.req.header('authorization'),
+  options.verifier,
+  lifetime,
+);
+if (!decision.ok)
+  return new Response(null, {
+    status: decision.status,
+    headers:
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+  });
 return serve(c, account, decision.authInfo);
 ```
 
@@ -342,8 +463,15 @@ From `templates/lit-hono/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -354,14 +482,27 @@ export function createAccountServer({ view, lifetime, authorize }: AccountServer
       input: z.strictObject({}),
       output: AccountOutputSchema,
       view,
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );

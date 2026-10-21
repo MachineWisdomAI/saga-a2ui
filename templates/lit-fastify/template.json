@@ -1,7 +1,15 @@
 {
   "stack": "lit-mcp",
   "server": "fastify",
-  "serverAdapter": { "package": "@modelcontextprotocol/fastify", "version": "2.0.1" },
+  "serverAdapter": {
+    "package": "@modelcontextprotocol/fastify",
+    "version": "2.0.1"
+  },
   "sdkPackages": ["core", "lit", "mcp"],
-  "snippets": ["prepare-view", "register-protected-operation", "identity-handoff", "bind-action"]
+  "snippets": [
+    "prepare-view",
+    "register-protected-operation",
+    "identity-handoff",
+    "bind-action"
+  ]
 }

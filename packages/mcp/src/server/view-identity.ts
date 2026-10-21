@@ -19,14 +19,33 @@ import { createHash } from 'node:crypto';
  * with a substituted character. There is no registry or state: calling it again with the same bytes
  * and filename is the only way to recover an identity.
  */
-export function viewUriForHtml(html: string | Uint8Array, filename: string): string {
-  if (typeof filename !== 'string' || !filename.endsWith('.html') || filename.includes('\\') || /^[a-zA-Z]:/.test(filename) || filename.split('/').some((part) => part === '' || part === '.' || part === '..') || filename.split('/').at(-1) === '.html') {
-    throw new TypeError('The view filename must be a relative HTML file without empty or traversal segments.');
+export function viewUriForHtml(
+  html: string | Uint8Array,
+  filename: string,
+): string {
+  if (
+    typeof filename !== 'string' ||
+    !filename.endsWith('.html') ||
+    filename.includes('\\') ||
+    /^[a-zA-Z]:/.test(filename) ||
+    filename
+      .split('/')
+      .some((part) => part === '' || part === '.' || part === '..') ||
+    filename.split('/').at(-1) === '.html'
+  ) {
+    throw new TypeError(
+      'The view filename must be a relative HTML file without empty or traversal segments.',
+    );
   }
   const bytes = typeof html === 'string' ? Buffer.from(html, 'utf8') : html;
   // Encoding replaces an unpaired surrogate with U+FFFD, so a string that does not survive the round trip had no exact bytes.
-  if (typeof html === 'string' && Buffer.from(bytes).toString('utf8') !== html) {
-    throw new RangeError('The HTML contains an unpaired surrogate, so it has no exact UTF-8 bytes to identify.');
+  if (
+    typeof html === 'string' &&
+    Buffer.from(bytes).toString('utf8') !== html
+  ) {
+    throw new RangeError(
+      'The HTML contains an unpaired surrogate, so it has no exact UTF-8 bytes to identify.',
+    );
   }
   const digest = createHash('sha256').update(bytes).digest('hex');
   const named = filename.replace(/\.html$/, `.${digest.slice(0, 32)}.html`);

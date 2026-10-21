@@ -25,11 +25,20 @@ export interface ContentResource {
  * The embedded `data:` and `blob:` baseline needs no declaration. The declared CSP is served
  * beside the document and is not covered by its identity.
  */
-export function contentResource(viewHtml: string, policy: ContentPolicy, filename = 'view.html'): ContentResource {
+export function contentResource(
+  viewHtml: string,
+  policy: ContentPolicy,
+  filename = 'view.html',
+): ContentResource {
   const html = embedPolicy(viewHtml, policy);
   return {
     uri: viewUriForHtml(html, filename),
     html,
-    csp: { connectDomains: [], resourceDomains: policy.resource.resourceDomains, frameDomains: [], baseUriDomains: [] },
+    csp: {
+      connectDomains: [],
+      resourceDomains: policy.resource.resourceDomains,
+      frameDomains: [],
+      baseUriDomains: [],
+    },
   };
 }

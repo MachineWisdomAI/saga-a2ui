@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import type { FetchLike } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll } from 'vitest';
-import { startListener, type Listener } from '../../templates/lit-node/server/listener.js';
+import {
+  startListener,
+  type Listener,
+} from '../../templates/lit-node/server/listener.js';
 import { runCli, type Environment } from '../saga.js';
 import type { ValidatorLoad } from './chatgpt.js';
 import type { PluginValidator } from './claude-plugin.js';
@@ -29,9 +32,21 @@ export const root = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-publish-'));
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 
 let listener: Listener;
-export const viewHtml = fs.readFileSync(path.join(FIXTURE, 'build', 'view.html'), 'utf8');
+export const viewHtml = fs.readFileSync(
+  path.join(FIXTURE, 'build', 'view.html'),
+  'utf8',
+);
 beforeAll(async () => {
-  listener = await startListener({ filename: 'view.html', html: viewHtml, verifier: { verifyAccessToken: () => Promise.reject(new Error('this fixture is public')) }, authorize: async () => true, port: 0 });
+  listener = await startListener({
+    filename: 'view.html',
+    html: viewHtml,
+    verifier: {
+      verifyAccessToken: () =>
+        Promise.reject(new Error('this fixture is public')),
+    },
+    authorize: async () => true,
+    port: 0,
+  });
 });
 afterAll(async () => listener.close());
 
@@ -43,9 +58,15 @@ export function copyFixture(): string {
 }
 
 export const workspace = (): string => fs.mkdtempSync(path.join(root, 'cwd-'));
-export const editInput = (app: string, change: (input: Record<string, any>) => void): void => {
+export const editInput = (
+  app: string,
+  change: (input: Record<string, any>) => void,
+): void => {
   const file = path.join(app, 'saga-publication.json');
-  const input = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, any>;
+  const input = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+    string,
+    any
+  >;
   change(input);
   fs.writeFileSync(file, JSON.stringify(input, null, 2));
 };
@@ -54,26 +75,53 @@ export const editInput = (app: string, change: (input: Record<string, any>) => v
 export const connector = (): Record<string, any> => ({
   name: 'Notes Fixture',
   oneLiner: 'Shows whether the Notes Fixture service is running.',
-  description: 'Shows whether the Notes Fixture service is running, in a card inside the conversation. It only reports status and reads nothing from your account.',
+  description:
+    'Shows whether the Notes Fixture service is running, in a card inside the conversation. It only reports status and reads nothing from your account.',
   categories: ['Developer Tools'],
   slug: 'notes-fixture',
   documentationURL: 'https://notes.example.com/docs',
   privacyPolicyURL: 'https://notes.example.com/privacy',
-  support: { email: 'support@notes.example.com', url: 'https://notes.example.com/support' },
+  support: {
+    email: 'support@notes.example.com',
+    url: 'https://notes.example.com/support',
+  },
   icon: 'assets/icon.svg',
-  screenshots: [1, 2, 3].map((n) => ({ file: `screenshots/${n}.png`, prompt: `Is the notes service running? (${n})` })),
-  useCases: { primary: ['Check whether the notes service is running'], prerequisites: 'Nothing: the connector needs no account.', access: 'read' },
+  screenshots: [1, 2, 3].map((n) => ({
+    file: `screenshots/${n}.png`,
+    prompt: `Is the notes service running? (${n})`,
+  })),
+  useCases: {
+    primary: ['Check whether the notes service is running'],
+    prerequisites: 'Nothing: the connector needs no account.',
+    access: 'read',
+  },
   authentication: { mode: 'none' },
-  dataHandling: { apiOwnership: 'first-party', personalHealthData: false, sponsoredContent: false },
+  dataHandling: {
+    apiOwnership: 'first-party',
+    personalHealthData: false,
+    sponsoredContent: false,
+  },
   allowedLinkUris: ['https://notes.example.com'],
-  reviewContact: { name: 'Fixture Reviewer', email: 'review@notes.example.com' },
+  reviewContact: {
+    name: 'Fixture Reviewer',
+    email: 'review@notes.example.com',
+  },
 });
 
 /** A copy of the fixture application with its Claude section and the three carousel screenshots the section names. */
-export function claudeApp(change: (connector: Record<string, any>, input: Record<string, any>) => void = () => undefined): string {
+export function claudeApp(
+  change: (
+    connector: Record<string, any>,
+    input: Record<string, any>,
+  ) => void = () => undefined,
+): string {
   const app = copyFixture();
   fs.mkdirSync(path.join(app, 'screenshots'));
-  for (const n of [1, 2, 3]) fs.writeFileSync(path.join(app, 'screenshots', `${n}.png`), png(600, 600, 1000));
+  for (const n of [1, 2, 3])
+    fs.writeFileSync(
+      path.join(app, 'screenshots', `${n}.png`),
+      png(600, 600, 1000),
+    );
   editInput(app, (input) => {
     input.claude = { connector: connector() };
     change(input.claude.connector, input);
@@ -88,7 +136,13 @@ export interface Wire {
 }
 
 /** The network seam: routes the published URL to the local listener and records the methods sent. */
-export function wire(rewrite?: (method: string, response: Response) => Promise<Response> | Response, options: { readonly ignoreCursors?: boolean } = {}): Wire {
+export function wire(
+  rewrite?: (
+    method: string,
+    response: Response,
+  ) => Promise<Response> | Response,
+  options: { readonly ignoreCursors?: boolean } = {},
+): Wire {
   const methods: string[] = [];
   return {
     methods,
@@ -96,10 +150,16 @@ export function wire(rewrite?: (method: string, response: Response) => Promise<R
       let method = init?.method ?? 'GET';
       let sent = init;
       if (typeof init?.body === 'string') {
-        const request = JSON.parse(init.body) as { method?: string; params?: { cursor?: unknown } };
+        const request = JSON.parse(init.body) as {
+          method?: string;
+          params?: { cursor?: unknown };
+        };
         method = request.method ?? method;
         // A server that offers pages forever is simulated by a listener that serves its one page whatever cursor it is given.
-        if (options.ignoreCursors === true && request.params?.cursor !== undefined) {
+        if (
+          options.ignoreCursors === true &&
+          request.params?.cursor !== undefined
+        ) {
           delete request.params.cursor;
           sent = { ...init, body: JSON.stringify(request) };
         }
@@ -109,10 +169,23 @@ export function wire(rewrite?: (method: string, response: Response) => Promise<R
       if (rewrite === undefined) return response;
       // Synthetic mutations edit JSON-RPC values, independently of whether the real listener
       // delivered that value as JSON or as the terminal message of a legacy SSE exchange.
-      if (response.headers.get('content-type')?.startsWith('text/event-stream')) {
-        const messages = (await response.text()).split('\n').filter((line) => line.startsWith('data: ')).map((line) => JSON.parse(line.slice(6)));
-        const terminal = messages.find((message) => 'result' in message || 'error' in message);
-        return rewrite(method, new Response(JSON.stringify(terminal), { status: response.status, headers: { 'content-type': 'application/json' } }));
+      if (
+        response.headers.get('content-type')?.startsWith('text/event-stream')
+      ) {
+        const messages = (await response.text())
+          .split('\n')
+          .filter((line) => line.startsWith('data: '))
+          .map((line) => JSON.parse(line.slice(6)));
+        const terminal = messages.find(
+          (message) => 'result' in message || 'error' in message,
+        );
+        return rewrite(
+          method,
+          new Response(JSON.stringify(terminal), {
+            status: response.status,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
       }
       return rewrite(method, response);
     },
@@ -137,14 +210,25 @@ export interface Options {
   readonly now?: () => Date;
 }
 
-export async function saga(args: readonly string[], options: Options = {}): Promise<Run> {
+export async function saga(
+  args: readonly string[],
+  options: Options = {},
+): Promise<Run> {
   let out = '';
   let err = '';
   const environment: Environment = {
     cwd: options.cwd ?? workspace(),
     sdkVersion: () => '0.0.0-candidate.g0123456789ab',
-    stageDemo: () => Promise.reject(new Error('publish builds no demonstration')),
-    publication: { load: async () => publicationTool, environment: options.environment ?? {}, fetch: (options.wire ?? wire()).fetch, validators: options.validators, pluginValidator: options.pluginValidator, now: options.now },
+    stageDemo: () =>
+      Promise.reject(new Error('publish builds no demonstration')),
+    publication: {
+      load: async () => publicationTool,
+      environment: options.environment ?? {},
+      fetch: (options.wire ?? wire()).fetch,
+      validators: options.validators,
+      pluginValidator: options.pluginValidator,
+      now: options.now,
+    },
     stdout: (text) => {
       out += text;
       options.onOutput?.(text);
@@ -156,17 +240,34 @@ export async function saga(args: readonly string[], options: Options = {}): Prom
 }
 
 /** A network seam that edits the JSON-RPC result of one method. */
-export const editing = (target: string, edit: (result: Record<string, any>) => void, options: { readonly ignoreCursors?: boolean } = {}): Wire =>
+export const editing = (
+  target: string,
+  edit: (result: Record<string, any>) => void,
+  options: { readonly ignoreCursors?: boolean } = {},
+): Wire =>
   wire(async (method, response) => {
     if (method !== target) return response;
-    const body = JSON.parse(await response.text()) as { result: Record<string, any> };
+    const body = JSON.parse(await response.text()) as {
+      result: Record<string, any>;
+    };
     edit(body.result);
-    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   }, options);
 
-export const recordOf = (directory: string): PublicationRecord => JSON.parse(fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8')) as PublicationRecord;
-export const status = (record: PublicationRecord, id: string): string | undefined => record.findings.find((finding) => finding.id === id)?.status;
-export const listing = (directory: string): string[] => (fs.existsSync(directory) ? fs.readdirSync(directory).sort() : []);
+export const recordOf = (directory: string): PublicationRecord =>
+  JSON.parse(
+    fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8'),
+  ) as PublicationRecord;
+export const status = (
+  record: PublicationRecord,
+  id: string,
+): string | undefined =>
+  record.findings.find((finding) => finding.id === id)?.status;
+export const listing = (directory: string): string[] =>
+  fs.existsSync(directory) ? fs.readdirSync(directory).sort() : [];
 
 /** A square PNG of the given size, made without a library. `rows` is how many pixel rows the image data holds (the header always promises `size`). */
 export function png(size: number, rows = size, width = size): Buffer {
@@ -193,7 +294,15 @@ export function png(size: number, rows = size, width = size): Buffer {
   header.writeUInt32BE(size, 4);
   header[8] = 8;
   header[9] = 2;
-  const pixels = Buffer.concat(Array.from({ length: rows }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x23)])));
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
+  const pixels = Buffer.concat(
+    Array.from({ length: rows }, () =>
+      Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x23)]),
+    ),
+  );
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(pixels)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
-

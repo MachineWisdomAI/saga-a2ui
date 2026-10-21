@@ -1,8 +1,14 @@
 import { readFile } from 'node:fs/promises';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
-import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import {
+  startEpisodeListener,
+  type EpisodeListener,
+} from '../src/mcp/listener.js';
 import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
@@ -19,14 +25,24 @@ test.beforeAll(async () => {
     catalog: {
       find: (id) =>
         ({
-          'ep-001': { id: 'ep-001', title: 'First wire title', description: 'Plain <b>text</b> from the wire.' },
-          'ep-002': { id: 'ep-002', title: 'Second wire title', description: 'Second description.' },
+          'ep-001': {
+            id: 'ep-001',
+            title: 'First wire title',
+            description: 'Plain <b>text</b> from the wire.',
+          },
+          'ep-002': {
+            id: 'ep-002',
+            title: 'Second wire title',
+            description: 'Second description.',
+          },
         })[id],
     },
     port: 0,
   });
   client = new Client({ name: 'e2e-host', version: '0.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(listener.url)));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(listener.url)),
+  );
 });
 
 test.afterAll(async () => {
@@ -37,33 +53,49 @@ test.afterAll(async () => {
 /** The URI the server registered for the view, as a host learns it from the tool. */
 async function registeredViewUri(): Promise<string> {
   const { tools } = await client.listTools();
-  const uri = (tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
-    ?.resourceUri;
+  const uri = (
+    tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta as
+      { ui?: { resourceUri?: string } } | undefined
+  )?.ui?.resourceUri;
   if (uri === undefined) throw new Error('The tool links no view resource.');
   return uri;
 }
 
 async function readView(): Promise<HostedResource> {
-  const { contents } = await client.readResource({ uri: await registeredViewUri() });
+  const { contents } = await client.readResource({
+    uri: await registeredViewUri(),
+  });
   const [content] = contents;
-  if (!content || !('text' in content)) throw new Error('resources/read returned no text');
+  if (!content || !('text' in content))
+    throw new Error('resources/read returned no text');
   const ui = (content._meta as { ui: { csp: HostedResource['csp'] } }).ui;
   return { html: content.text, csp: ui.csp };
 }
 
 async function mountedView(page: Page): Promise<FrameLocator> {
   await page.goto('/host-fixture/index.html');
-  await page.evaluate((resource) => window.mountView?.(resource), await readView());
+  await page.evaluate(
+    (resource) => window.mountView?.(resource),
+    await readView(),
+  );
   return page.frameLocator('iframe[title="MCP App view"]');
 }
 
 async function deliver(page: Page, episodeId: string) {
-  const result = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId } });
-  await page.evaluate((payload) => window.deliverToolResult?.(payload), result as never);
+  const result = await client.callTool({
+    name: EPISODE_TOOL_NAME,
+    arguments: { episodeId },
+  });
+  await page.evaluate(
+    (payload) => window.deliverToolResult?.(payload),
+    result as never,
+  );
   return result;
 }
 
-test('the tool result from the wire is the title the view renders', async ({ page }) => {
+test('the tool result from the wire is the title the view renders', async ({
+  page,
+}) => {
   const view = await mountedView(page);
   const result = await deliver(page, 'ep-001');
 
@@ -74,11 +106,15 @@ test('the tool result from the wire is the title the view renders', async ({ pag
   });
   await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
   // Markup in the description stays visible text rather than becoming elements.
-  await expect(view.getByTestId('panel-description')).toHaveText('Plain <b>text</b> from the wire.');
+  await expect(view.getByTestId('panel-description')).toHaveText(
+    'Plain <b>text</b> from the wire.',
+  );
   await expect(view.locator('b')).toHaveCount(0);
 });
 
-test('changing the server result changes the visible title', async ({ page }) => {
+test('changing the server result changes the visible title', async ({
+  page,
+}) => {
   const view = await mountedView(page);
   await deliver(page, 'ep-001');
   await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
@@ -86,14 +122,23 @@ test('changing the server result changes the visible title', async ({ page }) =>
   await expect(view.getByTestId('panel-title')).toHaveText('Second wire title');
 });
 
-test('the resource is linked from the tool and served with an empty-allowlist CSP', async ({ page }) => {
+test('the resource is linked from the tool and served with an empty-allowlist CSP', async ({
+  page,
+}) => {
   const { tools } = await client.listTools();
   const uri = await registeredViewUri();
-  expect(tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta).toMatchObject({ ui: { resourceUri: uri } });
+  expect(
+    tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta,
+  ).toMatchObject({ ui: { resourceUri: uri } });
   expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
 
   const resource = await readView();
-  expect(resource.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
+  expect(resource.csp).toEqual({
+    connectDomains: [],
+    resourceDomains: [],
+    frameDomains: [],
+    baseUriDomains: [],
+  });
 
   // The mounted iframe is sandboxed without same-origin access and carries a restrictive CSP.
   await mountedView(page);
@@ -101,7 +146,9 @@ test('the resource is linked from the tool and served with an empty-allowlist CS
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
   const policy = await page.evaluate(() => {
     const doc = document.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
-    return /http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(doc)?.[1];
+    return /http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(
+      doc,
+    )?.[1];
   });
   expect(policy).toContain("default-src 'none'");
   expect(policy).toContain("connect-src 'none'");
@@ -111,12 +158,16 @@ test('a CSP-blocked network request from the view fails', async ({ page }) => {
   const view = await mountedView(page);
   await deliver(page, 'ep-001');
   await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
-  const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
+  const frame = page
+    .frames()
+    .find((candidate) => candidate !== page.mainFrame());
   // Target the live MCP listener: only the CSP, not a dead port, can be the reason it fails.
   const violated = await frame?.evaluate(
     (url) =>
       new Promise<string>((resolve) => {
-        document.addEventListener('securitypolicyviolation', (event) => resolve(event.violatedDirective));
+        document.addEventListener('securitypolicyviolation', (event) =>
+          resolve(event.violatedDirective),
+        );
         fetch(url, { method: 'POST' }).catch(() => undefined);
       }),
     listener.url,
@@ -124,13 +175,21 @@ test('a CSP-blocked network request from the view fails', async ({ page }) => {
   expect(violated).toBe('connect-src');
 });
 
-test('an error result clears the rendered title and explains the problem', async ({ page }) => {
+test('an error result clears the rendered title and explains the problem', async ({
+  page,
+}) => {
   const view = await mountedView(page);
   await deliver(page, 'ep-001');
   await expect(view.getByTestId('panel-title')).toHaveText('First wire title');
-  const failed = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId: 'missing' } });
+  const failed = await client.callTool({
+    name: EPISODE_TOOL_NAME,
+    arguments: { episodeId: 'missing' },
+  });
   expect(failed.isError).toBe(true);
-  await page.evaluate((payload) => window.deliverToolResult?.(payload), failed as never);
+  await page.evaluate(
+    (payload) => window.deliverToolResult?.(payload),
+    failed as never,
+  );
 
   await expect(view.getByTestId('view-problem')).toBeVisible();
   await expect(view.getByTestId('panel-title')).toHaveCount(0);
@@ -139,16 +198,24 @@ test('an error result clears the rendered title and explains the problem', async
 
 test.describe('result lifecycle through the bridge', () => {
   const sendRaw = (page: Page, payload: unknown) =>
-    page.evaluate((result) => window.deliverToolResult?.(result), payload as never);
+    page.evaluate(
+      (result) => window.deliverToolResult?.(result),
+      payload as never,
+    );
   const episode = (title: string) => ({
     content: [],
     structuredContent: { episodeId: 'ep-x', title, description: 'Plain text.' },
   });
 
-  test('a result sent during initialization renders once and a later result replaces it', async ({ page }) => {
+  test('a result sent during initialization renders once and a later result replaces it', async ({
+    page,
+  }) => {
     await page.goto('/host-fixture/index.html');
     await page.evaluate(
-      (args) => window.mountView?.(args.resource, { resultDuringInitialization: args.early }),
+      (args) =>
+        window.mountView?.(args.resource, {
+          resultDuringInitialization: args.early,
+        }),
       { resource: await readView(), early: episode('Early title') },
     );
     const view = page.frameLocator('iframe[title="MCP App view"]');
@@ -163,11 +230,25 @@ test.describe('result lifecycle through the bridge', () => {
 
   for (const [name, bad] of [
     ['an error result', { isError: true, content: [] }],
-    ['a non-episode result', { content: [], structuredContent: { surprise: true } }],
-    ['a result with an undeclared field', { content: [], structuredContent: { ...episode('T').structuredContent, secret: 'x' } }],
-    ['a result with no structured content', { content: [{ type: 'text', text: 'plain' }] }],
+    [
+      'a non-episode result',
+      { content: [], structuredContent: { surprise: true } },
+    ],
+    [
+      'a result with an undeclared field',
+      {
+        content: [],
+        structuredContent: { ...episode('T').structuredContent, secret: 'x' },
+      },
+    ],
+    [
+      'a result with no structured content',
+      { content: [{ type: 'text', text: 'plain' }] },
+    ],
   ] as const) {
-    test(`${name} clears the prior surface, shows a fallback, and a valid result recovers`, async ({ page }) => {
+    test(`${name} clears the prior surface, shows a fallback, and a valid result recovers`, async ({
+      page,
+    }) => {
       const view = await mountedView(page);
       await sendRaw(page, episode('Prior title'));
       await expect(view.getByTestId('panel-title')).toHaveText('Prior title');
@@ -179,7 +260,9 @@ test.describe('result lifecycle through the bridge', () => {
       await expect(view.locator('a2ui-surface')).toHaveCount(0);
 
       await sendRaw(page, episode('Recovered title'));
-      await expect(view.getByTestId('panel-title')).toHaveText('Recovered title');
+      await expect(view.getByTestId('panel-title')).toHaveText(
+        'Recovered title',
+      );
       await expect(view.getByTestId('view-problem')).toBeHidden();
       await expect(view.locator('a2ui-surface')).toHaveCount(1);
     });
@@ -209,17 +292,25 @@ test.describe('result lifecycle through the bridge', () => {
 
   // The remount case above proves replacement: the fixture removes the old frame. Isolation between
   // views is a different claim, and needs two frames that are alive at the same time.
-  test('two live views keep their own results, and tearing one down leaves the other unchanged', async ({ page }) => {
+  test('two live views keep their own results, and tearing one down leaves the other unchanged', async ({
+    page,
+  }) => {
     await page.goto('/host-fixture/index.html');
     const resource = await readView();
     await page.evaluate((r) => window.mountView?.(r), resource);
-    await page.evaluate((r) => window.mountView?.(r, { slot: 'second' }), resource);
+    await page.evaluate(
+      (r) => window.mountView?.(r, { slot: 'second' }),
+      resource,
+    );
     const first = page.frameLocator('iframe[title="MCP App view"]');
     const second = page.frameLocator('iframe[title="MCP App view (second)"]');
     await expect(page.locator('iframe')).toHaveCount(2);
 
     const send = (slot: string | undefined, payload: unknown) =>
-      page.evaluate((args) => window.deliverToolResult?.(args.payload as never, args.slot), { slot, payload });
+      page.evaluate(
+        (args) => window.deliverToolResult?.(args.payload as never, args.slot),
+        { slot, payload },
+      );
     await send(undefined, episode('First view'));
     await send('second', episode('Second view'));
     await expect(first.getByTestId('panel-title')).toHaveText('First view');
@@ -227,7 +318,9 @@ test.describe('result lifecycle through the bridge', () => {
 
     // A result for one view reaches that view only.
     await send('second', episode('Second view, newer'));
-    await expect(second.getByTestId('panel-title')).toHaveText('Second view, newer');
+    await expect(second.getByTestId('panel-title')).toHaveText(
+      'Second view, newer',
+    );
     await expect(first.getByTestId('panel-title')).toHaveText('First view');
 
     // Host teardown of the first view: it ignores what follows, the second keeps working.
@@ -235,9 +328,13 @@ test.describe('result lifecycle through the bridge', () => {
     await send(undefined, episode('After teardown')).catch(() => undefined);
     await page.waitForTimeout(300);
     await expect(first.getByTestId('panel-title')).toHaveText('First view');
-    await expect(second.getByTestId('panel-title')).toHaveText('Second view, newer');
+    await expect(second.getByTestId('panel-title')).toHaveText(
+      'Second view, newer',
+    );
     await send('second', episode('Second view, after the first closed'));
-    await expect(second.getByTestId('panel-title')).toHaveText('Second view, after the first closed');
+    await expect(second.getByTestId('panel-title')).toHaveText(
+      'Second view, after the first closed',
+    );
     await expect(second.locator('a2ui-surface')).toHaveCount(1);
   });
 });

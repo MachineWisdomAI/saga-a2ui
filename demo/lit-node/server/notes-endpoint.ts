@@ -3,7 +3,10 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { LifetimeCause, RequestLifetime } from '@saga-a2ui/mcp/server';
 import { mayAnswer } from '../../../apps/lit-host/src/mcp/response-lifetime.js';
-import { createNotesServer, type NotesBackend } from '../../../examples/pack1-consumer/server/index.js';
+import {
+  createNotesServer,
+  type NotesBackend,
+} from '../../../examples/pack1-consumer/server/index.js';
 import { authenticate } from '../../../templates/lit-node/server/authenticate.js';
 
 // The notes endpoint of the demonstration: the PACK1 notes application (a non-playback action
@@ -34,7 +37,11 @@ export interface NotesEndpointOptions {
  * caller going away disconnects it, and a deadline that passes first destroys the connection so a
  * stalled body cannot hold it open. A response is never given a second status.
  */
-function bindToLifetime(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): void {
+function bindToLifetime(
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): void {
   res.on('error', () => undefined);
   req.on('error', () => undefined);
   let delivered = false;
@@ -63,7 +70,10 @@ function bindToLifetime(req: IncomingMessage, res: ServerResponse, lifetime: Req
  * Reads the request body until it ends, `MAX_REQUEST_BYTES` is exceeded or `gate` aborts, and settles
  * once. Avoids for-await: leaving that loop destroys the socket before a 413 can be written.
  */
-function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
+function readLimitedBody(
+  req: IncomingMessage,
+  gate: AbortSignal,
+): Promise<{ tooLarge: true } | { tooLarge: false; text: string }> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let received = 0;
@@ -74,7 +84,9 @@ function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<{ too
       req.off('error', onError);
       gate.removeEventListener('abort', onGate);
     };
-    const finish = (result: { tooLarge: true } | { tooLarge: false; text: string }) => {
+    const finish = (
+      result: { tooLarge: true } | { tooLarge: false; text: string },
+    ) => {
       if (settled) return;
       settled = true;
       req.pause();
@@ -87,7 +99,8 @@ function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<{ too
       if (received > MAX_REQUEST_BYTES) return finish({ tooLarge: true });
       chunks.push(bytes);
     };
-    const onEnd = () => finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
+    const onEnd = () =>
+      finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
     const onError = (error: Error) => {
       if (settled) return;
       settled = true;
@@ -110,49 +123,103 @@ function readLimitedBody(req: IncomingMessage, gate: AbortSignal): Promise<{ too
 }
 
 /** Answers, then drops the connection: the rest of the request body is not wanted. */
-function refuseAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: object): void {
-  res.writeHead(status, { 'content-type': 'application/json', connection: 'close' }).end(JSON.stringify(body));
+function refuseAndClose(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  body: object,
+): void {
+  res
+    .writeHead(status, {
+      'content-type': 'application/json',
+      connection: 'close',
+    })
+    .end(JSON.stringify(body));
   if (res.writableFinished) req.destroy();
   else res.once('finish', () => req.destroy());
 }
 
 /** A body stage that did not finish. An expiry is answered once; a disconnect or cancellation writes nothing. */
-function bodyFailed(cause: LifetimeCause, lifetime: RequestLifetime, req: IncomingMessage, res: ServerResponse): void {
+function bodyFailed(
+  cause: LifetimeCause,
+  lifetime: RequestLifetime,
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
   // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
-  if (cause.kind !== 'request-timeout' && cause.kind !== 'disconnected' && cause.kind !== 'completed') lifetime.record(cause);
-  if (cause.kind === 'disconnected' || cause.kind === 'cancelled' || cause.kind === 'completed') return;
-  if (mayAnswer(lifetime, res)) refuseAndClose(req, res, 408, { error: 'request_timeout' });
+  if (
+    cause.kind !== 'request-timeout' &&
+    cause.kind !== 'disconnected' &&
+    cause.kind !== 'completed'
+  )
+    lifetime.record(cause);
+  if (
+    cause.kind === 'disconnected' ||
+    cause.kind === 'cancelled' ||
+    cause.kind === 'completed'
+  )
+    return;
+  if (mayAnswer(lifetime, res))
+    refuseAndClose(req, res, 408, { error: 'request_timeout' });
 }
 
 /**
  * Reads and parses a POST body as one bounded stage of the request. `undefined` means the response
  * has been dealt with (or the caller has gone) and nothing may be built for it.
  */
-async function readJsonBody(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<{ value: unknown } | undefined> {
+async function readJsonBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): Promise<{ value: unknown } | undefined> {
   const declared = Number(req.headers['content-length']);
   if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) {
-    if (mayAnswer(lifetime, res)) refuseAndClose(req, res, 413, { error: 'payload_too_large' });
+    if (mayAnswer(lifetime, res))
+      refuseAndClose(req, res, 413, { error: 'payload_too_large' });
     return undefined;
   }
-  const read = await lifetime.run('body', (scope) => readLimitedBody(req, scope.signal));
+  const read = await lifetime.run('body', (scope) =>
+    readLimitedBody(req, scope.signal),
+  );
   if (!read.ok) return void bodyFailed(read.cause, lifetime, req, res);
   if (!mayAnswer(lifetime, res)) return undefined;
-  if (read.value.tooLarge) return void refuseAndClose(req, res, 413, { error: 'payload_too_large' });
+  if (read.value.tooLarge)
+    return void refuseAndClose(req, res, 413, { error: 'payload_too_large' });
   try {
     return { value: JSON.parse(read.value.text) as unknown };
   } catch {
-    res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }));
+    res.writeHead(400, { 'content-type': 'application/json' }).end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32700, message: 'Parse error' },
+      }),
+    );
     return undefined;
   }
 }
 
 /** Serves one POST of the notes endpoint. The caller owns the path and the lifetime. */
-export async function serveNotes(options: NotesEndpointOptions, req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime): Promise<void> {
+export async function serveNotes(
+  options: NotesEndpointOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+): Promise<void> {
   bindToLifetime(req, res, lifetime);
-  if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();
+  if (req.method !== 'POST')
+    return void res.writeHead(405, { allow: 'POST' }).end();
   const decision = await authenticate(req, options.verifier, lifetime);
   if (!decision.ok) {
-    if (mayAnswer(lifetime, res)) res.writeHead(decision.status, decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge }).end();
+    if (mayAnswer(lifetime, res))
+      res
+        .writeHead(
+          decision.status,
+          decision.challenge === undefined
+            ? {}
+            : { 'WWW-Authenticate': decision.challenge },
+        )
+        .end();
     return;
   }
   // The body is the adapter's wait, so it runs under the request's lifetime (what authentication
@@ -162,7 +229,12 @@ export async function serveNotes(options: NotesEndpointOptions, req: IncomingMes
   if (lifetime.check() !== undefined) return;
   // The transport reads the verified context only from the request, never from a tool argument.
   Object.assign(req, { auth: decision.authInfo });
-  const server = createNotesServer({ html: options.html, filename: 'notes.html', backend: options.backend, lifetime });
+  const server = createNotesServer({
+    html: options.html,
+    filename: 'notes.html',
+    backend: options.backend,
+    lifetime,
+  });
   const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

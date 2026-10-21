@@ -1,7 +1,17 @@
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
-import { McpServer, type AuthInfo, type CallToolResult, type ServerContext } from '@modelcontextprotocol/server';
+import {
+  McpServer,
+  type AuthInfo,
+  type CallToolResult,
+  type ServerContext,
+} from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
-import { registerProtectedOperation, valueOrThrow, viewUriForHtml, type RequestLifetime } from '@saga-a2ui/mcp/server';
+import {
+  registerProtectedOperation,
+  valueOrThrow,
+  viewUriForHtml,
+  type RequestLifetime,
+} from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 import {
   ARCHIVE_TOOL,
@@ -35,16 +45,25 @@ export interface NoteRecord {
 }
 
 export interface NotesBackend {
-  notesFor(accountId: string, signal: AbortSignal): Promise<readonly NoteRecord[]>;
+  notesFor(
+    accountId: string,
+    signal: AbortSignal,
+  ): Promise<readonly NoteRecord[]>;
   isSignedIn(accountId: string, signal: AbortSignal): Promise<boolean>;
   /** `undefined` when the account may not archive that note, whatever the reason. */
-  archive(accountId: string, noteId: string, signal: AbortSignal): Promise<{ readonly archivedAt: number } | undefined>;
+  archive(
+    accountId: string,
+    noteId: string,
+    signal: AbortSignal,
+  ): Promise<{ readonly archivedAt: number } | undefined>;
 }
 
 /** The built view is required before the server can claim to serve anything. */
 export class ViewArtifactMissing extends Error {
   constructor() {
-    super('The notes view has not been built: the server needs the built page and will not start without it.');
+    super(
+      'The notes view has not been built: the server needs the built page and will not start without it.',
+    );
     this.name = 'ViewArtifactMissing';
   }
 }
@@ -53,19 +72,30 @@ export class ViewArtifactMissing extends Error {
 const VIEW_MARKER = 'data-testid="view-status"';
 
 function requireViewArtifact(html: unknown): string {
-  if (typeof html !== 'string' || !html.includes(VIEW_MARKER)) throw new ViewArtifactMissing();
+  if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
+    throw new ViewArtifactMissing();
   return html;
 }
 
-const identityOf = (authInfo: AuthInfo | undefined): { readonly accountId: string } | undefined => {
+const identityOf = (
+  authInfo: AuthInfo | undefined,
+): { readonly accountId: string } | undefined => {
   const accountId = authInfo?.extra?.accountId;
-  return typeof accountId === 'string' && accountId !== '' ? { accountId } : undefined;
+  return typeof accountId === 'string' && accountId !== ''
+    ? { accountId }
+    : undefined;
 };
 
-const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text }] });
+const failure = (text: string): CallToolResult => ({
+  isError: true,
+  content: [{ type: 'text', text }],
+});
 
 /** A failure the server knows changed nothing; the view may tell the person so. Any other failure leaves the outcome unknown. */
-const refusal = (text: string): CallToolResult => ({ ...failure(text), _meta: { [NO_EFFECT_META]: true } });
+const refusal = (text: string): CallToolResult => ({
+  ...failure(text),
+  _meta: { [NO_EFFECT_META]: true },
+});
 
 export interface NotesServerOptions {
   /** The final document; its bytes name its resource. */
@@ -92,14 +122,32 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
    * finish in time throws its typed cause, which the tool answers as "unavailable" and never as a
    * refusal: ending the wait does not undo a call already started, and a late answer is dropped.
    */
-  async function bounded<T>(ctx: ServerContext, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async function bounded<T>(
+    ctx: ServerContext,
+    work: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     if (lifetime === undefined) return work(ctx.mcpReq.signal);
-    const result = await lifetime.run('storage', (scope) => work(scope.signal), { upstream: ctx.mcpReq.signal });
+    const result = await lifetime.run(
+      'storage',
+      (scope) => work(scope.signal),
+      { upstream: ctx.mcpReq.signal },
+    );
     // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
-    if (!result.ok && result.cause.kind !== 'request-timeout' && result.cause.kind !== 'disconnected' && result.cause.kind !== 'completed') lifetime.record(result.cause);
+    if (
+      !result.ok &&
+      result.cause.kind !== 'request-timeout' &&
+      result.cause.kind !== 'disconnected' &&
+      result.cause.kind !== 'completed'
+    )
+      lifetime.record(result.cause);
     return valueOrThrow(result);
   }
-  const view = { uri: viewUriForHtml(html, options.filename), title: 'Notes view', html, csp: CLOSED_VIEW_CSP };
+  const view = {
+    uri: viewUriForHtml(html, options.filename),
+    title: 'Notes view',
+    html,
+    csp: CLOSED_VIEW_CSP,
+  };
   const server = new McpServer({ name: 'pack1-notes', version: '0.0.0' });
 
   registerProtectedOperation(
@@ -107,19 +155,32 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
     {
       name: LIST_TOOL,
       title: 'Open my notes',
-      description: 'Shows the signed-in account’s own notes, each with an Archive control.',
+      description:
+        'Shows the signed-in account’s own notes, each with an Archive control.',
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: NotesOutputSchema,
       view,
-      failures: { absent: TEXT.noNotes, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      failures: {
+        absent: TEXT.noNotes,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
-        return { kind: 'record', record: await backend.notesFor(identity.accountId, request.signal) };
+        return {
+          kind: 'record',
+          record: await backend.notesFor(identity.accountId, request.signal),
+        };
       },
       // Each public field is copied by name: a record's other fields stay on the server.
       project: (records) => {
-        const notes = records.map((note) => ({ id: note.id, title: note.title, body: note.body }));
+        const notes = records.map((note) => ({
+          id: note.id,
+          title: note.title,
+          body: note.body,
+        }));
         return { text: `${notes.length} notes`, data: { notes } };
       },
     },
@@ -131,7 +192,8 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
     SESSION_TOOL,
     {
       title: 'Check the session',
-      description: 'Tells the view whether the account is still signed in. It authorizes nothing.',
+      description:
+        'Tells the view whether the account is still signed in. It authorizes nothing.',
       inputSchema: z.strictObject({}),
       outputSchema: SessionOutputSchema,
       annotations: READ_ONLY,
@@ -141,11 +203,19 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
       const identity = identityOf(ctx.http?.authInfo);
       if (!identity) return failure(TEXT.signInRequired);
       try {
-        if (!(await bounded(ctx, (signal) => backend.isSignedIn(identity.accountId, signal)))) return failure(TEXT.signInRequired);
+        if (
+          !(await bounded(ctx, (signal) =>
+            backend.isSignedIn(identity.accountId, signal),
+          ))
+        )
+          return failure(TEXT.signInRequired);
       } catch {
         return failure(TEXT.unavailable);
       }
-      return { content: [{ type: 'text', text: 'signed in' }], structuredContent: { signedIn: true } };
+      return {
+        content: [{ type: 'text', text: 'signed in' }],
+        structuredContent: { signedIn: true },
+      };
     },
   );
 
@@ -165,11 +235,19 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
       const identity = identityOf(ctx.http?.authInfo);
       if (!identity) return refusal(TEXT.signInRequired);
       try {
-        const archived = await bounded(ctx, (signal) => backend.archive(identity.accountId, noteId, signal));
+        const archived = await bounded(ctx, (signal) =>
+          backend.archive(identity.accountId, noteId, signal),
+        );
         // One sentence for an absent note, someone else's note and an archived one: nothing is disclosed.
         if (archived === undefined) return refusal(TEXT.cannotArchive);
-        const output = ArchiveOutputSchema.parse({ noteId, archivedAt: archived.archivedAt });
-        return { content: [{ type: 'text', text: 'archived' }], structuredContent: output };
+        const output = ArchiveOutputSchema.parse({
+          noteId,
+          archivedAt: archived.archivedAt,
+        });
+        return {
+          content: [{ type: 'text', text: 'archived' }],
+          structuredContent: output,
+        };
       } catch {
         // An exception, a wait that ran out of time, or an output that failed validation after the
         // write: the archive may have been applied (or may still be), so this failure does not claim otherwise.
