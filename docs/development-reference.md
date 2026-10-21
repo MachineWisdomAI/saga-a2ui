@@ -59,11 +59,115 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
     npm run test:browser                # serves the built page and checks the visible title
     npm run verify                      # guards, typecheck, build, tests, LFS, and version enrollment
 
-`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. The full CI route installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+
+### Formatting and hooks
+
+Use the Node version in `.nvmrc` (22.12.0) or a compatible later release.
+Developers and Hermes/Codex/Claude agents use the same explicit setup in each
+fresh clone or linked worktree:
+
+```sh
+npm ci --workspaces=false --ignore-scripts
+npm run hooks:install
+npm run hooks:check
+```
+
+Verification prints `SAGA formatter hook verified` with the effective hook path.
+Setup is idempotent, changes no Git configuration and installs no consumer
+lifecycle script. Normal SDK consumers do not install hooks. Full SDK development
+still needs the workspace dependencies described above.
+
+The installer uses Git's effective hooks directory, including `core.hooksPath`.
+It preserves an existing executable pre-commit as `pre-commit.saga-original`,
+runs it first and respects its failure, then runs pinned lint-staged/Prettier
+from the committing worktree. The pre-push hook and its default-branch/force-push
+guards are untouched. Git normally shares hooks between linked worktrees;
+worktrees predating this tooling continue to run the original guard. Install
+root dependencies in each worktree that has the formatter. No global hook
+setting is changed. A symlink or non-executable existing hook requires its owner
+to resolve it before setup; an existing backup plus an unknown hook requires
+inspection rather than replacement. If another installer replaces the wrapper,
+`hooks:check` reports that drift. Preserve the backup when repairing it.
+
+Prettier 3.9.10 and lint-staged 16.2.7 are pinned development tools; the latter
+supports Node 20.17+ and therefore the repository's Node 22.12 baseline. Its newer
+17.6.0 release requires Node 22.22.1+. One small wrapper composes the existing
+hook; a second hook manager would add another owner for the same file.
+
+Only staged JS/TS (including JSX/TSX and MJS/CJS), JSON, CSS and YAML are selected.
+`.prettierignore` excludes generated output, lockfiles, retained evidence,
+vendored material and Markdown/HTML source-quotation documents. lint-staged owns
+index updates and restores unstaged portions; do not use `--no-stash` or
+`--no-hide-partially-staged`. No repository-wide reformat is part of adoption.
+Formatting a touched source file can change quoted guide snippets: reconcile
+those quotes and run `npm run test:docs` before review.
+
+For selected files, run `npm run format -- PATH...`. For a branch, run
+`npm run format:check -- BASE HEAD --merge-base`; the check never writes files.
+The CI backstop uses that same selection and pinned configuration on changed
+files. Documentation-only changes select no formatter inputs and retain the
+existing cheap document checks. `npm run test:tooling` exercises real isolated
+commits, partial staging, preserved hooks and linked worktrees without building
+an application or opening a browser.
+
+If a hook cannot find Node, make the supported runtime available on the Git
+process's PATH (including IDE/agent launches). If dependencies are absent, run
+the root installation command above. Resolve formatting failures with the pinned
+local formatter and retry the commit; inspect the index and worktree after any
+lint-staged restoration conflict. There is no automatic network download in the
+hook.
+
+### CI checks and release qualification
+
+CI (`.github/workflows/ci.yml`) runs on pull requests, pushes to main and manual
+runs. **Documentation, artifacts, policy tests and CI routing** always checks Git
+LFS pointers, version enrollment, Python version-policy integration and CI path
+routing. It also runs `npm run test:docs`: existing checks for guide
+commands, source snippets, generated recipes, local links/headings, tour
+references and third-party notices. It installs root tools only, using
+`npm ci --workspaces=false --ignore-scripts`; no SDK/application workspace,
+Lynx fixture, browser or pnpm dependency is installed. The full application's
+headless suite also includes these document tests.
+The separate **Version policy** PR check still validates the intended versions
+against the current base.
+
+| Changes | Application types, builds, tests and release qualification |
+| --- | --- |
+| Root Markdown; Markdown in `docs/`, `blueprints/` or `diagrams/`; README/CHANGELOG files elsewhere; PNG/JPEG/GIF/WebP/AVIF/SVG/ICO under `assets/brand/`, `docs/` or `diagrams/` | Skipped; focused document and artifact checks run |
+| Only those documents and the exact version-policy paths listed in `scripts/ci-scope.py` | Skipped; focused policy checks run |
+| All other paths, including source/fixture Markdown, runtime images, executable files in `docs/`, retained evidence/deliverables, dependencies and CI routing/workflow changes | Full qualification |
+| Manual CI run, unavailable Git history or an empty/unknown change set | Full qualification |
+
+Markdown/image extensions are case-insensitive. Renames check both paths;
+moving a runtime image into documentation still runs full qualification. A PR
+uses its merge-base diff; a main push checks its complete before/after diff.
+This CI decision is deliberately more conservative than the version-bump
+documentation exemption. It does not exempt an entire documentation directory.
+Run its real-Git routing cases locally with `python3 scripts/test-ci-scope.py`.
+Guide or notice changes remain on the fast path and must pass the focused
+document checks; a broken generated recipe or source quote cannot pass merely
+because no application build ran.
+
+The full check retains the entire existing route: packed React pnpm consumer,
+`npm run verify`, `candidate:pack`, `candidate:rehearse`, and the SHA-named
+candidate artifact retained for 14 days. Named steps identify each operation.
+The rehearsal rebuilds A and B from the same implementation at different
+versions; it proves that install/update/rollback procedure, not compatibility
+between different implementations.
+
+Before any separately authorized release, run **CI → Run workflow** on the
+exact release ref (or `gh workflow run ci.yml --ref YOUR_RELEASE_REF`) and require
+the full check to pass for that revision. Manual runs always bypass path
+exemptions; the artifact upload follows successful packing and rehearsal in
+the same job. PR and main code changes also run it automatically. A skipped
+docs-only check is not release qualification. This workflow publishes and
+deploys nothing and holds no registry credential. It does not establish npm
+installation or assistant-host acceptance.
 
 ### Repository verification
 
-`npm run verify` is the one local and CI route. It runs the static guard, headless and browser discovery checks, typecheck, build, headless tests, browser tests, Git LFS pointer check, and version-enrollment check, in that order. It stops at the first failing command and uses that command's exit code. Git LFS must already be installed; the pointer check calls `git lfs`.
+`npm run verify` is the complete local and full-CI application route. It runs the static guard, headless and browser discovery checks, typecheck, build, headless tests, browser tests, Git LFS pointer check, and version-enrollment check, in that order. It stops at the first failing command and uses that command's exit code. Git LFS must already be installed; the pointer check calls `git lfs`.
 
 Browser installation is an explicit prerequisite. Install the Playwright browser this repository already depends on before verify. Verify does not download a browser and does not substitute a different one:
 

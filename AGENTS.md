@@ -19,6 +19,10 @@ This repository is a MachineWisdom TypeScript SDK, initially private and intende
 - Keep durable non-trivial specs, plans, decisions, status, and handoffs in FAVA Trails. Promote finalized truth and sync it.
 - Do not build “shared-something” helper identities. Use shared-all or shared-none; give shared artifacts one owner and one documented repair path.
 
+## Local tooling
+
+In a fresh clone/worktree, install pinned root tools with `npm ci --workspaces=false --ignore-scripts`. Run `npm run hooks:check`; if absent, run `npm run hooks:install` and check again for `SAGA formatter hook verified`. The hook formats staged source/configuration with local Prettier; use `npm run format -- PATH...` for explicit files. See [formatting and hooks](docs/development-reference.md#formatting-and-hooks) for guard preservation and troubleshooting.
+
 ## Coding Standards
 
 Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before designing, implementing, refactoring, or reviewing code. Use the `codebase-design` skill for module/interface design when available; the repository standards apply without it.

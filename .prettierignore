@@ -1,0 +1,24 @@
+# Initial rollout: source/configuration only. Existing docs quote source verbatim.
+**/*.md
+**/*.html
+**/node_modules/**
+**/dist/**
+**/dist-installed/**
+**/build/**
+**/coverage/**
+**/generated/**
+**/*.generated.*
+**/package-lock.json
+**/pnpm-lock.yaml
+**/yarn.lock
+candidate-out/**
+release-out/**
+docs/evidence/**
+docs/artifacts/**
+vendor/**
+third_party/**
+.wise-agents/**
+.claude/**
+.codex/**
+test-results/**
+playwright-report/**
