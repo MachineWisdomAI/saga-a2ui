@@ -5,18 +5,60 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import { McpServer, type AuthInfo } from '@modelcontextprotocol/server';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   mcpPlugin,
   type McpPluginOptions,
 } from '../templates/lit-hapi/server/bridge.js';
+import { startListener } from '../templates/lit-hapi/server/listener.js';
 
 const servers: Hapi.Server[] = [];
 const clients: Client[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
   for (const server of servers.splice(0)) await server.stop({ timeout: 0 });
+});
+
+it('keeps application body refusals inspectable by Hapi host response listeners', async () => {
+  const original = Hapi.server;
+  const kinds: string[] = [];
+  const factory = vi.spyOn(Hapi, 'server').mockImplementation((options) => {
+    const server = original(options);
+    servers.push(server);
+    server.events.on('response', (request) => {
+      if (request.raw.res.statusCode >= 400)
+        kinds.push(typeof request.response);
+    });
+    return server;
+  });
+  let listener;
+  try {
+    listener = await startListener({
+      html: '<starter-app></starter-app>',
+      port: 0,
+      verifier: {
+        verifyAccessToken: async () => {
+          throw new Error('unused');
+        },
+      },
+      authorize: async () => true,
+    });
+  } finally {
+    factory.mockRestore();
+  }
+  const response = await fetch(listener.statusUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: '{invalid',
+  });
+  expect(response.status).toBe(400);
+  await response.text();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(kinds).toEqual(['object']);
 });
 
 it('refuses an omitted auth decision at registration instead of publishing a route', async () => {

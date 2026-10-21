@@ -58,9 +58,7 @@ export interface StarterHarness {
   /** The exported, installed and built starter; available inside a case, not while cases are registered. */
   built(): BuiltStarter;
   /** Starts the built listener with the suite's test application. */
-  start(options?: {
-    budgets?: ListenerOptions['budgets'];
-  }): Promise<{
+  start(options?: { budgets?: ListenerOptions['budgets'] }): Promise<{
     readonly listener: Listener;
     readonly calls: { verifier: number; authorize: number };
   }>;

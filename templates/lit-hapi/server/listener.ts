@@ -158,31 +158,28 @@ export async function startListener(
     return cause === undefined || cause.kind === 'request-timeout';
   }
 
-  /** Answers, then drops the connection: the rest of the request body is not wanted. */
+  /** Hapi owns each refusal; after it is sent the unread request body loses its socket. */
   function refuseAndClose(
-    req: IncomingMessage,
-    res: ServerResponse,
+    request: Hapi.Request,
+    h: Hapi.ResponseToolkit,
     status: number,
     body: object,
-  ): void {
-    res
-      .writeHead(status, {
-        'content-type': 'application/json',
-        connection: 'close',
-      })
-      .end(JSON.stringify(body));
-    if (res.writableFinished) req.destroy();
-    else res.once('finish', () => req.destroy());
+  ): Hapi.ResponseObject {
+    request.raw.res.once('finish', () => request.raw.req.destroy());
+    return h
+      .response(body)
+      .code(status)
+      .header('connection', 'close')
+      .takeover();
   }
 
   /** A body stage that did not finish. An expiry is answered once; a disconnect writes nothing. */
   function bodyFailed(
     cause: LifetimeCause,
-    lifetime: RequestLifetime,
-    req: IncomingMessage,
-    res: ServerResponse,
-  ): void {
-    // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
+    request: Hapi.Request,
+    h: Hapi.ResponseToolkit,
+  ): Hapi.ResponseObject | undefined {
+    const lifetime = request.app.lifetime;
     if (
       cause.kind !== 'request-timeout' &&
       cause.kind !== 'disconnected' &&
@@ -194,39 +191,37 @@ export async function startListener(
       cause.kind === 'cancelled' ||
       cause.kind === 'completed'
     )
-      return;
-    if (mayAnswer(lifetime, res))
-      refuseAndClose(req, res, 408, { error: 'request_timeout' });
+      return undefined;
+    return mayAnswer(lifetime, request.raw.res)
+      ? refuseAndClose(request, h, 408, { error: 'request_timeout' })
+      : undefined;
   }
 
-  /**
-   * Reads and parses a POST body as one bounded stage of the request. `undefined` means the
-   * response has been dealt with (or the caller has gone) and nothing may be built for it.
-   */
+  /** A parsed body, an inspectable Hapi refusal, or no response when the caller has gone. */
   async function readJsonBody(
-    req: IncomingMessage,
-    res: ServerResponse,
-    lifetime: RequestLifetime,
+    request: Hapi.Request,
+    h: Hapi.ResponseToolkit,
     body: Readable,
-  ): Promise<{ value: unknown } | undefined> {
+  ): Promise<{ value: unknown } | Hapi.ResponseObject | undefined> {
+    const lifetime = request.app.lifetime;
     const read = await lifetime.run('body', (scope) =>
       readLimitedBody(body, scope.signal),
     );
-    if (!read.ok) return void bodyFailed(read.cause, lifetime, req, res);
-    if (!mayAnswer(lifetime, res)) return undefined;
+    if (!read.ok) return bodyFailed(read.cause, request, h);
+    if (!mayAnswer(lifetime, request.raw.res)) return undefined;
     if (read.value.tooLarge)
-      return void refuseAndClose(req, res, 413, { error: 'payload_too_large' });
+      return refuseAndClose(request, h, 413, { error: 'payload_too_large' });
     try {
       return { value: JSON.parse(read.value.text) as unknown };
     } catch {
-      res.writeHead(400, { 'content-type': 'application/json' }).end(
-        JSON.stringify({
+      return h
+        .response({
           jsonrpc: '2.0',
           id: null,
           error: { code: -32700, message: 'Parse error' },
-        }),
-      );
-      return undefined;
+        })
+        .code(400)
+        .takeover();
     }
   }
 
@@ -236,15 +231,13 @@ export async function startListener(
     if (request.method !== 'post') return h.continue;
     if (!(request.payload instanceof Readable))
       throw new Error('Expected the Hapi streaming payload.');
-    const body = await readJsonBody(
-      request.raw.req,
-      request.raw.res,
-      request.app.lifetime,
-      request.payload,
-    );
+    const body = await readJsonBody(request, h, request.payload);
     if (body === undefined) return h.abandon;
-    request.app.mcpBody = body;
-    return h.continue;
+    if ('value' in body) {
+      request.app.mcpBody = body;
+      return h.continue;
+    }
+    return body;
   });
 
   const payload = {
