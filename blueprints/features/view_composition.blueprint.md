@@ -1,6 +1,6 @@
 ---
 feature_name: view_composition
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_lit_adapter, reusable_mcp_connector, content_safety_levels, application_setup]
 date_added: 2026-10-21
@@ -10,7 +10,7 @@ date_added: 2026-10-21
 
 ## Status
 
-- Design: draft. The owner's approval is recorded in a status-only follow-up commit that pins this revision.
+- Design: **approved** by the human owner on 2026-10-21 at reviewed revision [`db83e84a7d8d6d9527c5ab350472e82809afd609`](https://github.com/MachineWisdomAI/saga-a2ui/blob/db83e84a7d8d6d9527c5ab350472e82809afd609/blueprints/features/view_composition.blueprint.md). The approval covers the stack-package layout, the five layers for both renderers, the shared major.minor rule, the integration-branch delivery and the partial amendments named below to the Lit adapter, MCP connector and application setup designs and to the package layout document. No diagram exists for this design. Approval provenance is kept in the private delivery records.
 - Implementation: not started. Target release `0.7.0`, developed on the integration branch `feat/v0.7-composition`.
 - Length: above the 1,000-word guide because one design fixes the package layout, five layers for two renderers and partial amendments to three approved Blueprints.
 
