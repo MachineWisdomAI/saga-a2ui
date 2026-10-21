@@ -45,6 +45,20 @@ jobs:
           cache: npm
       - name: Install root documentation tools without SDK workspaces or lifecycle scripts
         run: npm ci --workspaces=false --ignore-scripts
+      - name: Verify isolated staged-formatting and hook behavior
+        run: npm run test:tooling
+      - name: Check formatting of changed source and configuration
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          FORMAT_EVENT: ${{ github.event_name }}
+          FORMAT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FORMAT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$FORMAT_EVENT" = pull_request ]; then
+            npm run format:check -- "$FORMAT_BASE" "$FORMAT_HEAD" --merge-base
+          else
+            npm run format:check -- "$FORMAT_BASE" "$FORMAT_HEAD"
+          fi
       - name: Check guide commands, snippets, links, tour references and notices
         run: npm run test:docs
       - name: Explain selected checks
