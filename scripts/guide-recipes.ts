@@ -4,7 +4,12 @@ import { pathToFileURL } from 'node:url';
 import { repoRoot } from './packed-consumer.js';
 import { QUALIFIED_STARTERS } from './qualified-starters.js';
 import { SUPPORTED_PAIRS } from './saga.js';
-import { extractSnippets, readTemplateMetadata, templateDirectory, templateFiles } from './starter-template.js';
+import {
+  extractSnippets,
+  readTemplateMetadata,
+  templateDirectory,
+  templateFiles,
+} from './starter-template.js';
 
 // The attach-to-an-existing-backend recipes (GUIDE1), rendered from the maintained templates that CI
 // qualifies. Nothing here retypes a snippet: each one is the template's own lines, cut by
@@ -21,52 +26,97 @@ export const RECIPES_FILE = 'docs/attach-to-existing-backend.md';
  * The server targets the application-setup design requires. Plain data: the target is covered when a
  * qualified template declares it, and is listed as without a recipe until then.
  */
-export const REQUIRED_SERVERS = ['node', 'express', 'hono', 'fastify', 'hapi'] as const;
+export const REQUIRED_SERVERS = [
+  'node',
+  'express',
+  'hono',
+  'fastify',
+  'hapi',
+] as const;
 
 const OPEN_WORK: Readonly<Record<string, string>> = {
   hapi: 'The Hapi bridge and its identity handoff are [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65). Hapi has no official adapter, and route authentication does not yet reach the bridge callback, so the identity handoff is work that issue owns.',
 };
 
 const SNIPPET_TITLES: Readonly<Record<string, string>> = {
+  'prepare-view': 'Prepare the view and endpoint handlers once',
   'identity-handoff': 'Hand the verified identity to the transport',
   'register-protected-operation': 'Register a protected operation',
   'bind-action': 'Attach an action to a rendered control',
 };
 
-const SNIPPET_ORDER = ['identity-handoff', 'register-protected-operation', 'bind-action'];
+const SNIPPET_ORDER = [
+  'prepare-view',
+  'identity-handoff',
+  'register-protected-operation',
+  'bind-action',
+];
 
 /** Removes the indentation every non-blank line shares, so a snippet cut from a nested position reads from the margin. */
 export function dedent(text: string): string {
   const lines = text.split('\n');
-  const indents = lines.filter((line) => line.trim() !== '').map((line) => /^ */.exec(line)?.[0].length ?? 0);
+  const indents = lines
+    .filter((line) => line.trim() !== '')
+    .map((line) => /^ */.exec(line)?.[0].length ?? 0);
   const common = indents.length === 0 ? 0 : Math.min(...indents);
-  return lines.map((line) => line.slice(Math.min(common, /^ */.exec(line)?.[0].length ?? 0))).join('\n');
+  return lines
+    .map((line) =>
+      line.slice(Math.min(common, /^ */.exec(line)?.[0].length ?? 0)),
+    )
+    .join('\n');
 }
 
-const GLUE_NOT_SHOWN = new Set(['server/listener.ts', 'server/main.ts', 'server/operations.ts']);
+const GLUE_NOT_SHOWN = new Set([
+  'server/listener.ts',
+  'server/main.ts',
+  'server/operations.ts',
+]);
 
 function pairTable(): string {
   const rows = QUALIFIED_STARTERS.map((name) => {
     const metadata = readTemplateMetadata(templateDirectory(name));
-    const offered = SUPPORTED_PAIRS.some((pair) => pair.stack === metadata.stack && pair.server === metadata.server && pair.template === name);
+    const offered = SUPPORTED_PAIRS.some(
+      (pair) =>
+        pair.stack === metadata.stack &&
+        pair.server === metadata.server &&
+        pair.template === name,
+    );
     return `| \`${metadata.stack}\` | \`${metadata.server}\` | [\`${name}\`](../templates/${name}/) | ${offered ? 'offered' : 'not offered'} |`;
   });
-  return ['| Stack | Server | Maintained template | `saga init` |', '| --- | --- | --- | --- |', ...rows].join('\n');
+  return [
+    '| Stack | Server | Maintained template | `saga init` |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+  ].join('\n');
 }
 
 function uncoveredList(): string {
-  const covered = new Set(QUALIFIED_STARTERS.map((name) => readTemplateMetadata(templateDirectory(name)).server));
+  const covered = new Set(
+    QUALIFIED_STARTERS.map(
+      (name) => readTemplateMetadata(templateDirectory(name)).server,
+    ),
+  );
   const uncovered = REQUIRED_SERVERS.filter((server) => !covered.has(server));
-  if (uncovered.length === 0) return 'Every required server target has a qualified template above.';
-  return uncovered.map((server) => `- \`${server}\`: ${OPEN_WORK[server] ?? 'It has no qualified template yet.'}`).join('\n');
+  if (uncovered.length === 0)
+    return 'Every required server target has a qualified template above.';
+  return uncovered
+    .map(
+      (server) =>
+        `- \`${server}\`: ${OPEN_WORK[server] ?? 'It has no qualified template yet.'}`,
+    )
+    .join('\n');
 }
 
 function recipe(name: string): string {
   const template = templateDirectory(name);
   const metadata = readTemplateMetadata(template);
   const snippets = extractSnippets(template);
-  const declared = [...metadata.snippets].sort((a, b) => SNIPPET_ORDER.indexOf(a) - SNIPPET_ORDER.indexOf(b));
-  const glue = templateFiles(template).filter((file) => file.startsWith('server/') && !GLUE_NOT_SHOWN.has(file));
+  const declared = [...metadata.snippets].sort(
+    (a, b) => SNIPPET_ORDER.indexOf(a) - SNIPPET_ORDER.indexOf(b),
+  );
+  const glue = templateFiles(template).filter(
+    (file) => file.startsWith('server/') && !GLUE_NOT_SHOWN.has(file),
+  );
   const parts = [
     `<!-- recipe:${name} -->`,
     `## \`${metadata.server}\` with \`${metadata.stack}\``,
@@ -77,8 +127,20 @@ function recipe(name: string): string {
   ];
   for (const snippetName of declared) {
     const snippet = snippets.find((one) => one.name === snippetName);
-    if (snippet === undefined) throw new Error(`${name} declares the snippet ${snippetName}, which the template does not contain.`);
-    parts.push('', `### ${SNIPPET_TITLES[snippetName] ?? snippetName}`, '', `From \`templates/${name}/${snippet.file}\`:`, '', '```ts', dedent(snippet.text), '```');
+    if (snippet === undefined)
+      throw new Error(
+        `${name} declares the snippet ${snippetName}, which the template does not contain.`,
+      );
+    parts.push(
+      '',
+      `### ${SNIPPET_TITLES[snippetName] ?? snippetName}`,
+      '',
+      `From \`templates/${name}/${snippet.file}\`:`,
+      '',
+      '```ts',
+      dedent(snippet.text),
+      '```',
+    );
   }
   parts.push(`<!-- /recipe:${name} -->`);
   return parts.join('\n');
@@ -113,9 +175,10 @@ export function renderRecipes(): string {
     '',
     '1. Install the SDK packages the recipe lists from one candidate, together, and keep the `@a2ui/markdown-it` override in your root `package.json`.',
     '2. Decide who is asking. Your application authenticates the request (`server/verifier.ts` is the seam for your identity provider) and gives SAGA the result only through the transport\u2019s per-request auth, as in the identity handoff below. A protected operation that receives no verified identity does not run; a declared public operation needs none and is given none.',
-    '3. Register the operations your backend exposes. The handler makes your own authorization decision for that request\u2019s identity, and the projection copies the public fields out of the record by name.',
-    '4. Build the view with your own catalog and serve it as the operation\u2019s view resource, as the starter does. The view\u2019s address is derived from its bytes, so rebuild the view and restart the server together.',
-    '5. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.',
+    '3. Read the built HTML before listening. The preparation snippet defines `view` from `options.html` and its actual filename (`index.html` in the starter); `server/main.ts` reads that file. Prepare it once and reuse it in each request factory.',
+    '4. Register the operations your backend exposes. The handler makes your own authorization decision for that request\u2019s identity, and the projection copies the public fields out of the record by name.',
+    '5. Build the view with your own catalog and serve it as the operation\u2019s view resource, as the starter does. The view\u2019s address preserves its filename and fingerprints its final bytes, so rebuild the view and restart the server together.',
+    '6. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.',
     '',
     'CI qualifies the starter\u2019s listener and operations against real MCP clients. That qualification belongs to the starter: attaching the same lines to your application does not inherit it. Test your own authentication, authorization and refusal paths in your application.',
     '',
@@ -125,11 +188,15 @@ export function renderRecipes(): string {
     .replace(/\n+$/, '\n');
 }
 
-export type RecipesCheck = { readonly current: true } | { readonly current: false; readonly message: string };
+export type RecipesCheck =
+  | { readonly current: true }
+  | { readonly current: false; readonly message: string };
 
 /** Compares a written recipes file with what the templates render now. */
 export function checkRecipes(file: string): RecipesCheck {
-  const written = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
+  const written = fs.existsSync(file)
+    ? fs.readFileSync(file, 'utf8')
+    : undefined;
   if (written === renderRecipes()) return { current: true };
   return {
     current: false,
@@ -137,7 +204,10 @@ export function checkRecipes(file: string): RecipesCheck {
   };
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   const file = path.join(repoRoot, RECIPES_FILE);
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--check') {

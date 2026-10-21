@@ -29,9 +29,10 @@ A pair is listed only while CI qualifies it, and a qualified pair is not automat
 
 1. Install the SDK packages the recipe lists from one candidate, together, and keep the `@a2ui/markdown-it` override in your root `package.json`.
 2. Decide who is asking. Your application authenticates the request (`server/verifier.ts` is the seam for your identity provider) and gives SAGA the result only through the transport’s per-request auth, as in the identity handoff below. A protected operation that receives no verified identity does not run; a declared public operation needs none and is given none.
-3. Register the operations your backend exposes. The handler makes your own authorization decision for that request’s identity, and the projection copies the public fields out of the record by name.
-4. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address is derived from its bytes, so rebuild the view and restart the server together.
-5. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
+3. Read the built HTML before listening. The preparation snippet defines `view` from `options.html` and its actual filename (`index.html` in the starter); `server/main.ts` reads that file. Prepare it once and reuse it in each request factory.
+4. Register the operations your backend exposes. The handler makes your own authorization decision for that request’s identity, and the projection copies the public fields out of the record by name.
+5. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address preserves its filename and fingerprints its final bytes, so rebuild the view and restart the server together.
+6. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
 
 CI qualifies the starter’s listener and operations against real MCP clients. That qualification belongs to the starter: attaching the same lines to your application does not inherit it. Test your own authentication, authorization and refusal paths in your application.
 
@@ -40,7 +41,24 @@ CI qualifies the starter’s listener and operations against real MCP clients. T
 
 Template: [`templates/lit-node`](../templates/lit-node/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-node/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
 
 ### Hand the verified identity to the transport
 
@@ -51,7 +69,14 @@ From `templates/lit-node/server/listener.ts`:
 // only as the transport's per-request auth; no tool argument can name an account.
 const decision = await authenticate(req, options.verifier, lifetime);
 if (!decision.ok) {
-  res.writeHead(decision.status, decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge }).end();
+  res
+    .writeHead(
+      decision.status,
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+    )
+    .end();
   return;
 }
 Object.assign(req, { auth: decision.authInfo });
@@ -68,8 +93,15 @@ From `templates/lit-node/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -79,15 +111,28 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -117,7 +162,24 @@ attach: (view) => {
 
 Template: [`templates/lit-express`](../templates/lit-express/). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-express/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
 
 ### Hand the verified identity to the transport
 
@@ -129,7 +191,14 @@ From `templates/lit-express/server/listener.ts`:
 const identify: RequestHandler = async (req, res, next) => {
   const decision = await authenticate(req, options.verifier, lifetimeOf(res));
   if (!decision.ok) {
-    res.writeHead(decision.status, decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge }).end();
+    res
+      .writeHead(
+        decision.status,
+        decision.challenge === undefined
+          ? {}
+          : { 'WWW-Authenticate': decision.challenge },
+      )
+      .end();
     return;
   }
   req.auth = decision.authInfo;
@@ -148,8 +217,15 @@ From `templates/lit-express/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -159,15 +235,28 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -197,7 +286,24 @@ attach: (view) => {
 
 Template: [`templates/lit-fastify`](../templates/lit-fastify/). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-fastify/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
 
 ### Hand the verified identity to the transport
 
@@ -206,10 +312,18 @@ From `templates/lit-fastify/server/listener.ts`:
 ```ts
 // Who is asking is decided before any server is built or any body is read. The verified context
 // travels to the tool only as the transport's per-request auth; no tool argument can name an account.
-const identityHandoff = async (request: FastifyRequest, reply: FastifyReply) => {
-  const decision = await authenticate(request.raw, options.verifier, lifetimeOf(request));
+const identityHandoff = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const decision = await authenticate(
+    request.raw,
+    options.verifier,
+    lifetimeOf(request),
+  );
   if (!decision.ok) {
-    if (decision.challenge !== undefined) reply.header('WWW-Authenticate', decision.challenge);
+    if (decision.challenge !== undefined)
+      reply.header('WWW-Authenticate', decision.challenge);
     return reply.code(decision.status).send();
   }
   Object.assign(request.raw, { auth: decision.authInfo });
@@ -227,8 +341,15 @@ From `templates/lit-fastify/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -238,15 +359,28 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );
@@ -276,7 +410,24 @@ attach: (view) => {
 
 Template: [`templates/lit-hono`](../templates/lit-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
 
-The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-hono/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
 
 ### Hand the verified identity to the transport
 
@@ -285,9 +436,20 @@ From `templates/lit-hono/server/listener.ts`:
 ```ts
 // Who is asking is decided before any server is built. The verified context travels to the tool
 // only as the transport's per-request auth; no tool argument can name an account.
-const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
-if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
-return serve(c, () => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), decision.authInfo);
+const decision = await authenticate(
+  c.req.header('authorization'),
+  options.verifier,
+  lifetime,
+);
+if (!decision.ok)
+  return new Response(null, {
+    status: decision.status,
+    headers:
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+  });
+return serve(c, account, decision.authInfo);
 ```
 
 ### Register a protected operation
@@ -301,8 +463,15 @@ From `templates/lit-hono/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
   registerProtectedOperation(
     server,
     {
@@ -312,15 +481,28 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
-      failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
       identity: identityOf,
       async handle(_input, identity, request) {
         // Replace this with a call to your backend. The decision to answer is made here, for this request.
-        if (!(await request.within('authorization', (signal) => authorize(identity, signal)))) return { kind: 'refused', text: TEXT.notAllowed };
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
         return { kind: 'record', record: identity };
       },
-      project: (record) => ({ text: 'Signed in.', data: { accountId: record.accountId } }),
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
     },
     { lifetime },
   );

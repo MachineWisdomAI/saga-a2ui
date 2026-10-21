@@ -1,8 +1,19 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { DEFAULT_CONTENT_POLICY, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
+import type {
+  McpServer,
+  OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
+import {
+  DEFAULT_CONTENT_POLICY,
+  type ContentPolicy,
+} from '@saga-a2ui/components/faithful-card';
 import {
   assertBudgetSettings,
   createServerBudgets,
@@ -11,14 +22,33 @@ import {
   type RequestBudgets,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
-import { createMediaService, type MediaStore } from '../playback/media-service.js';
+import {
+  createMediaService,
+  type MediaStore,
+} from '../playback/media-service.js';
 import { CAPABILITY_HEADER, PROOF_HEADER } from '../playback/media-proof.js';
-import { MEDIA_PATH_PREFIX, OPEN_TOOL_NAME, PLAY_TOOL_NAME, PLAYBACK_LIMITS } from '../playback/playback.js';
-import { createPlaybackServer, type PlaybackBackend } from '../playback/playback-server.js';
+import {
+  MEDIA_PATH_PREFIX,
+  OPEN_TOOL_NAME,
+  PLAY_TOOL_NAME,
+  PLAYBACK_LIMITS,
+} from '../playback/playback.js';
+import {
+  createPlaybackServer,
+  type PlaybackBackend,
+} from '../playback/playback-server.js';
 import { createAnswerServer, type AnswerBackend } from './answer-server.js';
-import { authenticate, PLAYBACK_REQUIREMENT, SUBSCRIPTIONS_REQUIREMENT, type AuthRequirement } from './request-auth.js';
+import {
+  authenticate,
+  PLAYBACK_REQUIREMENT,
+  SUBSCRIPTIONS_REQUIREMENT,
+  type AuthRequirement,
+} from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
-import { SUBSCRIPTION_LIMITS, SUBSCRIPTIONS_TOOL_NAME } from './subscriptions.js';
+import {
+  SUBSCRIPTION_LIMITS,
+  SUBSCRIPTIONS_TOOL_NAME,
+} from './subscriptions.js';
 import {
   classifyProtectedBody,
   declaredBodyTooLarge,
@@ -27,14 +57,23 @@ import {
   writeTransport,
   type ProtectedRequestPolicy,
 } from './protected-request.js';
-import { bindResponseToLifetime, mayAnswer, resolveStreamingPolicy, type StreamingPolicy } from './response-lifetime.js';
+import {
+  bindResponseToLifetime,
+  mayAnswer,
+  resolveStreamingPolicy,
+  type StreamingPolicy,
+} from './response-lifetime.js';
 import {
   createSubscriptionsServer,
   createViewSessionLabeler,
   type SubscriptionBackend,
 } from './subscriptions-server.js';
 
-export { DEFAULT_STREAM_IDLE_MS, ListenerConfigurationError, type StreamingPolicy } from './response-lifetime.js';
+export {
+  DEFAULT_STREAM_IDLE_MS,
+  ListenerConfigurationError,
+  type StreamingPolicy,
+} from './response-lifetime.js';
 
 /** Optional protected endpoint: the signed-in user's own subscriptions. */
 export interface SubscriptionsEndpointOptions {
@@ -108,11 +147,14 @@ export interface RequestOutcome {
 }
 
 /** Header values arrive as `string | string[]`; a repeated header is not a valid credential. */
-function singleHeader(value: string | string[] | undefined): string | undefined {
+function singleHeader(
+  value: string | string[] | undefined,
+): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
 export interface EpisodeListenerOptions {
+  readonly viewFilename?: string;
   readonly viewHtml: string;
   readonly catalog: EpisodeCatalog;
   /** Trusted content policy of the public episode view. Defaults to Standard with no image host. */
@@ -179,8 +221,14 @@ interface ProtectedEndpoint {
 type OwnedStage = 'authentication' | 'body' | 'acquisition';
 
 /** Throws before the listener opens when an operation limit stated by an application is unusable. */
-function assertOperationLimit(where: string, operationMs: number | undefined): void {
-  assertBudgetSettings(where, operationMs === undefined ? undefined : { operationMs });
+function assertOperationLimit(
+  where: string,
+  operationMs: number | undefined,
+): void {
+  assertBudgetSettings(
+    where,
+    operationMs === undefined ? undefined : { operationMs },
+  );
 }
 
 /**
@@ -194,7 +242,9 @@ function assertOperationLimit(where: string, operationMs: number | undefined): v
  * body wait, and that one absolute deadline covers authentication, body ingestion, the tool or
  * acquisition and delivery of a finite response through transport `finish`. See `RequestBudgets`.
  */
-export async function startEpisodeListener(options: EpisodeListenerOptions): Promise<EpisodeListener> {
+export async function startEpisodeListener(
+  options: EpisodeListenerOptions,
+): Promise<EpisodeListener> {
   // Everything an application can state about time is resolved and validated before the port opens.
   const instance = createServerBudgets(options.budgets);
   const routeBudgets = {
@@ -203,9 +253,15 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     playback: instance.forRoute(options.playback?.budgets),
     answer: instance.forRoute(options.answer?.budgets),
   } as const;
-  assertOperationLimit('Subscriptions readBoundMs', options.subscriptions?.readBoundMs);
+  assertOperationLimit(
+    'Subscriptions readBoundMs',
+    options.subscriptions?.readBoundMs,
+  );
   assertOperationLimit('Answer answerBoundMs', options.answer?.answerBoundMs);
-  const answerStreaming = options.answer?.responseMode === 'event-stream' ? resolveStreamingPolicy(options.answer.streaming) : undefined;
+  const answerStreaming =
+    options.answer?.responseMode === 'event-stream'
+      ? resolveStreamingPolicy(options.answer.streaming)
+      : undefined;
 
   const http: Server = createServer();
   await new Promise<void>((resolve, reject) => {
@@ -223,19 +279,35 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     ? createMediaService({
         store: playback.mediaStore,
         // The same lookup Play uses, asked again on every fresh acquisition.
-        entitlement: (accountId, episodeId, signal) => playback.backend.checkEntitlement(accountId, episodeId, signal),
-        ...(playback.capabilityTtlSeconds === undefined ? {} : { ttlSeconds: playback.capabilityTtlSeconds }),
-        ...(playback.nowSeconds === undefined ? {} : { nowSeconds: playback.nowSeconds }),
+        entitlement: (accountId, episodeId, signal) =>
+          playback.backend.checkEntitlement(accountId, episodeId, signal),
+        ...(playback.capabilityTtlSeconds === undefined
+          ? {}
+          : { ttlSeconds: playback.capabilityTtlSeconds }),
+        ...(playback.nowSeconds === undefined
+          ? {}
+          : { nowSeconds: playback.nowSeconds }),
       })
     : undefined;
 
-  const MEDIA_PATH = new RegExp(`^${MEDIA_PATH_PREFIX}([a-z0-9][a-z0-9-]{0,63})$`);
+  const MEDIA_PATH = new RegExp(
+    `^${MEDIA_PATH_PREFIX}([a-z0-9][a-z0-9-]{0,63})$`,
+  );
 
   /** Picks the route's budgets from the path alone, so nothing a request sends can choose them. */
-  function routeFor(path: string): { readonly budgets: RequestBudgets; readonly streaming?: StreamingPolicy } {
-    if (path === SUBSCRIPTIONS_PATH) return { budgets: routeBudgets.subscriptions };
-    if (path === PLAYBACK_PATH || (MEDIA_PATH.test(path) && options.playback)) return { budgets: routeBudgets.playback };
-    if (path === ANSWER_PATH) return { budgets: routeBudgets.answer, ...(answerStreaming ? { streaming: answerStreaming } : {}) };
+  function routeFor(path: string): {
+    readonly budgets: RequestBudgets;
+    readonly streaming?: StreamingPolicy;
+  } {
+    if (path === SUBSCRIPTIONS_PATH)
+      return { budgets: routeBudgets.subscriptions };
+    if (path === PLAYBACK_PATH || (MEDIA_PATH.test(path) && options.playback))
+      return { budgets: routeBudgets.playback };
+    if (path === ANSWER_PATH)
+      return {
+        budgets: routeBudgets.answer,
+        ...(answerStreaming ? { streaming: answerStreaming } : {}),
+      };
     return { budgets: routeBudgets.episode };
   }
 
@@ -311,7 +383,9 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
         req.off('error', onError);
         gate.removeEventListener('abort', onGate);
       };
-      const finish = (result: { tooLarge: true } | { tooLarge: false; text: string }) => {
+      const finish = (
+        result: { tooLarge: true } | { tooLarge: false; text: string },
+      ) => {
         if (settled) return;
         settled = true;
         req.pause();
@@ -327,7 +401,11 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
         }
         chunks.push(buf);
       };
-      const onEnd = () => finish({ tooLarge: false, text: Buffer.concat(chunks).toString('utf8') });
+      const onEnd = () =>
+        finish({
+          tooLarge: false,
+          text: Buffer.concat(chunks).toString('utf8'),
+        });
       const onError = (error: Error) => {
         if (settled) return;
         settled = true;
@@ -356,14 +434,25 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
   }
 
   function rejectOversized(req: IncomingMessage, res: ServerResponse): void {
-    writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    writeTransport(res, {
+      kind: 'transport',
+      status: 413,
+      error: 'payload_too_large',
+    });
     closeAfter(req, res);
   }
 
-  function writeAuthDecision(res: ServerResponse, decision: { status: number; challenge?: string; error: string }): void {
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
+  function writeAuthDecision(
+    res: ServerResponse,
+    decision: { status: number; challenge?: string; error: string },
+  ): void {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+    };
     if (decision.challenge) headers['www-authenticate'] = decision.challenge;
-    res.writeHead(decision.status, headers).end(JSON.stringify({ error: decision.error }));
+    res
+      .writeHead(decision.status, headers)
+      .end(JSON.stringify({ error: decision.error }));
   }
 
   /**
@@ -371,23 +460,54 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
    * cancellation writes nothing; an expiry writes one answer and gets no extra time to deliver it.
    * Never a 401 for a wait that merely expired, and never a claim that access was denied.
    */
-  function stageFailed(stage: OwnedStage, cause: LifetimeCause, lifetime: RequestLifetime, req: IncomingMessage, res: ServerResponse): void {
+  function stageFailed(
+    stage: OwnedStage,
+    cause: LifetimeCause,
+    lifetime: RequestLifetime,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): void {
     // The lifetime recorded its own expiry, disconnect and completion itself; the rest are this stage's.
-    if (cause.kind !== 'request-timeout' && cause.kind !== 'disconnected' && cause.kind !== 'completed') lifetime.record(cause);
-    if (cause.kind === 'disconnected' || cause.kind === 'cancelled' || cause.kind === 'completed') return;
+    if (
+      cause.kind !== 'request-timeout' &&
+      cause.kind !== 'disconnected' &&
+      cause.kind !== 'completed'
+    )
+      lifetime.record(cause);
+    if (
+      cause.kind === 'disconnected' ||
+      cause.kind === 'cancelled' ||
+      cause.kind === 'completed'
+    )
+      return;
     if (!mayAnswer(lifetime, res)) return;
-    if (stage === 'authentication') return writeAuthDecision(res, { status: 500, error: 'server_error' });
+    if (stage === 'authentication')
+      return writeAuthDecision(res, { status: 500, error: 'server_error' });
     if (stage === 'body') {
-      writeTransport(res, { kind: 'transport', status: 408, error: 'request_timeout' });
+      writeTransport(res, {
+        kind: 'transport',
+        status: 408,
+        error: 'request_timeout',
+      });
       return closeAfter(req, res);
     }
-    res.writeHead(503, REFUSED_HEADERS).end(JSON.stringify({ error: 'unavailable' }));
+    res
+      .writeHead(503, REFUSED_HEADERS)
+      .end(JSON.stringify({ error: 'unavailable' }));
   }
 
   /** Reads the request body as one bounded stage. `undefined` means the response has been dealt with. */
-  async function readBodyStage(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime, maxBytes: number): Promise<string | undefined> {
-    const read = await lifetime.run('body', (scope) => readLimitedBody(req, maxBytes, scope.signal));
-    if (!read.ok) return void stageFailed('body', read.cause, lifetime, req, res);
+  async function readBodyStage(
+    req: IncomingMessage,
+    res: ServerResponse,
+    lifetime: RequestLifetime,
+    maxBytes: number,
+  ): Promise<string | undefined> {
+    const read = await lifetime.run('body', (scope) =>
+      readLimitedBody(req, maxBytes, scope.signal),
+    );
+    if (!read.ok)
+      return void stageFailed('body', read.cause, lifetime, req, res);
     if (!mayAnswer(lifetime, res)) return undefined;
     if (read.value.tooLarge) return void rejectOversized(req, res);
     return read.value.text;
@@ -405,16 +525,33 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     res: ServerResponse,
     lifetime: RequestLifetime,
   ): Promise<void> {
-    if (declaredBodyTooLarge(req, endpoint.policy)) return writeTransport(res, { kind: 'transport', status: 413, error: 'payload_too_large' });
+    if (declaredBodyTooLarge(req, endpoint.policy))
+      return writeTransport(res, {
+        kind: 'transport',
+        status: 413,
+        error: 'payload_too_large',
+      });
     const authenticated = await lifetime.run('authentication', (scope) =>
       authenticate(req, endpoint.verifier, endpoint.requirement, scope.signal),
     );
-    if (!authenticated.ok) return stageFailed('authentication', authenticated.cause, lifetime, req, res);
+    if (!authenticated.ok)
+      return stageFailed(
+        'authentication',
+        authenticated.cause,
+        lifetime,
+        req,
+        res,
+      );
     const decision = authenticated.value;
     if (!decision.ok) {
       lifetime.record(
         decision.status === 500
-          ? { kind: 'dependency-failure', stage: 'authentication', effect: 'none', error: decision.fault }
+          ? {
+              kind: 'dependency-failure',
+              stage: 'authentication',
+              effect: 'none',
+              error: decision.fault,
+            }
           : { kind: 'auth-refused', status: decision.status },
       );
       if (mayAnswer(lifetime, res)) writeAuthDecision(res, decision);
@@ -423,7 +560,12 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     if (!mayAnswer(lifetime, res)) return;
     const headerFailure = transportHeaderFailure(req);
     if (headerFailure) return writeTransport(res, headerFailure);
-    const text = await readBodyStage(req, res, lifetime, endpoint.policy.limits.maxRequestBytes);
+    const text = await readBodyStage(
+      req,
+      res,
+      lifetime,
+      endpoint.policy.limits.maxRequestBytes,
+    );
     if (text === undefined) return;
     const gate = classifyProtectedBody(text, endpoint.policy);
     if (gate.kind === 'transport') return writeTransport(res, gate);
@@ -432,7 +574,13 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     // snapshot nor a server is made for a request whose lifetime has ended.
     if (lifetime.signal.aborted) return;
     Object.assign(req, { auth: decision.authInfo });
-    await serve(endpoint.createServer(lifetime), req, res, gate.body, endpoint.policy.limits.maxRequestBytes);
+    await serve(
+      endpoint.createServer(lifetime),
+      req,
+      res,
+      gate.body,
+      endpoint.policy.limits.maxRequestBytes,
+    );
   }
 
   /** A public endpoint: the body is a bounded stage too, but no credential is read and no identity exists. */
@@ -443,16 +591,34 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     createServerFor: (lifetime: RequestLifetime) => McpServer,
     enableJsonResponse = true,
   ): Promise<void> {
-    const text = await readBodyStage(req, res, lifetime, PUBLIC_MAX_REQUEST_BYTES);
+    const text = await readBodyStage(
+      req,
+      res,
+      lifetime,
+      PUBLIC_MAX_REQUEST_BYTES,
+    );
     if (text === undefined) return;
     let body: unknown;
     try {
       body = JSON.parse(text);
     } catch {
-      return writeProtocol(res, { kind: 'protocol', status: 400, id: null, code: -32700, message: 'Parse error' });
+      return writeProtocol(res, {
+        kind: 'protocol',
+        status: 400,
+        id: null,
+        code: -32700,
+        message: 'Parse error',
+      });
     }
     if (lifetime.signal.aborted) return;
-    await serve(createServerFor(lifetime), req, res, body, PUBLIC_MAX_REQUEST_BYTES, enableJsonResponse);
+    await serve(
+      createServerFor(lifetime),
+      req,
+      res,
+      body,
+      PUBLIC_MAX_REQUEST_BYTES,
+      enableJsonResponse,
+    );
   }
 
   function protectedEndpointAt(path: string): ProtectedEndpoint | undefined {
@@ -468,7 +634,9 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
             backend: endpoint.backend,
             labelViewSession,
             lifetime,
-            ...(endpoint.readBoundMs === undefined ? {} : { readBoundMs: endpoint.readBoundMs }),
+            ...(endpoint.readBoundMs === undefined
+              ? {}
+              : { readBoundMs: endpoint.readBoundMs }),
           }),
       };
     }
@@ -510,7 +678,10 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     vary: `Origin, Range, ${CAPABILITY_HEADER}, ${PROOF_HEADER}`,
     ...CORS_HEADERS,
   } as const;
-  const REFUSED_HEADERS = { 'content-type': 'application/json', ...MEDIA_ANSWER_HEADERS } as const;
+  const REFUSED_HEADERS = {
+    'content-type': 'application/json',
+    ...MEDIA_ANSWER_HEADERS,
+  } as const;
 
   /**
    * The synthetic media service's HTTP edge. It never authenticates the person; the capability and
@@ -519,7 +690,12 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
    * acquisition is its own request: it starts a new deadline and inherits nothing from the Play that
    * issued its capability, and the capability keeps its own, separate expiry.
    */
-  async function serveMedia(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime, episodeId: string): Promise<void> {
+  async function serveMedia(
+    req: IncomingMessage,
+    res: ServerResponse,
+    lifetime: RequestLifetime,
+    episodeId: string,
+  ): Promise<void> {
     if (!mediaService) return void res.writeHead(404).end();
     const acquired = await lifetime.run('acquisition', (scope) =>
       mediaService.acquire(
@@ -536,13 +712,22 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     );
     // The entitlement lookup or the storage read failed or did not finish. That is neither a grant nor
     // a refusal of this caller, so say "try again" (503) without any dependency text, readable by the view.
-    if (!acquired.ok) return stageFailed('acquisition', acquired.cause, lifetime, req, res);
+    if (!acquired.ok)
+      return stageFailed('acquisition', acquired.cause, lifetime, req, res);
     const outcome = acquired.value;
     if (!mayAnswer(lifetime, res)) return; // the caller went away or the request ended: nothing is written
-    if (outcome.kind === 'refused') return void res.writeHead(403, REFUSED_HEADERS).end(JSON.stringify({ error: 'forbidden' }));
+    if (outcome.kind === 'refused')
+      return void res
+        .writeHead(403, REFUSED_HEADERS)
+        .end(JSON.stringify({ error: 'forbidden' }));
     if (outcome.kind === 'unsatisfiable') {
       // Sent only to a caller who passed every check, so the length is not a probe for anyone else.
-      res.writeHead(416, { 'content-range': `bytes */${outcome.total}`, ...MEDIA_ANSWER_HEADERS }).end();
+      res
+        .writeHead(416, {
+          'content-range': `bytes */${outcome.total}`,
+          ...MEDIA_ANSWER_HEADERS,
+        })
+        .end();
       return;
     }
     const delivered = {
@@ -553,26 +738,38 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
     };
     if (outcome.kind === 'partial') {
       res
-        .writeHead(206, { ...delivered, 'content-range': `bytes ${outcome.first}-${outcome.last}/${outcome.total}` })
+        .writeHead(206, {
+          ...delivered,
+          'content-range': `bytes ${outcome.first}-${outcome.last}/${outcome.total}`,
+        })
         .end(Buffer.from(outcome.media.bytes));
       return;
     }
     res.writeHead(200, delivered).end(Buffer.from(outcome.media.bytes));
   }
 
-  async function handle(req: IncomingMessage, res: ServerResponse, lifetime: RequestLifetime, path: string): Promise<void> {
+  async function handle(
+    req: IncomingMessage,
+    res: ServerResponse,
+    lifetime: RequestLifetime,
+    path: string,
+  ): Promise<void> {
     const mediaMatch = MEDIA_PATH.exec(path);
     if (mediaMatch?.[1] && options.playback) {
       // A preflight carries no credential and reaches no media: it only answers which headers the
       // real request may send.
-      if (req.method === 'OPTIONS') return void res.writeHead(204, CORS_HEADERS).end();
-      if (req.method !== 'GET') return void res.writeHead(405, { allow: 'GET, OPTIONS' }).end();
+      if (req.method === 'OPTIONS')
+        return void res.writeHead(204, CORS_HEADERS).end();
+      if (req.method !== 'GET')
+        return void res.writeHead(405, { allow: 'GET, OPTIONS' }).end();
       return serveMedia(req, res, lifetime, mediaMatch[1]);
     }
     const protectedEndpoint = protectedEndpointAt(path);
     const answerEndpoint = path === ANSWER_PATH ? options.answer : undefined;
-    if (path !== MCP_PATH && !protectedEndpoint && !answerEndpoint) return void res.writeHead(404).end();
-    if (req.method !== 'POST') return void res.writeHead(405, { allow: 'POST' }).end();
+    if (path !== MCP_PATH && !protectedEndpoint && !answerEndpoint)
+      return void res.writeHead(404).end();
+    if (req.method !== 'POST')
+      return void res.writeHead(405, { allow: 'POST' }).end();
 
     // Public by design: nothing is authenticated and the server is built without any identity.
     if (answerEndpoint) {
@@ -585,16 +782,20 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
             viewHtml: answerEndpoint.viewHtml,
             backend: answerEndpoint.backend,
             lifetime: requestLifetime,
-            ...(answerEndpoint.answerBoundMs === undefined ? {} : { answerBoundMs: answerEndpoint.answerBoundMs }),
+            ...(answerEndpoint.answerBoundMs === undefined
+              ? {}
+              : { answerBoundMs: answerEndpoint.answerBoundMs }),
           }),
         answerEndpoint.responseMode !== 'event-stream',
       );
     }
 
-    if (protectedEndpoint) return serveProtected(protectedEndpoint, req, res, lifetime);
+    if (protectedEndpoint)
+      return serveProtected(protectedEndpoint, req, res, lifetime);
     await servePublic(req, res, lifetime, (requestLifetime) =>
       createEpisodeServer({
         viewHtml: options.viewHtml,
+        viewFilename: options.viewFilename,
         catalog: options.catalog,
         contentPolicy: options.contentPolicy ?? DEFAULT_CONTENT_POLICY,
         lifetime: requestLifetime,
@@ -604,9 +805,15 @@ export async function startEpisodeListener(options: EpisodeListenerOptions): Pro
 
   return {
     url: `http://${HOST}:${port}${MCP_PATH}`,
-    ...(options.subscriptions ? { subscriptionsUrl: `http://${HOST}:${port}${SUBSCRIPTIONS_PATH}` } : {}),
-    ...(options.playback ? { playbackUrl: `http://${HOST}:${port}${PLAYBACK_PATH}` } : {}),
-    ...(options.answer ? { answerUrl: `http://${HOST}:${port}${ANSWER_PATH}` } : {}),
+    ...(options.subscriptions
+      ? { subscriptionsUrl: `http://${HOST}:${port}${SUBSCRIPTIONS_PATH}` }
+      : {}),
+    ...(options.playback
+      ? { playbackUrl: `http://${HOST}:${port}${PLAYBACK_PATH}` }
+      : {}),
+    ...(options.answer
+      ? { answerUrl: `http://${HOST}:${port}${ANSWER_PATH}` }
+      : {}),
     close: () =>
       new Promise<void>((resolve, reject) => {
         http.close((error) => (error ? reject(error) : resolve()));
