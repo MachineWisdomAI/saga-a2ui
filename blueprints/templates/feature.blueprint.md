@@ -15,7 +15,7 @@ date_added: YYYY-MM-DD
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination feature directory). On approval, update status above and pin the reviewed design revision. Record completed scope as Blueprint <design SHA> implemented at <code repository>@<landed code SHA>, with review/verification links and remaining acceptance gaps. Preserve that record when adding a draft or approved successor and its replacement scope. -->
 
-<!-- Copy to features/<capability>.blueprint.md. Replace prompts with subject-matter prose before review; use only real module/feature references. -->
+<!-- Copy to features/<capability>.blueprint.md. Follow ../README.md#authoring for the reader budget; replace prompts with prose and use real references. -->
 
 ## Problem and current behavior
 
@@ -23,11 +23,11 @@ date_added: YYYY-MM-DD
 
 ## Proposed behavior
 
-<!-- Walk through one representative end-to-end example, defining terms on first use. Embed the rendered flow diagram with useful alt text. -->
+<!-- Lead with a short before/after example, then walk one representative flow. Define terms on first use; add a diagram only when it clarifies the change. -->
 
 ## Responsibilities and interfaces
 
-<!-- Identify owners, inputs, outputs and authority boundaries. Embed the ownership/data-flow illustration. Explain the rationale and material tradeoffs; label interfaces that do not yet exist. -->
+<!-- Identify owners, inputs, outputs and authority boundaries. Explain material tradeoffs; label proposed interfaces. Reuse the flow illustration if it already explains ownership. -->
 
 ## Failure and recovery
 

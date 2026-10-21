@@ -61,6 +61,12 @@ jobs:
           fi
       - name: Check guide commands, snippets, links, tour references and notices
         run: npm run test:docs
+      - name: Check advisory Blueprint length
+        env:
+          BLUEPRINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+        run: |
+          python3 scripts/test-blueprint-length.py
+          python3 scripts/check-blueprint-length.py --base "$BLUEPRINT_BASE"
       - name: Explain selected checks
         env:
           CI_SCOPE: ${{ steps.scope.outputs.scope }}
