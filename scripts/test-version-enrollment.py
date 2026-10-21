@@ -43,7 +43,8 @@ class EnrollmentTest(unittest.TestCase):
             run("git", "commit", "-m", "feat: enroll package")
             enrolled = run("git", "rev-parse", "HEAD").strip()
             for name in ["README.md", "packages/core/README.MD", "docs/setup.md",
-                         "assets/brand/banner.png", "docs/images/flow.svg"]:
+                         "assets/brand/banner.png", "docs/images/flow.svg",
+                         "scripts/starter-qualification.ts"]:
                 file = root / name
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_text("documentation")
