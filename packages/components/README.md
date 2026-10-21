@@ -4,7 +4,7 @@ Optional renderer-neutral FaithfulCard content parsing, policy and image consent
 
 Requires Node >=22.12.0 and a TypeScript-aware bundler; exports are TypeScript source. Apache-2.0, with dependency licenses retained separately.
 
-The prepared prerelease is `0.5.1-rc.1`, intended for the `next` tag. Preparation does not establish npm availability. Install only after the release is announced.
+Release candidates are published under the npm `next` tag. Pin the same exact version of all saga a2ui packages used by your application.
 
 Use matching exact SAGA versions. At the consumer workspace root, pin `@a2ui/markdown-it` to `0.2.1` using your package manager override. React consumers use `@saga-a2ui/react/a2ui`, without direct A2UI dependencies. Keep the A2UI Zod 3 and MCP Zod 4 contexts separate.
 
