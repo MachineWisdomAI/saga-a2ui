@@ -1,4 +1,4 @@
-"""First enrollment of an existing unversioned package, then an ordinary bump."""
+"""Version enrollment and explicit PR intent through real Git repositories."""
 import json
 from pathlib import Path
 import subprocess
