@@ -20,7 +20,10 @@ export const mountOwners = new WeakMap<Element, MountOwner>();
  * surface element is the owner's own mount and the owner's surface is the one the element holds.
  * Light DOM or slotted content that never passes through the owner's shadow tree finds nothing.
  */
-export function hostOf(element: Element, surface: SurfaceModel<any>): InstanceHost | undefined {
+export function hostOf(
+  element: Element,
+  surface: SurfaceModel<any>,
+): InstanceHost | undefined {
   let nearestSurfaceElement: Element | undefined;
   let root = element.getRootNode();
   while (root instanceof ShadowRoot) {
@@ -28,7 +31,9 @@ export function hostOf(element: Element, surface: SurfaceModel<any>): InstanceHo
     if (host.localName === 'a2ui-surface') nearestSurfaceElement ??= host;
     const owner = mountOwners.get(host);
     if (owner) {
-      const sameMount = nearestSurfaceElement !== undefined && nearestSurfaceElement === owner.mount();
+      const sameMount =
+        nearestSurfaceElement !== undefined &&
+        nearestSurfaceElement === owner.mount();
       return owner.surface === surface && sameMount ? owner.host : undefined;
     }
     root = host.getRootNode();

@@ -1,7 +1,16 @@
 import type { InstanceHost, OpenInstance } from '@saga-a2ui/core/actions';
 import { useCallback, useLayoutEffect, useRef, type MouseEvent } from 'react';
-import { presentationFor, titleFor, type PlayControlAction } from '../playback/play-presentation.js';
-import { PLAY_CONTROL_ID, PlayControl, type PlayControlEvents, type PlaybackViewState } from '../playback/playback-view.js';
+import {
+  presentationFor,
+  titleFor,
+  type PlayControlAction,
+} from '../playback/play-presentation.js';
+import {
+  PLAY_CONTROL_ID,
+  PlayControl,
+  type PlayControlEvents,
+  type PlaybackViewState,
+} from '../playback/playback-view.js';
 import './play-control.css';
 
 /**
@@ -17,9 +26,13 @@ import './play-control.css';
  * `isLive` is a fresh pull at every call; the flag is cleared before `retire`, so a handle, a
  * binding and a press all see the control as gone from the first moment of cleanup.
  */
-function useControlInstance(host: InstanceHost | undefined): (action: PlayControlAction, native: Event) => void {
+function useControlInstance(
+  host: InstanceHost | undefined,
+): (action: PlayControlAction, native: Event) => void {
   // Written only by the layout effect below. A press reads it at press time, never at render time.
-  const instance = useRef<OpenInstance<PlayControlEvents> | undefined>(undefined);
+  const instance = useRef<OpenInstance<PlayControlEvents> | undefined>(
+    undefined,
+  );
   useLayoutEffect(() => {
     if (!host) return undefined;
     let committed = true;
@@ -38,7 +51,10 @@ function useControlInstance(host: InstanceHost | undefined): (action: PlayContro
       open.retire();
     };
   }, [host]);
-  return useCallback((action, native) => void instance.current?.activate(action, native), []);
+  return useCallback(
+    (action, native) => void instance.current?.activate(action, native),
+    [],
+  );
 }
 
 /**
@@ -51,7 +67,10 @@ function useControlInstance(host: InstanceHost | undefined): (action: PlayContro
  * is pending (`aria-disabled`, `aria-busy`), every change is announced by one polite status
  * region, and when a state removes the button while it had focus, focus moves to the status.
  */
-export function PlayControlView(props: { readonly host: InstanceHost | undefined; readonly state: PlaybackViewState }) {
+export function PlayControlView(props: {
+  readonly host: InstanceHost | undefined;
+  readonly state: PlaybackViewState;
+}) {
   const activate = useControlInstance(props.host);
   const shown = presentationFor(props.state);
   const statusRef = useRef<HTMLParagraphElement | null>(null);
@@ -61,7 +80,8 @@ export function PlayControlView(props: { readonly host: InstanceHost | undefined
   const buttonRef = useCallback((node: HTMLButtonElement | null) => {
     if (node === null) return undefined;
     return () => {
-      if (node.ownerDocument.activeElement === node) focusStranded.current = true;
+      if (node.ownerDocument.activeElement === node)
+        focusStranded.current = true;
     };
   }, []);
   useLayoutEffect(() => {
@@ -70,13 +90,21 @@ export function PlayControlView(props: { readonly host: InstanceHost | undefined
     statusRef.current?.focus();
   });
 
-  const press = (action: PlayControlAction, busy: boolean | undefined, event: MouseEvent): void => {
+  const press = (
+    action: PlayControlAction,
+    busy: boolean | undefined,
+    event: MouseEvent,
+  ): void => {
     if (busy) return; // a pending request ignores the press; the bound action's busy policy also does
     activate(action, event.nativeEvent);
   };
 
   return (
-    <div className="saga-play" data-testid="play-root" data-state={props.state.kind}>
+    <div
+      className="saga-play"
+      data-testid="play-root"
+      data-state={props.state.kind}
+    >
       {shown.button ? (
         <button
           type="button"
@@ -84,12 +112,21 @@ export function PlayControlView(props: { readonly host: InstanceHost | undefined
           data-testid="play-button"
           aria-disabled={shown.busy ? 'true' : 'false'}
           aria-busy={shown.busy ? 'true' : 'false'}
-          onClick={(event) => press(shown.button?.action ?? 'play', shown.busy, event)}
+          onClick={(event) =>
+            press(shown.button?.action ?? 'play', shown.busy, event)
+          }
         >
           {shown.button.label}
         </button>
       ) : null}
-      <p className="saga-play-status" data-testid="play-status" role="status" aria-live="polite" tabIndex={-1} ref={statusRef}>
+      <p
+        className="saga-play-status"
+        data-testid="play-status"
+        role="status"
+        aria-live="polite"
+        tabIndex={-1}
+        ref={statusRef}
+      >
         {shown.status}
       </p>
     </div>
@@ -97,7 +134,10 @@ export function PlayControlView(props: { readonly host: InstanceHost | undefined
 }
 
 /** The player page: the selected episode's title above its control. */
-export function PlayerPage(props: { readonly host: InstanceHost | undefined; readonly state: PlaybackViewState }) {
+export function PlayerPage(props: {
+  readonly host: InstanceHost | undefined;
+  readonly state: PlaybackViewState;
+}) {
   return (
     <main>
       <h1 data-testid="playback-title">{titleFor(props.state)}</h1>

@@ -1,9 +1,23 @@
 import { readFile } from 'node:fs/promises';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { expect, type Frame, type FrameLocator, type Page } from '@playwright/test';
-import { createContentPolicy, type ContentPolicy } from '@saga-a2ui/components/faithful-card';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
+import {
+  expect,
+  type Frame,
+  type FrameLocator,
+  type Page,
+} from '@playwright/test';
+import {
+  createContentPolicy,
+  type ContentPolicy,
+} from '@saga-a2ui/components/faithful-card';
 import { EPISODE_TOOL_NAME } from '../src/mcp/episode.js';
-import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import {
+  startEpisodeListener,
+  type EpisodeListener,
+} from '../src/mcp/listener.js';
 import { woff2Bytes } from './asset-fixtures.js';
 import type { HostedResource } from './host-fixture/host.js';
 
@@ -16,7 +30,8 @@ import type { HostedResource } from './host-fixture/host.js';
 const builtView = new URL('../dist/view/view.html', import.meta.url);
 export const IMAGE_HOST = 'images.example.com';
 export const IMAGE = `https://${IMAGE_HOST}/ok.png`;
-const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+const SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
 
 export interface Opened {
   readonly page: Page;
@@ -46,7 +61,11 @@ export interface OpenOptions {
   /** The description every episode has, or one chosen by episode id. */
   readonly description: string | ((episodeId: string) => string);
   /** How the host treats links: absent (no capability), allow, deny, or a custom handler. */
-  readonly hostLinks?: 'absent' | 'allow' | 'deny' | ((url: string) => Promise<{ isError?: boolean }>);
+  readonly hostLinks?:
+    | 'absent'
+    | 'allow'
+    | 'deny'
+    | ((url: string) => Promise<{ isError?: boolean }>);
   /** Rewrites the served document, e.g. to remove the restrictions or corrupt the configuration. */
   readonly transformHtml?: (html: string) => string;
   /** Skip waiting for the host handshake (a view that refuses to start never completes it). */
@@ -62,7 +81,10 @@ export async function cleanupServedResources(): Promise<void> {
   await Promise.all(listeners.splice(0).map((listener) => listener.close()));
 }
 
-export function policyOf(imageHosts: readonly string[], settings: object = {}): ContentPolicy {
+export function policyOf(
+  imageHosts: readonly string[],
+  settings: object = {},
+): ContentPolicy {
   const created = createContentPolicy({ imageHosts, ...settings });
   if (!created.ok) throw new Error(created.failure.message);
   return created.policy;
@@ -70,20 +92,29 @@ export function policyOf(imageHosts: readonly string[], settings: object = {}): 
 
 function policyFor(options: OpenOptions): ContentPolicy {
   return policyOf(options.imageHosts ?? [], {
-    ...(options.fontOrigins === undefined ? {} : { fontOrigins: options.fontOrigins }),
+    ...(options.fontOrigins === undefined
+      ? {}
+      : { fontOrigins: options.fontOrigins }),
     ...(options.level === undefined ? {} : { level: options.level }),
-    ...(options.blockedPresentation === undefined ? {} : { blockedPresentation: options.blockedPresentation }),
+    ...(options.blockedPresentation === undefined
+      ? {}
+      : { blockedPresentation: options.blockedPresentation }),
   });
 }
 
-export async function serveResource(options: OpenOptions): Promise<{ resource: HostedResource; client: Client }> {
+export async function serveResource(
+  options: OpenOptions,
+): Promise<{ resource: HostedResource; client: Client }> {
   const listener = await startEpisodeListener({
     viewHtml: await readFile(builtView, 'utf8'),
     catalog: {
       find: (id) => ({
         id,
         title: 'Episode title',
-        description: typeof options.description === 'function' ? options.description(id) : options.description,
+        description:
+          typeof options.description === 'function'
+            ? options.description(id)
+            : options.description,
       }),
     },
     contentPolicy: policyFor(options),
@@ -91,15 +122,25 @@ export async function serveResource(options: OpenOptions): Promise<{ resource: H
   });
   listeners.push(listener);
   const client = new Client({ name: 'e2e-host', version: '0.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(listener.url)));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(listener.url)),
+  );
   clients.push(client);
   const { tools } = await client.listTools();
-  const uri = (tools[0]?._meta as { ui: { resourceUri: string } }).ui.resourceUri;
+  const uri = (tools[0]?._meta as { ui: { resourceUri: string } }).ui
+    .resourceUri;
   const { contents } = await client.readResource({ uri });
   const [content] = contents;
-  if (!content || !('text' in content)) throw new Error('resources/read returned no text');
+  if (!content || !('text' in content))
+    throw new Error('resources/read returned no text');
   const ui = (content._meta as { ui: { csp: HostedResource['csp'] } }).ui;
-  return { resource: { html: options.transformHtml?.(content.text) ?? content.text, csp: ui.csp }, client };
+  return {
+    resource: {
+      html: options.transformHtml?.(content.text) ?? content.text,
+      csp: ui.csp,
+    },
+    client,
+  };
 }
 
 /**
@@ -109,34 +150,82 @@ export async function serveResource(options: OpenOptions): Promise<{ resource: H
  * unlisted origin. Playwright adds a permissive CORS header to a fulfilled response that has none,
  * so a denial has to name another origin to reach the browser's own CORS check.
  */
-export async function observeNetwork(page: Page, requests: string[]): Promise<void> {
+export async function observeNetwork(
+  page: Page,
+  requests: string[],
+): Promise<void> {
   await page.route(/^https:\/\//, async (route) => {
     const url = new URL(route.request().url());
     requests.push(url.href);
-    const cors = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
+    const cors = {
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    };
     if (url.pathname === '/redirect-out.png') {
-      return route.fulfill({ status: 302, headers: { ...cors, location: 'https://other.example.net/stolen.png' } });
+      return route.fulfill({
+        status: 302,
+        headers: { ...cors, location: 'https://other.example.net/stolen.png' },
+      });
     }
     if (url.pathname === '/redirect-font.woff2') {
-      return route.fulfill({ status: 302, headers: { ...cors, location: 'https://other.example.net/stolen.woff2' } });
+      return route.fulfill({
+        status: 302,
+        headers: {
+          ...cors,
+          location: 'https://other.example.net/stolen.woff2',
+        },
+      });
     }
     if (url.pathname === '/cors-denied.woff2') {
-      const denying = { 'access-control-allow-origin': 'https://unrelated.example', 'cache-control': 'no-store' };
-      return route.fulfill({ status: 200, headers: denying, contentType: 'font/woff2', body: woff2Bytes() });
+      const denying = {
+        'access-control-allow-origin': 'https://unrelated.example',
+        'cache-control': 'no-store',
+      };
+      return route.fulfill({
+        status: 200,
+        headers: denying,
+        contentType: 'font/woff2',
+        body: woff2Bytes(),
+      });
     }
     if (url.pathname.endsWith('.woff2')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'font/woff2', body: woff2Bytes() });
+      return route.fulfill({
+        status: 200,
+        headers: cors,
+        contentType: 'font/woff2',
+        body: woff2Bytes(),
+      });
     }
     if (url.pathname.endsWith('.js')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'text/javascript', body: 'window.__external = 1;' });
+      return route.fulfill({
+        status: 200,
+        headers: cors,
+        contentType: 'text/javascript',
+        body: 'window.__external = 1;',
+      });
     }
     if (url.pathname.endsWith('.css')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'text/css', body: 'body { color: red; }' });
+      return route.fulfill({
+        status: 200,
+        headers: cors,
+        contentType: 'text/css',
+        body: 'body { color: red; }',
+      });
     }
     if (url.pathname.endsWith('.mp3')) {
-      return route.fulfill({ status: 200, headers: cors, contentType: 'audio/mpeg', body: 'not audio' });
+      return route.fulfill({
+        status: 200,
+        headers: cors,
+        contentType: 'audio/mpeg',
+        body: 'not audio',
+      });
     }
-    return route.fulfill({ status: 200, headers: cors, contentType: 'image/svg+xml', body: SVG });
+    return route.fulfill({
+      status: 200,
+      headers: cors,
+      contentType: 'image/svg+xml',
+      body: SVG,
+    });
   });
 }
 
@@ -147,11 +236,14 @@ export async function open(page: Page, options: OpenOptions): Promise<Opened> {
   await observeNetwork(page, requests);
   const links = options.hostLinks ?? 'absent';
   if (links !== 'absent') {
-    await page.exposeFunction('handleOpenLink', async (params: { url: string }) => {
-      openLinkCalls.push(params.url);
-      if (typeof links === 'function') return links(params.url);
-      return links === 'deny' ? { isError: true } : {};
-    });
+    await page.exposeFunction(
+      'handleOpenLink',
+      async (params: { url: string }) => {
+        openLinkCalls.push(params.url);
+        if (typeof links === 'function') return links(params.url);
+        return links === 'deny' ? { isError: true } : {};
+      },
+    );
   }
   const { resource, client } = await serveResource(options);
   await page.goto('/host-fixture/index.html');
@@ -162,11 +254,20 @@ export async function open(page: Page, options: OpenOptions): Promise<Opened> {
   } else {
     await mounted;
   }
-  const frame = page.frames().find((candidate) => candidate !== page.mainFrame());
-  if (frame === undefined) throw new Error('the host fixture did not mount a view frame');
+  const frame = page
+    .frames()
+    .find((candidate) => candidate !== page.mainFrame());
+  if (frame === undefined)
+    throw new Error('the host fixture did not mount a view frame');
   if (options.expectStart !== false) {
-    const result = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId: 'ep-1' } });
-    await page.evaluate((payload) => window.deliverToolResult?.(payload), result as never);
+    const result = await client.callTool({
+      name: EPISODE_TOOL_NAME,
+      arguments: { episodeId: 'ep-1' },
+    });
+    await page.evaluate(
+      (payload) => window.deliverToolResult?.(payload),
+      result as never,
+    );
   }
   page.on('framenavigated', (navigated) => navigations.push(navigated.url()));
   return {
@@ -178,8 +279,14 @@ export async function open(page: Page, options: OpenOptions): Promise<Opened> {
     openLinkCalls,
     navigations,
     async deliverEpisode(episodeId) {
-      const result = await client.callTool({ name: EPISODE_TOOL_NAME, arguments: { episodeId } });
-      await page.evaluate((payload) => window.deliverToolResult?.(payload), result as never);
+      const result = await client.callTool({
+        name: EPISODE_TOOL_NAME,
+        arguments: { episodeId },
+      });
+      await page.evaluate(
+        (payload) => window.deliverToolResult?.(payload),
+        result as never,
+      );
     },
     async teardown() {
       await page.evaluate(() => window.teardownView?.());
@@ -187,4 +294,5 @@ export async function open(page: Page, options: OpenOptions): Promise<Opened> {
   };
 }
 
-export const imageRequests = (requests: readonly string[]) => requests.filter((url) => /\.(png|svg)$/.test(new URL(url).pathname));
+export const imageRequests = (requests: readonly string[]) =>
+  requests.filter((url) => /\.(png|svg)$/.test(new URL(url).pathname));

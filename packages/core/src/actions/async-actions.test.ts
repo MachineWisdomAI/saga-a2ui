@@ -13,7 +13,18 @@ import {
   type Outcome,
   type PrerequisiteContext,
 } from './index.js';
-import { Control, elapse, gate, newHost, renderInstance, rig, settle, type ControlEvents, type FakeInstance, type Rig } from './fake-adapter.test-support.js';
+import {
+  Control,
+  elapse,
+  gate,
+  newHost,
+  renderInstance,
+  rig,
+  settle,
+  type ControlEvents,
+  type FakeInstance,
+  type Rig,
+} from './fake-adapter.test-support.js';
 
 // Everything here goes through the public builder and the binding a handle returns, with the
 // renderer-free adapter and a controlled clock. Promises are gated by the test, so the order in
@@ -37,7 +48,13 @@ describe('a Save-style local action', () => {
     });
     const confirm = prerequisite(
       'confirm',
-      ({ provided, params }: PrerequisiteContext<{ readonly user: string }, { readonly text: string }>) => {
+      ({
+        provided,
+        params,
+      }: PrerequisiteContext<
+        { readonly user: string },
+        { readonly text: string }
+      >) => {
         order.push(`confirm:${provided.user}:${params.text}`);
         return proceed({ confirmed: true as const });
       },
@@ -48,7 +65,9 @@ describe('a Save-style local action', () => {
       .before(session)
       .before(confirm)
       .run(async ({ params, provided }) => {
-        order.push(`run:${provided.user}:${String(provided.confirmed)}:${params.text}`);
+        order.push(
+          `run:${provided.user}:${String(provided.confirmed)}:${params.text}`,
+        );
         return { savedAt: await savedAt.promise };
       })
       .build();
@@ -57,7 +76,11 @@ describe('a Save-style local action', () => {
     control.press();
     expect(binding.state.phase).toBe('running');
     await settle();
-    expect(order).toEqual(['session', 'confirm:u-1:draft', 'run:u-1:true:draft']);
+    expect(order).toEqual([
+      'session',
+      'confirm:u-1:draft',
+      'run:u-1:true:draft',
+    ]);
     expect(binding.state.phase).toBe('running');
 
     savedAt.resolve(7);
@@ -97,7 +120,9 @@ describe('a Save-style local action', () => {
   it('a refusal stops the handler and reaches the failure hook as a refusal, not as an error', async () => {
     const stages: unknown[] = [];
     let ran = false;
-    const signIn = prerequisite('session', async () => refuse('sign-in-required'));
+    const signIn = prerequisite('session', async () =>
+      refuse('sign-in-required'),
+    );
     const never = prerequisite('never-reached', () => {
       stages.push('second prerequisite ran');
       return proceed();
@@ -119,7 +144,16 @@ describe('a Save-style local action', () => {
     await settle();
 
     expect(ran).toBe(false);
-    expect(stages).toEqual(['prerequisites', { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required', category: 'application' }, false]);
+    expect(stages).toEqual([
+      'prerequisites',
+      {
+        kind: 'refused',
+        prerequisite: 'session',
+        reason: 'sign-in-required',
+        category: 'application',
+      },
+      false,
+    ]);
     expect(binding.state.phase).toBe('idle');
   });
 
@@ -134,7 +168,14 @@ describe('a Save-style local action', () => {
       .before(bad)
       .run(() => undefined)
       .limits({ hookMs: 1000 })
-      .onFailure((context) => void seen.push(context.stage, 'provided' in context, context.failure.kind))
+      .onFailure(
+        (context) =>
+          void seen.push(
+            context.stage,
+            'provided' in context,
+            context.failure.kind,
+          ),
+      )
       .build();
     const { control } = rig(action);
 
@@ -192,9 +233,11 @@ describe('a Save-style local action', () => {
 
   it('hands a synchronous failure to the event caller only when no failure hook receives it', async () => {
     const boom = new Error('boom');
-    const unhandled = Action.local<Press>('unhandled').run(() => {
-      throw boom;
-    }).build();
+    const unhandled = Action.local<Press>('unhandled')
+      .run(() => {
+        throw boom;
+      })
+      .build();
     const handled = Action.local<Press>('handled')
       .run(() => {
         throw boom;
@@ -244,7 +287,13 @@ describe('the work deadline and the hook budget', () => {
     expect(binding.state.phase).toBe('running');
     await elapse(1);
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(aborted).toBe(true);
     expect(binding.state.phase).toBe('idle');
 
@@ -269,7 +318,10 @@ describe('the work deadline and the hook budget', () => {
       .limits({ deadlineMs: 2000, hookMs: 1000 })
       .observe((event) => void observed.push(event))
       .onSuccess(() => void seen.push('success'))
-      .onFailure((context) => void seen.push(`failure:${context.stage}:${context.failure.kind}`))
+      .onFailure(
+        (context) =>
+          void seen.push(`failure:${context.stage}:${context.failure.kind}`),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -295,7 +347,11 @@ describe('the work deadline and the hook budget', () => {
         return 'saved';
       })
       .limits({ deadlineMs: 500, hookMs: 1000 })
-      .onSuccess(() => new Promise((resolve) => setTimeout(resolve, 900)).then(() => undefined))
+      .onSuccess(() =>
+        new Promise((resolve) => setTimeout(resolve, 900)).then(
+          () => undefined,
+        ),
+      )
       .onFinally(({ outcome }) => void outcomes.push(outcome))
       .build();
     const { control, binding } = rig(action);
@@ -334,13 +390,23 @@ describe('the work deadline and the hook budget', () => {
       .onSuccess(async () => {
         throw new Error('view failed');
       })
-      .onFailure((context) => void seen.push(context.stage === 'running' ? context.failure : context.stage))
+      .onFailure(
+        (context) =>
+          void seen.push(
+            context.stage === 'running' ? context.failure : context.stage,
+          ),
+      )
       .build();
     const overrunning = Action.local<Press>('overruns')
       .run(() => ({ id: 2 }))
       .limits({ hookMs: 1000 })
       .onSuccess(() => new Promise<void>(() => undefined))
-      .onFailure((context) => void seen.push(context.stage === 'running' ? context.failure : context.stage))
+      .onFailure(
+        (context) =>
+          void seen.push(
+            context.stage === 'running' ? context.failure : context.stage,
+          ),
+      )
       .build();
 
     rig(throwing).control.press();
@@ -348,14 +414,20 @@ describe('the work deadline and the hook budget', () => {
     await elapse(1000);
 
     expect(seen).toEqual([
-      { kind: 'success-hook-error', error: new Error('view failed'), result: { id: 1 }, category: 'unknown' },
+      {
+        kind: 'success-hook-error',
+        error: new Error('view failed'),
+        result: { id: 1 },
+        category: 'unknown',
+      },
       { kind: 'success-hook-timeout', result: { id: 2 }, category: 'timeout' },
     ]);
   });
 
   it('gives the outcome hook and the final hook separate budgets', async () => {
     const reported: CleanupError[][] = [];
-    const slow = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const slow = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
     const action = Action.local<Press>('budgets')
       .run(() => {
         throw new Error('x');
@@ -397,9 +469,15 @@ describe('the work deadline and the hook budget', () => {
     expect(binding.state.phase).toBe('settling');
     await elapse(1);
 
-    expect(reported).toEqual([[{ step: 'onFailure', reason: 'budget-exceeded' }]]);
+    expect(reported).toEqual([
+      [{ step: 'onFailure', reason: 'budget-exceeded' }],
+    ]);
     expect(binding.state.phase).toBe('idle');
-    expect(observed.filter((event) => event.phase === 'cleanup-error').map((event) => event.cleanupStep)).toEqual(['onFailure']);
+    expect(
+      observed
+        .filter((event) => event.phase === 'cleanup-error')
+        .map((event) => event.cleanupStep),
+    ).toEqual(['onFailure']);
   });
 
   it('bounds a final hook that never settles or throws, reporting the step name only', async () => {
@@ -428,7 +506,10 @@ describe('the work deadline and the hook budget', () => {
     expect(first.binding.state.phase).toBe('idle');
     expect(second.binding.state.phase).toBe('idle');
     const reports = observed.filter((event) => event.phase === 'cleanup-error');
-    expect(reports.map((event) => event.cleanupStep)).toEqual(['onFinally', 'onFinally']);
+    expect(reports.map((event) => event.cleanupStep)).toEqual([
+      'onFinally',
+      'onFinally',
+    ]);
     expect(JSON.stringify(observed)).not.toContain('secret detail');
   });
 
@@ -542,7 +623,8 @@ describe('callback eligibility', () => {
       .onFailure(async ({ current, failure }) => {
         const which = call;
         if (which === 1) await slow.promise;
-        if (current() && failure.kind === 'handler-error') writes.push(`presented ${which}`);
+        if (current() && failure.kind === 'handler-error')
+          writes.push(`presented ${which}`);
       })
       .build();
     const { control } = rig(action);
@@ -565,7 +647,9 @@ describe('callback eligibility', () => {
       .run(() => result.promise)
       .limits({ hookMs: 1000 })
       .onSuccess(() => void seen.push('success'))
-      .onCanceled(({ stage, cause }) => void seen.push(`canceled:${stage}:${cause}`))
+      .onCanceled(
+        ({ stage, cause }) => void seen.push(`canceled:${stage}:${cause}`),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -618,7 +702,11 @@ describe('decided outcomes are immutable', () => {
     expect(hookCurrent?.()).toBe(false);
     await settle();
     expect(calls).toEqual(['onFailure started']);
-    expect(finalOutcome).toMatchObject({ status: 'failed', stage: 'running', failure: { kind: 'handler-error' } });
+    expect(finalOutcome).toMatchObject({
+      status: 'failed',
+      stage: 'running',
+      failure: { kind: 'handler-error' },
+    });
     expect(finalObsolete).toBe(true);
     expect(diagnostics).toEqual([{ step: 'onFailure', reason: 'obsolete' }]);
     expect(row.binding.state.phase).toBe('idle');
@@ -716,7 +804,11 @@ describe('decided outcomes are immutable', () => {
 });
 
 /** A control showing one row whose item identity is `id`, with the subject reader attached. */
-function rigRow(definition: unknown, initial: Record<string, unknown> = { id: 'a' }, observable?: boolean): Rig {
+function rigRow(
+  definition: unknown,
+  initial: Record<string, unknown> = { id: 'a' },
+  observable?: boolean,
+): Rig {
   const host = newHost();
   const control = renderInstance(host, 'row', {
     data: initial,
@@ -725,7 +817,9 @@ function rigRow(definition: unknown, initial: Record<string, unknown> = { id: 'a
   let binding: ActionBinding | undefined;
   host.register((view) => {
     view.watchById('row', Control, (handle) => {
-      binding = handle.bindAction('activate', definition as never, { subject: () => handle.read('id') });
+      binding = handle.bindAction('activate', definition as never, {
+        subject: () => handle.read('id'),
+      });
     });
   });
   if (binding === undefined) throw new Error('nothing was bound');
@@ -769,7 +863,10 @@ describe('the busy policy', () => {
     const started = observed.find((event) => event.phase === 'started');
     const ignored = observed.filter((event) => event.phase === 'ignored');
     expect(ignored).toHaveLength(2);
-    expect(ignored[0]).toMatchObject({ ignoredReason: 'busy', busyInvocationId: started?.invocationId });
+    expect(ignored[0]).toMatchObject({
+      ignoredReason: 'busy',
+      busyInvocationId: started?.invocationId,
+    });
     expect(ignored[0]).not.toHaveProperty('invocationId');
   });
 
@@ -787,7 +884,9 @@ describe('the busy policy', () => {
       .limits({ hookMs: 1000 })
       .whenBusy('replace')
       .onSuccess(({ result }) => void seen.push(`success:${result}`))
-      .onCanceled(({ cause, stage }) => void seen.push(`canceled:${stage}:${cause}`))
+      .onCanceled(
+        ({ cause, stage }) => void seen.push(`canceled:${stage}:${cause}`),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -913,10 +1012,17 @@ describe('the success hook settles after the instance stopped being current', ()
         await hookGate.promise;
         if (extra.fail === true) throw new Error('write failed');
       })
-      .onCanceled(({ cause, stage }) => void seen.push(`canceled:${stage}:${cause}`))
+      .onCanceled(
+        ({ cause, stage }) => void seen.push(`canceled:${stage}:${cause}`),
+      )
       .onFinally(({ outcome }) => void outcomes.push(outcome))
       .build();
-    return { hookGate, outcomes, seen, row: rigRow(action, { id: 'a' }, false) };
+    return {
+      hookGate,
+      outcomes,
+      seen,
+      row: rigRow(action, { id: 'a' }, false),
+    };
   }
 
   it('cancels with the result retained when the subject changed and nothing woke the runtime', async () => {
@@ -929,8 +1035,18 @@ describe('the success hook settles after the instance stopped being current', ()
     hookGate.resolve();
     await settle();
 
-    expect(outcomes).toEqual([{ status: 'canceled', cause: 'subject-changed', stage: 'completing', result: 42 }]);
-    expect(seen).toEqual(['success-hook', 'canceled:completing:subject-changed']);
+    expect(outcomes).toEqual([
+      {
+        status: 'canceled',
+        cause: 'subject-changed',
+        stage: 'completing',
+        result: 42,
+      },
+    ]);
+    expect(seen).toEqual([
+      'success-hook',
+      'canceled:completing:subject-changed',
+    ]);
     expect(row.binding.state.phase).toBe('idle');
   });
 
@@ -943,7 +1059,14 @@ describe('the success hook settles after the instance stopped being current', ()
     hookGate.resolve();
     await settle();
 
-    expect(outcomes).toEqual([{ status: 'canceled', cause: 'subject-changed', stage: 'completing', result: 42 }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'canceled',
+        cause: 'subject-changed',
+        stage: 'completing',
+        result: 42,
+      },
+    ]);
   });
 
   it('cancels with the result retained when the instance stopped being live and nothing woke the runtime', async () => {
@@ -956,7 +1079,11 @@ describe('the success hook settles after the instance stopped being current', ()
     await settle();
 
     expect(outcomes).toHaveLength(1);
-    expect(outcomes[0]).toMatchObject({ status: 'canceled', stage: 'completing', result: 42 });
+    expect(outcomes[0]).toMatchObject({
+      status: 'canceled',
+      stage: 'completing',
+      result: 42,
+    });
     expect(row.binding.state.phase).toBe('disposed');
   });
 
@@ -1021,7 +1148,13 @@ describe('the work deadline ends the work callback before it announces the abort
 
     expect(observed).toEqual([false]);
     expect(written).toEqual([]);
-    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(decisions).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(failureCurrent).toBe(true);
     expect(binding.state.phase).toBe('idle');
   });
@@ -1051,7 +1184,13 @@ describe('the work deadline ends the work callback before it announces the abort
 
     expect(observed).toEqual([false]);
     expect(written).toEqual([]);
-    expect(decisions).toEqual([{ status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(decisions).toEqual([
+      {
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(binding.state.phase).toBe('idle');
   });
 
@@ -1071,7 +1210,13 @@ describe('the work deadline ends the work callback before it announces the abort
     await elapse(10);
     await elapse(1000);
 
-    expect(decisions).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(decisions).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
   });
 });
 
@@ -1087,8 +1232,14 @@ describe('the optional subject reader', () => {
         return call === 1 ? result.promise : params.id;
       })
       .limits({ hookMs: 1000 })
-      .onSuccess(({ params, result: value }) => void seen.push(`archived ${params.id} -> ${value}`))
-      .onCanceled(({ params, cause }) => void seen.push(`canceled ${params.id}: ${cause}`))
+      .onSuccess(
+        ({ params, result: value }) =>
+          void seen.push(`archived ${params.id} -> ${value}`),
+      )
+      .onCanceled(
+        ({ params, cause }) =>
+          void seen.push(`canceled ${params.id}: ${cause}`),
+      )
       .build();
     const row = rigRow(action);
 
@@ -1197,10 +1348,15 @@ describe('the optional subject reader', () => {
       .onCanceled(({ cause }) => void seen.push(cause))
       .build();
     const host = newHost();
-    const control = renderInstance(host, 'row', { data: { id: 'a', revision: 1 } });
+    const control = renderInstance(host, 'row', {
+      data: { id: 'a', revision: 1 },
+    });
     host.register((view) =>
       view.watchById('row', Control, (handle) => {
-        handle.bindAction('activate', action, { subject: () => `${String(handle.read('id'))}:${String(handle.read('revision'))}` });
+        handle.bindAction('activate', action, {
+          subject: () =>
+            `${String(handle.read('id'))}:${String(handle.read('revision'))}`,
+        });
       }),
     );
 
@@ -1216,7 +1372,12 @@ describe('the optional subject reader', () => {
     const action = Action.local<Press>('throwing-subject')
       .run(() => new Promise<void>(() => undefined))
       .limits({ hookMs: 1000 })
-      .onFailure((context) => void seen.push(context.stage === 'input' ? context.failure.kind : 'other'))
+      .onFailure(
+        (context) =>
+          void seen.push(
+            context.stage === 'input' ? context.failure.kind : 'other',
+          ),
+      )
       .onCanceled(({ cause }) => void seen.push(cause))
       .build();
     const host = newHost();
@@ -1288,7 +1449,13 @@ describe('the optional subject reader', () => {
         throw new Error('adapter cannot observe');
       },
     });
-    host.register((view) => view.watchById('c', Control, (handle) => void handle.bindAction('activate', action)));
+    host.register((view) =>
+      view.watchById(
+        'c',
+        Control,
+        (handle) => void handle.bindAction('activate', action),
+      ),
+    );
 
     expect(instance.activate('activate', 'click')).toBe('started');
     await settle();
@@ -1311,7 +1478,9 @@ describe('cancellation stops waiting on an uncooperative promise', () => {
       )
       .run(() => void calls.push('handler'))
       .limits({ hookMs: 1000 })
-      .onCanceled(({ stage, cause }) => void calls.push(`canceled:${stage}:${cause}`))
+      .onCanceled(
+        ({ stage, cause }) => void calls.push(`canceled:${stage}:${cause}`),
+      )
       .onFinally(({ outcome }) => void calls.push(`finally:${outcome.status}`))
       .build();
     const { control, binding } = rig(action);
@@ -1321,7 +1490,10 @@ describe('cancellation stops waiting on an uncooperative promise', () => {
     waiting.resolve(proceed());
     await settle();
 
-    expect(calls).toEqual(['canceled:prerequisites:disposed', 'finally:canceled']);
+    expect(calls).toEqual([
+      'canceled:prerequisites:disposed',
+      'finally:canceled',
+    ]);
     expect(binding.state.phase).toBe('disposed');
   });
 
@@ -1337,7 +1509,12 @@ describe('cancellation stops waiting on an uncooperative promise', () => {
         return hook.promise;
       })
       .onFailure(() => void calls.push('failure hook'))
-      .onCanceled((context) => void calls.push(context.stage === 'completing' ? context.result : context.stage))
+      .onCanceled(
+        (context) =>
+          void calls.push(
+            context.stage === 'completing' ? context.result : context.stage,
+          ),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -1411,10 +1588,22 @@ describe('observers and listeners cannot affect the action or leak', () => {
       'finished',
     ]);
     const text = JSON.stringify(observed);
-    for (const secret of ['PARAM-SECRET', 'RESULT-SECRET', 'ERROR-SECRET']) expect(text).not.toContain(secret);
-    expect(new Set(observed.map((event) => event.bindingId))).toEqual(new Set([binding.id]));
-    expect(observed[2]).toMatchObject({ status: 'failed', failureKind: 'success-hook-error' });
-    expect(Object.keys(observed[0]!).sort()).toEqual(['bindingId', 'elapsedMs', 'invocationId', 'label', 'phase']);
+    for (const secret of ['PARAM-SECRET', 'RESULT-SECRET', 'ERROR-SECRET'])
+      expect(text).not.toContain(secret);
+    expect(new Set(observed.map((event) => event.bindingId))).toEqual(
+      new Set([binding.id]),
+    );
+    expect(observed[2]).toMatchObject({
+      status: 'failed',
+      failureKind: 'success-hook-error',
+    });
+    expect(Object.keys(observed[0]!).sort()).toEqual([
+      'bindingId',
+      'elapsedMs',
+      'invocationId',
+      'label',
+      'phase',
+    ]);
   });
 
   it('is not changed by an observer or listener that throws or returns a rejected promise', async () => {
@@ -1454,25 +1643,47 @@ describe('observers and listeners cannot affect the action or leak', () => {
 });
 
 describe('what the runtime refuses when the types are bypassed', () => {
-  const draft = () => Action.local<Press>('x') as unknown as Record<string, (...args: unknown[]) => never>;
+  const draft = () =>
+    Action.local<Press>('x') as unknown as Record<
+      string,
+      (...args: unknown[]) => never
+    >;
 
   it('refuses limits that are not finite positive numbers, and accepts hooks without limits', () => {
-    const withHandler = draft().run!(() => undefined) as unknown as Record<string, (...args: unknown[]) => never>;
+    const withHandler = draft().run!(() => undefined) as unknown as Record<
+      string,
+      (...args: unknown[]) => never
+    >;
 
-    for (const bad of [{ hookMs: 0 }, { hookMs: -1 }, { hookMs: Number.NaN }, { hookMs: Number.POSITIVE_INFINITY }, { hookMs: '5' }]) {
+    for (const bad of [
+      { hookMs: 0 },
+      { hookMs: -1 },
+      { hookMs: Number.NaN },
+      { hookMs: Number.POSITIVE_INFINITY },
+      { hookMs: '5' },
+    ]) {
       expect(() => withHandler.limits!(bad)).toThrow(/hookMs/);
     }
-    expect(() => withHandler.limits!({ hookMs: 1, deadlineMs: 0 })).toThrow(/deadlineMs/);
+    expect(() => withHandler.limits!({ hookMs: 1, deadlineMs: 0 })).toThrow(
+      /deadlineMs/,
+    );
     expect(() => withHandler.onSuccess!(() => undefined)).not.toThrow();
     expect(() => draft().limits!({ hookMs: 1 })).toThrow(/can only follow run/);
     expect(() => withHandler.whenBusy!('queue')).toThrow(/ignore/);
   });
 
   it('refuses a repeated registration, and keeps two hooks on one retained alias separate', () => {
-    const limited = (Action.local<Press>('x').run(() => undefined) as unknown as { limits(l: unknown): Record<string, (...args: unknown[]) => unknown> }).limits({
+    const limited = (
+      Action.local<Press>('x').run(() => undefined) as unknown as {
+        limits(l: unknown): Record<string, (...args: unknown[]) => unknown>;
+      }
+    ).limits({
       hookMs: 1,
     });
-    const first = limited.onSuccess!(() => undefined) as Record<string, (...args: unknown[]) => unknown>;
+    const first = limited.onSuccess!(() => undefined) as Record<
+      string,
+      (...args: unknown[]) => unknown
+    >;
 
     expect(() => first.onSuccess!(() => undefined)).toThrow(/once/);
     expect(() => first.limits!({ hookMs: 2 })).toThrow(/once/);
@@ -1482,10 +1693,14 @@ describe('what the runtime refuses when the types are bypassed', () => {
   });
 
   it('refuses input after before, a prerequisite without a run function, and a non-function hook', () => {
-    const afterBefore = (Action.local<Press>('x') as unknown as { before(p: unknown): Record<string, (...args: unknown[]) => unknown> }).before(
-      prerequisite('ok', () => proceed()),
+    const afterBefore = (
+      Action.local<Press>('x') as unknown as {
+        before(p: unknown): Record<string, (...args: unknown[]) => unknown>;
+      }
+    ).before(prerequisite('ok', () => proceed()));
+    expect(() => afterBefore.input!(() => 1)).toThrow(
+      /input can be declared once/,
     );
-    expect(() => afterBefore.input!(() => 1)).toThrow(/input can be declared once/);
     expect(() => draft().before!({ label: 'no run' })).toThrow(/prerequisite/);
     expect(() => prerequisite('', () => proceed())).toThrow(/label/);
   });
@@ -1496,12 +1711,26 @@ describe('what the types guarantee', () => {
   it('orders prerequisites by what they need and types the handler by what they provided', () => {
     // Never called: the lines below compile or fail to compile, and several would throw if they ran.
     const checks = (): void => {
-      const session = prerequisite('session', () => proceed({ session: { userKey: 'u' } }));
-      const confirm = prerequisite('confirm', ({ provided }: PrerequisiteContext<{ readonly session: { readonly userKey: string } }, unknown>) =>
-        proceed({ confirmed: provided.session.userKey === 'u' }),
+      const session = prerequisite('session', () =>
+        proceed({ session: { userKey: 'u' } }),
       );
-      const needsNote = prerequisite('needs-note', ({ params }: PrerequisiteContext<unknown, { readonly noteId: string }>) => proceed({ n: params.noteId }));
-  
+      const confirm = prerequisite(
+        'confirm',
+        ({
+          provided,
+        }: PrerequisiteContext<
+          { readonly session: { readonly userKey: string } },
+          unknown
+        >) => proceed({ confirmed: provided.session.userKey === 'u' }),
+      );
+      const needsNote = prerequisite(
+        'needs-note',
+        ({
+          params,
+        }: PrerequisiteContext<unknown, { readonly noteId: string }>) =>
+          proceed({ n: params.noteId }),
+      );
+
       // @ts-expect-error a prerequisite cannot come before the one that provides what it needs
       Action.local<Press>('misordered').before(confirm);
       // @ts-expect-error a prerequisite that needs params fails for an action that extracts none
@@ -1511,26 +1740,44 @@ describe('what the types guarantee', () => {
         .before(session)
         .before(confirm)
         .before(needsNote)
-        .run(({ provided, params }) => `${provided.session.userKey}${String(provided.confirmed)}${provided.n}${params.noteId}`)
+        .run(
+          ({ provided, params }) =>
+            `${provided.session.userKey}${String(provided.confirmed)}${provided.n}${params.noteId}`,
+        )
         .limits({ hookMs: 1 })
         .onSuccess(({ result }) => void result.toUpperCase())
         .build();
-  
-      // @ts-expect-error `provided` is unknown until a prerequisite provides something
-      Action.local<Press>('unknown-provided').run(({ provided }) => provided.session);
+
+      Action.local<Press>('unknown-provided').run(
+        // @ts-expect-error `provided` is unknown until a prerequisite provides something
+        ({ provided }) => provided.session,
+      );
       // Hooks need no limits: the SDK defaults apply.
-      Action.local<Press>('no-limits').run(() => 1).onSuccess(() => undefined).build();
-      // @ts-expect-error a hook is registered once
-      Action.local<Press>('twice').run(() => 1).limits({ hookMs: 1 }).onSuccess(() => undefined).onSuccess;
-      // @ts-expect-error limits are declared once
-      Action.local<Press>('limits-twice').run(() => 1).limits({ hookMs: 1 }).limits;
+      Action.local<Press>('no-limits')
+        .run(() => 1)
+        .onSuccess(() => undefined)
+        .build();
+      Action.local<Press>('twice')
+        .run(() => 1)
+        .limits({ hookMs: 1 })
+        // @ts-expect-error a hook is registered once
+        .onSuccess(() => undefined).onSuccess;
+      Action.local<Press>('limits-twice')
+        .run(() => 1)
+        // @ts-expect-error limits are declared once
+        .limits({ hookMs: 1 }).limits;
       // Each setting is optional on its own.
-      Action.local<Press>('no-hook-budget').run(() => 1).limits({ deadlineMs: 1 }).build();
+      Action.local<Press>('no-hook-budget')
+        .run(() => 1)
+        .limits({ deadlineMs: 1 })
+        .build();
       Action.local<Press>('failure-union')
         .run(() => 1)
         .limits({ hookMs: 1 })
-        // @ts-expect-error a failure before the handler started has no `provided`
-        .onFailure((context) => (context.stage === 'prerequisites' ? context.provided : undefined))
+        .onFailure((context) =>
+          // @ts-expect-error a failure before the handler started has no `provided`
+          context.stage === 'prerequisites' ? context.provided : undefined,
+        )
         .build();
       const cause: CancelCause = 'replaced';
       void cause;

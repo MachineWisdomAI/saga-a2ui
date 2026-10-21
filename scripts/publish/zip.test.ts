@@ -18,7 +18,11 @@ describe('writeZip', () => {
 
   it('round-trips the files and records no time that could change the digest', () => {
     const bytes = writeZip(files);
-    expect(readZip(bytes).map((entry) => [entry.path, Buffer.from(entry.data).toString()]).sort()).toEqual([
+    expect(
+      readZip(bytes)
+        .map((entry) => [entry.path, Buffer.from(entry.data).toString()])
+        .sort(),
+    ).toEqual([
       ['assets/logo.svg', '<svg/>'],
       ['plugin.json', '{"name":"a"}\n'],
     ]);
@@ -26,8 +30,17 @@ describe('writeZip', () => {
     expect(bytes.readUInt16LE(12)).toBe(33);
   });
 
-  it.each(['../escape.txt', '/absolute.txt', 'a//b.txt', 'a\\b.txt', 'dir/', ''])('refuses to write the path %j', (entryPath) => {
-    expect(() => writeZip([{ path: entryPath, data: text('x') }])).toThrow(ZipError);
+  it.each([
+    '../escape.txt',
+    '/absolute.txt',
+    'a//b.txt',
+    'a\\b.txt',
+    'dir/',
+    '',
+  ])('refuses to write the path %j', (entryPath) => {
+    expect(() => writeZip([{ path: entryPath, data: text('x') }])).toThrow(
+      ZipError,
+    );
   });
 
   it('refuses the same path twice', () => {
@@ -39,18 +52,25 @@ describe('readZip', () => {
   it('refuses an entry that leaves the archive root', () => {
     // "aa/b" and "../b" have the same length, so the name can be replaced in both headers.
     const bytes = writeZip([{ path: 'aa/b', data: text('x') }]);
-    const forged = Buffer.from(bytes.toString('latin1').replaceAll('aa/b', '../b'), 'latin1');
+    const forged = Buffer.from(
+      bytes.toString('latin1').replaceAll('aa/b', '../b'),
+      'latin1',
+    );
     expect(() => readZip(forged)).toThrow(/not a path inside the archive root/);
   });
 
   it('refuses data that does not match its checksum', () => {
-    const bytes = Buffer.from(writeZip([{ path: 'a.txt', data: text('hello') }]));
+    const bytes = Buffer.from(
+      writeZip([{ path: 'a.txt', data: text('hello') }]),
+    );
     bytes.write('J', bytes.indexOf('hello'), 'latin1');
     expect(() => readZip(bytes)).toThrow(/checksum/);
   });
 
   it('refuses a link recorded in the file attributes', () => {
-    const bytes = Buffer.from(writeZip([{ path: 'a.txt', data: text('target') }]));
+    const bytes = Buffer.from(
+      writeZip([{ path: 'a.txt', data: text('target') }]),
+    );
     const central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
     bytes.writeUInt32LE((0o120777 << 16) >>> 0, central + 38);
     expect(() => readZip(bytes)).toThrow(/not a regular file/);

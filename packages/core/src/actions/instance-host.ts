@@ -34,7 +34,8 @@ export interface InstanceEvent<Native = unknown> {
   read(path: string): unknown;
 }
 
-type NativeOf<Event> = Event extends InstanceEvent<infer Native> ? Native : never;
+type NativeOf<Event> =
+  Event extends InstanceEvent<infer Native> ? Native : never;
 
 /**
  * Optional, per binding. `subject` reads, through a supported application or renderer API and not
@@ -71,12 +72,19 @@ export interface InstanceHandle<Events> {
 
 export interface InstanceView {
   /** The one instance with this ID and kind. Throws when there is none or more than one. */
-  getById<Events>(id: string, kind: ComponentKind<Events>): InstanceHandle<Events>;
+  getById<Events>(
+    id: string,
+    kind: ComponentKind<Events>,
+  ): InstanceHandle<Events>;
   /**
    * Setup-time discovery: calls `onHandle` once for each present and later instance with this ID
    * and kind. Unsubscribing stops discovery only. It disposes no binding and removes no callable.
    */
-  watchById<Events>(id: string, kind: ComponentKind<Events>, onHandle: (handle: InstanceHandle<Events>) => void): () => void;
+  watchById<Events>(
+    id: string,
+    kind: ComponentKind<Events>,
+    onHandle: (handle: InstanceHandle<Events>) => void,
+  ): () => void;
 }
 
 export interface OpenInfo<Events> {
@@ -104,14 +112,19 @@ export interface OpenInstance<Events> {
    * `unbound` when nothing is installed, and `retired` when the instance was retired or is no
    * longer live. `started` means the callable received the event; a binding that is busy drops it.
    */
-  activate<Name extends keyof Events & string>(event: Name, native: NativeOf<Events[Name]>): 'started' | 'unbound' | 'retired';
+  activate<Name extends keyof Events & string>(
+    event: Name,
+    native: NativeOf<Events[Name]>,
+  ): 'started' | 'unbound' | 'retired';
   /**
    * The binding now attached to one event of this instance, by identity: `undefined` while
    * nothing is attached, and never a disposed binding. An adapter that captures it with what it
    * renders can later tell, by reference, that the callable `activate` would reach is no longer
    * the one that render showed. A rebind on the same handle is a different reference.
    */
-  attached<Name extends keyof Events & string>(event: Name): ActionBinding | undefined;
+  attached<Name extends keyof Events & string>(
+    event: Name,
+  ): ActionBinding | undefined;
   /**
    * Calls `listener` synchronously after this instance gains or loses an attached binding, and
    * once when it retires, with the change already visible through `attached`. A listener that
@@ -235,11 +248,15 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
     for (const binding of [...registration.bindings]) binding.dispose();
   }
 
-  function handleFor<Events>(registration: Registration, record: InstanceRecord): InstanceHandle<Events> {
+  function handleFor<Events>(
+    registration: Registration,
+    record: InstanceRecord,
+  ): InstanceHandle<Events> {
     return {
       id: record.componentId,
       dataPath: record.dataPath,
-      read: (path) => (record.retired || !record.isLive() ? undefined : record.read(path)),
+      read: (path) =>
+        record.retired || !record.isLive() ? undefined : record.read(path),
       bindAction<Name extends keyof Events & string>(
         event: Name,
         action: ActionDefinition<Events[Name]>,
@@ -247,7 +264,9 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
       ) {
         const subject = options?.subject;
         if (subject !== undefined && typeof subject !== 'function') {
-          throw new TypeError(`The subject option for '${record.componentId}' must be a function.`);
+          throw new TypeError(
+            `The subject option for '${record.componentId}' must be a function.`,
+          );
         }
         // `isLive` is read fresh: the renderer may have dropped this instance's model before it retires the element.
         if (!registration.active || record.retired || !record.isLive()) {
@@ -257,7 +276,9 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
           );
         }
         if (!record.events.has(event)) {
-          throw new Error(`The component '${record.componentId}' does not offer the event '${event}'.`);
+          throw new Error(
+            `The component '${record.componentId}' does not offer the event '${event}'.`,
+          );
         }
         if (record.slots.has(event)) {
           throw new Error(
@@ -267,10 +288,12 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
         }
         const installation = {};
         const detach = (): void => {
-          const detached = record.slots.get(event)?.installation === installation;
+          const detached =
+            record.slots.get(event)?.installation === installation;
           if (detached) record.slots.delete(event);
           registration.bindings.delete(binding);
-          for (const scope of registration.callbackScopes) scope.delete(binding);
+          for (const scope of registration.callbackScopes)
+            scope.delete(binding);
           if (detached) announce(record);
         };
         // Throws for a definition `Action` did not build, before anything is installed.
@@ -291,7 +314,10 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
               dataPath: record.dataPath,
               native,
               read(path) {
-                if (!delivering) throw new Error('read() answers only while the event is being delivered.');
+                if (!delivering)
+                  throw new Error(
+                    'read() answers only while the event is being delivered.',
+                  );
                 return record.read(path);
               },
             };
@@ -328,16 +354,31 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
     }
   }
 
-  function matches(id: string, kind: ComponentKind<unknown>, record: InstanceRecord): boolean {
-    return !record.retired && record.componentId === id && record.kind === kind && record.isLive();
+  function matches(
+    id: string,
+    kind: ComponentKind<unknown>,
+    record: InstanceRecord,
+  ): boolean {
+    return (
+      !record.retired &&
+      record.componentId === id &&
+      record.kind === kind &&
+      record.isLive()
+    );
   }
 
   function viewFor(registration: Registration): InstanceView {
     return {
       getById(id, kind) {
-        if (!registration.active) throw new Error(`The setup that asked for '${id}' has ended.`);
-        const found = [...instances].filter((record) => matches(id, kind, record));
-        if (found.length === 0) throw new Error(`No rendered instance has the component ID '${id}' and kind '${kind.label}'.`);
+        if (!registration.active)
+          throw new Error(`The setup that asked for '${id}' has ended.`);
+        const found = [...instances].filter((record) =>
+          matches(id, kind, record),
+        );
+        if (found.length === 0)
+          throw new Error(
+            `No rendered instance has the component ID '${id}' and kind '${kind.label}'.`,
+          );
         if (found.length > 1) {
           throw new Error(
             `${found.length} rendered instances have the component ID '${id}' and kind '${kind.label}'. ` +
@@ -347,12 +388,16 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
         return handleFor(registration, found[0]!);
       },
       watchById(id, kind, onHandle) {
-        if (!registration.active) throw new Error(`The setup that watches '${id}' has ended.`);
+        if (!registration.active)
+          throw new Error(`The setup that watches '${id}' has ended.`);
         const watch: Watch = { id, kind, onHandle };
         registration.watches.add(watch);
         for (const record of [...instances]) {
           if (!registration.watches.has(watch)) break;
-          if (matches(id, kind, record)) runCallback(registration, () => onHandle(handleFor(registration, record)));
+          if (matches(id, kind, record))
+            runCallback(registration, () =>
+              onHandle(handleFor(registration, record)),
+            );
         }
         return () => {
           registration.watches.delete(watch);
@@ -397,8 +442,15 @@ export function createInstanceHost(options: InstanceHostOptions): InstanceHost {
         instances.add(record);
         for (const registration of [...registrations]) {
           for (const watch of [...registration.watches]) {
-            if (record.retired || !registration.watches.has(watch) || !matches(watch.id, watch.kind, record)) continue;
-            runCallback(registration, () => watch.onHandle(handleFor(registration, record)));
+            if (
+              record.retired ||
+              !registration.watches.has(watch) ||
+              !matches(watch.id, watch.kind, record)
+            )
+              continue;
+            runCallback(registration, () =>
+              watch.onHandle(handleFor(registration, record)),
+            );
           }
         }
       }

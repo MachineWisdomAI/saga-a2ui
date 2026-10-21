@@ -1,4 +1,8 @@
-import { describeContentFailure, type InterpretedCard, type ReadResult } from '@saga-a2ui/components/faithful-card';
+import {
+  describeContentFailure,
+  type InterpretedCard,
+  type ReadResult,
+} from '@saga-a2ui/components/faithful-card';
 import { useContext, useMemo, type ReactElement } from 'react';
 import { useCardLifecycle, type CardLifecycle } from './lifecycle.js';
 import { Blocks, type Rendering } from './nodes.js';
@@ -12,9 +16,17 @@ export interface FaithfulCardProps {
   readonly markdown: unknown;
 }
 
-function Failure(props: { readonly reason: string; readonly message: string }): ReactElement {
+function Failure(props: {
+  readonly reason: string;
+  readonly message: string;
+}): ReactElement {
   return (
-    <p className="saga-card saga-card-failure" role="alert" data-testid="card-failure" data-reason={props.reason}>
+    <p
+      className="saga-card saga-card-failure"
+      role="alert"
+      data-testid="card-failure"
+      data-reason={props.reason}
+    >
       {props.message}
     </p>
   );
@@ -25,18 +37,31 @@ function Failure(props: { readonly reason: string; readonly message: string }): 
  * images grants or gives back this card's consent to load the images the policy permits; it makes no
  * server call and runs no action, and it cannot widen what the policy permits.
  */
-function Controls(props: { readonly view: FaithfulCardView; readonly card: InterpretedCard; readonly lifecycle: CardLifecycle }): ReactElement | null {
+function Controls(props: {
+  readonly view: FaithfulCardView;
+  readonly card: InterpretedCard;
+  readonly lifecycle: CardLifecycle;
+}): ReactElement | null {
   const { view, card, lifecycle } = props;
   const { fragments } = card;
-  const blockable = fragments.links + fragments.images.length + fragments.rawHtml > 0;
+  const blockable =
+    fragments.links + fragments.images.length + fragments.rawHtml > 0;
   if (!blockable) return null;
   const granted = lifecycle.images.consent === 'granted';
-  const offer = view.policy.offerImages(fragments.images, view.imageEnforcement);
-  const unavailableReason = !granted && !offer.available ? offer.reason : undefined;
+  const offer = view.policy.offerImages(
+    fragments.images,
+    view.imageEnforcement,
+  );
+  const unavailableReason =
+    !granted && !offer.available ? offer.reason : undefined;
   const ended = !granted && lifecycle.imagesEnded;
   return (
     <div className="saga-card-controls" data-testid="card-controls">
-      <button type="button" data-testid="source-toggle" onClick={() => lifecycle.toggleSource()}>
+      <button
+        type="button"
+        data-testid="source-toggle"
+        onClick={() => lifecycle.toggleSource()}
+      >
         {lifecycle.sourceRevealed ? 'Hide source' : 'Reveal source'}
       </button>
       {fragments.images.length === 0 ? null : (
@@ -45,7 +70,11 @@ function Controls(props: { readonly view: FaithfulCardView; readonly card: Inter
             type="button"
             data-testid="images-toggle"
             disabled={unavailableReason !== undefined || ended}
-            onClick={() => (granted ? lifecycle.hideImages() : lifecycle.showImages(fragments.images))}
+            onClick={() =>
+              granted
+                ? lifecycle.hideImages()
+                : lifecycle.showImages(fragments.images)
+            }
           >
             {granted ? 'Hide images' : 'Show images'}
           </button>
@@ -58,8 +87,12 @@ function Controls(props: { readonly view: FaithfulCardView; readonly card: Inter
             </span>
           ) : null}
           {unavailableReason === undefined ? null : (
-            <span data-testid="images-unavailable" data-reason={unavailableReason}>
-              Images in this content cannot be shown: none is permitted by the content policy or this host.
+            <span
+              data-testid="images-unavailable"
+              data-reason={unavailableReason}
+            >
+              Images in this content cannot be shown: none is permitted by the
+              content policy or this host.
             </span>
           )}
         </>
@@ -73,19 +106,37 @@ function Controls(props: { readonly view: FaithfulCardView; readonly card: Inter
  * lets an owner that can end before React unmounts the card (an A2UI node) retire its controls at
  * once; a card used directly has no such owner.
  */
-export function CardContent(props: FaithfulCardProps & { readonly isLive?: () => boolean }): ReactElement {
+export function CardContent(
+  props: FaithfulCardProps & { readonly isLive?: () => boolean },
+): ReactElement {
   const { contractVersion, markdown, isLive } = props;
-  const view: FaithfulCardView | undefined = useContext(FaithfulCardViewContext);
+  const view: FaithfulCardView | undefined = useContext(
+    FaithfulCardViewContext,
+  );
   const lifecycle = useCardLifecycle(view, contractVersion, markdown, isLive);
   const reader = view?.reader;
   // Reading is pure and only cached here: the same reader and values always give the same result.
-  const interpretation = useMemo<ReadResult | undefined>(() => reader?.read({ contractVersion, markdown }), [reader, contractVersion, markdown]);
+  const interpretation = useMemo<ReadResult | undefined>(
+    () => reader?.read({ contractVersion, markdown }),
+    [reader, contractVersion, markdown],
+  );
 
   // Without a view that supplies the trusted reader and policy, nothing is interpreted or shown.
   if (view === undefined || interpretation === undefined) {
-    return <Failure reason="no-view" message="This content cannot be shown: no content view is available." />;
+    return (
+      <Failure
+        reason="no-view"
+        message="This content cannot be shown: no content view is available."
+      />
+    );
   }
-  if (!interpretation.ok) return <Failure reason={interpretation.failure.kind} message={describeContentFailure(interpretation.failure)} />;
+  if (!interpretation.ok)
+    return (
+      <Failure
+        reason={interpretation.failure.kind}
+        message={describeContentFailure(interpretation.failure)}
+      />
+    );
 
   const strict = view.policy.level === 'strict';
   const rendering: Rendering = {
@@ -93,7 +144,8 @@ export function CardContent(props: FaithfulCardProps & { readonly isLive?: () =>
     strict,
     revealed: lifecycle.sourceRevealed,
     linkOutcomes: lifecycle.linkOutcomes,
-    openLink: (ordinal, url) => lifecycle.openLink(view.hostLinks, ordinal, url),
+    openLink: (ordinal, url) =>
+      lifecycle.openLink(view.hostLinks, ordinal, url),
     images: lifecycle.images,
     imageStillPermitted: (source) => lifecycle.imageStillPermitted(source),
     failedImages: lifecycle.failedImages,
@@ -101,7 +153,13 @@ export function CardContent(props: FaithfulCardProps & { readonly isLive?: () =>
   };
   return (
     <div className="saga-card" data-testid="card-root">
-      {strict ? <Controls view={view} card={interpretation.card} lifecycle={lifecycle} /> : null}
+      {strict ? (
+        <Controls
+          view={view}
+          card={interpretation.card}
+          lifecycle={lifecycle}
+        />
+      ) : null}
       <div className="saga-card-content" data-testid="card-content">
         <Blocks nodes={interpretation.card.blocks} rendering={rendering} />
       </div>
@@ -116,5 +174,10 @@ export function CardContent(props: FaithfulCardProps & { readonly isLive?: () =>
  * shows only that no view is available; it never interprets, fetches or navigates on its own.
  */
 export function FaithfulCard(props: FaithfulCardProps): ReactElement {
-  return <CardContent contractVersion={props.contractVersion} markdown={props.markdown} />;
+  return (
+    <CardContent
+      contractVersion={props.contractVersion}
+      markdown={props.markdown}
+    />
+  );
 }

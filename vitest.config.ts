@@ -9,7 +9,16 @@ export default defineConfig({
   test: {
     root: repoRoot,
     environment: 'node',
-    include: ['apps/**/*.test.ts', 'packages/**/*.test.ts', 'scripts/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.wise-agents/**'],
+    include: [
+      'apps/**/*.test.ts',
+      'packages/**/*.test.ts',
+      'scripts/**/*.test.ts',
+    ],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.wise-agents/**',
+    ],
   },
 });

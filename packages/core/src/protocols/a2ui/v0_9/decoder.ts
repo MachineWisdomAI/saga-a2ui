@@ -39,7 +39,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const malformed = (message: string): DecodeFailure => ({ kind: 'malformed', message });
+const malformed = (message: string): DecodeFailure => ({
+  kind: 'malformed',
+  message,
+});
 
 function deepFreeze<T>(value: T): T {
   if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
@@ -82,12 +85,16 @@ function decodeCase<Schema extends z.ZodTypeAny>(
 ): ValidatedMessage | DecodeFailure {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    return malformed(`Invalid ${tag} message: ${parsed.error.errors.map(formatZodIssue).join(', ')}`);
+    return malformed(
+      `Invalid ${tag} message: ${parsed.error.errors.map(formatZodIssue).join(', ')}`,
+    );
   }
   try {
     return build(parsed.data);
   } catch {
-    return malformed(`Invalid ${tag} message: it contains a value that cannot be copied.`);
+    return malformed(
+      `Invalid ${tag} message: it contains a value that cannot be copied.`,
+    );
   }
 }
 
@@ -103,21 +110,44 @@ function describeVersion(version: unknown): string {
 function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
   if (!isRecord(raw)) return malformed('Each message must be an object.');
   if (!SUPPORTED_VERSIONS.includes(raw.version)) {
-    return { kind: 'unsupported-version', message: `Unsupported A2UI version: ${describeVersion(raw.version)}. Supported: v0.9.` };
+    return {
+      kind: 'unsupported-version',
+      message: `Unsupported A2UI version: ${describeVersion(raw.version)}. Supported: v0.9.`,
+    };
   }
   // The only place wire tags are inspected. Upstream schemas are strict, so a message with
   // extra operations or fields fails validation of its case.
   if ('createSurface' in raw) {
-    return decodeCase('createSurface', CreateSurfaceMessageSchema, raw, validatedMessage.createSurface);
+    return decodeCase(
+      'createSurface',
+      CreateSurfaceMessageSchema,
+      raw,
+      validatedMessage.createSurface,
+    );
   }
   if ('updateComponents' in raw) {
-    return decodeCase('updateComponents', UpdateComponentsMessageSchema, raw, validatedMessage.updateComponents);
+    return decodeCase(
+      'updateComponents',
+      UpdateComponentsMessageSchema,
+      raw,
+      validatedMessage.updateComponents,
+    );
   }
   if ('updateDataModel' in raw) {
-    return decodeCase('updateDataModel', UpdateDataModelMessageSchema, raw, validatedMessage.updateDataModel);
+    return decodeCase(
+      'updateDataModel',
+      UpdateDataModelMessageSchema,
+      raw,
+      validatedMessage.updateDataModel,
+    );
   }
   if ('deleteSurface' in raw) {
-    return decodeCase('deleteSurface', DeleteSurfaceMessageSchema, raw, validatedMessage.deleteSurface);
+    return decodeCase(
+      'deleteSurface',
+      DeleteSurfaceMessageSchema,
+      raw,
+      validatedMessage.deleteSurface,
+    );
   }
   return malformed('Message has no supported operation.');
 }
@@ -126,7 +156,9 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   if (Array.isArray(input)) return input;
   if (isRecord(input) && 'messages' in input) {
     if (!Array.isArray(input.messages) || Object.keys(input).length !== 1) {
-      return malformed('A message list must be an object with only a "messages" array.');
+      return malformed(
+        'A message list must be an object with only a "messages" array.',
+      );
     }
     return input.messages;
   }
@@ -135,7 +167,8 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
 
 function decodeInput(input: unknown): DecodeResult {
   const raws = rawMessages(input);
-  if (!Array.isArray(raws)) return { ok: false, failure: raws as DecodeFailure };
+  if (!Array.isArray(raws))
+    return { ok: false, failure: raws as DecodeFailure };
   const messages: ValidatedMessage[] = [];
   for (const raw of raws) {
     const decoded = decodeMessage(raw);
@@ -155,7 +188,10 @@ export const a2uiV0_9Decoder: MessageDecoder = {
     try {
       return decodeInput(input);
     } catch {
-      return { ok: false, failure: malformed('Input could not be inspected or parsed.') };
+      return {
+        ok: false,
+        failure: malformed('Input could not be inspected or parsed.'),
+      };
     }
   },
 };

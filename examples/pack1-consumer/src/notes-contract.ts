@@ -19,10 +19,19 @@ export const NoteSchema = z.strictObject({
 });
 export type PublicNote = z.infer<typeof NoteSchema>;
 
-export const NotesOutputSchema = z.strictObject({ notes: z.array(NoteSchema).max(50) });
-export const SessionOutputSchema = z.strictObject({ signedIn: z.literal(true) });
-export const ArchiveInputSchema = z.strictObject({ noteId: z.string().min(1).max(32) });
-export const ArchiveOutputSchema = z.strictObject({ noteId: z.string().min(1).max(32), archivedAt: z.number().int().nonnegative() });
+export const NotesOutputSchema = z.strictObject({
+  notes: z.array(NoteSchema).max(50),
+});
+export const SessionOutputSchema = z.strictObject({
+  signedIn: z.literal(true),
+});
+export const ArchiveInputSchema = z.strictObject({
+  noteId: z.string().min(1).max(32),
+});
+export const ArchiveOutputSchema = z.strictObject({
+  noteId: z.string().min(1).max(32),
+  archivedAt: z.number().int().nonnegative(),
+});
 
 /** Fixed sentences: a failure never repeats a backend message, a note identifier or a credential. */
 export const TEXT = {
@@ -52,13 +61,18 @@ export const VIEW_TEXT = {
  * for an error or for a result this contract does not accept, so nothing of such a result appears)
  * and the status sentence that says which of the three it was.
  */
-export function readNotesResult(result: { readonly isError?: boolean; readonly structuredContent?: unknown }): {
+export function readNotesResult(result: {
+  readonly isError?: boolean;
+  readonly structuredContent?: unknown;
+}): {
   readonly notes: readonly PublicNote[];
   readonly status: string;
 } {
   if (result.isError === true) return { notes: [], status: VIEW_TEXT.problem };
   const parsed = NotesOutputSchema.safeParse(result.structuredContent);
-  return parsed.success ? { notes: parsed.data.notes, status: VIEW_TEXT.notes } : { notes: [], status: VIEW_TEXT.mismatch };
+  return parsed.success
+    ? { notes: parsed.data.notes, status: VIEW_TEXT.notes }
+    : { notes: [], status: VIEW_TEXT.mismatch };
 }
 
 /**
@@ -69,8 +83,20 @@ export function readNotesResult(result: { readonly isError?: boolean; readonly s
  */
 export const NO_EFFECT_META = 'pack1/no-effect';
 
-export const declaresNoEffect = (reply: { readonly isError?: boolean; readonly _meta?: Record<string, unknown> }): boolean =>
-  reply.isError === true && reply._meta?.[NO_EFFECT_META] === true;
+export const declaresNoEffect = (reply: {
+  readonly isError?: boolean;
+  readonly _meta?: Record<string, unknown>;
+}): boolean => reply.isError === true && reply._meta?.[NO_EFFECT_META] === true;
 
-export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
-export const WRITES = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+export const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+export const WRITES = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;

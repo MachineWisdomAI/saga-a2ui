@@ -1,6 +1,14 @@
-import { A2uiSurface, createComponentImplementation, type ReactCatalogComponent } from '@a2ui/react/v0_9';
+import {
+  A2uiSurface,
+  createComponentImplementation,
+  type ReactCatalogComponent,
+} from '@a2ui/react/v0_9';
 import { Catalog, type SurfaceModel } from '@a2ui/web_core/v0_9';
-import { basicCatalog, ColumnApi, TextApi } from '@a2ui/web_core/v0_9/basic_catalog';
+import {
+  basicCatalog,
+  ColumnApi,
+  TextApi,
+} from '@a2ui/web_core/v0_9/basic_catalog';
 import {
   createContentPolicy,
   createFaithfulCardReader,
@@ -11,10 +19,26 @@ import {
   type ImageConsentScope,
   type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
-import { a2uiV0_9Decoder, createMessageSession, type IngestResult, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { faithfulCardEntry, FaithfulCardProvider, type FaithfulCardView } from '@saga-a2ui/react/faithful-card';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type IngestResult,
+  type MessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  faithfulCardEntry,
+  FaithfulCardProvider,
+  type FaithfulCardView,
+} from '@saga-a2ui/react/faithful-card';
 import '@saga-a2ui/react/faithful-card.css';
-import { createElement, StrictMode, useLayoutEffect, useState, version as reactVersion, type ReactNode } from 'react';
+import {
+  createElement,
+  StrictMode,
+  useLayoutEffect,
+  useState,
+  version as reactVersion,
+  type ReactNode,
+} from 'react';
 import { version as reactDomVersion } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -33,24 +57,46 @@ import { createRoot, type Root } from 'react-dom/client';
 // `#root-b`, for the cases that interleave views. `?ends=retire|revokeAll` adds an application
 // element that ends the first view's consent in the same commit as the first press.
 
-export const CATALOG_ID = 'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
+export const CATALOG_ID =
+  'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
 export const SURFACE_ID = 'cards';
 export const SECOND_SURFACE_ID = 'cards-b';
 
 declare const __REACT_FAITHFUL_CARD_IDENTITIES__: Record<string, string>;
 
-type ChildReference = string | { readonly id: string; readonly basePath: string };
+type ChildReference =
+  string | { readonly id: string; readonly basePath: string };
 
-function childrenOf(buildChild: (id: string, basePath?: string) => ReactNode, value: unknown): ReactNode[] {
+function childrenOf(
+  buildChild: (id: string, basePath?: string) => ReactNode,
+  value: unknown,
+): ReactNode[] {
   const list = Array.isArray(value) ? (value as ChildReference[]) : [];
-  return list.map((child) => (typeof child === 'string' ? buildChild(child) : buildChild(child.id, child.basePath)));
+  return list.map((child) =>
+    typeof child === 'string'
+      ? buildChild(child)
+      : buildChild(child.id, child.basePath),
+  );
 }
 
-const Text = createComponentImplementation(TextApi, ({ props }) => createElement('p', { 'data-testid': 'app-text' }, String(props.text ?? '')));
-const Column = createComponentImplementation(ColumnApi, ({ props, buildChild }) =>
-  createElement('div', { 'data-layout': 'column' }, ...childrenOf(buildChild, props.children)),
+const Text = createComponentImplementation(TextApi, ({ props }) =>
+  createElement('p', { 'data-testid': 'app-text' }, String(props.text ?? '')),
 );
-const catalog = new Catalog<ReactCatalogComponent>(CATALOG_ID, 'v0.9', [Text, Column, faithfulCardEntry], [...basicCatalog.functions.values()]);
+const Column = createComponentImplementation(
+  ColumnApi,
+  ({ props, buildChild }) =>
+    createElement(
+      'div',
+      { 'data-layout': 'column' },
+      ...childrenOf(buildChild, props.children),
+    ),
+);
+const catalog = new Catalog<ReactCatalogComponent>(
+  CATALOG_ID,
+  'v0.9',
+  [Text, Column, faithfulCardEntry],
+  [...basicCatalog.functions.values()],
+);
 
 const FIRST = [
   '# Reading the evidence',
@@ -82,15 +128,28 @@ const SECOND =
   '![redirected](https://images.example.com/redirect.png).';
 
 const layout = (): unknown[] => [
-  { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID },
+  },
   {
     version: 'v0.9',
     updateComponents: {
       surfaceId: SURFACE_ID,
       components: [
         { id: 'root', component: 'Column', children: ['first', 'second'] },
-        { id: 'first', component: 'FaithfulCard', contractVersion: { path: '/first/version' }, markdown: { path: '/first/markdown' } },
-        { id: 'second', component: 'FaithfulCard', contractVersion: 1, markdown: { path: '/second' } },
+        {
+          id: 'first',
+          component: 'FaithfulCard',
+          contractVersion: { path: '/first/version' },
+          markdown: { path: '/first/markdown' },
+        },
+        {
+          id: 'second',
+          component: 'FaithfulCard',
+          contractVersion: 1,
+          markdown: { path: '/second' },
+        },
       ],
     },
   },
@@ -104,20 +163,33 @@ const layout = (): unknown[] => [
 ];
 
 const secondLayout = (): unknown[] => [
-  { version: 'v0.9', createSurface: { surfaceId: SECOND_SURFACE_ID, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    createSurface: { surfaceId: SECOND_SURFACE_ID, catalogId: CATALOG_ID },
+  },
   {
     version: 'v0.9',
     updateComponents: {
       surfaceId: SECOND_SURFACE_ID,
       components: [
         { id: 'root', component: 'Column', children: ['only'] },
-        { id: 'only', component: 'FaithfulCard', contractVersion: 1, markdown: { path: '/only' } },
+        {
+          id: 'only',
+          component: 'FaithfulCard',
+          contractVersion: 1,
+          markdown: { path: '/only' },
+        },
       ],
     },
   },
   {
     version: 'v0.9',
-    updateDataModel: { surfaceId: SECOND_SURFACE_ID, value: { only: 'The other view ![third](https://images.example.com/third.png) and [a link](https://docs.example.com/third).' } },
+    updateDataModel: {
+      surfaceId: SECOND_SURFACE_ID,
+      value: {
+        only: 'The other view ![third](https://images.example.com/third.png) and [a link](https://docs.example.com/third).',
+      },
+    },
   },
 ];
 
@@ -156,16 +228,31 @@ const pending: ((outcome: LinkOpenOutcome) => void)[] = [];
 const hostLinks: HostLinks = {
   open(url) {
     requests.push(url);
-    if (hostAnswer === 'pending') return new Promise<LinkOpenOutcome>((resolve) => void pending.push(resolve));
-    if (hostAnswer === 'denied' || hostAnswer === 'unavailable' || hostAnswer === 'failed') return Promise.resolve(hostAnswer);
+    if (hostAnswer === 'pending')
+      return new Promise<LinkOpenOutcome>(
+        (resolve) => void pending.push(resolve),
+      );
+    if (
+      hostAnswer === 'denied' ||
+      hostAnswer === 'unavailable' ||
+      hostAnswer === 'failed'
+    )
+      return Promise.resolve(hostAnswer);
     return Promise.resolve<LinkOpenOutcome>('opened');
   },
 };
 
 // The application's trusted settings, built once.
-const readerResult = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000 });
-const policyResult = createContentPolicy({ level, imageHosts: ['images.example.com'] });
-if (!readerResult.ok || !policyResult.ok) throw new Error('the page settings are invalid');
+const readerResult = createFaithfulCardReader({
+  dialect: 'commonmark-tables-strikethrough',
+  maxLength: 20_000,
+});
+const policyResult = createContentPolicy({
+  level,
+  imageHosts: ['images.example.com'],
+});
+if (!readerResult.ok || !policyResult.ok)
+  throw new Error('the page settings are invalid');
 const reader = readerResult.reader;
 const policy = policyResult.policy;
 
@@ -178,10 +265,16 @@ function carryPolicy(derived: ContentPolicy): void {
   document.head.append(meta);
 }
 carryPolicy(policy);
-const documentPolicies = Array.from(document.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'), (meta) => meta.getAttribute('content') ?? '');
+const documentPolicies = Array.from(
+  document.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'),
+  (meta) => meta.getAttribute('content') ?? '',
+);
 
 /** One view: the trusted settings, with the enforcement the document demonstrates and its own consent scope. */
-function viewWithScope(): { readonly view: FaithfulCardView; readonly consent: ImageConsentScope } {
+function viewWithScope(): {
+  readonly view: FaithfulCardView;
+  readonly consent: ImageConsentScope;
+} {
   const consent = createImageConsentScope();
   return {
     consent,
@@ -203,7 +296,10 @@ interface OpenSession {
 }
 
 function openSession(messages: unknown[]): OpenSession {
-  const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
+  const session = createMessageSession({
+    catalogs: [catalog],
+    decoder: a2uiV0_9Decoder,
+  });
   let surface: SurfaceModel<ReactCatalogComponent> | undefined;
   session.onSurfaceCreated((created) => {
     surface = created;
@@ -214,7 +310,8 @@ function openSession(messages: unknown[]): OpenSession {
 }
 
 const currentFirst = openSession(layout());
-const currentSecond = second === undefined ? undefined : openSession(secondLayout());
+const currentSecond =
+  second === undefined ? undefined : openSession(secondLayout());
 const roots = new Map<string, Root>();
 
 function container(id: string): HTMLElement {
@@ -229,7 +326,11 @@ function container(id: string): HTMLElement {
  * runs earlier in the same commit as the card's Show images, which is the ordering an application
  * hits when it handles a selection or teardown while a card updates. It acts once, on the first press.
  */
-function Ender(props: { readonly pressed: boolean; readonly scope: ImageConsentScope; readonly mode: 'retire' | 'revokeAll' }): null {
+function Ender(props: {
+  readonly pressed: boolean;
+  readonly scope: ImageConsentScope;
+  readonly mode: 'retire' | 'revokeAll';
+}): null {
   const { pressed, scope, mode } = props;
   useLayoutEffect(() => {
     if (!pressed) return;
@@ -238,29 +339,67 @@ function Ender(props: { readonly pressed: boolean; readonly scope: ImageConsentS
   }, [pressed, scope, mode]);
   return null;
 }
-function EndsOnPress(props: { readonly scope: ImageConsentScope; readonly mode: 'retire' | 'revokeAll'; readonly children: ReactNode }): ReactNode {
+function EndsOnPress(props: {
+  readonly scope: ImageConsentScope;
+  readonly mode: 'retire' | 'revokeAll';
+  readonly children: ReactNode;
+}): ReactNode {
   const [pressed, setPressed] = useState(false);
-  return createElement('div', { onClick: () => setPressed(true) }, createElement(Ender, { pressed, scope: props.scope, mode: props.mode }), props.children);
+  return createElement(
+    'div',
+    { onClick: () => setPressed(true) },
+    createElement(Ender, { pressed, scope: props.scope, mode: props.mode }),
+    props.children,
+  );
 }
-const ends = params.get('ends') === 'retire' ? 'retire' : params.get('ends') === 'revokeAll' ? 'revokeAll' : undefined;
+const ends =
+  params.get('ends') === 'retire'
+    ? 'retire'
+    : params.get('ends') === 'revokeAll'
+      ? 'revokeAll'
+      : undefined;
 
-function render(id: string, view: FaithfulCardView, surface: SurfaceModel<ReactCatalogComponent>): void {
+function render(
+  id: string,
+  view: FaithfulCardView,
+  surface: SurfaceModel<ReactCatalogComponent>,
+): void {
   const surfaceElement = createElement(A2uiSurface, { surface });
-  const body = ends !== undefined && id === 'root' ? createElement(EndsOnPress, { scope: view.consent, mode: ends, children: surfaceElement }) : surfaceElement;
-  roots.get(id)?.render(createElement(StrictMode, null, createElement(FaithfulCardProvider, { view, children: body })));
+  const body =
+    ends !== undefined && id === 'root'
+      ? createElement(EndsOnPress, {
+          scope: view.consent,
+          mode: ends,
+          children: surfaceElement,
+        })
+      : surfaceElement;
+  roots
+    .get(id)
+    ?.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(FaithfulCardProvider, { view, children: body }),
+      ),
+    );
 }
 
 const consumer: ReactFaithfulCardConsumer = {
   requests,
   pending,
-  identities: { ...__REACT_FAITHFUL_CARD_IDENTITIES__, runtimeReact: reactVersion, runtimeReactDom: reactDomVersion },
+  identities: {
+    ...__REACT_FAITHFUL_CARD_IDENTITIES__,
+    runtimeReact: reactVersion,
+    runtimeReactDom: reactDomVersion,
+  },
   consent: first.consent,
   secondConsent: second?.consent,
   documentPolicies,
   derivedPolicy: policy.resource.contentSecurityPolicy,
   send: (input) => currentFirst.session.ingest(input),
   sendSecond: (input) => {
-    if (currentSecond === undefined) throw new Error('the second view is not mounted; use ?second=1');
+    if (currentSecond === undefined)
+      throw new Error('the second view is not mounted; use ?second=1');
     return currentSecond.session.ingest(input);
   },
   unmount: () => {

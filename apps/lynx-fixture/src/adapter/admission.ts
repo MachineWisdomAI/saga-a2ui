@@ -1,4 +1,8 @@
-import type { ComponentInstance, MessageStore, ServerToClientMessage } from '@lynx-js/genui/a2ui';
+import type {
+  ComponentInstance,
+  MessageStore,
+  ServerToClientMessage,
+} from '@lynx-js/genui/a2ui';
 import { createMessageStore } from '@lynx-js/genui/a2ui/store';
 import { SOURCE_ID_PROP } from './kind.js';
 
@@ -23,8 +27,12 @@ export type Admission =
   | { readonly kind: 'admitted'; readonly message: ServerToClientMessage }
   | { readonly kind: 'rejected'; readonly rejection: Rejection };
 
-export function admit(message: ServerToClientMessage, boundControlNames: ReadonlySet<string>): Admission {
-  if (!('updateComponents' in message) || !message.updateComponents) return { kind: 'admitted', message };
+export function admit(
+  message: ServerToClientMessage,
+  boundControlNames: ReadonlySet<string>,
+): Admission {
+  if (!('updateComponents' in message) || !message.updateComponents)
+    return { kind: 'admitted', message };
   const { surfaceId, components } = message.updateComponents;
   const annotated: ComponentInstance[] = [];
   for (const item of components as ComponentInstance[]) {
@@ -33,7 +41,14 @@ export function admit(message: ServerToClientMessage, boundControlNames: Readonl
       continue;
     }
     if ('action' in item) {
-      return { kind: 'rejected', rejection: { surfaceId, componentId: item.id ?? '', reason: 'action-on-bound-control' } };
+      return {
+        kind: 'rejected',
+        rejection: {
+          surfaceId,
+          componentId: item.id ?? '',
+          reason: 'action-on-bound-control',
+        },
+      };
     }
     // The adapter's value replaces anything the agent sent under this name. The processor stores
     // a spread of the item and clones JSON-copy it, so a plain string survives to the control.
@@ -41,7 +56,10 @@ export function admit(message: ServerToClientMessage, boundControlNames: Readonl
   }
   return {
     kind: 'admitted',
-    message: { ...message, updateComponents: { ...message.updateComponents, components: annotated } } as ServerToClientMessage,
+    message: {
+      ...message,
+      updateComponents: { ...message.updateComponents, components: annotated },
+    } as ServerToClientMessage,
   };
 }
 
@@ -51,7 +69,9 @@ export interface AdmittingStoreOptions {
 }
 
 /** A message buffer that admits each pushed message before the renderer can see it. */
-export function createAdmittingMessageStore(options: AdmittingStoreOptions): MessageStore {
+export function createAdmittingMessageStore(
+  options: AdmittingStoreOptions,
+): MessageStore {
   const inner = createMessageStore();
   return {
     subscribe: inner.subscribe,
@@ -60,7 +80,10 @@ export function createAdmittingMessageStore(options: AdmittingStoreOptions): Mes
     push(message) {
       const admitted: ServerToClientMessage[] = [];
       for (const candidate of Array.isArray(message) ? message : [message]) {
-        const result = admit(candidate as ServerToClientMessage, options.controls);
+        const result = admit(
+          candidate as ServerToClientMessage,
+          options.controls,
+        );
         if (result.kind === 'rejected') options.onRejected(result.rejection);
         else admitted.push(result.message);
       }

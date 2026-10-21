@@ -1,12 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { BudgetSettings } from '@saga-a2ui/mcp/server';
-import { startEpisodeListener, type EpisodeListener, type RequestOutcome } from '../mcp/listener.js';
+import {
+  startEpisodeListener,
+  type EpisodeListener,
+  type RequestOutcome,
+} from '../mcp/listener.js';
 import type { MediaStore } from './media-service.js';
 import type { PlaybackBackend, EpisodeRecord } from './playback-server.js';
 
@@ -18,7 +27,9 @@ import type { PlaybackBackend, EpisodeRecord } from './playback-server.js';
 export const PRIVATE_CANARY = 'canary-private-backend-field';
 
 /** A recognizable value the media store would return; never part of any tool result. */
-export const MEDIA_BYTES = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x63, 0x61, 0x6e, 0x61, 0x72, 0x79]);
+export const MEDIA_BYTES = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0x63, 0x61, 0x6e, 0x61, 0x72, 0x79,
+]);
 
 export interface CountingPlayback {
   readonly backend: PlaybackBackend;
@@ -42,7 +53,11 @@ export interface CountingPlayback {
    * Holds the next entitlement lookup open, as a slow authorization service would. It answers
    * `outcome` once released, however late; `signal` is what the lookup was asked to stop on.
    */
-  holdNextEntitlement(): { readonly reached: Promise<void>; readonly signal: () => AbortSignal | undefined; release(outcome?: 'entitled' | 'denied'): void };
+  holdNextEntitlement(): {
+    readonly reached: Promise<void>;
+    readonly signal: () => AbortSignal | undefined;
+    release(outcome?: 'entitled' | 'denied'): void;
+  };
 }
 
 export function countingPlayback(
@@ -55,19 +70,37 @@ export function countingPlayback(
     mediaBytes?: Uint8Array;
   },
 ): CountingPlayback {
-  const entitlements = new Map(Object.entries(initialEntitlements).map(([account, ids]) => [account, new Set(ids)]));
+  const entitlements = new Map(
+    Object.entries(initialEntitlements).map(([account, ids]) => [
+      account,
+      new Set(ids),
+    ]),
+  );
   const episodes = options?.episodes ?? [
     // The extra field stands in for a private backend column that must never be published.
-    { id: 'ep-1', title: 'The protected episode', description: 'A public description.', internalNote: PRIVATE_CANARY },
-    { id: 'ep-2', title: 'Another protected episode', description: 'Also public.' },
+    {
+      id: 'ep-1',
+      title: 'The protected episode',
+      description: 'A public description.',
+      internalNote: PRIVATE_CANARY,
+    },
+    {
+      id: 'ep-2',
+      title: 'Another protected episode',
+      description: 'Also public.',
+    },
   ];
   const entitlementChecks: { accountId: string; episodeId: string }[] = [];
   const mediaReads: string[] = [];
   let entitlementFault = options?.failEntitlementWith;
   let readFault: string | undefined;
-  let heldRead: { readonly started: () => void; readonly gate: Promise<void> } | undefined;
+  let heldRead:
+    { readonly started: () => void; readonly gate: Promise<void> } | undefined;
   let heldEntitlement:
-    | { readonly started: (signal: AbortSignal) => void; readonly gate: Promise<'entitled' | 'denied'> }
+    | {
+        readonly started: (signal: AbortSignal) => void;
+        readonly gate: Promise<'entitled' | 'denied'>;
+      }
     | undefined;
   return {
     entitlementChecks,
@@ -85,13 +118,22 @@ export function countingPlayback(
       let release!: (outcome: 'entitled' | 'denied') => void;
       let started!: (signal: AbortSignal) => void;
       let seen: AbortSignal | undefined;
-      const gate = new Promise<'entitled' | 'denied'>((resolve) => void (release = resolve));
-      const reached = new Promise<void>((resolve) => void (started = (signal) => {
-        seen = signal;
-        resolve();
-      }));
+      const gate = new Promise<'entitled' | 'denied'>(
+        (resolve) => void (release = resolve),
+      );
+      const reached = new Promise<void>(
+        (resolve) =>
+          void (started = (signal) => {
+            seen = signal;
+            resolve();
+          }),
+      );
       heldEntitlement = { started, gate };
-      return { reached, signal: () => seen, release: (outcome = 'entitled') => release(outcome) };
+      return {
+        reached,
+        signal: () => seen,
+        release: (outcome = 'entitled') => release(outcome),
+      };
     },
     holdNextRead() {
       let release!: () => void;
@@ -103,7 +145,9 @@ export function countingPlayback(
     },
     backend: {
       // `recordFor` lets a test make the backend answer a lookup with a record whose own id differs.
-      findEpisode: (episodeId) => options?.recordFor?.[episodeId] ?? episodes.find((episode) => episode.id === episodeId),
+      findEpisode: (episodeId) =>
+        options?.recordFor?.[episodeId] ??
+        episodes.find((episode) => episode.id === episodeId),
       async checkEntitlement(accountId, episodeId, signal) {
         entitlementChecks.push({ accountId, episodeId });
         const held = heldEntitlement;
@@ -113,7 +157,9 @@ export function countingPlayback(
           return held.gate; // answers whenever released, even after the request was abandoned
         }
         if (entitlementFault) throw new Error(entitlementFault);
-        return entitlements.get(accountId)?.has(episodeId) ? 'entitled' : 'denied';
+        return entitlements.get(accountId)?.has(episodeId)
+          ? 'entitled'
+          : 'denied';
       },
     },
     store: {
@@ -126,7 +172,10 @@ export function countingPlayback(
           held.started();
           await held.gate;
         }
-        return { contentType: 'audio/wav', bytes: options?.mediaBytes ?? MEDIA_BYTES };
+        return {
+          contentType: 'audio/wav',
+          bytes: options?.mediaBytes ?? MEDIA_BYTES,
+        };
       },
     },
   };
@@ -170,7 +219,9 @@ export async function startPlaybackHarness(
   const listener = await startEpisodeListener({
     viewHtml,
     catalog: { find: () => undefined },
-    ...(options.contentPolicy === undefined ? {} : { contentPolicy: options.contentPolicy }),
+    ...(options.contentPolicy === undefined
+      ? {}
+      : { contentPolicy: options.contentPolicy }),
     port: 0,
     ...(options.budgets === undefined ? {} : { budgets: options.budgets }),
     ...(options.observe === undefined ? {} : { observe: options.observe }),
@@ -179,9 +230,15 @@ export async function startPlaybackHarness(
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: options.verifier ?? createDevelopmentVerifier(),
-      ...(options.playbackBudgets === undefined ? {} : { budgets: options.playbackBudgets }),
-      ...(options.capabilityTtlSeconds === undefined ? {} : { capabilityTtlSeconds: options.capabilityTtlSeconds }),
-      ...(options.nowSeconds === undefined ? {} : { nowSeconds: options.nowSeconds }),
+      ...(options.playbackBudgets === undefined
+        ? {}
+        : { budgets: options.playbackBudgets }),
+      ...(options.capabilityTtlSeconds === undefined
+        ? {}
+        : { capabilityTtlSeconds: options.capabilityTtlSeconds }),
+      ...(options.nowSeconds === undefined
+        ? {}
+        : { nowSeconds: options.nowSeconds }),
     },
   });
   return { listener, playback };
@@ -197,9 +254,14 @@ export interface WireResponse {
 export async function callToolOverHttp(
   url: string | undefined,
   token: string | undefined,
-  params: { name: string; arguments?: unknown; _meta?: Record<string, unknown> },
+  params: {
+    name: string;
+    arguments?: unknown;
+    _meta?: Record<string, unknown>;
+  },
 ): Promise<WireResponse> {
-  if (url === undefined) throw new Error('the listener has no playback endpoint');
+  if (url === undefined)
+    throw new Error('the listener has no playback endpoint');
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -207,7 +269,12 @@ export async function callToolOverHttp(
       accept: 'application/json, text/event-stream',
       ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
     },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params }),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params,
+    }),
   });
   const text = await response.text();
   return {
@@ -219,8 +286,15 @@ export async function callToolOverHttp(
 
 /** What the view does in a browser: a non-extractable-in-practice key pair whose public half is shared. */
 export async function createRecipientKey(): Promise<RecipientKey> {
-  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-  return { publicJwk: await crypto.subtle.exportKey('jwk', pair.publicKey), privateKey: pair.privateKey };
+  const pair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  );
+  return {
+    publicJwk: await crypto.subtle.exportKey('jwk', pair.publicKey),
+    privateKey: pair.privateKey,
+  };
 }
 
 export interface RecipientKey {
@@ -247,9 +321,16 @@ export async function playAndGetGrant(
     arguments: { episodeId },
     _meta: { 'saga-a2ui/recipient-key': key.publicJwk },
   });
-  const result = (response.body as { result?: { isError?: boolean; _meta?: Record<string, unknown> } }).result;
+  const result = (
+    response.body as {
+      result?: { isError?: boolean; _meta?: Record<string, unknown> };
+    }
+  ).result;
   const view = result?._meta?.['saga-a2ui/playback'];
-  if (result?.isError || !view) throw new Error(`Play was not authorized: ${JSON.stringify(response.body)}`);
+  if (result?.isError || !view)
+    throw new Error(
+      `Play was not authorized: ${JSON.stringify(response.body)}`,
+    );
   return view as GrantedView;
 }
 
@@ -266,10 +347,20 @@ export async function signMediaProof(options: {
   readonly issuedAt?: number;
 }): Promise<string> {
   const { SignJWT } = await import('jose');
-  const capabilityHash = createHash('sha256').update(options.capability).digest('base64url');
+  const capabilityHash = createHash('sha256')
+    .update(options.capability)
+    .digest('base64url');
   const { kty, crv, x, y } = options.key.publicJwk;
-  return new SignJWT({ htm: options.method ?? 'GET', htu: options.url, cap: capabilityHash })
-    .setProtectedHeader({ alg: 'ES256', typ: 'saga-media-proof+jwt', jwk: { kty, crv, x, y } as never })
+  return new SignJWT({
+    htm: options.method ?? 'GET',
+    htu: options.url,
+    cap: capabilityHash,
+  })
+    .setProtectedHeader({
+      alg: 'ES256',
+      typ: 'saga-media-proof+jwt',
+      jwk: { kty, crv, x, y } as never,
+    })
     .setJti(options.jti ?? randomUUID())
     .setIssuedAt(options.issuedAt)
     .sign(options.key.privateKey);
@@ -291,17 +382,28 @@ export async function acquireMedia(options: {
 }): Promise<MediaAttempt> {
   const response = await fetch(options.url, {
     headers: {
-      ...(options.capability === undefined ? {} : { [CAPABILITY_HEADER]: options.capability }),
+      ...(options.capability === undefined
+        ? {}
+        : { [CAPABILITY_HEADER]: options.capability }),
       ...(options.proof === undefined ? {} : { [PROOF_HEADER]: options.proof }),
       ...(options.range === undefined ? {} : { range: options.range }),
     },
   });
-  return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };
+  return {
+    status: response.status,
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    headers: response.headers,
+  };
 }
 
 /** One raw JSON-RPC request over HTTP to the playback endpoint (for methods other than tools/call). */
-export async function rpcOverHttp(url: string | undefined, token: string | undefined, body: unknown): Promise<WireResponse> {
-  if (url === undefined) throw new Error('the listener has no playback endpoint');
+export async function rpcOverHttp(
+  url: string | undefined,
+  token: string | undefined,
+  body: unknown,
+): Promise<WireResponse> {
+  if (url === undefined)
+    throw new Error('the listener has no playback endpoint');
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -312,14 +414,21 @@ export async function rpcOverHttp(url: string | undefined, token: string | undef
     body: JSON.stringify(body),
   });
   const text = await response.text();
-  return { status: response.status, challenge: response.headers.get('www-authenticate'), body: text.length === 0 ? undefined : JSON.parse(text) };
+  return {
+    status: response.status,
+    challenge: response.headers.get('www-authenticate'),
+    body: text.length === 0 ? undefined : JSON.parse(text),
+  };
 }
 
 /** What a stand-in destination saw: the proof that nothing (or exactly what) reached it. */
 export interface Recorder {
   /** `http://127.0.0.1:<port>`; a different origin from the listener under test. */
   readonly origin: string;
-  readonly requests: { readonly url: string; readonly headers: IncomingHttpHeaders }[];
+  readonly requests: {
+    readonly url: string;
+    readonly headers: IncomingHttpHeaders;
+  }[];
   close(): Promise<void>;
 }
 
@@ -328,12 +437,20 @@ export interface Recorder {
  * view was never told about, or for a media origin that redirects, so a test can show that no
  * capability or proof ever arrives there. It answers with `respond`, or with 200 and the canary bytes.
  */
-export async function startRecorder(respond?: (req: IncomingMessage, res: ServerResponse) => void): Promise<Recorder> {
+export async function startRecorder(
+  respond?: (req: IncomingMessage, res: ServerResponse) => void,
+): Promise<Recorder> {
   const requests: Recorder['requests'][number][] = [];
   const server = createServer((req, res) => {
     requests.push({ url: req.url ?? '', headers: req.headers });
     if (respond) return respond(req, res);
-    res.writeHead(200, { 'content-type': 'audio/wav', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }).end(Buffer.from(MEDIA_BYTES));
+    res
+      .writeHead(200, {
+        'content-type': 'audio/wav',
+        'access-control-allow-origin': '*',
+        'access-control-allow-headers': '*',
+      })
+      .end(Buffer.from(MEDIA_BYTES));
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

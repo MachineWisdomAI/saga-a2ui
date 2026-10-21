@@ -9,7 +9,15 @@
 //     policy applies (a policy may add annotations between them, never remove or reorder them).
 // Nothing here claims identical pixels between renderers, or that any description is true.
 
-export type FixtureBlockKind = 'paragraph' | 'heading' | 'quote' | 'list' | 'table' | 'code-block' | 'raw-html-block' | 'rule';
+export type FixtureBlockKind =
+  | 'paragraph'
+  | 'heading'
+  | 'quote'
+  | 'list'
+  | 'table'
+  | 'code-block'
+  | 'raw-html-block'
+  | 'rule';
 
 export interface ValidDescription {
   readonly id: string;
@@ -22,7 +30,8 @@ export interface ValidDescription {
   readonly order: readonly string[];
 }
 
-export type RefusalKind = 'invalid' | 'unsupported-version' | 'too-long' | 'too-nested';
+export type RefusalKind =
+  'invalid' | 'unsupported-version' | 'too-long' | 'too-nested';
 
 export interface RefusedDescription {
   readonly id: string;
@@ -91,11 +100,22 @@ const UNBROKEN = [
 export const VALID_DESCRIPTIONS: readonly ValidDescription[] = [
   {
     id: 'multilingual-long',
-    summary: 'long mixed-script notes with headings, a list, a quote, attribution and a footer',
+    summary:
+      'long mixed-script notes with headings, a list, a quote, attribution and a footer',
     dialect: 'commonmark-tables-strikethrough',
     contractVersion: 1,
     markdown: MULTILINGUAL,
-    outline: ['heading', 'paragraph', 'paragraph', 'paragraph', 'heading', 'list', 'quote', 'paragraph', 'paragraph'],
+    outline: [
+      'heading',
+      'paragraph',
+      'paragraph',
+      'paragraph',
+      'heading',
+      'list',
+      'quote',
+      'paragraph',
+      'paragraph',
+    ],
     order: [
       'Episode 42',
       'This week we read slowly',
@@ -116,17 +136,50 @@ export const VALID_DESCRIPTIONS: readonly ValidDescription[] = [
     dialect: 'commonmark-tables-strikethrough',
     contractVersion: 1,
     markdown: STRUCTURED,
-    outline: ['heading', 'paragraph', 'table', 'code-block', 'rule', 'paragraph'],
-    order: ['Reading plan', 'Before the table', 'a retracted claim', 'Monday', 'Tuesday', 'plain code line one', 'After the rule'],
+    outline: [
+      'heading',
+      'paragraph',
+      'table',
+      'code-block',
+      'rule',
+      'paragraph',
+    ],
+    order: [
+      'Reading plan',
+      'Before the table',
+      'a retracted claim',
+      'Monday',
+      'Tuesday',
+      'plain code line one',
+      'After the rule',
+    ],
   },
   {
     id: 'hostile-references',
-    summary: 'refused links and images, raw markup and control look-alikes between ordinary sentences',
+    summary:
+      'refused links and images, raw markup and control look-alikes between ordinary sentences',
     dialect: 'commonmark',
     contractVersion: 1,
     markdown: HOSTILE,
-    outline: ['paragraph', 'paragraph', 'paragraph', 'paragraph', 'raw-html-block', 'paragraph', 'paragraph'],
-    order: ['Opening line for the reader.', 'the guide', 'insecure notes', 'run it', 'sign in', 'Archive everything', 'is only the characters written', 'Closing line for the reader.'],
+    outline: [
+      'paragraph',
+      'paragraph',
+      'paragraph',
+      'paragraph',
+      'raw-html-block',
+      'paragraph',
+      'paragraph',
+    ],
+    order: [
+      'Opening line for the reader.',
+      'the guide',
+      'insecure notes',
+      'run it',
+      'sign in',
+      'Archive everything',
+      'is only the characters written',
+      'Closing line for the reader.',
+    ],
   },
   {
     id: 'unbroken-long',
@@ -135,7 +188,14 @@ export const VALID_DESCRIPTIONS: readonly ValidDescription[] = [
     contractVersion: 1,
     markdown: UNBROKEN,
     outline: ['paragraph', 'paragraph', 'code-block', 'table', 'paragraph'],
-    order: ['Start', 'LongLabel', 'RefusedLabel', 'a very long line of code', 'a long cell with many words in it', 'Final line.'],
+    order: [
+      'Start',
+      'LongLabel',
+      'RefusedLabel',
+      'a very long line of code',
+      'a long cell with many words in it',
+      'Final line.',
+    ],
   },
 ];
 
@@ -143,10 +203,58 @@ const SECRET = 'PRIVATE-SUBSCRIBER-TEXT';
 
 /** Results a renderer must refuse visibly, with nothing of the earlier or the refused content left. */
 export const REFUSED_DESCRIPTIONS: readonly RefusedDescription[] = [
-  { id: 'unsupported-number', summary: 'a later contract version', contractVersion: 2, markdown: `${SECRET} number`, maxLength: 5000, failure: 'unsupported-version', secret: SECRET },
-  { id: 'unsupported-string', summary: 'a version that is not the number 1', contractVersion: '1', markdown: `${SECRET} string`, maxLength: 5000, failure: 'unsupported-version', secret: SECRET },
-  { id: 'invalid-shape', summary: 'markdown that is not a string', contractVersion: 1, markdown: { secret: SECRET }, maxLength: 5000, failure: 'invalid', secret: SECRET },
-  { id: 'invalid-missing', summary: 'no markdown at all', contractVersion: 1, markdown: undefined, maxLength: 5000, failure: 'invalid', secret: SECRET },
-  { id: 'oversize', summary: 'one code unit over the application bound', contractVersion: 1, markdown: `${SECRET} `.padEnd(201, 'x'), maxLength: 200, failure: 'too-long', secret: SECRET },
-  { id: 'nested', summary: 'quotes nested past the safeguard', contractVersion: 1, markdown: `${'> '.repeat(25)}${SECRET}`, maxLength: 5000, failure: 'too-nested', secret: SECRET },
+  {
+    id: 'unsupported-number',
+    summary: 'a later contract version',
+    contractVersion: 2,
+    markdown: `${SECRET} number`,
+    maxLength: 5000,
+    failure: 'unsupported-version',
+    secret: SECRET,
+  },
+  {
+    id: 'unsupported-string',
+    summary: 'a version that is not the number 1',
+    contractVersion: '1',
+    markdown: `${SECRET} string`,
+    maxLength: 5000,
+    failure: 'unsupported-version',
+    secret: SECRET,
+  },
+  {
+    id: 'invalid-shape',
+    summary: 'markdown that is not a string',
+    contractVersion: 1,
+    markdown: { secret: SECRET },
+    maxLength: 5000,
+    failure: 'invalid',
+    secret: SECRET,
+  },
+  {
+    id: 'invalid-missing',
+    summary: 'no markdown at all',
+    contractVersion: 1,
+    markdown: undefined,
+    maxLength: 5000,
+    failure: 'invalid',
+    secret: SECRET,
+  },
+  {
+    id: 'oversize',
+    summary: 'one code unit over the application bound',
+    contractVersion: 1,
+    markdown: `${SECRET} `.padEnd(201, 'x'),
+    maxLength: 200,
+    failure: 'too-long',
+    secret: SECRET,
+  },
+  {
+    id: 'nested',
+    summary: 'quotes nested past the safeguard',
+    contractVersion: 1,
+    markdown: `${'> '.repeat(25)}${SECRET}`,
+    maxLength: 5000,
+    failure: 'too-nested',
+    secret: SECRET,
+  },
 ];

@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import { isAuthoredTypeScript, repositoryRoot, walkFiles } from './authored-tree.js';
+import {
+  isAuthoredTypeScript,
+  repositoryRoot,
+  walkFiles,
+} from './authored-tree.js';
 
 // Narrow check, not truthiness analysis. Flag `||` only when the left operand,
 // after unwrapping parentheses and zero-argument `.trim()` calls, is a string
@@ -11,7 +15,9 @@ import { isAuthoredTypeScript, repositoryRoot, walkFiles } from './authored-tree
 
 type Finding = { file: string; line: number };
 
-function zeroArgTrimReceiver(node: ts.CallExpression): ts.Expression | undefined {
+function zeroArgTrimReceiver(
+  node: ts.CallExpression,
+): ts.Expression | undefined {
   if (node.arguments.length !== 0) return undefined;
   const callee = node.expression;
   if (!ts.isPropertyAccessExpression(callee)) return undefined;
@@ -34,7 +40,10 @@ function fixedText(expression: ts.Expression): string | undefined {
     }
     break;
   }
-  if (ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current)) {
+  if (
+    ts.isStringLiteral(current) ||
+    ts.isNoSubstitutionTemplateLiteral(current)
+  ) {
     return current.text;
   }
   if (ts.isTemplateExpression(current)) {
@@ -57,12 +66,23 @@ function scriptKind(file: string): ts.ScriptKind {
 }
 
 function scanSource(file: string, text: string): Finding[] {
-  const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(file));
+  const sourceFile = ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind(file),
+  );
   const findings: Finding[] = [];
   function visit(node: ts.Node): void {
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.BarBarToken
+    ) {
       if (leftHasFixedNonWhitespace(node.left)) {
-        const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        const position = sourceFile.getLineAndCharacterOfPosition(
+          node.getStart(sourceFile),
+        );
         findings.push({ file, line: position.line + 1 });
       }
     }
@@ -124,7 +144,9 @@ function main(): number {
   }
   const findings = files.flatMap(scanFile);
   for (const finding of findings) {
-    console.log(`${finding.file}:${finding.line}: left operand of || necessarily contains fixed non-whitespace text`);
+    console.log(
+      `${finding.file}:${finding.line}: left operand of || necessarily contains fixed non-whitespace text`,
+    );
   }
   return findings.length === 0 ? 0 : 1;
 }

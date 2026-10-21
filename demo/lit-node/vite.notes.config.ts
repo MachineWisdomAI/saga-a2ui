@@ -13,6 +13,8 @@ export default defineConfig({
     outDir: path.resolve('dist/notes'),
     emptyOutDir: true,
     target: 'es2022',
-    rollupOptions: { input: path.resolve('../../examples/pack1-consumer/own.html') },
+    rollupOptions: {
+      input: path.resolve('../../examples/pack1-consumer/own.html'),
+    },
   },
 });

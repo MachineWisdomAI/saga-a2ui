@@ -7,8 +7,16 @@ import {
   type ImageEnforcement,
   type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
-import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement, defineElements, ElementConflictError } from '@saga-a2ui/lit';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type IngestResult,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  createA2uiAppElement,
+  defineElements,
+  ElementConflictError,
+} from '@saga-a2ui/lit';
 import {
   FaithfulCardContentElement,
   FaithfulCardElement,
@@ -65,7 +73,11 @@ declare global {
   }
 }
 
-function viewFor(options: CardOptions, linkCalls: string[], held: Array<(outcome: LinkOpenOutcome) => void> = []): ContentView {
+function viewFor(
+  options: CardOptions,
+  linkCalls: string[],
+  held: Array<(outcome: LinkOpenOutcome) => void> = [],
+): ContentView {
   const policy = createContentPolicy({
     level: options.level ?? 'standard',
     imageHosts: options.imageHosts ?? [],
@@ -108,7 +120,9 @@ window.mountCard = (id, options = {}) => {
   const view = viewFor(options, linkCalls, held);
   // The view answers the cards inside its host. The host is the view's owner: it ends the view on removal.
   let endView = provideContentView(host, view);
-  const element = document.createElement('saga-faithful-card-content') as FaithfulCardContentElement;
+  const element = document.createElement(
+    'saga-faithful-card-content',
+  ) as FaithfulCardContentElement;
   host.append(element);
   element.contractVersion = 1;
   element.markdown = options.markdown ?? '';
@@ -138,22 +152,46 @@ window.mountCard = (id, options = {}) => {
 // The same component through a real A2UI catalog: the application's own catalog lists the optional
 // entry, a session binds the card's two values to the data model, and the app element is the view.
 const CATALOG_ID = 'https://fixture.test/catalogs/faithful-card/v1';
-const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [faithfulCardEntry]);
-const catalogView = viewFor({ dialect: 'commonmark-tables-strikethrough', maxLength: 20_000, level: 'strict' }, []);
+const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
+  faithfulCardEntry,
+]);
+const catalogView = viewFor(
+  {
+    dialect: 'commonmark-tables-strikethrough',
+    maxLength: 20_000,
+    level: 'strict',
+  },
+  [],
+);
 class CardApp extends createA2uiAppElement({
-  createSession: () => createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
+  createSession: () =>
+    createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
   initialInput: [
-    { version: 'v0.9', createSurface: { surfaceId: 'card', catalogId: CATALOG_ID } },
+    {
+      version: 'v0.9',
+      createSurface: { surfaceId: 'card', catalogId: CATALOG_ID },
+    },
     {
       version: 'v0.9',
       updateComponents: {
         surfaceId: 'card',
         components: [
-          { id: 'root', component: 'FaithfulCard', contractVersion: { path: '/contractVersion' }, markdown: { path: '/markdown' } },
+          {
+            id: 'root',
+            component: 'FaithfulCard',
+            contractVersion: { path: '/contractVersion' },
+            markdown: { path: '/markdown' },
+          },
         ],
       },
     },
-    { version: 'v0.9', updateDataModel: { surfaceId: 'card', value: { contractVersion: 1, markdown: 'Waiting.' } } },
+    {
+      version: 'v0.9',
+      updateDataModel: {
+        surfaceId: 'card',
+        value: { contractVersion: 1, markdown: 'Waiting.' },
+      },
+    },
   ],
   surfaceId: 'card',
 }) {
@@ -176,7 +214,9 @@ window.registerAgain = () => {
 };
 window.defineConflicting = (tagName) => {
   try {
-    defineElements([{ tagName, element: class OtherImplementation extends HTMLElement {} }]);
+    defineElements([
+      { tagName, element: class OtherImplementation extends HTMLElement {} },
+    ]);
     return 'defined';
   } catch (error) {
     return error instanceof ElementConflictError ? 'conflict' : String(error);
@@ -184,4 +224,5 @@ window.defineConflicting = (tagName) => {
 };
 window.firstDefinitionsKept = () =>
   customElements.get('saga-faithful-card') === FaithfulCardElement &&
-  customElements.get('saga-faithful-card-content') === FaithfulCardContentElement;
+  customElements.get('saga-faithful-card-content') ===
+    FaithfulCardContentElement;

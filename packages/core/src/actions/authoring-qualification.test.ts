@@ -8,7 +8,11 @@ import {
   type PrerequisiteContext,
   type ServerTransport,
 } from './index.js';
-import { Control, newHost, renderInstance } from './fake-adapter.test-support.js';
+import {
+  Control,
+  newHost,
+  renderInstance,
+} from './fake-adapter.test-support.js';
 
 // The Blueprint's authoring cases (positive P1-P8 and L1, negative N1-N25 of the evidence
 // companion), run against the package's real exports and its own tsconfig instead of the
@@ -35,7 +39,9 @@ const session = prerequisite('session', () => proceed({ user: 'u-1' }));
 const audit = prerequisite('audit', () => proceed());
 const needsAsync = false as boolean;
 const hiddenAsync = (): unknown => Promise.resolve(1);
-const transport: ServerTransport = { callServerTool: () => Promise.resolve({ content: [] }) };
+const transport: ServerTransport = {
+  callServerTool: () => Promise.resolve({ content: [] }),
+};
 
 describe('the Blueprint authoring cases against the real exports', () => {
   it('accepts every positive case', async () => {
@@ -47,18 +53,30 @@ describe('the Blueprint authoring cases against the real exports', () => {
       .build();
 
     // P2: a prerequisite that needs less than the action provides is accepted.
-    const needsOnlyUser = prerequisite('needs-user', ({ provided }: PrerequisiteContext<{ readonly user: string }, unknown>) =>
-      provided.user === '' ? refuse('empty') : proceed({ confirmed: true as const }),
+    const needsOnlyUser = prerequisite(
+      'needs-user',
+      ({
+        provided,
+      }: PrerequisiteContext<{ readonly user: string }, unknown>) =>
+        provided.user === ''
+          ? refuse('empty')
+          : proceed({ confirmed: true as const }),
     );
     const lessNeeded = Action.local<Press>('less-needed')
       .input(() => ({ noteId: 'note-1', extra: 1 }))
       .before(session)
       .before(needsOnlyUser)
-      .run(({ params, provided }) => `${params.noteId}:${params.extra}:${String(provided.confirmed)}`)
+      .run(
+        ({ params, provided }) =>
+          `${params.noteId}:${params.extra}:${String(provided.confirmed)}`,
+      )
       .build();
 
     // P3: a synchronous prerequisite attaches the same way.
-    const syncGuard = Action.local<Press>('sync-guard').before(prerequisite('sync', () => proceed())).run(() => 1).build();
+    const syncGuard = Action.local<Press>('sync-guard')
+      .before(prerequisite('sync', () => proceed()))
+      .run(() => 1)
+      .build();
 
     // P4: a callback that always throws returns `never`, which is valid.
     const throwing = Action.local<Press>('throwing')
@@ -75,7 +93,9 @@ describe('the Blueprint authoring cases against the real exports', () => {
       .build();
 
     // P6: a retained alias is a branch: two branches each register one hook, and neither sees the other.
-    const base = Action.local<Press>('branch').run(() => 1).limits({ hookMs: 1 });
+    const base = Action.local<Press>('branch')
+      .run(() => 1)
+      .limits({ hookMs: 1 });
     const branchA = base.onSuccess(() => undefined).build();
     const branchB = base.onSuccess(() => undefined).build();
 
@@ -85,15 +105,21 @@ describe('the Blueprint authoring cases against the real exports', () => {
       .run(() => 0)
       .limits({ deadlineMs: 1, hookMs: 1 })
       .onFinally(({ outcome, cleanupErrors }) => {
-        if (outcome.status === 'failed' && outcome.stage === 'prerequisites') kinds.push(outcome.failure.kind); // not started
-        if (outcome.status === 'failed' && outcome.stage === 'running') kinds.push(outcome.failure.kind); // effect may be unknown
+        if (outcome.status === 'failed' && outcome.stage === 'prerequisites')
+          kinds.push(outcome.failure.kind); // not started
+        if (outcome.status === 'failed' && outcome.stage === 'running')
+          kinds.push(outcome.failure.kind); // effect may be unknown
         void cleanupErrors.length; // diagnostics, kept apart from the outcome
       })
       .build();
 
     // P8: `current()` is available to a handler and to a prerequisite.
     const fresh = Action.local<Press>('fresh')
-      .before(prerequisite('fresh-guard', ({ current }) => (current() ? proceed() : refuse('stale'))))
+      .before(
+        prerequisite('fresh-guard', ({ current }) =>
+          current() ? proceed() : refuse('stale'),
+        ),
+      )
       .run(async ({ current }) => (current() ? 1 : 0))
       .build();
 
@@ -104,7 +130,20 @@ describe('the Blueprint authoring cases against the real exports', () => {
       .run(() => 0)
       .build();
 
-    expect([guarded, lessNeeded, syncGuard, throwing, optional, branchA, branchB, finalReport, fresh, hidden].map((one) => one.label)).toEqual([
+    expect(
+      [
+        guarded,
+        lessNeeded,
+        syncGuard,
+        throwing,
+        optional,
+        branchA,
+        branchB,
+        finalReport,
+        fresh,
+        hidden,
+      ].map((one) => one.label),
+    ).toEqual([
       'guarded',
       'less-needed',
       'sync-guard',
@@ -163,8 +202,11 @@ describe('the Blueprint authoring cases against the real exports', () => {
 
       // N18: the guard has no diagnostic-string escape.
       Action.local<Press>('n18')
-        // @ts-expect-error a string is not assignable to the guard parameter
-        .atActivation(async () => 1, 'atActivation must return synchronously; start awaited work in before or run')
+        .atActivation(
+          async () => 1,
+          // @ts-expect-error a string is not assignable to the guard parameter
+          'atActivation must return synchronously; start awaited work in before or run',
+        )
         .run(() => 0)
         .build();
 
@@ -179,7 +221,9 @@ describe('the Blueprint authoring cases against the real exports', () => {
         .build();
 
       // N24: an action written for the data-bearing row event cannot attach to a plain button, whose event has no noteId.
-      const archiveRow = Action.local<NoteEvent>('archive-row').run(() => 0).build();
+      const archiveRow = Action.local<NoteEvent>('archive-row')
+        .run(() => 0)
+        .build();
       const host = newHost();
       renderInstance(host, 'details-toggle');
       host.register((view) => {

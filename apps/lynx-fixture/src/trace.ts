@@ -17,17 +17,27 @@ interface BridgeModule {
 
 let sequence = 0;
 
-export const onBackground = (): boolean => typeof __BACKGROUND__ !== 'undefined' && __BACKGROUND__;
-export const onMainThread = (): boolean => typeof __MAIN_THREAD__ !== 'undefined' && __MAIN_THREAD__;
+export const onBackground = (): boolean =>
+  typeof __BACKGROUND__ !== 'undefined' && __BACKGROUND__;
+export const onMainThread = (): boolean =>
+  typeof __MAIN_THREAD__ !== 'undefined' && __MAIN_THREAD__;
 
 /** Records one observation. Returns its sequence number, or 0 when it was not recorded. */
 export function trace(event: Readonly<Record<string, unknown>>): number {
   if (!onBackground()) return 0;
-  if (typeof NativeModules === 'undefined' || NativeModules?.bridge === undefined) return 0;
+  if (
+    typeof NativeModules === 'undefined' ||
+    NativeModules?.bridge === undefined
+  )
+    return 0;
   sequence += 1;
   // `at` is the worker's wall clock, comparable with the page's for measuring the interval between
   // a native node leaving the document and the effect cleanup that retires its instance.
-  NativeModules.bridge.call('saga:record', JSON.stringify({ seq: sequence, at: Date.now(), ...event }), () => undefined);
+  NativeModules.bridge.call(
+    'saga:record',
+    JSON.stringify({ seq: sequence, at: Date.now(), ...event }),
+    () => undefined,
+  );
   return sequence;
 }
 
@@ -50,6 +60,13 @@ export interface MainThreadFacts {
 export function countOnMainThread(name: keyof MainThreadFacts): void {
   if (!onMainThread()) return;
   const scope = globalThis as { __sagaMainThread?: MainThreadFacts };
-  scope.__sagaMainThread ??= { roots: 0, renders: 0, slotsConstructed: 0, tokensCaptured: 0, opens: 0, closes: 0 };
+  scope.__sagaMainThread ??= {
+    roots: 0,
+    renders: 0,
+    slotsConstructed: 0,
+    tokensCaptured: 0,
+    opens: 0,
+    closes: 0,
+  };
   scope.__sagaMainThread[name] += 1;
 }

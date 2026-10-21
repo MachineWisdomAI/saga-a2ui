@@ -53,7 +53,8 @@ Three kinds of value cross a boundary in this application, and TypeScript guaran
 
 ```ts examples/pack1-consumer/src/notes-actions.ts
 function requireNoteId(value: unknown): string {
-  if (typeof value !== 'string' || value === '') throw new Error('this row shows no note');
+  if (typeof value !== 'string' || value === '')
+    throw new Error('this row shows no note');
   return value;
 }
 ```
@@ -63,8 +64,13 @@ function requireNoteId(value: unknown): string {
 - A **request** carries tool arguments. The server declares a strict schema, so a caller cannot add an account, send a number for an ID, or send an empty one:
 
 ```ts examples/pack1-consumer/src/notes-contract.ts
-export const ArchiveInputSchema = z.strictObject({ noteId: z.string().min(1).max(32) });
-export const ArchiveOutputSchema = z.strictObject({ noteId: z.string().min(1).max(32), archivedAt: z.number().int().nonnegative() });
+export const ArchiveInputSchema = z.strictObject({
+  noteId: z.string().min(1).max(32),
+});
+export const ArchiveOutputSchema = z.strictObject({
+  noteId: z.string().min(1).max(32),
+  archivedAt: z.number().int().nonnegative(),
+});
 ```
 
   The traced test sends `{ noteId: 'n-1', accountId: 'acct-bob' }`, `{ noteId: 42 }` and `{ noteId: '' }` to `archive_note`; every one is rejected and the backend is never asked.
@@ -78,11 +84,33 @@ The generic parameters on `Action.server<ActionButtonActivation, CallToolResult>
 The layout is a list of component definitions with IDs. In the notes application the Archive control is two of them:
 
 ```ts examples/pack1-consumer/src/notes-surface.ts
-{ id: 'note-actions', component: 'Row', children: ['row-read', 'row-archive'] },
-{ id: 'row-read', component: 'ActionButton', child: 'row-read-label' },
-{ id: 'row-read-label', component: 'Line', kind: 'body', text: 'Mark read' },
-{ id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
-{ id: 'row-archive-label', component: 'Line', kind: 'body', text: 'Archive' },
+{
+  id: 'note-actions',
+  component: 'Row',
+  children: ['row-read', 'row-archive'],
+},
+{
+  id: 'row-read',
+  component: 'ActionButton',
+  child: 'row-read-label',
+},
+{
+  id: 'row-read-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Mark read',
+},
+{
+  id: 'row-archive',
+  component: 'ActionButton',
+  child: 'row-archive-label',
+},
+{
+  id: 'row-archive-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Archive',
+},
 ```
 
 The row is a *template*: `{ componentId: 'note-row', path: '/notes' }` repeats it per note, so the renderer creates one Archive button per note, all from the one `row-archive` definition. [The vocabulary is in the setup guide](getting-started.md#component-definition-template-and-instance).
@@ -91,8 +119,19 @@ Application code attaches behavior to those instances when the surface is presen
 
 ```ts examples/pack1-consumer/src/notes-view.ts
 attach: (view) => {
-  view.watchById('row-archive', ActionButton, (handle) => void handle.bindAction('activate', actions.archiveNote, { subject: () => handle.read('id') }));
-  view.watchById('row-read', ActionButton, (handle) => void handle.bindAction('activate', actions.markRead));
+  view.watchById(
+    'row-archive',
+    ActionButton,
+    (handle) =>
+      void handle.bindAction('activate', actions.archiveNote, {
+        subject: () => handle.read('id'),
+      }),
+  );
+  view.watchById(
+    'row-read',
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.markRead),
+  );
 },
 ```
 
@@ -128,18 +167,30 @@ What stays with playback is playback's own: the gesture the browser needs, the p
 Here is the whole Archive definition, in the order the runtime runs it. Prerequisites run strictly in the order written; the handler only starts after every one proceeded.
 
 ```ts examples/pack1-consumer/src/notes-actions.ts
-const archiveNote = Action.server<ActionButtonActivation, CallToolResult>('archive-note', environment.transport)
-  .input((event) => ({ noteId: requireNoteId(event.read('id')), at: event.dataPath }))
+const archiveNote = Action.server<ActionButtonActivation, CallToolResult>(
+  'archive-note',
+  environment.transport,
+)
+  .input((event) => ({
+    noteId: requireNoteId(event.read('id')),
+    at: event.dataPath,
+  }))
   // Inside the event turn: the application's hold on this row, owned by the invocation. The
   // scope gives it back when the invocation ends unless the success hook hands it over.
-  .atActivation(({ scope, event }) => scope.own(environment.holds.begin(requireNoteId(event.read('id'))), (token) => environment.holds.end(token)))
+  .atActivation(({ scope, event }) =>
+    scope.own(
+      environment.holds.begin(requireNoteId(event.read('id'))),
+      (token) => environment.holds.end(token),
+    ),
+  )
   .before(requireSession)
   .run(async ({ params, call }) => {
     const reply = await call(ARCHIVE_TOOL, { noteId: params.noteId });
     // A returned tool-level failure is a result, not an exception. Only a refusal the server marked
     // as having no effect is a known outcome; any other failure (a backend exception, an output the
     // server could not validate after writing) may follow an applied archive, so it stays unknown.
-    if (declaresNoEffect(reply)) throw new ArchiveDeclined('The server declined to archive the note');
+    if (declaresNoEffect(reply))
+      throw new ArchiveDeclined('The server declined to archive the note');
     if (reply.isError === true) throw new Error('The archive request failed');
     return ArchiveOutputSchema.parse(reply.structuredContent);
   })
@@ -215,10 +266,17 @@ A prerequisite is reusable asynchronous work that must finish before the handler
 The notes application's session check is one prerequisite, reusable by any action:
 
 ```ts examples/pack1-consumer/src/notes-actions.ts
-export function createSessionPrerequisite(transport: ServerTransport<CallToolResult>) {
+export function createSessionPrerequisite(
+  transport: ServerTransport<CallToolResult>,
+) {
   return prerequisite('session', async ({ signal }) => {
-    const reply = await transport.callServerTool({ name: SESSION_TOOL, arguments: {} }, { signal });
-    return reply.isError === true ? refuse('sign-in-required') : proceed({ signedIn: true as const });
+    const reply = await transport.callServerTool(
+      { name: SESSION_TOOL, arguments: {} },
+      { signal },
+    );
+    return reply.isError === true
+      ? refuse('sign-in-required')
+      : proceed({ signedIn: true as const });
   });
 }
 ```
@@ -227,13 +285,20 @@ To change what Archive requires, add prerequisites to the chain. Two more cross-
 
 ```ts scripts/guide-actions/guarded-archive.ts
 /** Cross-cutting requirement: the person confirms. A refusal means the handler never starts. */
-export const confirmArchive = (environment: GuardEnvironment): Prerequisite<NoValues, unknown, Pressed> =>
-  prerequisite('confirm', async ({ params, signal }) => ((await environment.confirm(params.noteId, signal)) ? proceed() : refuse('not-confirmed')));
+export const confirmArchive = (
+  environment: GuardEnvironment,
+): Prerequisite<NoValues, unknown, Pressed> =>
+  prerequisite('confirm', async ({ params, signal }) =>
+    (await environment.confirm(params.noteId, signal))
+      ? proceed()
+      : refuse('not-confirmed'),
 ```
 
 ```ts scripts/guide-actions/guarded-archive.ts
 /** Cross-cutting requirement: a durable audit entry exists before the protected request is sent. */
-export const auditArchive = (environment: GuardEnvironment): Prerequisite<{ readonly auditId: string }, unknown, Pressed> =>
+export const auditArchive = (
+  environment: GuardEnvironment,
+): Prerequisite<{ readonly auditId: string }, unknown, Pressed> =>
   prerequisite('audit', async ({ params, signal }) => {
     try {
       return proceed({ auditId: await environment.record(params, signal) });
@@ -246,8 +311,14 @@ export const auditArchive = (environment: GuardEnvironment): Prerequisite<{ read
 Composed after the session check, they read as a list of requirements:
 
 ```ts scripts/guide-actions/guarded-archive.ts
-return Action.server<InstanceEvent<unknown>, Reply>('archive-note-guarded', transport)
-  .input((event) => ({ noteId: String(event.read('id')), at: event.dataPath }))
+return Action.server<InstanceEvent<unknown>, Reply>(
+  'archive-note-guarded',
+  transport,
+)
+  .input((event) => ({
+    noteId: String(event.read('id')),
+    at: event.dataPath,
+  }))
   .before(requireSession) // 1. a valid session (its own request, counted apart)
   .before(confirmArchive(environment)) // 2. the person confirms
   .before(auditArchive(environment)) // 3. the audit entry exists
@@ -279,7 +350,8 @@ Every invocation ends in exactly one outcome, decided once and never edited: `su
 .onSuccess(({ params, result, activation, current }) => {
   // The server confirmed: the hold now belongs to the application's owner for good.
   activation.transfer((token) => environment.holds.confirm(token));
-  if (current()) environment.present(params.at, `Archived at ${result.archivedAt}`);
+  if (current())
+    environment.present(params.at, `Archived at ${result.archivedAt}`);
 })
 .onFailure((context) => {
   if (context.stage === 'input') return; // nothing was read from the event, so no row can be named
@@ -287,9 +359,18 @@ Every invocation ends in exactly one outcome, decided once and never edited: `su
   if (context.stage === 'prerequisites') {
     // The handler never started: no archive request was sent.
     const { failure } = context;
-    environment.present(context.params.at, `Not archived: ${failure.kind === 'refused' ? failure.reason : failure.kind}`);
-  } else if (context.failure.kind === 'handler-error' && context.failure.error instanceof ArchiveDeclined) {
-    environment.present(context.params.at, 'The server declined; nothing changed');
+    environment.present(
+      context.params.at,
+      `Not archived: ${failure.kind === 'refused' ? failure.reason : failure.kind}`,
+    );
+  } else if (
+    context.failure.kind === 'handler-error' &&
+    context.failure.error instanceof ArchiveDeclined
+  ) {
+    environment.present(
+      context.params.at,
+      'The server declined; nothing changed',
+    );
   } else {
     // A timeout, a transport failure or an unreadable reply: the request may have been applied.
     environment.present(context.params.at, 'Archive status unknown');
@@ -297,7 +378,12 @@ Every invocation ends in exactly one outcome, decided once and never edited: `su
 })
 .onCanceled((context) => {
   if (!context.current()) return;
-  environment.present(context.params.at, context.stage === 'prerequisites' ? 'Not archived: canceled' : 'Archive status unknown');
+  environment.present(
+    context.params.at,
+    context.stage === 'prerequisites'
+      ? 'Not archived: canceled'
+      : 'Archive status unknown',
+  );
 })
 ```
 
@@ -335,7 +421,13 @@ The server side uses the same rule for its own waits: a stage that does not fini
 One definition bound to two instances keeps each binding's own state:
 
 ```ts examples/pack1-consumer/src/notes-view.ts
-view.watchById('row-archive', ActionButton, (handle) => void handle.bindAction('activate', actions.archiveNote, { subject: () => handle.read('id') }));
+view.watchById(
+  'row-archive',
+  ActionButton,
+  (handle) =>
+    void handle.bindAction('activate', actions.archiveNote, {
+      subject: () => handle.read('id'),
+    }),
 ```
 
 The traced test presses the first row, holds the server open, and presses the second. Observed: the first binding is `running` while the second is `idle`; both holds are pending at once (`n-1`, `n-2`); when the server is released, both archives apply and both holds are handed to their owner. A pending press on one row never disables or cancels the other.
@@ -365,7 +457,8 @@ confirm(token: number): void {
 
 /** Gives an unconfirmed token back. A confirmed token, or one already given back, is left alone. */
 end(token: number): void {
-  if (this.#tokens.get(token)?.phase === 'pending') this.#tokens.delete(token);
+  if (this.#tokens.get(token)?.phase === 'pending')
+    this.#tokens.delete(token);
   this.#publish();
 }
 ```
@@ -388,8 +481,19 @@ On React the binding is the same definition and the same `bindAction`; only how 
 
 ```ts examples/pack1-consumer/src/notes-react-view.tsx
 const setup = (view: InstanceView): void => {
-  view.watchById('row-archive', ActionButton, (handle) => void handle.bindAction('activate', actions.archiveNote, { subject: () => handle.read('id') }));
-  view.watchById('row-read', ActionButton, (handle) => void handle.bindAction('activate', actions.markRead));
+  view.watchById(
+    'row-archive',
+    ActionButton,
+    (handle) =>
+      void handle.bindAction('activate', actions.archiveNote, {
+        subject: () => handle.read('id'),
+      }),
+  );
+  view.watchById(
+    'row-read',
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.markRead),
+  );
 };
 ```
 

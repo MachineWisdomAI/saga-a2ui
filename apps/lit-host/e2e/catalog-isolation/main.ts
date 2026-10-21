@@ -1,10 +1,30 @@
-import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement, defineElements, ElementConflictError } from '@saga-a2ui/lit';
-import { answerCardData, answerSurface, ANSWER_SURFACE_ID } from '../../src/answer-card/presentation.js';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type IngestResult,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  createA2uiAppElement,
+  defineElements,
+  ElementConflictError,
+} from '@saga-a2ui/lit';
+import {
+  answerCardData,
+  answerSurface,
+  ANSWER_SURFACE_ID,
+} from '../../src/answer-card/presentation.js';
 import { NO_HOST_LINKS } from '@saga-a2ui/components/faithful-card';
-import { AnswerCardElement, answerCatalog, registerAnswerElements } from '../../src/lit/answer-card.js';
+import {
+  AnswerCardElement,
+  answerCatalog,
+  registerAnswerElements,
+} from '../../src/lit/answer-card.js';
 import { contentViewFromDocument } from '../../src/lit/content-view.js';
-import { registerLitElements, SagaPanelElement, sagaCatalog } from '../../src/lit/integration.js';
+import {
+  registerLitElements,
+  SagaPanelElement,
+  sagaCatalog,
+} from '../../src/lit/integration.js';
 import { createSagaAppElement } from '../../src/lit/saga-app.js';
 import { initialFixture, SURFACE_ID } from '../../src/saga-panel/fixture.js';
 
@@ -35,7 +55,11 @@ registerAnswerElements();
 customElements.define(
   'saga-app',
   createSagaAppElement({
-    createSession: () => createMessageSession({ catalogs: [sagaCatalog], decoder: a2uiV0_9Decoder }),
+    createSession: () =>
+      createMessageSession({
+        catalogs: [sagaCatalog],
+        decoder: a2uiV0_9Decoder,
+      }),
     initialInput: initialFixture,
     surfaceId: SURFACE_ID,
     content: content.view,
@@ -44,7 +68,11 @@ customElements.define(
 customElements.define(
   'answer-app',
   createA2uiAppElement({
-    createSession: () => createMessageSession({ catalogs: [answerCatalog], decoder: a2uiV0_9Decoder }),
+    createSession: () =>
+      createMessageSession({
+        catalogs: [answerCatalog],
+        decoder: a2uiV0_9Decoder,
+      }),
     initialInput: [...answerSurface, ...answerCardData({ kind: 'waiting' })],
     surfaceId: ANSWER_SURFACE_ID,
   }),
@@ -54,11 +82,14 @@ window.answerApp = () => document.querySelector<AnswerAppElement>('answer-app');
 window.repeatSetup = registerLitElements;
 window.defineConflicting = (tagName) => {
   try {
-    defineElements([{ tagName, element: class OtherImplementation extends HTMLElement {} }]);
+    defineElements([
+      { tagName, element: class OtherImplementation extends HTMLElement {} },
+    ]);
     return 'defined';
   } catch (error) {
     return error instanceof ElementConflictError ? 'conflict' : String(error);
   }
 };
 window.firstDefinitionsKept = () =>
-  customElements.get('saga-panel') === SagaPanelElement && customElements.get('answer-card') === AnswerCardElement;
+  customElements.get('saga-panel') === SagaPanelElement &&
+  customElements.get('answer-card') === AnswerCardElement;

@@ -10,7 +10,8 @@ import type { HostLinks } from '@saga-a2ui/components/faithful-card';
 export function createAppHostLinks(app: App): HostLinks {
   return {
     async open(url) {
-      if (app.getHostCapabilities()?.openLinks === undefined) return 'unavailable';
+      if (app.getHostCapabilities()?.openLinks === undefined)
+        return 'unavailable';
       try {
         const result = await app.openLink({ url });
         return result.isError === true ? 'denied' : 'opened';

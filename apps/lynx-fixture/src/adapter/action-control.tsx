@@ -1,11 +1,37 @@
-import { NodeRenderer, useChecks, type CatalogComponent, type CheckLike, type ComponentInstance, type GenericComponentProps } from '@lynx-js/genui/a2ui';
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from '@lynx-js/react';
+import {
+  NodeRenderer,
+  useChecks,
+  type CatalogComponent,
+  type CheckLike,
+  type ComponentInstance,
+  type GenericComponentProps,
+} from '@lynx-js/genui/a2ui';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from '@lynx-js/react';
 import type { InstanceHost } from '@saga-a2ui/core/actions';
-import { InstanceSlot, type Activation, type OpenWhere, type SlotConfig, type TapToken } from './instance-slot.js';
-import { ACTION_BUTTON_NAME, ActionButton, SOURCE_ID_PROP, type LynxTap } from './kind.js';
+import {
+  InstanceSlot,
+  type Activation,
+  type OpenWhere,
+  type SlotConfig,
+  type TapToken,
+} from './instance-slot.js';
+import {
+  ACTION_BUTTON_NAME,
+  ActionButton,
+  SOURCE_ID_PROP,
+  type LynxTap,
+} from './kind.js';
 
 /** The presentation's action host. One `<A2UI>` mount, one host; a new session is a new host. */
-export const ActionHostContext = createContext<InstanceHost | undefined>(undefined);
+export const ActionHostContext = createContext<InstanceHost | undefined>(
+  undefined,
+);
 
 export interface ActionControlOptions {
   readonly itemKeyProp: SlotConfig['itemKeyProp'];
@@ -45,10 +71,19 @@ const noSnapshot = (): undefined => undefined;
  * a replaced rule list re-renders the control. The array keeps its identity until the stored
  * component is replaced, which is what `useChecks` keys its re-evaluation on.
  */
-function useStoredChecks(surface: GenericComponentProps['surface'], componentId: string): CheckLike[] | undefined {
+function useStoredChecks(
+  surface: GenericComponentProps['surface'],
+  componentId: string,
+): CheckLike[] | undefined {
   const resource = surface.resources.get(componentId);
-  useSyncExternalStore(resource === undefined ? noSubscribe : resource.subscribe, resource === undefined ? noSnapshot : resource.getSnapshot, resource === undefined ? noSnapshot : resource.getSnapshot);
-  const stored: unknown = (surface.components.get(componentId) as Record<string, unknown> | undefined)?.['checks'];
+  useSyncExternalStore(
+    resource === undefined ? noSubscribe : resource.subscribe,
+    resource === undefined ? noSnapshot : resource.getSnapshot,
+    resource === undefined ? noSnapshot : resource.getSnapshot,
+  );
+  const stored: unknown = (
+    surface.components.get(componentId) as Record<string, unknown> | undefined
+  )?.['checks'];
   return Array.isArray(stored) ? (stored as CheckLike[]) : undefined;
 }
 
@@ -61,7 +96,9 @@ function useStoredChecks(surface: GenericComponentProps['surface'], componentId:
  * inert slot, never opens it. Binding and subscription happen in effects, on the background
  * thread only.
  */
-export function createActionControl(options: ActionControlOptions): ActionControl {
+export function createActionControl(
+  options: ActionControlOptions,
+): ActionControl {
   function useSlotView(props: GenericComponentProps): SlotView {
     const host = useContext(ActionHostContext);
     const [slot] = useState(
@@ -74,13 +111,20 @@ export function createActionControl(options: ActionControlOptions): ActionContro
           probe: options.probe,
         }),
     );
-    const snapshot = useSyncExternalStore(slot.subscribe, slot.getSnapshot, slot.getSnapshot);
+    const snapshot = useSyncExternalStore(
+      slot.subscribe,
+      slot.getSnapshot,
+      slot.getSnapshot,
+    );
 
     const componentId = props.id ?? '';
     const where: OpenWhere = {
       surface: props.surface,
       componentId,
-      sourceComponentId: typeof props[SOURCE_ID_PROP] === 'string' ? props[SOURCE_ID_PROP] : componentId,
+      sourceComponentId:
+        typeof props[SOURCE_ID_PROP] === 'string'
+          ? props[SOURCE_ID_PROP]
+          : componentId,
       dataContextPath: props.dataContextPath,
     };
 
@@ -100,15 +144,20 @@ export function createActionControl(options: ActionControlOptions): ActionContro
     // Pure: what this render showed.
     const token = slot.tapToken(snapshot, props);
     slot.noteRender(token?.shownKey);
-    const onTap = (event: LynxTap): Activation | 'no-token' => (token === undefined ? 'no-token' : slot.activate(token, event));
+    const onTap = (event: LynxTap): Activation | 'no-token' =>
+      token === undefined ? 'no-token' : slot.activate(token, event);
     useEffect(() => {
       slot.currentTap = onTap;
     });
 
-    const childId = typeof props['child'] === 'string' ? props['child'] : undefined;
-    const child = childId === undefined ? undefined : props.surface.components.get(childId);
+    const childId =
+      typeof props['child'] === 'string' ? props['child'] : undefined;
+    const child =
+      childId === undefined ? undefined : props.surface.components.get(childId);
     const childWithContext: ComponentInstance | undefined =
-      child !== undefined && props.dataContextPath !== undefined ? { ...child, dataContextPath: props.dataContextPath } : child;
+      child !== undefined && props.dataContextPath !== undefined
+        ? { ...child, dataContextPath: props.dataContextPath }
+        : child;
     return { token, onTap, componentId, child: childWithContext };
   }
 
@@ -125,15 +174,29 @@ export function createActionControl(options: ActionControlOptions): ActionContro
     // value, which `useChecks` does not recognise and so counts as passing, and the rule no longer
     // names the data it depends on. The stored rule keeps the binding, so the hook evaluates it
     // against the current data model and re-evaluates when that model changes.
-    const checked = useChecks({ checks: useStoredChecks(props.surface, componentId), componentId, surface: props.surface, dataContextPath: props.dataContextPath });
+    const checked = useChecks({
+      checks: useStoredChecks(props.surface, componentId),
+      componentId,
+      surface: props.surface,
+      dataContextPath: props.dataContextPath,
+    });
     const enabled = props['isValid'] !== false && checked.ok;
 
     return (
       <>
-        <view id={componentId} bindtap={token === undefined || !enabled ? undefined : onTap}>
-          {child === undefined ? null : <NodeRenderer component={child} surface={props.surface} />}
+        <view
+          id={componentId}
+          bindtap={token === undefined || !enabled ? undefined : onTap}
+        >
+          {child === undefined ? null : (
+            <NodeRenderer component={child} surface={props.surface} />
+          )}
         </view>
-        {!checked.ok && typeof checked.firstFailureMessage === 'string' && checked.firstFailureMessage !== '' ? <text id={`${componentId}-error`}>{checked.firstFailureMessage}</text> : null}
+        {!checked.ok &&
+        typeof checked.firstFailureMessage === 'string' &&
+        checked.firstFailureMessage !== '' ? (
+          <text id={`${componentId}-error`}>{checked.firstFailureMessage}</text>
+        ) : null}
       </>
     );
   }
@@ -141,7 +204,12 @@ export function createActionControl(options: ActionControlOptions): ActionContro
 
   function FirstScreenProbe(props: GenericComponentProps) {
     const { token, onTap, componentId } = useSlotView(props);
-    return <view id={componentId} bindtap={token === undefined ? undefined : onTap} />;
+    return (
+      <view
+        id={componentId}
+        bindtap={token === undefined ? undefined : onTap}
+      />
+    );
   }
   FirstScreenProbe.displayName = `${ACTION_BUTTON_NAME}FirstScreenProbe`;
 

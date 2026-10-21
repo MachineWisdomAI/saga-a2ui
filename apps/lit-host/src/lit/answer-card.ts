@@ -14,10 +14,17 @@ export class AnswerCardElement extends A2uiLitElement<typeof AnswerCardApi> {
     if (!props) return nothing;
     const question = String(props.question ?? '');
     const answer = String(props.answer ?? '');
-    return html`<main data-testid="answer-root" data-state=${String(props.state ?? '')}>
+    return html`<main
+      data-testid="answer-root"
+      data-state=${String(props.state ?? '')}
+    >
       <h1>Answer</h1>
-      <p data-testid="answer-status" role="status">${String(props.status ?? '')}</p>
-      <p data-testid="answer-question" ?hidden=${question === ''}>${question}</p>
+      <p data-testid="answer-status" role="status">
+        ${String(props.status ?? '')}
+      </p>
+      <p data-testid="answer-question" ?hidden=${question === ''}>
+        ${question}
+      </p>
       <p data-testid="answer-text" ?hidden=${answer === ''}>${answer}</p>
     </main>`;
   }
@@ -30,7 +37,11 @@ const AnswerCard: LitComponentApi = {
 };
 
 /** The answer view's own catalog: one component, no functions. */
-export const answerCatalog = new Catalog<LitComponentApi>(ANSWER_CATALOG_ID, 'v0.9', [AnswerCard]);
+export const answerCatalog = new Catalog<LitComponentApi>(
+  ANSWER_CATALOG_ID,
+  'v0.9',
+  [AnswerCard],
+);
 
 /** Explicit setup: defines the catalog's custom element. Repeating it is harmless. */
 export function registerAnswerElements(): void {

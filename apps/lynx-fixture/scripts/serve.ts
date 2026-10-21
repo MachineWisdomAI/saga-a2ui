@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 // Static server for the built Web host, plus one endpoint that never answers so the tests can
 // tell whether an aborted request really dropped its connection.
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const appRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const dist = path.join(appRoot, 'dist');
 const port = Number(process.env['PORT'] ?? 4174);
 
@@ -36,14 +39,24 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify(slow));
     return;
   }
-  const relative = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  const relative =
+    url.pathname === '/'
+      ? 'index.html'
+      : decodeURIComponent(url.pathname).replace(/^\/+/, '');
   const file = path.resolve(dist, relative);
-  if (!file.startsWith(dist + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  if (
+    !file.startsWith(dist + path.sep) ||
+    !fs.existsSync(file) ||
+    !fs.statSync(file).isFile()
+  ) {
     response.writeHead(404);
     response.end('not found');
     return;
   }
-  response.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
+  response.writeHead(200, {
+    'content-type': types[path.extname(file)] ?? 'application/octet-stream',
+    'cache-control': 'no-store',
+  });
   fs.createReadStream(file).pipe(response);
 });
 

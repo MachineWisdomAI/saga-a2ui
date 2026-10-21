@@ -7,10 +7,15 @@ const BUILT_DIRECTORIES = ['dist', 'dist-installed'] as const;
 
 export type BuiltDirectory = (typeof BUILT_DIRECTORIES)[number];
 
-export function builtDirectory(env: Record<string, string | undefined> = process.env): BuiltDirectory {
+export function builtDirectory(
+  env: Record<string, string | undefined> = process.env,
+): BuiltDirectory {
   const requested = env.SAGA_BUILT_DIR ?? 'dist';
   const found = BUILT_DIRECTORIES.find((name) => name === requested);
-  if (found === undefined) throw new Error(`SAGA_BUILT_DIR must be one of ${BUILT_DIRECTORIES.join(', ')}, not ${requested}`);
+  if (found === undefined)
+    throw new Error(
+      `SAGA_BUILT_DIR must be one of ${BUILT_DIRECTORIES.join(', ')}, not ${requested}`,
+    );
   return found;
 }
 

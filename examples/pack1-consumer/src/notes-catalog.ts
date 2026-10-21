@@ -1,4 +1,8 @@
-import { A2uiLitElement, basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
+import {
+  A2uiLitElement,
+  basicCatalog,
+  type LitComponentApi,
+} from '@a2ui/lit/v0_9';
 import { actionButtonEntry } from '@saga-a2ui/lit/actions';
 import { html, nothing } from 'lit';
 import { LineApi } from './notes-line.js';
@@ -27,7 +31,11 @@ class LineElement extends A2uiLitElement<typeof LineApi> {
   }
 }
 
-export const Line: LitComponentApi = { ...LineApi, tagName: 'notes-line', element: LineElement };
+export const Line: LitComponentApi = {
+  ...LineApi,
+  tagName: 'notes-line',
+  element: LineElement,
+};
 
 const upstream = (name: string): LitComponentApi => {
   const component = basicCatalog.components.get(name);
@@ -36,4 +44,10 @@ const upstream = (name: string): LitComponentApi => {
 };
 
 /** What every consumer of this application has: layout, the application's own line, and the opt-in action control. */
-export const ownEntries: readonly LitComponentApi[] = [upstream('Column'), upstream('Row'), upstream('List'), Line, actionButtonEntry];
+export const ownEntries: readonly LitComponentApi[] = [
+  upstream('Column'),
+  upstream('Row'),
+  upstream('List'),
+  Line,
+  actionButtonEntry,
+];

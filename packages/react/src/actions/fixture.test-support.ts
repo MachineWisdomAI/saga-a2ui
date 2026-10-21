@@ -1,8 +1,30 @@
-import { A2uiSurface, createComponentImplementation, type ReactCatalogComponent } from '@a2ui/react/v0_9';
+import {
+  A2uiSurface,
+  createComponentImplementation,
+  type ReactCatalogComponent,
+} from '@a2ui/react/v0_9';
 import { Catalog, type SurfaceModel } from '@a2ui/web_core/v0_9';
-import { basicCatalog, ButtonApi, ColumnApi, ListApi, RowApi, TextApi } from '@a2ui/web_core/v0_9/basic_catalog';
-import { a2uiV0_9Decoder, createMessageSession, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createElement, Fragment, StrictMode, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import {
+  basicCatalog,
+  ButtonApi,
+  ColumnApi,
+  ListApi,
+  RowApi,
+  TextApi,
+} from '@a2ui/web_core/v0_9/basic_catalog';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type MessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  createElement,
+  Fragment,
+  StrictMode,
+  useLayoutEffect,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import type { InstanceView, Limits } from '@saga-a2ui/core/actions';
@@ -16,48 +38,93 @@ import { InstanceHostProvider, useActionSetup } from './instance-host.js';
 // behavior of an upstream renderer's Button: pressing it calls the resolved `action`, which
 // dispatches on the surface (the protocol path).
 
-export const CATALOG_ID = 'https://saga-a2ui.local/catalogs/react-action-consumer/v1';
+export const CATALOG_ID =
+  'https://saga-a2ui.local/catalogs/react-action-consumer/v1';
 export const SURFACE_ID = 'actions';
 
-type ChildReference = string | { readonly id: string; readonly basePath: string };
+type ChildReference =
+  string | { readonly id: string; readonly basePath: string };
 
 // The generated view hands a child list over as tokens, or `{ id, basePath }` for a template item.
-function childrenOf(buildChild: (id: string, basePath?: string) => ReactNode, value: unknown): ReactNode[] {
+function childrenOf(
+  buildChild: (id: string, basePath?: string) => ReactNode,
+  value: unknown,
+): ReactNode[] {
   const list = Array.isArray(value) ? (value as ChildReference[]) : [];
-  return list.map((child) => (typeof child === 'string' ? buildChild(child) : buildChild(child.id, child.basePath)));
+  return list.map((child) =>
+    typeof child === 'string'
+      ? buildChild(child)
+      : buildChild(child.id, child.basePath),
+  );
 }
 
-const Text = createComponentImplementation(TextApi, ({ props }) => createElement('span', null, String(props.text ?? '')));
+const Text = createComponentImplementation(TextApi, ({ props }) =>
+  createElement('span', null, String(props.text ?? '')),
+);
 /**
  * A parent's layout effect runs after its children's in the same commit. The Column reports when
  * it does, so a test can see what the children had already done by the end of the layout phase.
  */
 export const columnHooks: { afterLayout?: () => void } = {};
-const Column = createComponentImplementation(ColumnApi, ({ props, buildChild }) => {
-  useLayoutEffect(() => columnHooks.afterLayout?.());
-  return createElement('div', { 'data-layout': 'column' }, ...childrenOf(buildChild, props.children));
-});
+const Column = createComponentImplementation(
+  ColumnApi,
+  ({ props, buildChild }) => {
+    useLayoutEffect(() => columnHooks.afterLayout?.());
+    return createElement(
+      'div',
+      { 'data-layout': 'column' },
+      ...childrenOf(buildChild, props.children),
+    );
+  },
+);
 const Row = createComponentImplementation(RowApi, ({ props, buildChild }) =>
-  createElement('div', { 'data-layout': 'row' }, ...childrenOf(buildChild, props.children)),
-);
-const List = createComponentImplementation(ListApi, ({ props, buildChild }) =>
-  createElement('div', { 'data-layout': 'list' }, ...childrenOf(buildChild, props.children)),
-);
-const Button = createComponentImplementation(ButtonApi, ({ props, buildChild }) =>
   createElement(
-    'button',
-    { type: 'button', 'data-upstream': 'true', onClick: () => (props.action as (() => void) | undefined)?.() },
-    typeof props.child === 'string' ? buildChild(props.child) : null,
+    'div',
+    { 'data-layout': 'row' },
+    ...childrenOf(buildChild, props.children),
   ),
 );
+const List = createComponentImplementation(ListApi, ({ props, buildChild }) =>
+  createElement(
+    'div',
+    { 'data-layout': 'list' },
+    ...childrenOf(buildChild, props.children),
+  ),
+);
+const Button = createComponentImplementation(
+  ButtonApi,
+  ({ props, buildChild }) =>
+    createElement(
+      'button',
+      {
+        type: 'button',
+        'data-upstream': 'true',
+        onClick: () => (props.action as (() => void) | undefined)?.(),
+      },
+      typeof props.child === 'string' ? buildChild(props.child) : null,
+    ),
+);
 
-export const components: ReactCatalogComponent[] = [Text, Column, Row, List, Button, ActionButtonEntry];
-export const catalog = new Catalog<ReactCatalogComponent>(CATALOG_ID, 'v0.9', components, [
-  ...basicCatalog.functions.values(),
-]);
+export const components: ReactCatalogComponent[] = [
+  Text,
+  Column,
+  Row,
+  List,
+  Button,
+  ActionButtonEntry,
+];
+export const catalog = new Catalog<ReactCatalogComponent>(
+  CATALOG_ID,
+  'v0.9',
+  components,
+  [...basicCatalog.functions.values()],
+);
 
 /** The messages that create the surface with the consumer's layout and data. */
-export function layout(surfaceId = SURFACE_ID, extraComponents: readonly object[] = []): unknown[] {
+export function layout(
+  surfaceId = SURFACE_ID,
+  extraComponents: readonly object[] = [],
+): unknown[] {
   return [
     { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
     {
@@ -65,7 +132,11 @@ export function layout(surfaceId = SURFACE_ID, extraComponents: readonly object[
       updateComponents: {
         surfaceId,
         components: [
-          { id: 'root', component: 'Column', children: ['mark-a', 'mark-b', 'orphan', 'upstream-button', 'rows'] },
+          {
+            id: 'root',
+            component: 'Column',
+            children: ['mark-a', 'mark-b', 'orphan', 'upstream-button', 'rows'],
+          },
           { id: 'mark-a', component: 'ActionButton', child: 'mark-a-label' },
           { id: 'mark-a-label', component: 'Text', text: 'Mark A' },
           { id: 'mark-b', component: 'ActionButton', child: 'mark-b-label' },
@@ -79,10 +150,22 @@ export function layout(surfaceId = SURFACE_ID, extraComponents: readonly object[
             action: { event: { name: 'upstream-press' } },
           },
           { id: 'upstream-label', component: 'Text', text: 'Upstream' },
-          { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
-          { id: 'row', component: 'Row', children: ['row-title', 'row-archive'] },
+          {
+            id: 'rows',
+            component: 'List',
+            children: { componentId: 'row', path: '/rows' },
+          },
+          {
+            id: 'row',
+            component: 'Row',
+            children: ['row-title', 'row-archive'],
+          },
           { id: 'row-title', component: 'Text', text: { path: 'title' } },
-          { id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
+          {
+            id: 'row-archive',
+            component: 'ActionButton',
+            child: 'row-archive-label',
+          },
           { id: 'row-archive-label', component: 'Text', text: 'Archive' },
           ...extraComponents,
         ],
@@ -187,11 +270,17 @@ export function mount(options: { readonly strict?: boolean } = {}): Mounted {
   const root: Root = createRoot(container);
   const strict = options.strict ?? true;
   const buttons = (label: string): HTMLButtonElement[] =>
-    [...container.querySelectorAll('button')].filter((candidate) => candidate.textContent === label);
+    [...container.querySelectorAll('button')].filter(
+      (candidate) => candidate.textContent === label,
+    );
   return {
     container,
     render(element) {
-      act(() => root.render(strict ? createElement(StrictMode, null, element) : element));
+      act(() =>
+        root.render(
+          strict ? createElement(StrictMode, null, element) : element,
+        ),
+      );
     },
     unmount() {
       act(() => root.unmount());
@@ -200,7 +289,8 @@ export function mount(options: { readonly strict?: boolean } = {}): Mounted {
     buttons,
     button(label) {
       const found = buttons(label);
-      if (found.length !== 1) throw new Error(`${found.length} buttons are labelled '${label}'`);
+      if (found.length !== 1)
+        throw new Error(`${found.length} buttons are labelled '${label}'`);
       return found[0]!;
     },
     async settle() {

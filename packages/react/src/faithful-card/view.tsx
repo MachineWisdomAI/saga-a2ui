@@ -1,4 +1,10 @@
-import type { ContentPolicy, FaithfulCardReader, HostLinks, ImageConsentScope, ImageEnforcement } from '@saga-a2ui/components/faithful-card';
+import type {
+  ContentPolicy,
+  FaithfulCardReader,
+  HostLinks,
+  ImageConsentScope,
+  ImageEnforcement,
+} from '@saga-a2ui/components/faithful-card';
 import { createContext, useMemo, type ReactNode } from 'react';
 
 /**
@@ -24,7 +30,9 @@ export interface FaithfulCardView {
 }
 
 /** Without a provider the context is empty, and a card refuses to show anything. */
-export const FaithfulCardViewContext = createContext<FaithfulCardView | undefined>(undefined);
+export const FaithfulCardViewContext = createContext<
+  FaithfulCardView | undefined
+>(undefined);
 
 /**
  * Makes `view` the trusted settings of every FaithfulCard beneath it. The cards below it see a
@@ -32,13 +40,21 @@ export const FaithfulCardViewContext = createContext<FaithfulCardView | undefine
  * because replacing one starts every card below from fresh state, as new content does, and ends
  * the consent that card had.
  */
-export function FaithfulCardProvider(props: { readonly view: FaithfulCardView; readonly children: ReactNode }) {
+export function FaithfulCardProvider(props: {
+  readonly view: FaithfulCardView;
+  readonly children: ReactNode;
+}) {
   const { reader, policy, hostLinks, imageEnforcement, consent } = props.view;
   // Memoised only so that an unchanged set keeps one object identity across the application's
   // re-renders; a discarded memo costs a card its transient state, never correctness.
   const view = useMemo<FaithfulCardView>(
-    () => Object.freeze({ reader, policy, hostLinks, imageEnforcement, consent }),
+    () =>
+      Object.freeze({ reader, policy, hostLinks, imageEnforcement, consent }),
     [reader, policy, hostLinks, imageEnforcement, consent],
   );
-  return <FaithfulCardViewContext.Provider value={view}>{props.children}</FaithfulCardViewContext.Provider>;
+  return (
+    <FaithfulCardViewContext.Provider value={view}>
+      {props.children}
+    </FaithfulCardViewContext.Provider>
+  );
 }

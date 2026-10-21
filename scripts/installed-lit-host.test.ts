@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildInstalledLitHost, classifyModules, INSTALLED_PAGE_CONFIGS, INSTALLED_SDK_PACKAGES, type BuiltPage, type InstalledLitHostIdentity } from './build-installed-lit-host.js';
+import {
+  buildInstalledLitHost,
+  classifyModules,
+  INSTALLED_PAGE_CONFIGS,
+  INSTALLED_SDK_PACKAGES,
+  type BuiltPage,
+  type InstalledLitHostIdentity,
+} from './build-installed-lit-host.js';
 import { createWorkDirectory, repoRoot } from './packed-consumer.js';
 
 // The application's browser pages (apps/lit-host) built outside the repository from the packed SDK
@@ -23,39 +30,75 @@ describe('the application pages built from the packed SDK packages', () => {
     if (found === undefined) throw new Error(`no build of ${config}`);
     return found;
   };
-  const sdkPackagesOf = (config: string): string[] => [...new Set(page(config).provenance.installedSdkFiles.map((file) => file.split('/').slice(0, 2).join('/')))];
+  const sdkPackagesOf = (config: string): string[] => [
+    ...new Set(
+      page(config).provenance.installedSdkFiles.map((file) =>
+        file.split('/').slice(0, 2).join('/'),
+      ),
+    ),
+  ];
 
   beforeAll(async () => {
     identity = await buildInstalledLitHost(out);
   }, 300_000);
 
-  it('builds every page with the application\'s own configurations, loading SDK code only from the installed copies', () => {
-    expect(identity.pages.map((one) => one.config)).toEqual([...INSTALLED_PAGE_CONFIGS]);
+  it("builds every page with the application's own configurations, loading SDK code only from the installed copies", () => {
+    expect(identity.pages.map((one) => one.config)).toEqual([
+      ...INSTALLED_PAGE_CONFIGS,
+    ]);
     for (const { config, provenance } of identity.pages) {
       // Nothing came from a workspace package or application file; every SDK module is a packed `src/` file.
       expect(provenance.unexpected, config).toEqual([]);
       expect(provenance.applicationModules, config).toBeGreaterThan(0);
       for (const file of provenance.installedSdkFiles) {
-        expect(file, config).toMatch(new RegExp(`^@saga-a2ui/(${INSTALLED_SDK_PACKAGES.join('|')})/src/`));
+        expect(file, config).toMatch(
+          new RegExp(`^@saga-a2ui/(${INSTALLED_SDK_PACKAGES.join('|')})/src/`),
+        );
       }
     }
     // The pages that use the SDK reach its public entry points through the installed copies.
-    expect(page('vite.config.ts').provenance.installedSdkFiles).toContain('@saga-a2ui/lit/src/a2ui/app-element.ts');
-    expect(page('vite.action-consumer.config.ts').provenance.installedSdkFiles).toEqual(
-      expect.arrayContaining(['@saga-a2ui/lit/src/a2ui/app-element.ts', '@saga-a2ui/lit/src/actions/lit-actions.ts', '@saga-a2ui/core/src/actions/server.ts']),
+    expect(page('vite.config.ts').provenance.installedSdkFiles).toContain(
+      '@saga-a2ui/lit/src/a2ui/app-element.ts',
     );
-    expect(page('vite.answer-view.config.ts').provenance.installedSdkFiles).toEqual(
-      expect.arrayContaining(['@saga-a2ui/lit/src/a2ui/app-element.ts', '@saga-a2ui/mcp/src/view/index.ts']),
+    expect(
+      page('vite.action-consumer.config.ts').provenance.installedSdkFiles,
+    ).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/lit/src/a2ui/app-element.ts',
+        '@saga-a2ui/lit/src/actions/lit-actions.ts',
+        '@saga-a2ui/core/src/actions/server.ts',
+      ]),
+    );
+    expect(
+      page('vite.answer-view.config.ts').provenance.installedSdkFiles,
+    ).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/lit/src/a2ui/app-element.ts',
+        '@saga-a2ui/mcp/src/view/index.ts',
+      ]),
     );
     // Playback runs through the reusable typed server action of core, and the old controller timer is gone.
-    const playback = page('vite.playback-view.config.ts').provenance.installedSdkFiles;
+    const playback = page('vite.playback-view.config.ts').provenance
+      .installedSdkFiles;
     expect(playback).toEqual(
-      expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/limits.ts', '@saga-a2ui/mcp/src/view/index.ts']),
+      expect.arrayContaining([
+        '@saga-a2ui/core/src/actions/invocation.ts',
+        '@saga-a2ui/core/src/actions/server.ts',
+        '@saga-a2ui/core/src/actions/limits.ts',
+        '@saga-a2ui/mcp/src/view/index.ts',
+      ]),
     );
     expect(playback).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
     // The player shows the episode's description beside Play through the optional card, from installed copies of the Lit element and its renderer-neutral contract (CARD1).
-    expect(playback).toEqual(expect.arrayContaining(['@saga-a2ui/components/src/faithful-card/index.ts', '@saga-a2ui/lit/src/faithful-card/index.ts']));
-    expect(page('vite.playback-view.config.ts').provenance.thirdPartyPackages).toContain('markdown-it');
+    expect(playback).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/components/src/faithful-card/index.ts',
+        '@saga-a2ui/lit/src/faithful-card/index.ts',
+      ]),
+    );
+    expect(
+      page('vite.playback-view.config.ts').provenance.thirdPartyPackages,
+    ).toContain('markdown-it');
     // The FaithfulCard pages reach the optional card, its renderer-neutral contract and Markdown parser, and (with an authored
     // protected control beside the card) the shared action seam and the server action, all through installed copies.
     const workflow = page('vite.card-workflow.config.ts').provenance;
@@ -68,48 +111,108 @@ describe('the application pages built from the packed SDK packages', () => {
       ]),
     );
     expect(workflow.thirdPartyPackages).toContain('markdown-it');
-    expect(page('vite.faithful-card.config.ts').provenance.installedSdkFiles).toEqual(
-      expect.arrayContaining(['@saga-a2ui/components/src/faithful-card/index.ts', '@saga-a2ui/lit/src/faithful-card/index.ts']),
+    expect(
+      page('vite.faithful-card.config.ts').provenance.installedSdkFiles,
+    ).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/components/src/faithful-card/index.ts',
+        '@saga-a2ui/lit/src/faithful-card/index.ts',
+      ]),
     );
   });
 
   it('keeps the optional FaithfulCard, its Markdown parser and React out of every page that does not use them', () => {
-    for (const config of ['vite.action-consumer.config.ts', 'vite.answer-view.config.ts', 'vite.subscriptions-view.config.ts', 'vite.host-fixture.config.ts']) {
+    for (const config of [
+      'vite.action-consumer.config.ts',
+      'vite.answer-view.config.ts',
+      'vite.subscriptions-view.config.ts',
+      'vite.host-fixture.config.ts',
+    ]) {
       const { installedSdkFiles, thirdPartyPackages } = page(config).provenance;
-      expect(installedSdkFiles.filter((file) => /^@saga-a2ui\/components\/|\/faithful-card\//.test(file)), config).toEqual([]);
-      expect(thirdPartyPackages.filter((name) => /markdown-it|^react/.test(name)), config).toEqual([]);
+      expect(
+        installedSdkFiles.filter((file) =>
+          /^@saga-a2ui\/components\/|\/faithful-card\//.test(file),
+        ),
+        config,
+      ).toEqual([]);
+      expect(
+        thirdPartyPackages.filter((name) => /markdown-it|^react/.test(name)),
+        config,
+      ).toEqual([]);
     }
     // The own-catalog and action route needs only core and Lit.
-    expect(sdkPackagesOf('vite.action-consumer.config.ts').sort()).toEqual(['@saga-a2ui/core', '@saga-a2ui/lit']);
+    expect(sdkPackagesOf('vite.action-consumer.config.ts').sort()).toEqual([
+      '@saga-a2ui/core',
+      '@saga-a2ui/lit',
+    ]);
     // Only the React player page carries React (REACT2); it is checked on its own below.
-    for (const { config, provenance } of identity.pages.filter((one) => one.config !== REACT_PLAYER)) {
-      expect(provenance.thirdPartyPackages.filter((name) => /^react/.test(name)), config).toEqual([]);
+    for (const { config, provenance } of identity.pages.filter(
+      (one) => one.config !== REACT_PLAYER,
+    )) {
+      expect(
+        provenance.thirdPartyPackages.filter((name) => /^react/.test(name)),
+        config,
+      ).toEqual([]);
     }
   });
 
-  it('builds the React player from the application\'s React runtime and the installed core and MCP copies only: no Lit, no components, no Markdown parser', () => {
-    const { installedSdkFiles, thirdPartyPackages } = page(REACT_PLAYER).provenance;
+  it("builds the React player from the application's React runtime and the installed core and MCP copies only: no Lit, no components, no Markdown parser", () => {
+    const { installedSdkFiles, thirdPartyPackages } =
+      page(REACT_PLAYER).provenance;
     // The shared controller runs the same typed server action and the same bridge as the Lit player.
     expect(installedSdkFiles).toEqual(
-      expect.arrayContaining(['@saga-a2ui/core/src/actions/invocation.ts', '@saga-a2ui/core/src/actions/server.ts', '@saga-a2ui/core/src/actions/instance-host.ts', '@saga-a2ui/mcp/src/view/index.ts']),
+      expect.arrayContaining([
+        '@saga-a2ui/core/src/actions/invocation.ts',
+        '@saga-a2ui/core/src/actions/server.ts',
+        '@saga-a2ui/core/src/actions/instance-host.ts',
+        '@saga-a2ui/mcp/src/view/index.ts',
+      ]),
     );
-    expect(sdkPackagesOf(REACT_PLAYER).sort()).toEqual(['@saga-a2ui/core', '@saga-a2ui/mcp']);
-    expect(thirdPartyPackages).toEqual(expect.arrayContaining(['react', 'react-dom']));
-    expect(thirdPartyPackages.filter((name) => /^lit|^@lit|^@a2ui\/|markdown-it/.test(name))).toEqual([]);
-    expect(installedSdkFiles.filter((file) => /\/faithful-card\/|\/lit\//.test(file))).toEqual([]);
-    expect(installedSdkFiles).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
+    expect(sdkPackagesOf(REACT_PLAYER).sort()).toEqual([
+      '@saga-a2ui/core',
+      '@saga-a2ui/mcp',
+    ]);
+    expect(thirdPartyPackages).toEqual(
+      expect.arrayContaining(['react', 'react-dom']),
+    );
+    expect(
+      thirdPartyPackages.filter((name) =>
+        /^lit|^@lit|^@a2ui\/|markdown-it/.test(name),
+      ),
+    ).toEqual([]);
+    expect(
+      installedSdkFiles.filter((file) =>
+        /\/faithful-card\/|\/lit\//.test(file),
+      ),
+    ).toEqual([]);
+    expect(installedSdkFiles).not.toContain(
+      '@saga-a2ui/mcp/src/policy/timer.ts',
+    );
   });
 
   it('puts no server module of the delivery package or the MCP server libraries in any browser page', () => {
     for (const { config, provenance } of identity.pages) {
-      expect(provenance.installedSdkFiles.filter((file) => /^@saga-a2ui\/mcp\/src\/server\//.test(file)), config).toEqual([]);
-      expect(provenance.thirdPartyPackages.filter((name) => /^@modelcontextprotocol\/(server|node)$/.test(name)), config).toEqual([]);
+      expect(
+        provenance.installedSdkFiles.filter((file) =>
+          /^@saga-a2ui\/mcp\/src\/server\//.test(file),
+        ),
+        config,
+      ).toEqual([]);
+      expect(
+        provenance.thirdPartyPackages.filter((name) =>
+          /^@modelcontextprotocol\/(server|node)$/.test(name),
+        ),
+        config,
+      ).toEqual([]);
     }
   });
 
   it('names the result: the packed tarballs and every built file by SHA-256, matching the bytes written', () => {
-    expect(Object.keys(identity.packedTarballSha256).sort()).toEqual([...INSTALLED_SDK_PACKAGES].sort());
-    for (const hash of Object.values(identity.packedTarballSha256)) expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(identity.packedTarballSha256).sort()).toEqual(
+      [...INSTALLED_SDK_PACKAGES].sort(),
+    );
+    for (const hash of Object.values(identity.packedTarballSha256))
+      expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(identity.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
     const listed = Object.keys(identity.builtFilesSha256);
     for (const required of [
@@ -129,7 +232,12 @@ describe('the application pages built from the packed SDK packages', () => {
     }
     for (const [file, hash] of Object.entries(identity.builtFilesSha256)) {
       // Derived here from the bytes on disk (the requirement), not from the builder's own function.
-      expect(createHash('sha256').update(fs.readFileSync(path.join(out, file))).digest('hex'), file).toBe(hash);
+      expect(
+        createHash('sha256')
+          .update(fs.readFileSync(path.join(out, file)))
+          .digest('hex'),
+        file,
+      ).toBe(hash);
     }
   });
 
@@ -142,9 +250,22 @@ describe('the application pages built from the packed SDK packages', () => {
     const previous = process.env.TMPDIR;
     process.env.TMPDIR = linkedRoot;
     try {
-      const linked = await buildInstalledLitHost(path.join(work, 'dist-installed-linked'));
-      for (const { config, provenance } of linked.pages) expect(provenance.unexpected, config).toEqual([]);
-      expect(linked.pages.map((one) => [one.config, one.provenance.installedSdkFiles])).toEqual(identity.pages.map((one) => [one.config, one.provenance.installedSdkFiles]));
+      const linked = await buildInstalledLitHost(
+        path.join(work, 'dist-installed-linked'),
+      );
+      for (const { config, provenance } of linked.pages)
+        expect(provenance.unexpected, config).toEqual([]);
+      expect(
+        linked.pages.map((one) => [
+          one.config,
+          one.provenance.installedSdkFiles,
+        ]),
+      ).toEqual(
+        identity.pages.map((one) => [
+          one.config,
+          one.provenance.installedSdkFiles,
+        ]),
+      );
       expect(linked.builtFilesSha256).toEqual(identity.builtFilesSha256);
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
@@ -153,12 +274,18 @@ describe('the application pages built from the packed SDK packages', () => {
   }, 300_000);
 });
 
-describe('classifying a build\'s modules by canonical path', () => {
+describe("classifying a build's modules by canonical path", () => {
   const root = createWorkDirectory('saga-installed-classify-test-');
   afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
   const realConsumer = path.join(root, 'real', 'consumer');
   const consumer = path.join(root, 'linked', 'consumer'); // the same directory, reached through a symlinked parent
-  const installed = path.join(realConsumer, 'node_modules', '@saga-a2ui', 'lit', 'src');
+  const installed = path.join(
+    realConsumer,
+    'node_modules',
+    '@saga-a2ui',
+    'lit',
+    'src',
+  );
 
   beforeAll(() => {
     fs.mkdirSync(installed, { recursive: true });
@@ -169,24 +296,50 @@ describe('classifying a build\'s modules by canonical path', () => {
   });
 
   it('accepts an installed SDK file and an application file reported by resolved path', () => {
-    const result = classifyModules(consumer, [path.join(installed, 'a.ts'), path.join(realConsumer, 'src', 'app.ts')]);
+    const result = classifyModules(consumer, [
+      path.join(installed, 'a.ts'),
+      path.join(realConsumer, 'src', 'app.ts'),
+    ]);
     expect(result.installedSdkFiles).toEqual(['@saga-a2ui/lit/src/a.ts']);
     expect(result.applicationModules).toBe(1);
     expect(result.unexpected).toEqual([]);
   });
 
   it('still rejects a workspace SDK source and a workspace application file', () => {
-    const workspaceSdk = path.join(repoRoot, 'packages', 'lit', 'src', 'a2ui', 'app-element.ts');
-    const workspaceApplication = path.join(repoRoot, 'apps', 'lit-host', 'src', 'main.ts');
-    const result = classifyModules(consumer, [workspaceSdk, workspaceApplication]);
+    const workspaceSdk = path.join(
+      repoRoot,
+      'packages',
+      'lit',
+      'src',
+      'a2ui',
+      'app-element.ts',
+    );
+    const workspaceApplication = path.join(
+      repoRoot,
+      'apps',
+      'lit-host',
+      'src',
+      'main.ts',
+    );
+    const result = classifyModules(consumer, [
+      workspaceSdk,
+      workspaceApplication,
+    ]);
     expect(result.installedSdkFiles).toEqual([]);
     expect(result.unexpected.length).toBe(2);
   });
 
   it('rejects an installed SDK package that is a link to the workspace package', () => {
-    const aliased = path.join(realConsumer, 'node_modules', '@saga-a2ui', 'core');
+    const aliased = path.join(
+      realConsumer,
+      'node_modules',
+      '@saga-a2ui',
+      'core',
+    );
     fs.symlinkSync(path.join(repoRoot, 'packages', 'core'), aliased, 'dir');
-    const result = classifyModules(consumer, [path.join(aliased, 'src', 'platform.d.ts')]);
+    const result = classifyModules(consumer, [
+      path.join(aliased, 'src', 'platform.d.ts'),
+    ]);
     expect(result.installedSdkFiles).toEqual([]);
     expect(result.unexpected.length).toBe(1);
   });

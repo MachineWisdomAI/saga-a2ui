@@ -1,11 +1,28 @@
 import { ServerResponse } from 'node:http';
-import { OAuthError, OAuthErrorCode, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ANSWER_TOOL_NAME, ANSWER_UNAVAILABLE_TEXT, ANSWER_VIEW_URI } from './answer.js';
+import {
+  ANSWER_TOOL_NAME,
+  ANSWER_UNAVAILABLE_TEXT,
+  ANSWER_VIEW_URI,
+} from './answer.js';
 import type { AnswerBackend } from './answer-server.js';
 import { createDevelopmentVerifier, DEV_TOKENS } from './dev-auth.js';
-import { startEpisodeListener, type EpisodeListener, type EpisodeListenerOptions, type RequestOutcome } from './listener.js';
-import { SUBSCRIPTIONS_TOOL_NAME, SUBSCRIPTIONS_UNAVAILABLE_TEXT, SUBSCRIPTIONS_VIEW_URI } from './subscriptions.js';
+import {
+  startEpisodeListener,
+  type EpisodeListener,
+  type EpisodeListenerOptions,
+  type RequestOutcome,
+} from './listener.js';
+import {
+  SUBSCRIPTIONS_TOOL_NAME,
+  SUBSCRIPTIONS_UNAVAILABLE_TEXT,
+  SUBSCRIPTIONS_VIEW_URI,
+} from './subscriptions.js';
 import type { SubscriptionBackend } from './subscriptions-server.js';
 
 // CORE3 through the real application listener, over real sockets, in both response modes: which
@@ -25,7 +42,9 @@ afterEach(async () => {
   outcomes.length = 0;
 });
 
-async function start(extra: Partial<EpisodeListenerOptions>): Promise<EpisodeListener> {
+async function start(
+  extra: Partial<EpisodeListenerOptions>,
+): Promise<EpisodeListener> {
   const listener = await startEpisodeListener({
     viewHtml: VIEW_HTML,
     catalog: { find: () => undefined },
@@ -48,16 +67,22 @@ interface Wire {
   readonly raw: string;
 }
 
-const JSON_HEAD = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
+const JSON_HEAD = {
+  'content-type': 'application/json',
+  accept: 'application/json, text/event-stream',
+};
 
 function parseWire(status: number, headers: Headers, raw: string): Wire {
   const messages: Record<string, any>[] = [];
   if (headers.get('content-type')?.includes('text/event-stream')) {
-    for (const line of raw.split('\n')) if (line.startsWith('data:') && line.slice(5).trim().length > 0) messages.push(JSON.parse(line.slice(5)));
+    for (const line of raw.split('\n'))
+      if (line.startsWith('data:') && line.slice(5).trim().length > 0)
+        messages.push(JSON.parse(line.slice(5)));
   } else if (raw.length > 0) {
     try {
       const body: unknown = JSON.parse(raw);
-      if (typeof body === 'object' && body !== null) messages.push(...(Array.isArray(body) ? body : [body]));
+      if (typeof body === 'object' && body !== null)
+        messages.push(...(Array.isArray(body) ? body : [body]));
     } catch {
       // A non-JSON body is left in `raw` for the assertion that cares.
     }
@@ -65,18 +90,39 @@ function parseWire(status: number, headers: Headers, raw: string): Wire {
   return { status, headers, messages, raw };
 }
 
-async function send(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Wire> {
-  const response = await fetch(url, { method: 'POST', headers: { ...JSON_HEAD, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+async function send(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<Wire> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { ...JSON_HEAD, ...headers },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
   return parseWire(response.status, response.headers, await response.text());
 }
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
-const callSubscriptions = (args: Record<string, unknown> = {}, id = 1) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: args } });
-const callAnswer = (question: string, id = 1, meta?: Record<string, unknown>) => ({
+const callSubscriptions = (args: Record<string, unknown> = {}, id = 1) => ({
   jsonrpc: '2.0',
   id,
   method: 'tools/call',
-  params: { name: ANSWER_TOOL_NAME, arguments: { question }, ...(meta ? { _meta: meta } : {}) },
+  params: { name: SUBSCRIPTIONS_TOOL_NAME, arguments: args },
+});
+const callAnswer = (
+  question: string,
+  id = 1,
+  meta?: Record<string, unknown>,
+) => ({
+  jsonrpc: '2.0',
+  id,
+  method: 'tools/call',
+  params: {
+    name: ANSWER_TOOL_NAME,
+    arguments: { question },
+    ...(meta ? { _meta: meta } : {}),
+  },
 });
 
 /** The three places a failure can be reported, observed separately. */
@@ -91,69 +137,237 @@ function layers(wire: Wire) {
 }
 
 describe('which layer reports each failure', () => {
-  const stalled: OAuthTokenVerifier = { verifyAccessToken: () => new Promise(() => undefined) };
+  const stalled: OAuthTokenVerifier = {
+    verifyAccessToken: () => new Promise(() => undefined),
+  };
   const faulty: OAuthTokenVerifier = {
     verifyAccessToken: () => {
       throw new Error(`identity provider down ${CANARY}`);
     },
   };
 
-  async function protectedWire(extra: Partial<EpisodeListenerOptions>, body: unknown, headers: Record<string, string>) {
+  async function protectedWire(
+    extra: Partial<EpisodeListenerOptions>,
+    body: unknown,
+    headers: Record<string, string>,
+  ) {
     const listener = await start(extra);
     return send(listener.subscriptionsUrl ?? '', body, headers);
   }
-  const subscriptions = (verifier: OAuthTokenVerifier, backend: SubscriptionBackend = quietBackend, budgets = {}) =>
-    ({ budgets, subscriptions: { viewHtml: VIEW_HTML, backend, verifier } }) satisfies Partial<EpisodeListenerOptions>;
+  const subscriptions = (
+    verifier: OAuthTokenVerifier,
+    backend: SubscriptionBackend = quietBackend,
+    budgets = {},
+  ) =>
+    ({
+      budgets,
+      subscriptions: { viewHtml: VIEW_HTML, backend, verifier },
+    }) satisfies Partial<EpisodeListenerOptions>;
 
   it.each([
-    ['no credential', subscriptions(createDevelopmentVerifier()), callSubscriptions(), {}, { http: 401, challenge: true, rpcError: undefined, toolError: undefined }],
-    ['an unknown credential', subscriptions(createDevelopmentVerifier()), callSubscriptions(), bearer('nope'), { http: 401, challenge: true, rpcError: undefined, toolError: undefined }],
-    ['an expired credential', subscriptions(createDevelopmentVerifier()), callSubscriptions(), bearer(DEV_TOKENS.expired), { http: 401, challenge: true, rpcError: undefined, toolError: undefined }],
-    ['a service-only credential', subscriptions(createDevelopmentVerifier()), callSubscriptions(), bearer(DEV_TOKENS.service), { http: 403, challenge: true, rpcError: undefined, toolError: undefined }],
-    ['a verifier that fails', subscriptions(faulty), callSubscriptions(), bearer('t'), { http: 500, challenge: false, rpcError: undefined, toolError: undefined }],
-    ['a verifier that stalls', subscriptions(stalled, quietBackend, { operationMs: 60, requestMs: 400 }), callSubscriptions(), bearer('t'), { http: 500, challenge: false, rpcError: undefined, toolError: undefined }],
-    ['a body that is not JSON', subscriptions(createDevelopmentVerifier()), `{${CANARY}`, bearer(DEV_TOKENS.alice), { http: 400, challenge: false, rpcError: -32700, toolError: undefined }],
-    ['an unknown tool', subscriptions(createDevelopmentVerifier()), { ...callSubscriptions(), params: { name: 'nope', arguments: {} } }, bearer(DEV_TOKENS.alice), { http: 200, challenge: false, rpcError: -32602, toolError: undefined }],
-    ['an input the tool refuses', subscriptions(createDevelopmentVerifier()), callSubscriptions({ status: 'bogus' }), bearer(DEV_TOKENS.alice), { http: 200, challenge: false, rpcError: undefined, toolError: true }],
-    ['a backend that fails', subscriptions(createDevelopmentVerifier(), { listSubscriptions: () => Promise.reject(new Error(CANARY)) }), callSubscriptions(), bearer(DEV_TOKENS.alice), { http: 200, challenge: false, rpcError: undefined, toolError: true }],
-    ['a backend that stalls', subscriptions(createDevelopmentVerifier(), { listSubscriptions: () => new Promise(() => undefined) }, { operationMs: 60 }), callSubscriptions(), bearer(DEV_TOKENS.alice), { http: 200, challenge: false, rpcError: undefined, toolError: true }],
-    ['a backend result that breaks the contract', subscriptions(createDevelopmentVerifier(), { listSubscriptions: async () => ({ displayName: 'A', subscriptions: [{ subscriptionId: 's', creator: 'c', tier: 't', status: CANARY }] }) }), callSubscriptions(), bearer(DEV_TOKENS.alice), { http: 200, challenge: false, rpcError: undefined, toolError: true }],
-  ] as const)('reports %s as one layer only', async (_name, extra, body, headers, expected) => {
-    const wire = await protectedWire(extra, body, headers);
-    expect(layers(wire)).toEqual(expected);
-    expect(wire.raw).not.toContain(CANARY);
-  });
+    [
+      'no credential',
+      subscriptions(createDevelopmentVerifier()),
+      callSubscriptions(),
+      {},
+      { http: 401, challenge: true, rpcError: undefined, toolError: undefined },
+    ],
+    [
+      'an unknown credential',
+      subscriptions(createDevelopmentVerifier()),
+      callSubscriptions(),
+      bearer('nope'),
+      { http: 401, challenge: true, rpcError: undefined, toolError: undefined },
+    ],
+    [
+      'an expired credential',
+      subscriptions(createDevelopmentVerifier()),
+      callSubscriptions(),
+      bearer(DEV_TOKENS.expired),
+      { http: 401, challenge: true, rpcError: undefined, toolError: undefined },
+    ],
+    [
+      'a service-only credential',
+      subscriptions(createDevelopmentVerifier()),
+      callSubscriptions(),
+      bearer(DEV_TOKENS.service),
+      { http: 403, challenge: true, rpcError: undefined, toolError: undefined },
+    ],
+    [
+      'a verifier that fails',
+      subscriptions(faulty),
+      callSubscriptions(),
+      bearer('t'),
+      {
+        http: 500,
+        challenge: false,
+        rpcError: undefined,
+        toolError: undefined,
+      },
+    ],
+    [
+      'a verifier that stalls',
+      subscriptions(stalled, quietBackend, { operationMs: 60, requestMs: 400 }),
+      callSubscriptions(),
+      bearer('t'),
+      {
+        http: 500,
+        challenge: false,
+        rpcError: undefined,
+        toolError: undefined,
+      },
+    ],
+    [
+      'a body that is not JSON',
+      subscriptions(createDevelopmentVerifier()),
+      `{${CANARY}`,
+      bearer(DEV_TOKENS.alice),
+      { http: 400, challenge: false, rpcError: -32700, toolError: undefined },
+    ],
+    [
+      'an unknown tool',
+      subscriptions(createDevelopmentVerifier()),
+      { ...callSubscriptions(), params: { name: 'nope', arguments: {} } },
+      bearer(DEV_TOKENS.alice),
+      { http: 200, challenge: false, rpcError: -32602, toolError: undefined },
+    ],
+    [
+      'an input the tool refuses',
+      subscriptions(createDevelopmentVerifier()),
+      callSubscriptions({ status: 'bogus' }),
+      bearer(DEV_TOKENS.alice),
+      { http: 200, challenge: false, rpcError: undefined, toolError: true },
+    ],
+    [
+      'a backend that fails',
+      subscriptions(createDevelopmentVerifier(), {
+        listSubscriptions: () => Promise.reject(new Error(CANARY)),
+      }),
+      callSubscriptions(),
+      bearer(DEV_TOKENS.alice),
+      { http: 200, challenge: false, rpcError: undefined, toolError: true },
+    ],
+    [
+      'a backend that stalls',
+      subscriptions(
+        createDevelopmentVerifier(),
+        { listSubscriptions: () => new Promise(() => undefined) },
+        { operationMs: 60 },
+      ),
+      callSubscriptions(),
+      bearer(DEV_TOKENS.alice),
+      { http: 200, challenge: false, rpcError: undefined, toolError: true },
+    ],
+    [
+      'a backend result that breaks the contract',
+      subscriptions(createDevelopmentVerifier(), {
+        listSubscriptions: async () => ({
+          displayName: 'A',
+          subscriptions: [
+            { subscriptionId: 's', creator: 'c', tier: 't', status: CANARY },
+          ],
+        }),
+      }),
+      callSubscriptions(),
+      bearer(DEV_TOKENS.alice),
+      { http: 200, challenge: false, rpcError: undefined, toolError: true },
+    ],
+  ] as const)(
+    'reports %s as one layer only',
+    async (_name, extra, body, headers, expected) => {
+      const wire = await protectedWire(extra, body, headers);
+      expect(layers(wire)).toEqual(expected);
+      expect(wire.raw).not.toContain(CANARY);
+    },
+  );
 
   describe.each([401, 429, 503])('a backend that answers %i', (status) => {
     const failing = (): SubscriptionBackend => ({
-      listSubscriptions: () => Promise.reject(Object.assign(new Error(`upstream ${status} ${CANARY}`), { status, headers: { 'retry-after': '30', 'www-authenticate': 'Bearer realm="upstream"' } })),
+      listSubscriptions: () =>
+        Promise.reject(
+          Object.assign(new Error(`upstream ${status} ${CANARY}`), {
+            status,
+            headers: {
+              'retry-after': '30',
+              'www-authenticate': 'Bearer realm="upstream"',
+            },
+          }),
+        ),
     });
 
     it('stays inside the tool result: the endpoint keeps its own status, challenge and retry hints', async () => {
-      const wire = await protectedWire(subscriptions(createDevelopmentVerifier(), failing()), callSubscriptions(), bearer(DEV_TOKENS.alice));
-      expect(layers(wire)).toEqual({ http: 200, challenge: false, rpcError: undefined, toolError: true });
+      const wire = await protectedWire(
+        subscriptions(createDevelopmentVerifier(), failing()),
+        callSubscriptions(),
+        bearer(DEV_TOKENS.alice),
+      );
+      expect(layers(wire)).toEqual({
+        http: 200,
+        challenge: false,
+        rpcError: undefined,
+        toolError: true,
+      });
       expect(wire.headers.get('retry-after')).toBeNull();
-      expect(wire.messages[0]?.result?.content).toEqual([{ type: 'text', text: SUBSCRIPTIONS_UNAVAILABLE_TEXT }]);
+      expect(wire.messages[0]?.result?.content).toEqual([
+        { type: 'text', text: SUBSCRIPTIONS_UNAVAILABLE_TEXT },
+      ]);
       expect(wire.raw).not.toContain(CANARY);
       expect(wire.raw).not.toContain(String(status));
-      expect(outcomes.at(-1)?.causes).toMatchObject([{ kind: 'dependency-failure', stage: 'storage' }]);
+      expect(outcomes.at(-1)?.causes).toMatchObject([
+        { kind: 'dependency-failure', stage: 'storage' },
+      ]);
     });
 
     it('is the same for a public operation', async () => {
-      const backend: AnswerBackend = { answer: () => Promise.reject(Object.assign(new Error(`upstream ${status} ${CANARY}`), { status })) };
-      const listener = await start({ answer: { viewHtml: VIEW_HTML, backend } });
+      const backend: AnswerBackend = {
+        answer: () =>
+          Promise.reject(
+            Object.assign(new Error(`upstream ${status} ${CANARY}`), {
+              status,
+            }),
+          ),
+      };
+      const listener = await start({
+        answer: { viewHtml: VIEW_HTML, backend },
+      });
       const wire = await send(listener.answerUrl ?? '', callAnswer('Why?'));
-      expect(layers(wire)).toEqual({ http: 200, challenge: false, rpcError: undefined, toolError: true });
-      expect(wire.messages[0]?.result?.content).toEqual([{ type: 'text', text: ANSWER_UNAVAILABLE_TEXT }]);
+      expect(layers(wire)).toEqual({
+        http: 200,
+        challenge: false,
+        rpcError: undefined,
+        toolError: true,
+      });
+      expect(wire.messages[0]?.result?.content).toEqual([
+        { type: 'text', text: ANSWER_UNAVAILABLE_TEXT },
+      ]);
       expect(wire.raw).not.toContain(CANARY);
     });
   });
 
   it('keeps a verifier that rejects the credential apart from one that could not decide', async () => {
-    const refusing: OAuthTokenVerifier = { verifyAccessToken: () => Promise.reject(new OAuthError(OAuthErrorCode.InvalidToken, 'no')) };
-    expect(layers(await protectedWire(subscriptions(refusing), callSubscriptions(), bearer('t')))).toMatchObject({ http: 401, challenge: true });
+    const refusing: OAuthTokenVerifier = {
+      verifyAccessToken: () =>
+        Promise.reject(new OAuthError(OAuthErrorCode.InvalidToken, 'no')),
+    };
+    expect(
+      layers(
+        await protectedWire(
+          subscriptions(refusing),
+          callSubscriptions(),
+          bearer('t'),
+        ),
+      ),
+    ).toMatchObject({ http: 401, challenge: true });
     await open.listener?.close();
-    expect(layers(await protectedWire(subscriptions(faulty), callSubscriptions(), bearer('t')))).toMatchObject({ http: 500, challenge: false });
+    expect(
+      layers(
+        await protectedWire(
+          subscriptions(faulty),
+          callSubscriptions(),
+          bearer('t'),
+        ),
+      ),
+    ).toMatchObject({ http: 500, challenge: false });
   });
 });
 
@@ -162,7 +376,9 @@ describe('what an observer of any layer can learn', () => {
   function captureLogs(): string[] {
     const written: string[] = [];
     for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
-      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => void written.push(args.map(String).join(' ')));
+      vi.spyOn(console, method).mockImplementation(
+        (...args: unknown[]) => void written.push(args.map(String).join(' ')),
+      );
     }
     for (const stream of [process.stdout, process.stderr]) {
       vi.spyOn(stream, 'write').mockImplementation(((chunk: unknown) => {
@@ -176,58 +392,157 @@ describe('what an observer of any layer can learn', () => {
   it.each([
     ['JSON', 'json'],
     ['server-sent events', 'event-stream'],
-  ] as const)('keeps every canary out of results, discovery, resources, errors, metadata and logs (%s)', async (_name, responseMode) => {
-    const logs = captureLogs();
-    const seen: string[] = [];
-    const verifier: OAuthTokenVerifier = {
-      verifyAccessToken: async (token) => ({ ...(await createDevelopmentVerifier().verifyAccessToken(DEV_TOKENS.alice)), token, extra: { accountId: 'acct-synthetic-alice', signInId: 'dev-sign-in-alice', secret: CANARY } }),
-    };
-    const listener = await start({
-      subscriptions: {
-        viewHtml: VIEW_HTML,
-        verifier,
-        backend: {
-          // The backend record carries private fields the projection must not copy.
-          listSubscriptions: async () =>
-            ({ displayName: 'Alice', cardToken: CANARY, subscriptions: [{ subscriptionId: 's1', creator: 'C', tier: 'T', status: 'active', email: CANARY }] }) as never,
+  ] as const)(
+    'keeps every canary out of results, discovery, resources, errors, metadata and logs (%s)',
+    async (_name, responseMode) => {
+      const logs = captureLogs();
+      const seen: string[] = [];
+      const verifier: OAuthTokenVerifier = {
+        verifyAccessToken: async (token) => ({
+          ...(await createDevelopmentVerifier().verifyAccessToken(
+            DEV_TOKENS.alice,
+          )),
+          token,
+          extra: {
+            accountId: 'acct-synthetic-alice',
+            signInId: 'dev-sign-in-alice',
+            secret: CANARY,
+          },
+        }),
+      };
+      const listener = await start({
+        subscriptions: {
+          viewHtml: VIEW_HTML,
+          verifier,
+          backend: {
+            // The backend record carries private fields the projection must not copy.
+            listSubscriptions: async () =>
+              ({
+                displayName: 'Alice',
+                cardToken: CANARY,
+                subscriptions: [
+                  {
+                    subscriptionId: 's1',
+                    creator: 'C',
+                    tier: 'T',
+                    status: 'active',
+                    email: CANARY,
+                  },
+                ],
+              }) as never,
+          },
         },
-      },
-      answer: { viewHtml: VIEW_HTML, responseMode, backend: { answer: async (question) => `Answer to ${question}` } },
-    });
-    const auth = bearer(`token-${CANARY}`);
-    const exchanges: Wire[] = [];
-    const record = async (url: string, body: unknown, headers: Record<string, string> = {}) => {
-      const wire = await send(url, body, headers);
-      exchanges.push(wire);
-      seen.push(wire.raw, JSON.stringify([...wire.headers.entries()]));
-      return wire;
-    };
-    // Success, failure and discovery on both endpoints, with the canary in every field the caller controls.
-    await record(listener.subscriptionsUrl ?? '', callSubscriptions({ status: 'active', note: CANARY, accountId: CANARY, _meta: { [CANARY]: CANARY } }), { ...auth, 'x-forwarded-user': CANARY });
-    await record(listener.subscriptionsUrl ?? '', callSubscriptions({ status: CANARY }), auth);
-    await record(listener.subscriptionsUrl ?? '', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, auth);
-    await record(listener.subscriptionsUrl ?? '', { jsonrpc: '2.0', id: 3, method: 'resources/list' }, auth);
-    await record(listener.subscriptionsUrl ?? '', { jsonrpc: '2.0', id: 4, method: 'resources/read', params: { uri: SUBSCRIPTIONS_VIEW_URI } }, auth);
-    await record(listener.subscriptionsUrl ?? '', { jsonrpc: '2.0', id: 5, method: 'resources/read', params: { uri: `ui://${CANARY}` } }, auth);
-    await record(listener.answerUrl ?? '', callAnswer(`question ${CANARY}`));
-    await record(listener.answerUrl ?? '', { jsonrpc: '2.0', id: 6, method: 'resources/read', params: { uri: ANSWER_VIEW_URI } });
-    await record(listener.answerUrl ?? '', { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: ANSWER_TOOL_NAME, arguments: { question: 7 } } });
+        answer: {
+          viewHtml: VIEW_HTML,
+          responseMode,
+          backend: { answer: async (question) => `Answer to ${question}` },
+        },
+      });
+      const auth = bearer(`token-${CANARY}`);
+      const exchanges: Wire[] = [];
+      const record = async (
+        url: string,
+        body: unknown,
+        headers: Record<string, string> = {},
+      ) => {
+        const wire = await send(url, body, headers);
+        exchanges.push(wire);
+        seen.push(wire.raw, JSON.stringify([...wire.headers.entries()]));
+        return wire;
+      };
+      // Success, failure and discovery on both endpoints, with the canary in every field the caller controls.
+      await record(
+        listener.subscriptionsUrl ?? '',
+        callSubscriptions({
+          status: 'active',
+          note: CANARY,
+          accountId: CANARY,
+          _meta: { [CANARY]: CANARY },
+        }),
+        { ...auth, 'x-forwarded-user': CANARY },
+      );
+      await record(
+        listener.subscriptionsUrl ?? '',
+        callSubscriptions({ status: CANARY }),
+        auth,
+      );
+      await record(
+        listener.subscriptionsUrl ?? '',
+        { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+        auth,
+      );
+      await record(
+        listener.subscriptionsUrl ?? '',
+        { jsonrpc: '2.0', id: 3, method: 'resources/list' },
+        auth,
+      );
+      await record(
+        listener.subscriptionsUrl ?? '',
+        {
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'resources/read',
+          params: { uri: SUBSCRIPTIONS_VIEW_URI },
+        },
+        auth,
+      );
+      await record(
+        listener.subscriptionsUrl ?? '',
+        {
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'resources/read',
+          params: { uri: `ui://${CANARY}` },
+        },
+        auth,
+      );
+      await record(listener.answerUrl ?? '', callAnswer(`question ${CANARY}`));
+      await record(listener.answerUrl ?? '', {
+        jsonrpc: '2.0',
+        id: 6,
+        method: 'resources/read',
+        params: { uri: ANSWER_VIEW_URI },
+      });
+      await record(listener.answerUrl ?? '', {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: { name: ANSWER_TOOL_NAME, arguments: { question: 7 } },
+      });
 
-    // The canary the caller sent may come back only where the contract returns the caller's own
-    // input: the answer repeats its question, and an unknown resource URI is echoed in JSON-RPC errors by the SDK.
-    const unexpected = exchanges.flatMap((wire) => (wire.raw.includes(CANARY) ? [wire.raw] : []));
-    for (const raw of unexpected) {
-      const echoedQuestion = raw.includes(`question ${CANARY}`);
-      const echoedUri = raw.includes(`ui://${CANARY}`);
-      expect(echoedQuestion || echoedUri, raw).toBe(true);
-    }
-    const allowedEcho = (text: string) => text.split(`question ${CANARY}`).join('').split(`Answer to ${CANARY}`).join('').split(`ui://${CANARY}`).join('');
-    // Nothing else: not the private backend fields, the credential, the forwarded header or the identity secret.
-    expect(allowedEcho(seen.join('\n'))).not.toContain(CANARY);
-    expect(logs.join('\n')).not.toContain(CANARY);
-    // Application diagnostics hold typed causes, never the credential or the backend record.
-    expect(JSON.stringify(outcomes.map(({ path, status, finished }) => ({ path, status, finished })))).not.toContain(CANARY);
-  });
+      // The canary the caller sent may come back only where the contract returns the caller's own
+      // input: the answer repeats its question, and an unknown resource URI is echoed in JSON-RPC errors by the SDK.
+      const unexpected = exchanges.flatMap((wire) =>
+        wire.raw.includes(CANARY) ? [wire.raw] : [],
+      );
+      for (const raw of unexpected) {
+        const echoedQuestion = raw.includes(`question ${CANARY}`);
+        const echoedUri = raw.includes(`ui://${CANARY}`);
+        expect(echoedQuestion || echoedUri, raw).toBe(true);
+      }
+      const allowedEcho = (text: string) =>
+        text
+          .split(`question ${CANARY}`)
+          .join('')
+          .split(`Answer to ${CANARY}`)
+          .join('')
+          .split(`ui://${CANARY}`)
+          .join('');
+      // Nothing else: not the private backend fields, the credential, the forwarded header or the identity secret.
+      expect(allowedEcho(seen.join('\n'))).not.toContain(CANARY);
+      expect(logs.join('\n')).not.toContain(CANARY);
+      // Application diagnostics hold typed causes, never the credential or the backend record.
+      expect(
+        JSON.stringify(
+          outcomes.map(({ path, status, finished }) => ({
+            path,
+            status,
+            finished,
+          })),
+        ),
+      ).not.toContain(CANARY);
+    },
+  );
 });
 
 describe('a request that is cancelled, abandoned or resumed', () => {
@@ -239,10 +554,19 @@ describe('a request that is cancelled, abandoned or resumed', () => {
   function watchClosedWrites(): string[] {
     const late: string[] = [];
     for (const method of ['write', 'end', 'writeHead'] as const) {
-      const original = ServerResponse.prototype[method] as (this: ServerResponse, ...args: unknown[]) => unknown;
-      vi.spyOn(ServerResponse.prototype, method).mockImplementation(function (this: ServerResponse, ...args: unknown[]) {
-        const carriesData = method !== 'end' || (args[0] !== undefined && typeof args[0] !== 'function');
-        if (carriesData && (this.destroyed || this.writableEnded)) late.push(method);
+      const original = ServerResponse.prototype[method] as (
+        this: ServerResponse,
+        ...args: unknown[]
+      ) => unknown;
+      vi.spyOn(ServerResponse.prototype, method).mockImplementation(function (
+        this: ServerResponse,
+        ...args: unknown[]
+      ) {
+        const carriesData =
+          method !== 'end' ||
+          (args[0] !== undefined && typeof args[0] !== 'function');
+        if (carriesData && (this.destroyed || this.writableEnded))
+          late.push(method);
         return original.apply(this, args);
       } as never);
     }
@@ -256,126 +580,218 @@ describe('a request that is cancelled, abandoned or resumed', () => {
     return { opened, open };
   }
 
-  describe.each(['json', 'event-stream'] as const)('on a public operation answering in %s', (responseMode) => {
-    function slowAnswer() {
-      const release = gate();
-      const entered: AbortSignal[] = [];
-      const late: Promise<void>[] = [];
-      const backend: AnswerBackend = {
-        async answer(question, request) {
-          entered.push(request.signal);
-          await request.reportProgress({ progress: 1, total: 2, message: `working on ${question}` });
-          await release.opened;
-          late.push(request.reportProgress({ progress: 2, total: 2, message: 'finished' }));
-          return `Answer to ${question}`;
-        },
-      };
-      return { backend, entered, late, release };
-    }
-
-    it('writes nothing to a response whose caller has gone, and runs the handler once', async () => {
-      const writes = watchClosedWrites();
-      const { backend, entered, late, release } = slowAnswer();
-      const listener = await start({ answer: { viewHtml: VIEW_HTML, backend, responseMode } });
-      const controller = new AbortController();
-      const gone = fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, signal: controller.signal, body: JSON.stringify(callAnswer('Q?', 1, { progressToken: 'p1' })) })
-        .then((response) => response.text())
-        .catch(() => undefined);
-      await expect.poll(() => entered.length).toBe(1);
-      controller.abort();
-      await gone;
-      await expect.poll(() => entered[0]?.aborted).toBe(true);
-      release.open();
-      await expect.poll(() => late.length).toBe(1);
-      await expect(late[0]).resolves.toBeUndefined();
-      await expect.poll(() => outcomes.length).toBe(1);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(writes).toEqual([]);
-      expect(entered).toHaveLength(1);
-      expect(outcomes[0]).toMatchObject({ finished: false });
-      expect(outcomes[0]?.causes.map((cause) => cause.kind)).toContain('disconnected');
-    });
-
-    it('does not resume or replay: the abandoned handler is not run again, and a retry is one new call', async () => {
-      const { backend, entered, release } = slowAnswer();
-      const listener = await start({ answer: { viewHtml: VIEW_HTML, backend, responseMode } });
-      const controller = new AbortController();
-      const gone = fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, signal: controller.signal, body: JSON.stringify(callAnswer('Q?')) })
-        .then((response) => response.text())
-        .catch(() => undefined);
-      await expect.poll(() => entered.length).toBe(1);
-      controller.abort();
-      await gone;
-      // A stateless endpoint has no stream to resume: these are refused without touching the handler.
-      for (const [method, headers] of [
-        ['GET', { accept: 'text/event-stream', 'last-event-id': '1' }],
-        ['DELETE', { 'mcp-session-id': 'abandoned' }],
-      ] as const) {
-        const resumed = await fetch(listener.answerUrl ?? '', { method, headers });
-        expect(resumed.status, method).toBe(405);
-        expect(resumed.headers.get('allow')).toBe('POST');
-        await resumed.text();
+  describe.each(['json', 'event-stream'] as const)(
+    'on a public operation answering in %s',
+    (responseMode) => {
+      function slowAnswer() {
+        const release = gate();
+        const entered: AbortSignal[] = [];
+        const late: Promise<void>[] = [];
+        const backend: AnswerBackend = {
+          async answer(question, request) {
+            entered.push(request.signal);
+            await request.reportProgress({
+              progress: 1,
+              total: 2,
+              message: `working on ${question}`,
+            });
+            await release.opened;
+            late.push(
+              request.reportProgress({
+                progress: 2,
+                total: 2,
+                message: 'finished',
+              }),
+            );
+            return `Answer to ${question}`;
+          },
+        };
+        return { backend, entered, late, release };
       }
-      expect(entered).toHaveLength(1);
-      release.open();
-      const retry = await send(listener.answerUrl ?? '', callAnswer('Q?', 2));
-      expect(retry.messages.at(-1)?.result?.structuredContent).toEqual({ question: 'Q?', answer: 'Answer to Q?' });
-      expect(entered).toHaveLength(2); // the retry is a new request with its own handler run
-    });
 
-    it('answers a request that outlives its deadline once, and writes nothing more when the handler finishes', async () => {
-      const writes = watchClosedWrites();
-      const { backend, entered, release } = slowAnswer();
-      const listener = await start({ budgets: { operationMs: 60, requestMs: 300 }, answer: { viewHtml: VIEW_HTML, backend, responseMode } });
-      const wire = await send(listener.answerUrl ?? '', callAnswer('Q?', 1, { progressToken: 'p1' }));
-      expect(wire.messages.filter((message) => message.id === 1)).toHaveLength(1); // exactly one response
-      expect(wire.messages.at(-1)?.result).toMatchObject({ isError: true, content: [{ type: 'text', text: ANSWER_UNAVAILABLE_TEXT }] });
-      release.open();
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      expect(writes).toEqual([]);
-      expect(entered).toHaveLength(1);
-    });
-  });
+      it('writes nothing to a response whose caller has gone, and runs the handler once', async () => {
+        const writes = watchClosedWrites();
+        const { backend, entered, late, release } = slowAnswer();
+        const listener = await start({
+          answer: { viewHtml: VIEW_HTML, backend, responseMode },
+        });
+        const controller = new AbortController();
+        const gone = fetch(listener.answerUrl ?? '', {
+          method: 'POST',
+          headers: JSON_HEAD,
+          signal: controller.signal,
+          body: JSON.stringify(callAnswer('Q?', 1, { progressToken: 'p1' })),
+        })
+          .then((response) => response.text())
+          .catch(() => undefined);
+        await expect.poll(() => entered.length).toBe(1);
+        controller.abort();
+        await gone;
+        await expect.poll(() => entered[0]?.aborted).toBe(true);
+        release.open();
+        await expect.poll(() => late.length).toBe(1);
+        await expect(late[0]).resolves.toBeUndefined();
+        await expect.poll(() => outcomes.length).toBe(1);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(writes).toEqual([]);
+        expect(entered).toHaveLength(1);
+        expect(outcomes[0]).toMatchObject({ finished: false });
+        expect(outcomes[0]?.causes.map((cause) => cause.kind)).toContain(
+          'disconnected',
+        );
+      });
+
+      it('does not resume or replay: the abandoned handler is not run again, and a retry is one new call', async () => {
+        const { backend, entered, release } = slowAnswer();
+        const listener = await start({
+          answer: { viewHtml: VIEW_HTML, backend, responseMode },
+        });
+        const controller = new AbortController();
+        const gone = fetch(listener.answerUrl ?? '', {
+          method: 'POST',
+          headers: JSON_HEAD,
+          signal: controller.signal,
+          body: JSON.stringify(callAnswer('Q?')),
+        })
+          .then((response) => response.text())
+          .catch(() => undefined);
+        await expect.poll(() => entered.length).toBe(1);
+        controller.abort();
+        await gone;
+        // A stateless endpoint has no stream to resume: these are refused without touching the handler.
+        for (const [method, headers] of [
+          ['GET', { accept: 'text/event-stream', 'last-event-id': '1' }],
+          ['DELETE', { 'mcp-session-id': 'abandoned' }],
+        ] as const) {
+          const resumed = await fetch(listener.answerUrl ?? '', {
+            method,
+            headers,
+          });
+          expect(resumed.status, method).toBe(405);
+          expect(resumed.headers.get('allow')).toBe('POST');
+          await resumed.text();
+        }
+        expect(entered).toHaveLength(1);
+        release.open();
+        const retry = await send(listener.answerUrl ?? '', callAnswer('Q?', 2));
+        expect(retry.messages.at(-1)?.result?.structuredContent).toEqual({
+          question: 'Q?',
+          answer: 'Answer to Q?',
+        });
+        expect(entered).toHaveLength(2); // the retry is a new request with its own handler run
+      });
+
+      it('answers a request that outlives its deadline once, and writes nothing more when the handler finishes', async () => {
+        const writes = watchClosedWrites();
+        const { backend, entered, release } = slowAnswer();
+        const listener = await start({
+          budgets: { operationMs: 60, requestMs: 300 },
+          answer: { viewHtml: VIEW_HTML, backend, responseMode },
+        });
+        const wire = await send(
+          listener.answerUrl ?? '',
+          callAnswer('Q?', 1, { progressToken: 'p1' }),
+        );
+        expect(
+          wire.messages.filter((message) => message.id === 1),
+        ).toHaveLength(1); // exactly one response
+        expect(wire.messages.at(-1)?.result).toMatchObject({
+          isError: true,
+          content: [{ type: 'text', text: ANSWER_UNAVAILABLE_TEXT }],
+        });
+        release.open();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        expect(writes).toEqual([]);
+        expect(entered).toHaveLength(1);
+      });
+    },
+  );
 
   it('does not let one request’s progress or completion reach another concurrent request', async () => {
     const release = { first: gate(), second: gate() };
     const backend: AnswerBackend = {
       async answer(question, request) {
-        await request.reportProgress({ progress: 1, total: 2, message: `progress for ${question}` });
+        await request.reportProgress({
+          progress: 1,
+          total: 2,
+          message: `progress for ${question}`,
+        });
         await (question === 'first' ? release.first : release.second).opened;
         return `answer for ${question}`;
       },
     };
-    const listener = await start({ answer: { viewHtml: VIEW_HTML, backend, responseMode: 'event-stream' } });
-    const first = send(listener.answerUrl ?? '', callAnswer('first', 1, { progressToken: 'tok-first' }));
-    const second = send(listener.answerUrl ?? '', callAnswer('second', 1, { progressToken: 'tok-second' }));
+    const listener = await start({
+      answer: { viewHtml: VIEW_HTML, backend, responseMode: 'event-stream' },
+    });
+    const first = send(
+      listener.answerUrl ?? '',
+      callAnswer('first', 1, { progressToken: 'tok-first' }),
+    );
+    const second = send(
+      listener.answerUrl ?? '',
+      callAnswer('second', 1, { progressToken: 'tok-second' }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 40)); // both are waiting; the later one finishes first
     release.second.open();
     release.first.open();
     const [one, two] = await Promise.all([first, second]);
-    const progressOf = (wire: Wire) => wire.messages.filter((message) => message.method === 'notifications/progress').map((message) => `${message.params.progressToken}:${message.params.message}`);
+    const progressOf = (wire: Wire) =>
+      wire.messages
+        .filter((message) => message.method === 'notifications/progress')
+        .map(
+          (message) =>
+            `${message.params.progressToken}:${message.params.message}`,
+        );
     expect(progressOf(one)).toEqual(['tok-first:progress for first']);
     expect(progressOf(two)).toEqual(['tok-second:progress for second']);
-    expect(one.messages.at(-1)?.result?.structuredContent).toEqual({ question: 'first', answer: 'answer for first' });
-    expect(two.messages.at(-1)?.result?.structuredContent).toEqual({ question: 'second', answer: 'answer for second' });
+    expect(one.messages.at(-1)?.result?.structuredContent).toEqual({
+      question: 'first',
+      answer: 'answer for first',
+    });
+    expect(two.messages.at(-1)?.result?.structuredContent).toEqual({
+      question: 'second',
+      answer: 'answer for second',
+    });
   });
 
   it('keeps concurrent principals apart while their slow reads overlap and finish out of order', async () => {
     const release = { alice: gate(), bob: gate() };
     const backend: SubscriptionBackend = {
       async listSubscriptions(accountId) {
-        await (accountId.endsWith('alice') ? release.alice : release.bob).opened;
-        return { displayName: accountId.endsWith('alice') ? 'Alice' : 'Bob', subscriptions: [] };
+        await (accountId.endsWith('alice') ? release.alice : release.bob)
+          .opened;
+        return {
+          displayName: accountId.endsWith('alice') ? 'Alice' : 'Bob',
+          subscriptions: [],
+        };
       },
     };
-    const listener = await start({ subscriptions: { viewHtml: VIEW_HTML, backend, verifier: createDevelopmentVerifier() } });
-    const alice = send(listener.subscriptionsUrl ?? '', callSubscriptions({}, 1), bearer(DEV_TOKENS.alice));
-    const bob = send(listener.subscriptionsUrl ?? '', callSubscriptions({}, 1), bearer(DEV_TOKENS.bob));
+    const listener = await start({
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        backend,
+        verifier: createDevelopmentVerifier(),
+      },
+    });
+    const alice = send(
+      listener.subscriptionsUrl ?? '',
+      callSubscriptions({}, 1),
+      bearer(DEV_TOKENS.alice),
+    );
+    const bob = send(
+      listener.subscriptionsUrl ?? '',
+      callSubscriptions({}, 1),
+      bearer(DEV_TOKENS.bob),
+    );
     await new Promise((resolve) => setTimeout(resolve, 40));
     release.bob.open();
-    expect((await bob).messages[0]?.result?.structuredContent).toMatchObject({ displayName: 'Bob' });
+    expect((await bob).messages[0]?.result?.structuredContent).toMatchObject({
+      displayName: 'Bob',
+    });
     release.alice.open();
-    expect((await alice).messages[0]?.result?.structuredContent).toMatchObject({ displayName: 'Alice' });
+    expect((await alice).messages[0]?.result?.structuredContent).toMatchObject({
+      displayName: 'Alice',
+    });
   });
 });
 
@@ -383,7 +799,13 @@ describe('what a caller’s own claims cannot do', () => {
   it('does not let client-side prerequisites, forwarded headers or tool arguments authorize a protected handler', async () => {
     const lookups: string[] = [];
     const listener = await start({
-      subscriptions: { viewHtml: VIEW_HTML, verifier: createDevelopmentVerifier(), backend: { listSubscriptions: async (accountId) => void lookups.push(accountId) } },
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        verifier: createDevelopmentVerifier(),
+        backend: {
+          listSubscriptions: async (accountId) => void lookups.push(accountId),
+        },
+      },
     });
     const claims = {
       status: 'active',
@@ -392,14 +814,30 @@ describe('what a caller’s own claims cannot do', () => {
       accountId: 'acct-synthetic-bob',
       signedIn: true,
     };
-    const forged = { 'x-forwarded-user': 'acct-synthetic-bob', 'x-authenticated': 'true', cookie: 'session=bob' };
-    const anonymous = await send(listener.subscriptionsUrl ?? '', callSubscriptions(claims), forged);
+    const forged = {
+      'x-forwarded-user': 'acct-synthetic-bob',
+      'x-authenticated': 'true',
+      cookie: 'session=bob',
+    };
+    const anonymous = await send(
+      listener.subscriptionsUrl ?? '',
+      callSubscriptions(claims),
+      forged,
+    );
     expect(layers(anonymous)).toMatchObject({ http: 401, challenge: true });
-    const serviceOnly = await send(listener.subscriptionsUrl ?? '', callSubscriptions(claims), { ...forged, ...bearer(DEV_TOKENS.service) });
+    const serviceOnly = await send(
+      listener.subscriptionsUrl ?? '',
+      callSubscriptions(claims),
+      { ...forged, ...bearer(DEV_TOKENS.service) },
+    );
     expect(layers(serviceOnly)).toMatchObject({ http: 403, challenge: true });
     expect(lookups).toEqual([]);
     // A real sign-in reads its own account, whatever the claims say.
-    const alice = await send(listener.subscriptionsUrl ?? '', callSubscriptions(claims), { ...forged, ...bearer(DEV_TOKENS.alice) });
+    const alice = await send(
+      listener.subscriptionsUrl ?? '',
+      callSubscriptions(claims),
+      { ...forged, ...bearer(DEV_TOKENS.alice) },
+    );
     expect(alice.status).toBe(200);
     expect(lookups).toEqual(['acct-synthetic-alice']);
   });
@@ -407,9 +845,20 @@ describe('what a caller’s own claims cannot do', () => {
   it('gives a public operation no identity even when the caller presents one', async () => {
     const seen: unknown[] = [];
     const listener = await start({
-      answer: { viewHtml: VIEW_HTML, backend: { answer: async (question, request) => (seen.push(Object.keys(request).sort()), `Answer to ${question}`) } },
+      answer: {
+        viewHtml: VIEW_HTML,
+        backend: {
+          answer: async (question, request) => (
+            seen.push(Object.keys(request).sort()),
+            `Answer to ${question}`
+          ),
+        },
+      },
     });
-    const wire = await send(listener.answerUrl ?? '', callAnswer('Who am I?'), { ...bearer(DEV_TOKENS.alice), 'x-forwarded-user': 'acct-synthetic-alice' });
+    const wire = await send(listener.answerUrl ?? '', callAnswer('Who am I?'), {
+      ...bearer(DEV_TOKENS.alice),
+      'x-forwarded-user': 'acct-synthetic-alice',
+    });
     expect(wire.messages[0]?.result?.isError).toBeUndefined();
     expect(seen).toEqual([['reportProgress', 'signal', 'within']]);
   });
@@ -417,19 +866,40 @@ describe('what a caller’s own claims cannot do', () => {
 
 describe('a request cancelled in the POST that carried it', () => {
   const batch = (tool: string, args: Record<string, unknown>) => [
-    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: tool, arguments: args } },
-    { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } },
+    {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: tool, arguments: args },
+    },
+    {
+      jsonrpc: '2.0',
+      method: 'notifications/cancelled',
+      params: { requestId: 1 },
+    },
   ];
 
   it('never enters a handler, gets no response for the cancelled call, and ends at the request deadline', async () => {
     const asked: string[] = [];
     const listener = await start({
       budgets: { operationMs: 100, requestMs: 250 },
-      answer: { viewHtml: VIEW_HTML, backend: { answer: async (question) => (asked.push(question), 'never') } },
+      answer: {
+        viewHtml: VIEW_HTML,
+        backend: {
+          answer: async (question) => (asked.push(question), 'never'),
+        },
+      },
     });
     const started = Date.now();
-    const response = await fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, body: JSON.stringify(batch(ANSWER_TOOL_NAME, { question: 'Q?' })) }).then(
-      async (reply) => ({ status: reply.status, body: await reply.text().catch(() => 'destroyed') }),
+    const response = await fetch(listener.answerUrl ?? '', {
+      method: 'POST',
+      headers: JSON_HEAD,
+      body: JSON.stringify(batch(ANSWER_TOOL_NAME, { question: 'Q?' })),
+    }).then(
+      async (reply) => ({
+        status: reply.status,
+        body: await reply.text().catch(() => 'destroyed'),
+      }),
       () => ({ status: 0, body: 'destroyed' }),
     );
     expect(asked).toEqual([]);
@@ -438,7 +908,10 @@ describe('a request cancelled in the POST that carried it', () => {
     expect(Date.now() - started).toBeLessThan(1_500);
     await expect.poll(() => outcomes.length).toBe(1);
     expect(outcomes[0]).toMatchObject({ finished: false });
-    expect(outcomes[0]?.causes).toMatchObject([{ kind: 'cancelled', stage: 'handler', effect: 'none' }, { kind: 'request-timeout', limitMs: 250 }]);
+    expect(outcomes[0]?.causes).toMatchObject([
+      { kind: 'cancelled', stage: 'handler', effect: 'none' },
+      { kind: 'request-timeout', limitMs: 250 },
+    ]);
   });
 });
 
@@ -447,20 +920,45 @@ describe('a cancelled request on a streaming endpoint', () => {
     const asked: string[] = [];
     const listener = await start({
       budgets: { requestMs: 5_000 },
-      answer: { viewHtml: VIEW_HTML, responseMode: 'event-stream', streaming: { idleMs: 150 }, backend: { answer: async (question) => (asked.push(question), 'never') } },
+      answer: {
+        viewHtml: VIEW_HTML,
+        responseMode: 'event-stream',
+        streaming: { idleMs: 150 },
+        backend: {
+          answer: async (question) => (asked.push(question), 'never'),
+        },
+      },
     });
     const started = Date.now();
     const body = JSON.stringify([
-      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: ANSWER_TOOL_NAME, arguments: { question: 'Q?' } } },
-      { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: ANSWER_TOOL_NAME, arguments: { question: 'Q?' } },
+      },
+      {
+        jsonrpc: '2.0',
+        method: 'notifications/cancelled',
+        params: { requestId: 1 },
+      },
     ]);
-    const reply = await fetch(listener.answerUrl ?? '', { method: 'POST', headers: JSON_HEAD, body });
+    const reply = await fetch(listener.answerUrl ?? '', {
+      method: 'POST',
+      headers: JSON_HEAD,
+      body,
+    });
     expect(reply.status).toBe(200);
     await reply.text().catch(() => undefined);
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(asked).toEqual([]);
     await expect.poll(() => outcomes.length).toBe(1);
     expect(outcomes[0]).toMatchObject({ finished: false });
-    expect(outcomes[0]?.causes).toContainEqual({ kind: 'operation-timeout', stage: 'delivery', limitMs: 150, effect: 'unknown' });
+    expect(outcomes[0]?.causes).toContainEqual({
+      kind: 'operation-timeout',
+      stage: 'delivery',
+      limitMs: 150,
+      effect: 'unknown',
+    });
   });
 });

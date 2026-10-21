@@ -9,7 +9,10 @@ export const EPISODE_TOOL_NAME = 'get_episode';
 export const EpisodeRequestSchema = z.object({
   episodeId: z
     .string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,63}$/, 'episodeId must be 1-64 lowercase letters, digits or hyphens'),
+    .regex(
+      /^[a-z0-9][a-z0-9-]{0,63}$/,
+      'episodeId must be 1-64 lowercase letters, digits or hyphens',
+    ),
 });
 
 /**

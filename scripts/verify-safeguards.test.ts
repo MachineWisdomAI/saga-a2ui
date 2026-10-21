@@ -6,7 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const tsx = path.join(repoRoot, 'node_modules', '.bin', 'tsx');
 const disposables: string[] = [];
 
@@ -23,7 +26,11 @@ function disposable(prefix: string): string {
 }
 
 function ignoredFixture(name: string): string {
-  const dir = path.join(repoRoot, '.wise-agents', `${name}-${randomBytes(4).toString('hex')}`);
+  const dir = path.join(
+    repoRoot,
+    '.wise-agents',
+    `${name}-${randomBytes(4).toString('hex')}`,
+  );
   fs.mkdirSync(dir, { recursive: true });
   disposables.push(dir);
   return dir;
@@ -34,12 +41,20 @@ function runScript(
   args: string[],
   options?: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(tsx, [path.join(repoRoot, 'scripts', script), ...args], {
-    cwd: options?.cwd ?? repoRoot,
-    env: options?.env ?? process.env,
-    encoding: 'utf8',
-  });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  const result = spawnSync(
+    tsx,
+    [path.join(repoRoot, 'scripts', script), ...args],
+    {
+      cwd: options?.cwd ?? repoRoot,
+      env: options?.env ?? process.env,
+      encoding: 'utf8',
+    },
+  );
+  return {
+    status: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  };
 }
 
 function writeSource(dir: string, name: string, source: string): string {
@@ -61,22 +76,26 @@ type GuardCase = { name: string; source: string; fails: boolean };
 const guardCases: GuardCase[] = [
   {
     name: 'original trimmed template fallback',
-    source: 'const resources = "";\nconst policy = `img-src ${resources}`.trim() || "img-src \'none\'";\n',
+    source:
+      'const resources = "";\nconst policy = `img-src ${resources}`.trim() || "img-src \'none\'";\n',
     fails: true,
   },
   {
     name: 'parentheses around the trim call',
-    source: 'const resources = "";\n(`img-src ${resources}`.trim()) || "img-src \'none\'";\n',
+    source:
+      'const resources = "";\n(`img-src ${resources}`.trim()) || "img-src \'none\'";\n',
     fails: true,
   },
   {
     name: 'trim of a parenthesized template',
-    source: 'const resources = "";\n(`img-src ${resources}`).trim() || "img-src \'none\'";\n',
+    source:
+      'const resources = "";\n(`img-src ${resources}`).trim() || "img-src \'none\'";\n',
     fails: true,
   },
   {
     name: 'nested parentheses around trim',
-    source: 'const resources = "";\n((`img-src ${resources}`).trim()) || "img-src \'none\'";\n',
+    source:
+      'const resources = "";\n((`img-src ${resources}`).trim()) || "img-src \'none\'";\n',
     fails: true,
   },
   {
@@ -96,17 +115,20 @@ const guardCases: GuardCase[] = [
   },
   {
     name: 'identifier trim may be empty',
-    source: 'const resources = "";\nconst fallback = "x";\nresources.trim() || fallback;\n',
+    source:
+      'const resources = "";\nconst fallback = "x";\nresources.trim() || fallback;\n',
     fails: false,
   },
   {
     name: 'interpolation-only template trim may be empty',
-    source: 'const resources = "";\nconst fallback = "x";\n`${resources}`.trim() || fallback;\n',
+    source:
+      'const resources = "";\nconst fallback = "x";\n`${resources}`.trim() || fallback;\n',
     fails: false,
   },
   {
     name: 'whitespace-only fixed template text',
-    source: 'const resources = "";\nconst fallback = "x";\n`  ${resources}  `.trim() || fallback;\n',
+    source:
+      'const resources = "";\nconst fallback = "x";\n`  ${resources}  `.trim() || fallback;\n',
     fails: false,
   },
   {
@@ -160,7 +182,11 @@ describe('fixed-text || guard', () => {
 
   it('does not scan dependencies or generated output', () => {
     const dir = disposable('guard-skip-');
-    writeSource(dir, 'src/ok.ts', 'const resources = "";\nresources.trim() || "x";\n');
+    writeSource(
+      dir,
+      'src/ok.ts',
+      'const resources = "";\nresources.trim() || "x";\n',
+    );
     writeSource(
       dir,
       'node_modules/bad.ts',
@@ -192,7 +218,11 @@ describe('test discovery', () => {
         '',
       ].join('\n'),
     );
-    writeSource(root, 'src/included.test.ts', "import { it } from 'vitest';\nit('included', () => {});\n");
+    writeSource(
+      root,
+      'src/included.test.ts',
+      "import { it } from 'vitest';\nit('included', () => {});\n",
+    );
     writeSource(
       root,
       'e2e/host-fixture/csp.test.ts',
@@ -206,7 +236,9 @@ describe('test discovery', () => {
     ]);
     const output = result.stdout + result.stderr;
     expect(result.status, output).not.toBe(0);
-    expect(output).toContain('omitted headless test: e2e/host-fixture/csp.test.ts');
+    expect(output).toContain(
+      'omitted headless test: e2e/host-fixture/csp.test.ts',
+    );
     expect(output).not.toContain('omitted headless test: src/included.test.ts');
   });
 
@@ -223,7 +255,11 @@ describe('test discovery', () => {
         '',
       ].join('\n'),
     );
-    writeSource(root, 'src/included.test.ts', "import { it } from 'vitest';\nit('included', () => {});\n");
+    writeSource(
+      root,
+      'src/included.test.ts',
+      "import { it } from 'vitest';\nit('included', () => {});\n",
+    );
     writeSource(
       root,
       'e2e/host-fixture/csp.test.ts',
@@ -245,10 +281,16 @@ describe('test discovery', () => {
     const result = runScript('check-test-discovery.ts', []);
     const output = result.stdout + result.stderr;
     expect(result.status, output).toBe(0);
-    expect(output).toContain('headless apps/lit-host/e2e/host-fixture/csp.test.ts');
+    expect(output).toContain(
+      'headless apps/lit-host/e2e/host-fixture/csp.test.ts',
+    );
     expect(output).toContain('browser apps/lit-host/e2e/csp-image.spec.ts');
-    expect(output).not.toContain('headless apps/lit-host/e2e/csp-image.spec.ts');
-    expect(output).not.toContain('browser apps/lit-host/e2e/host-fixture/csp.test.ts');
+    expect(output).not.toContain(
+      'headless apps/lit-host/e2e/csp-image.spec.ts',
+    );
+    expect(output).not.toContain(
+      'browser apps/lit-host/e2e/host-fixture/csp.test.ts',
+    );
   });
 });
 
@@ -268,14 +310,24 @@ type Receipt = {
   pristineHead: boolean;
   validationLabel: string;
   invocation: string;
-  commands: Array<{ name: string; argv: string[]; startedAt: string; endedAt: string; exitCode: number | null }>;
+  commands: Array<{
+    name: string;
+    argv: string[];
+    startedAt: string;
+    endedAt: string;
+    exitCode: number | null;
+  }>;
   exitCode: number;
 };
 
 function readReceipt(dir: string): Receipt {
-  const files = fs.readdirSync(dir).filter((name) => name.endsWith('.json') && name !== 'latest.json');
+  const files = fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith('.json') && name !== 'latest.json');
   expect(files).toHaveLength(1);
-  return JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8')) as Receipt;
+  return JSON.parse(
+    fs.readFileSync(path.join(dir, files[0]), 'utf8'),
+  ) as Receipt;
 }
 
 function git(cwd: string, args: string[]): string {
@@ -331,7 +383,11 @@ describe('verify receipts', () => {
   it('records dirty tracked files and does not label the run pristine-head', () => {
     const repo = initRepo();
     fs.appendFileSync(path.join(repo, 'tracked.txt'), 'local edit\n');
-    const expectedStatus = git(repo, ['status', '--porcelain=v1', '--untracked-files=no'])
+    const expectedStatus = git(repo, [
+      'status',
+      '--porcelain=v1',
+      '--untracked-files=no',
+    ])
       .split('\n')
       .filter(Boolean)
       .sort();
@@ -400,7 +456,14 @@ describe('verify receipts', () => {
     const secret = 's3cret-value-xyz';
     const result = runScript(
       'verify.ts',
-      ['--cwd', repo, '--receipt-dir', receipts, '--exec', execArg('ok', ['node', okScript])],
+      [
+        '--cwd',
+        repo,
+        '--receipt-dir',
+        receipts,
+        '--exec',
+        execArg('ok', ['node', okScript]),
+      ],
       { env: { ...process.env, SUPER_SECRET_TOKEN: secret } },
     );
     expect(result.status).toBe(0);
@@ -423,8 +486,12 @@ describe('verify receipts', () => {
     expect(receipt.argv.some((arg) => arg.endsWith('verify.ts'))).toBe(true);
     expect(receipt.commands[0].argv).toEqual(['node', okScript]);
     expect(Number.isNaN(Date.parse(receipt.startedAt))).toBe(false);
-    expect(Date.parse(receipt.endedAt)).toBeGreaterThanOrEqual(Date.parse(receipt.startedAt));
+    expect(Date.parse(receipt.endedAt)).toBeGreaterThanOrEqual(
+      Date.parse(receipt.startedAt),
+    );
     expect(Number.isNaN(Date.parse(receipt.commands[0].startedAt))).toBe(false);
-    expect(Date.parse(receipt.commands[0].endedAt)).toBeGreaterThanOrEqual(Date.parse(receipt.commands[0].startedAt));
+    expect(Date.parse(receipt.commands[0].endedAt)).toBeGreaterThanOrEqual(
+      Date.parse(receipt.commands[0].startedAt),
+    );
   });
 });

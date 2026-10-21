@@ -1,4 +1,8 @@
-import type { App, McpUiToolInputNotification, McpUiToolResultNotification } from '@modelcontextprotocol/ext-apps';
+import type {
+  App,
+  McpUiToolInputNotification,
+  McpUiToolResultNotification,
+} from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
 
 // Browser-side connection lifetime. Everything imported above is a type, so this module adds no
@@ -48,7 +52,9 @@ export interface ToolResultViewConnection {
  *   delivery, because the host ends the connection after its request is answered. Connecting
  *   the same `App` again starts with exactly one listener.
  */
-export async function connectToolResultView(deps: ToolResultViewDependencies): Promise<ToolResultViewConnection> {
+export async function connectToolResultView(
+  deps: ToolResultViewDependencies,
+): Promise<ToolResultViewConnection> {
   const { app } = deps;
   let disposed = false; // delivery has stopped
   let closed = false; // the App's transport close has been requested

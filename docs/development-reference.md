@@ -63,14 +63,12 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
 
 ### Formatting and hooks
 
-Automatic formatting hooks are intentionally deferred until the operator enables
-them after the codebase is stable. Agents must leave them disabled, including in
-fresh clones and linked worktrees; a missing formatter hook is expected, not a
-setup defect. Preserve existing Git safety guards and source formatting.
+Formatting hooks are enabled for SDK development. Install and verify them before
+committing in each development checkout or worktree, including Hermes Helmet
+worker checkouts. Preserve existing Git safety guards.
 
 Use the Node version in `.nvmrc` (22.23.3) or a compatible later release. The
-following hook installation procedure is for an explicit operator request only;
-installing the root tools alone does not enable hooks:
+following commands install the pinned root tools and enable the hooks:
 
 ```sh
 npm ci --workspaces=false --ignore-scripts
@@ -104,7 +102,9 @@ Only staged JS/TS (including JSX/TSX and MJS/CJS), JSON, CSS and YAML are select
 `.prettierignore` excludes generated output, lockfiles, retained evidence,
 vendored material and Markdown/HTML source-quotation documents. lint-staged owns
 index updates and restores unstaged portions; do not use `--no-stash` or
-`--no-hide-partially-staged`. No repository-wide reformat is part of adoption.
+`--no-hide-partially-staged`. The source/configuration baseline is normalized
+with this same formatter so future edits avoid unrelated formatting hunks.
+The hook formats whole selected files, including lines outside the staged hunk.
 Formatting a touched source file can change quoted guide snippets: reconcile
 those quotes and run `npm run test:docs` before review.
 

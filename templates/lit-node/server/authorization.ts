@@ -6,6 +6,9 @@ import type { AccountIdentity } from './identity.js';
 // request's budget ends, so a slow lookup can stop.
 
 /** The starter allows every signed-in account. That is a placeholder, not a policy. */
-export async function mayViewAccount(_identity: AccountIdentity, _signal: AbortSignal): Promise<boolean> {
+export async function mayViewAccount(
+  _identity: AccountIdentity,
+  _signal: AbortSignal,
+): Promise<boolean> {
   return true;
 }

@@ -35,7 +35,8 @@ export const PLAYBACK_RESULT_META = 'saga-a2ui/playback';
 export const HOST_CALL_SAFEGUARD_MS = 60_000;
 
 /** Tool failure: the account is not entitled to this episode (or the episode does not exist). */
-export const PLAYBACK_DENIED_TEXT = 'Playback denied: this account does not have access to this episode.';
+export const PLAYBACK_DENIED_TEXT =
+  'Playback denied: this account does not have access to this episode.';
 
 /** Tool failure: the host cannot route the private result to the view, so nothing was fetched. */
 export const PLAYBACK_UNSUPPORTED_TEXT = 'Playback is not supported here.';
@@ -64,13 +65,15 @@ export const PLAYBACK_LIMITS = {
 } as const;
 
 /** Tool failure: the known tool was called with input it does not accept. Never echoes the input. */
-export const PLAYBACK_UNREADABLE_REQUEST_TEXT = 'That play request could not be read.';
+export const PLAYBACK_UNREADABLE_REQUEST_TEXT =
+  'That play request could not be read.';
 
 /** Tool failure: a backend or dependency failed. Safe to retry. Carries no backend detail. */
 export const PLAYBACK_UNAVAILABLE_TEXT = 'Playback is unavailable.';
 
 /** Tool failure: the result broke its own contract, so nothing was sent. Carries no field values. */
-export const PLAYBACK_INVALID_RESULT_TEXT = 'The playback result could not be shown.';
+export const PLAYBACK_INVALID_RESULT_TEXT =
+  'The playback result could not be shown.';
 
 /** The one rule for an episode id: a short lowercase slug. Requests and projections both use it. */
 const EPISODE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -83,7 +86,9 @@ const EPISODE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
  */
 export const PlayRequestSchema = z.strictObject(
   {
-    episodeId: z.string({ error: PLAYBACK_UNREADABLE_REQUEST_TEXT }).regex(EPISODE_SLUG, PLAYBACK_UNREADABLE_REQUEST_TEXT),
+    episodeId: z
+      .string({ error: PLAYBACK_UNREADABLE_REQUEST_TEXT })
+      .regex(EPISODE_SLUG, PLAYBACK_UNREADABLE_REQUEST_TEXT),
   },
   { error: PLAYBACK_UNREADABLE_REQUEST_TEXT },
 );
@@ -92,7 +97,9 @@ export const PlayRequestSchema = z.strictObject(
  * Model projection: the only thing the model is ever told about a Play. Fixed text, no fields
  * from the request, the account, the episode record or the capability.
  */
-export const ModelPlaybackSchema = z.object({ text: z.literal(PLAYBACK_AUTHORIZED_TEXT) }).strict();
+export const ModelPlaybackSchema = z
+  .object({ text: z.literal(PLAYBACK_AUTHORIZED_TEXT) })
+  .strict();
 
 /** The public part of the view projection: what the listener may see about the episode. */
 export const ViewEpisodeSchema = z
@@ -124,6 +131,8 @@ export const PLAYBACK_NO_EPISODE_TEXT = 'No playable episode has that id.';
  * What mounting the player view may carry: the public episode and the sign-in label, nothing
  * else. It is deliberately not entitlement-aware: browsing an episode is not permission to play it.
  */
-export const OpenedEpisodeSchema = PublicEpisodeSchema.extend({ viewSession: ViewSessionLabelSchema }).strict();
+export const OpenedEpisodeSchema = PublicEpisodeSchema.extend({
+  viewSession: ViewSessionLabelSchema,
+}).strict();
 
 export type OpenedEpisode = z.infer<typeof OpenedEpisodeSchema>;

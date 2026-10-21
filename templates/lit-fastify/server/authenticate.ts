@@ -1,5 +1,10 @@
 import type { IncomingMessage } from 'node:http';
-import { OAuthError, OAuthErrorCode, type AuthInfo, type OAuthTokenVerifier } from '@modelcontextprotocol/server';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
 import type { RequestLifetime } from '@saga-a2ui/mcp/server';
 import { identityOf } from './identity.js';
 
@@ -14,9 +19,17 @@ const REALM = 'saga-starter';
 
 export type AuthDecision =
   | { readonly ok: true; readonly authInfo: AuthInfo }
-  | { readonly ok: false; readonly status: 401 | 403 | 503; readonly challenge?: string };
+  | {
+      readonly ok: false;
+      readonly status: 401 | 403 | 503;
+      readonly challenge?: string;
+    };
 
-const refuse = (status: 401 | 403, error: string, scope?: string): AuthDecision => ({
+const refuse = (
+  status: 401 | 403,
+  error: string,
+  scope?: string,
+): AuthDecision => ({
   ok: false,
   status,
   challenge: `Bearer realm="${REALM}", error="${error}"${scope === undefined ? '' : `, scope="${scope}"`}`,
@@ -28,23 +41,38 @@ const refuse = (status: 401 | 403, error: string, scope?: string): AuthDecision 
  * work. The verifier runs as the request's `authentication` stage, so a verifier that never
  * answers cannot hold the request past its budget.
  */
-export async function authenticate(request: Pick<IncomingMessage, 'headers'>, verifier: OAuthTokenVerifier, lifetime: RequestLifetime): Promise<AuthDecision> {
+export async function authenticate(
+  request: Pick<IncomingMessage, 'headers'>,
+  verifier: OAuthTokenVerifier,
+  lifetime: RequestLifetime,
+): Promise<AuthDecision> {
   const header = request.headers.authorization;
-  if (header === undefined) return { ok: false, status: 401, challenge: `Bearer realm="${REALM}"` };
+  if (header === undefined)
+    return { ok: false, status: 401, challenge: `Bearer realm="${REALM}"` };
   const match = /^Bearer ([^\s]+)$/i.exec(header);
   if (!match?.[1]) return refuse(401, 'invalid_token');
 
   const token = match[1];
-  const verified = await lifetime.run('authentication', () => verifier.verifyAccessToken(token));
+  const verified = await lifetime.run('authentication', () =>
+    verifier.verifyAccessToken(token),
+  );
   if (!verified.ok) {
     // A verifier that rejects the credential is a 401; one that fails or runs out of time is not the caller's fault.
     const cause = verified.cause;
-    const rejected = cause.kind === 'dependency-failure' && OAuthError.isInstance(cause.error) && cause.error.code === OAuthErrorCode.InvalidToken;
+    const rejected =
+      cause.kind === 'dependency-failure' &&
+      OAuthError.isInstance(cause.error) &&
+      cause.error.code === OAuthErrorCode.InvalidToken;
     return rejected ? refuse(401, 'invalid_token') : { ok: false, status: 503 };
   }
   const authInfo = verified.value;
-  if (typeof authInfo.expiresAt !== 'number' || authInfo.expiresAt <= Date.now() / 1000) return refuse(401, 'invalid_token');
-  if (!authInfo.scopes.includes(ACCOUNT_SCOPE)) return refuse(403, 'insufficient_scope', ACCOUNT_SCOPE);
+  if (
+    typeof authInfo.expiresAt !== 'number' ||
+    authInfo.expiresAt <= Date.now() / 1000
+  )
+    return refuse(401, 'invalid_token');
+  if (!authInfo.scopes.includes(ACCOUNT_SCOPE))
+    return refuse(403, 'insufficient_scope', ACCOUNT_SCOPE);
   const identity = identityOf(authInfo);
   if (!identity) return refuse(403, 'insufficient_scope', ACCOUNT_SCOPE);
   // The verifier may reuse the object it returned (a cached token record). Copy what this request
@@ -54,7 +82,10 @@ export async function authenticate(request: Pick<IncomingMessage, 'headers'>, ve
     authInfo: Object.freeze({
       ...authInfo,
       scopes: [...authInfo.scopes],
-      extra: Object.freeze({ ...authInfo.extra, accountId: identity.accountId }),
+      extra: Object.freeze({
+        ...authInfo.extra,
+        accountId: identity.accountId,
+      }),
     }),
   };
 }

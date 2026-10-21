@@ -13,10 +13,12 @@ export const SIGN_IN_REQUIRED_TEXT = 'Sign in to see your subscriptions.';
 export const SUBSCRIPTIONS_UNAVAILABLE_TEXT = 'Subscriptions are unavailable.';
 
 /** Tool failure: the known tool was called with business input it does not accept. */
-export const INVALID_SUBSCRIPTION_INPUT_TEXT = 'That subscription request could not be read.';
+export const INVALID_SUBSCRIPTION_INPUT_TEXT =
+  'That subscription request could not be read.';
 
 /** Tool failure: the backend record could not be projected. Carries no field values. */
-export const INVALID_OUTPUT_TEXT = 'The subscriptions result could not be shown.';
+export const INVALID_OUTPUT_TEXT =
+  'The subscriptions result could not be shown.';
 
 /** Successful read with nothing to list. Not a failure. */
 export const EMPTY_SUBSCRIPTIONS_TEXT = 'No subscriptions.';
@@ -44,8 +46,13 @@ export const SUBSCRIPTION_STATUSES = ['active', 'paused', 'canceled'] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
 /** The one authoritative check for a supported status. The server and the view share it. */
-export function isSubscriptionStatus(value: unknown): value is SubscriptionStatus {
-  return typeof value === 'string' && SUBSCRIPTION_STATUSES.some((supported) => supported === value);
+export function isSubscriptionStatus(
+  value: unknown,
+): value is SubscriptionStatus {
+  return (
+    typeof value === 'string' &&
+    SUBSCRIPTION_STATUSES.some((supported) => supported === value)
+  );
 }
 
 /**
@@ -62,14 +69,20 @@ export type DeclaredSubscriptionRead =
   | { readonly kind: 'rejected' };
 
 // Not strict on purpose: zod strips every undeclared field, so only `status` can come out.
-const DeclaredReadArgumentsSchema = z.object({ status: z.enum(SUBSCRIPTION_STATUSES).optional() });
+const DeclaredReadArgumentsSchema = z.object({
+  status: z.enum(SUBSCRIPTION_STATUSES).optional(),
+});
 
-export function declaredSubscriptionRead(argumentsFromHost: unknown): DeclaredSubscriptionRead {
+export function declaredSubscriptionRead(
+  argumentsFromHost: unknown,
+): DeclaredSubscriptionRead {
   if (argumentsFromHost === undefined) return { kind: 'unfiltered' };
   const parsed = DeclaredReadArgumentsSchema.safeParse(argumentsFromHost);
   if (!parsed.success) return { kind: 'rejected' };
   const { status } = parsed.data;
-  return status === undefined ? { kind: 'unfiltered' } : { kind: 'filtered', status };
+  return status === undefined
+    ? { kind: 'unfiltered' }
+    : { kind: 'filtered', status };
 }
 
 /**
@@ -86,7 +99,9 @@ export const SubscriptionsRequestSchema = z.object({
  * it reveals neither the credential nor the account. The view uses it only to tell whether the
  * data it holds still belongs to the sign-in it started with; it never authorizes anything.
  */
-export const ViewSessionLabelSchema = z.string().regex(/^vs_[A-Za-z0-9_-]{22}$/);
+export const ViewSessionLabelSchema = z
+  .string()
+  .regex(/^vs_[A-Za-z0-9_-]{22}$/);
 
 export const SubscriptionSchema = z
   .object({

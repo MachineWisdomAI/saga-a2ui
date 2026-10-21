@@ -9,7 +9,13 @@ import {
   type ObservedEvent,
   type Outcome,
 } from './index.js';
-import { elapse, gate, rig, settle, type Gate } from './fake-adapter.test-support.js';
+import {
+  elapse,
+  gate,
+  rig,
+  settle,
+  type Gate,
+} from './fake-adapter.test-support.js';
 
 // Resource ownership (ACT5) through the public builder and the binding a handle returns. The
 // application's owner below is the fixture the Blueprint requires: an observable single-resource
@@ -46,7 +52,8 @@ class PlayerOwner {
 
   start(lease: Lease): Promise<'started' | 'blocked'> {
     this.calls.push(`start:${lease.id}`);
-    if (this.current !== lease) return Promise.reject(new Error(`lease ${lease.id} was superseded`));
+    if (this.current !== lease)
+      return Promise.reject(new Error(`lease ${lease.id} was superseded`));
     if (this.blockNextStart) {
       this.blockNextStart = false;
       return Promise.resolve('blocked');
@@ -74,7 +81,6 @@ class PlayerOwner {
     this.calls.push('endCurrent');
     if (this.current !== undefined) this.end(this.current);
   }
-
 }
 
 type Presented = 'playing' | 'gesture-needed';
@@ -83,10 +89,15 @@ type Presented = 'playing' | 'gesture-needed';
 function playAction(
   owner: PlayerOwner,
   report: string[],
-  options: { startGate?: Gate<void>; present?: (state: Presented) => void | PromiseLike<void> } = {},
+  options: {
+    startGate?: Gate<void>;
+    present?: (state: Presented) => void | PromiseLike<void>;
+  } = {},
 ) {
   return Action.local<Press>('play')
-    .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+    .atActivation(({ scope }) =>
+      scope.own(owner.begin(), (lease) => owner.end(lease)),
+    )
     .run(async ({ activation }) => {
       if (options.startGate !== undefined) await options.startGate.promise;
       const started = await owner.start(activation.token);
@@ -106,7 +117,10 @@ function playAction(
       }
       if (context.stage === 'running') {
         const { failure } = context;
-        if (failure.kind === 'success-hook-error' || failure.kind === 'success-hook-timeout') {
+        if (
+          failure.kind === 'success-hook-error' ||
+          failure.kind === 'success-hook-timeout'
+        ) {
           // Chosen policy: only a result that records a started, transferred lease stays owner-held.
           if (failure.result.state === 'playing') {
             report.push('playing-but-view-failed');
@@ -169,10 +183,14 @@ describe('activation work, ownership of an existing token and acquisition after 
     const seen: unknown[] = [];
     const released: Lease[] = [];
     const action = Action.local<Press>('own-existing')
-      .atActivation(({ scope }) => scope.own(existing, (lease) => void released.push(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(existing, (lease) => void released.push(lease)),
+      )
       .run(({ activation }) => seen.push(['run', activation.token]))
       .limits({ hookMs: 100 })
-      .onSuccess(({ activation }) => void seen.push(['success', activation.token]))
+      .onSuccess(
+        ({ activation }) => void seen.push(['success', activation.token]),
+      )
       .build();
     const { control } = rig(action);
 
@@ -234,7 +252,12 @@ describe('activation work, ownership of an existing token and acquisition after 
       })
       .run(() => void (ran = true))
       .limits({ hookMs: 100 })
-      .onCanceled((context) => void order.push(`canceled:${context.stage}:${context.cause}:${context.activation.token.id}`))
+      .onCanceled(
+        (context) =>
+          void order.push(
+            `canceled:${context.stage}:${context.cause}:${context.activation.token.id}`,
+          ),
+      )
       .build();
     const { control, binding } = rig(action);
     holder.dispose = () => binding.dispose();
@@ -243,7 +266,10 @@ describe('activation work, ownership of an existing token and acquisition after 
     await settle();
 
     expect(ran).toBe(false);
-    expect(order).toEqual(['activation returned', 'canceled:prerequisites:disposed:1']);
+    expect(order).toEqual([
+      'activation returned',
+      'canceled:prerequisites:disposed:1',
+    ]);
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
@@ -262,7 +288,9 @@ describe('activation work, ownership of an existing token and acquisition after 
       })
       .run(() => void (ran = true))
       .limits({ hookMs: 100 })
-      .onCanceled(({ activation }) => void seen.push(`canceled:${activation.token}`))
+      .onCanceled(
+        ({ activation }) => void seen.push(`canceled:${activation.token}`),
+      )
       .onFailure((context) => void seen.push(`failed:${context.stage}`))
       .onFinally(({ outcome }) => void outcomes.push(outcome))
       .build();
@@ -276,7 +304,15 @@ describe('activation work, ownership of an existing token and acquisition after 
     // The activation did not complete, so no activation value exists; the failure is the outcome and
     // the cancellation, already obsolete, keeps the failure hook from presenting.
     expect(seen).toEqual([]);
-    expect(outcomes[0]).toEqual({ status: 'failed', stage: 'input', failure: { kind: 'activation-error', error: failure, category: 'unknown' } });
+    expect(outcomes[0]).toEqual({
+      status: 'failed',
+      stage: 'input',
+      failure: {
+        kind: 'activation-error',
+        error: failure,
+        category: 'unknown',
+      },
+    });
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
@@ -289,11 +325,23 @@ describe('activation work, ownership of an existing token and acquisition after 
     function disposingThrow(
       log: string[],
       release: (name: string, signal: AbortSignal) => void | Promise<void>,
-      options: { hook: (typeof hooks)[number]; final?: () => void | Promise<void> },
+      options: {
+        hook: (typeof hooks)[number];
+        final?: () => void | Promise<void>;
+      },
       finalSignals: AbortSignal[] = [],
     ) {
       const holder: { dispose?: () => void } = {};
-      const activate = ({ scope }: { scope: { own(token: string, release: (token: string, c: { signal: AbortSignal }) => unknown): unknown } }): void => {
+      const activate = ({
+        scope,
+      }: {
+        scope: {
+          own(
+            token: string,
+            release: (token: string, c: { signal: AbortSignal }) => unknown,
+          ): unknown;
+        };
+      }): void => {
         for (const name of ['older', 'newer']) {
           scope.own(name, (token, { signal }) => {
             log.push(token);
@@ -303,7 +351,15 @@ describe('activation work, ownership of an existing token and acquisition after 
         holder.dispose?.();
         throw new Error('activation failed after disposing');
       };
-      const finalHook = async ({ outcome, obsolete, signal }: { outcome: Outcome<unknown>; obsolete: boolean; signal: AbortSignal }) => {
+      const finalHook = async ({
+        outcome,
+        obsolete,
+        signal,
+      }: {
+        outcome: Outcome<unknown>;
+        obsolete: boolean;
+        signal: AbortSignal;
+      }) => {
         finalSignals.push(signal);
         log.push(`finally:${outcome.status}:${String(obsolete)}`);
         await options.final?.();
@@ -314,87 +370,110 @@ describe('activation work, ownership of an existing token and acquisition after 
         .limits({ hookMs: 100 });
       const action =
         options.hook === 'with a failure hook'
-          ? draft.onFailure(() => void log.push('failure')).onFinally(finalHook).build()
+          ? draft
+              .onFailure(() => void log.push('failure'))
+              .onFinally(finalHook)
+              .build()
           : draft.onFinally(finalHook).build();
       const rigged = rig(action);
       holder.dispose = () => rigged.binding.dispose();
       return rigged;
     }
 
-    it.each(hooks)('still resumes the release sweep and finalization when a release settles later, %s', async (hook) => {
-      const log: string[] = [];
-      const newer = gate<void>();
-      const { control } = disposingThrow(log, (name) => (name === 'newer' ? newer.promise : undefined), { hook });
+    it.each(hooks)(
+      'still resumes the release sweep and finalization when a release settles later, %s',
+      async (hook) => {
+        const log: string[] = [];
+        const newer = gate<void>();
+        const { control } = disposingThrow(
+          log,
+          (name) => (name === 'newer' ? newer.promise : undefined),
+          { hook },
+        );
 
-      try {
-        control.press();
-      } catch {
-        // Without a failure hook the activation's error reaches the event's own caller.
-      }
-      await settle();
-      // The newer release is in flight and the older one waits behind it.
-      expect(log).toEqual(['newer']);
+        try {
+          control.press();
+        } catch {
+          // Without a failure hook the activation's error reaches the event's own caller.
+        }
+        await settle();
+        // The newer release is in flight and the older one waits behind it.
+        expect(log).toEqual(['newer']);
 
-      newer.resolve();
-      await settle();
+        newer.resolve();
+        await settle();
 
-      // The failure hook never presents for the obsolete invocation, with or without one configured.
-      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
-    });
+        // The failure hook never presents for the obsolete invocation, with or without one configured.
+        expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+      },
+    );
 
-    it.each(hooks)('keeps the budget of a release that never settles, so the sweep still advances, %s', async (hook) => {
-      const log: string[] = [];
-      const signals = new Map<string, AbortSignal>();
-      const { control } = disposingThrow(
-        log,
-        (name, signal) => {
-          signals.set(name, signal);
-          return name === 'newer' ? new Promise<void>(() => undefined) : undefined;
-        },
-        { hook },
-      );
+    it.each(hooks)(
+      'keeps the budget of a release that never settles, so the sweep still advances, %s',
+      async (hook) => {
+        const log: string[] = [];
+        const signals = new Map<string, AbortSignal>();
+        const { control } = disposingThrow(
+          log,
+          (name, signal) => {
+            signals.set(name, signal);
+            return name === 'newer'
+              ? new Promise<void>(() => undefined)
+              : undefined;
+          },
+          { hook },
+        );
 
-      try {
-        control.press();
-      } catch {
-        // See above.
-      }
-      await settle();
-      expect(log).toEqual(['newer']);
-      expect(signals.get('newer')?.aborted).toBe(false);
+        try {
+          control.press();
+        } catch {
+          // See above.
+        }
+        await settle();
+        expect(log).toEqual(['newer']);
+        expect(signals.get('newer')?.aborted).toBe(false);
 
-      await elapse(99);
-      expect(log).toEqual(['newer']);
-      await elapse(1);
+        await elapse(99);
+        expect(log).toEqual(['newer']);
+        await elapse(1);
 
-      expect(signals.get('newer')?.aborted).toBe(true);
-      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
-    });
+        expect(signals.get('newer')?.aborted).toBe(true);
+        expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+      },
+    );
 
-    it.each(hooks)('still reaches and waits for an asynchronous final hook, %s', async (hook) => {
-      const log: string[] = [];
-      const done = gate<void>();
-      const finalSignals: AbortSignal[] = [];
-      const { control } = disposingThrow(log, () => undefined, { hook, final: () => done.promise }, finalSignals);
+    it.each(hooks)(
+      'still reaches and waits for an asynchronous final hook, %s',
+      async (hook) => {
+        const log: string[] = [];
+        const done = gate<void>();
+        const finalSignals: AbortSignal[] = [];
+        const { control } = disposingThrow(
+          log,
+          () => undefined,
+          { hook, final: () => done.promise },
+          finalSignals,
+        );
 
-      try {
-        control.press();
-      } catch {
-        // See above.
-      }
-      await settle();
-      // Both tokens are released and the final hook is running and being waited for.
-      expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
-      expect(finalSignals[0]?.aborted).toBe(false);
+        try {
+          control.press();
+        } catch {
+          // See above.
+        }
+        await settle();
+        // Both tokens are released and the final hook is running and being waited for.
+        expect(log).toEqual(['newer', 'older', 'finally:failed:true']);
+        expect(finalSignals[0]?.aborted).toBe(false);
 
-      await elapse(99);
-      expect(finalSignals[0]?.aborted).toBe(false);
-      done.resolve();
-      await settle();
-      await elapse(100);
-      // Settled normally: the budget no longer applies, so nothing aborts the finished hook.
-      expect(finalSignals[0]?.aborted).toBe(false);
-    });
+        await elapse(99);
+        expect(finalSignals[0]?.aborted).toBe(false);
+        done.resolve();
+        await settle();
+        await elapse(100);
+        // Settled normally: the budget no longer applies, so nothing aborts the finished hook.
+        expect(finalSignals[0]?.aborted).toBe(false);
+      },
+    );
 
     it('bounds a final hook that never settles by its own hookMs budget', async () => {
       const log: string[] = [];
@@ -402,7 +481,10 @@ describe('activation work, ownership of an existing token and acquisition after 
       const { control } = disposingThrow(
         log,
         () => undefined,
-        { hook: 'with a failure hook', final: () => new Promise<void>(() => undefined) },
+        {
+          hook: 'with a failure hook',
+          final: () => new Promise<void>(() => undefined),
+        },
         finalSignals,
       );
 
@@ -429,13 +511,19 @@ describe('activation work, ownership of an existing token and acquisition after 
         try {
           scope.own('late', () => void seen.push('late released'));
         } catch (error) {
-          seen.push(error instanceof InvocationEndedError ? 'late refused' : 'late other');
+          seen.push(
+            error instanceof InvocationEndedError
+              ? 'late refused'
+              : 'late other',
+          );
         }
         return held;
       })
       .run(() => undefined)
       .limits({ hookMs: 100 })
-      .onCanceled(({ activation }) => void seen.push(`canceled:${activation.token.id}`))
+      .onCanceled(
+        ({ activation }) => void seen.push(`canceled:${activation.token.id}`),
+      )
       .build();
     const { control, binding } = rig(action);
     holder.dispose = () => binding.dispose();
@@ -443,7 +531,12 @@ describe('activation work, ownership of an existing token and acquisition after 
     control.press();
     await settle();
 
-    expect(seen).toEqual(['active:false', 'late released', 'late refused', 'canceled:1']);
+    expect(seen).toEqual([
+      'active:false',
+      'late released',
+      'late refused',
+      'canceled:1',
+    ]);
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 
@@ -460,13 +553,18 @@ describe('activation work, ownership of an existing token and acquisition after 
       })
       .limits({ hookMs: 100 })
       .onFailure(({ stage, ...context }) => {
-        if (stage === 'running' && 'activation' in context) seen.failureHook = context.activation.active;
+        if (stage === 'running' && 'activation' in context)
+          seen.failureHook = context.activation.active;
       })
       .build();
     rig(action).control.press();
     await settle();
 
-    expect(seen).toEqual({ activation: true, handler: true, failureHook: false });
+    expect(seen).toEqual({
+      activation: true,
+      handler: true,
+      failureHook: false,
+    });
   });
 
   it('gives the event-turn callback no way to wait: its scope has no acquire', () => {
@@ -496,7 +594,9 @@ describe('release at the end of the invocation', () => {
       const stop = gate<void>();
       const fetched = gate<void>();
       const action = Action.local<Press>('reverse')
-        .atActivation(({ scope }) => scope.own('a', (token) => void log.push(`release:${token}`)))
+        .atActivation(({ scope }) =>
+          scope.own('a', (token) => void log.push(`release:${token}`)),
+        )
         .before(
           prerequisite('acquires', async ({ scope }) => {
             await scope.acquire(
@@ -522,7 +622,9 @@ describe('release at the end of the invocation', () => {
         .onSuccess(() => void log.push('onSuccess'))
         .onFailure(() => void log.push('onFailure'))
         .onCanceled(() => void log.push('onCanceled'))
-        .onFinally(({ outcome }) => void log.push(`onFinally:${outcome.status}`))
+        .onFinally(
+          ({ outcome }) => void log.push(`onFinally:${outcome.status}`),
+        )
         .build();
       const { control, binding } = rig(action);
 
@@ -534,12 +636,26 @@ describe('release at the end of the invocation', () => {
         await settle();
       }
 
-      const hook = { succeeds: 'onSuccess', fails: 'onFailure', 'is canceled': 'onCanceled' }[ending];
-      const status = { succeeds: 'succeeded', fails: 'failed', 'is canceled': 'canceled' }[ending];
+      const hook = {
+        succeeds: 'onSuccess',
+        fails: 'onFailure',
+        'is canceled': 'onCanceled',
+      }[ending];
+      const status = {
+        succeeds: 'succeeded',
+        fails: 'failed',
+        'is canceled': 'canceled',
+      }[ending];
       expect(log).toEqual(
         ending === 'succeeds'
           ? [hook, 'release:c', 'release:b', 'release:a', `onFinally:${status}`]
-          : [hook, 'release:c', 'release:b', 'release:a', `onFinally:${status}`],
+          : [
+              hook,
+              'release:c',
+              'release:b',
+              'release:a',
+              `onFinally:${status}`,
+            ],
       );
     },
   );
@@ -547,7 +663,10 @@ describe('release at the end of the invocation', () => {
   it('gives each release its own signal and budget: a stalled release cannot hold settling, and the outcome is untouched', async () => {
     const signals = new Map<string, AbortSignal>();
     const released: string[] = [];
-    const finals: { outcome: Outcome<unknown>; cleanupErrors: readonly CleanupError[] }[] = [];
+    const finals: {
+      outcome: Outcome<unknown>;
+      cleanupErrors: readonly CleanupError[];
+    }[] = [];
     const abortedWhenReleased: Record<string, boolean> = {};
     const action = Action.local<Press>('stalled-release')
       .atActivation(({ scope }) => {
@@ -557,13 +676,18 @@ describe('release at the end of the invocation', () => {
             released.push(token);
             abortedWhenReleased[token] = signal.aborted;
             // b never settles and ignores its signal.
-            return token === 'b' ? new Promise<void>(() => undefined) : undefined;
+            return token === 'b'
+              ? new Promise<void>(() => undefined)
+              : undefined;
           });
         }
       })
       .run(() => 'result')
       .limits({ hookMs: 100 })
-      .onFinally(({ outcome, cleanupErrors }) => void finals.push({ outcome, cleanupErrors }))
+      .onFinally(
+        ({ outcome, cleanupErrors }) =>
+          void finals.push({ outcome, cleanupErrors }),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -584,7 +708,10 @@ describe('release at the end of the invocation', () => {
     expect(abortedWhenReleased).toEqual({ a: false, b: false, c: false });
     expect(binding.state.phase).toBe('idle');
     expect(finals).toEqual([
-      { outcome: { status: 'succeeded', result: 'result' }, cleanupErrors: [{ step: 'release', reason: 'budget-exceeded' }] },
+      {
+        outcome: { status: 'succeeded', result: 'result' },
+        cleanupErrors: [{ step: 'release', reason: 'budget-exceeded' }],
+      },
     ]);
   });
 
@@ -616,7 +743,9 @@ describe('release at the end of the invocation', () => {
   it('records a release that throws or rejects, keeps releasing the rest, and leaves the outcome as decided', async () => {
     const log: string[] = [];
     const phases: ObservedEvent[] = [];
-    let finalContext: { outcome: Outcome<unknown>; cleanupErrors: readonly CleanupError[] } | undefined;
+    let finalContext:
+      | { outcome: Outcome<unknown>; cleanupErrors: readonly CleanupError[] }
+      | undefined;
     const boom = new Error('boom');
     const action = Action.local<Press>('release-fails')
       .atActivation(({ scope }) => {
@@ -632,7 +761,10 @@ describe('release at the end of the invocation', () => {
       })
       .run(() => 'result')
       .limits({ hookMs: 100 })
-      .onFinally(({ outcome, cleanupErrors }) => void (finalContext = { outcome, cleanupErrors }))
+      .onFinally(
+        ({ outcome, cleanupErrors }) =>
+          void (finalContext = { outcome, cleanupErrors }),
+      )
       .observe((event) => void phases.push(event))
       .build();
     const { control, binding } = rig(action);
@@ -648,14 +780,20 @@ describe('release at the end of the invocation', () => {
         { step: 'release', reason: 'threw', error: boom },
       ],
     });
-    expect(phases.filter((event) => event.phase === 'cleanup-error').map((event) => event.cleanupStep)).toEqual(['release', 'release']);
+    expect(
+      phases
+        .filter((event) => event.phase === 'cleanup-error')
+        .map((event) => event.cleanupStep),
+    ).toEqual(['release', 'release']);
     expect(binding.state.phase).toBe('idle');
   });
 
   it('releases after the outcome hook even when the invocation became obsolete, and an absent onFinally does not skip it', async () => {
     const log: string[] = [];
     const action = Action.local<Press>('obsolete-release')
-      .atActivation(({ scope }) => scope.own('a', () => void log.push('released')))
+      .atActivation(({ scope }) =>
+        scope.own('a', () => void log.push('released')),
+      )
       .run(() => new Promise<never>(() => undefined))
       .limits({ hookMs: 100 })
       .build();
@@ -746,10 +884,12 @@ describe('a token acquired after retirement', () => {
     const action = Action.local<Press>('no-acquire-after-end')
       .run(async ({ scope }) => {
         await stop.promise;
-        await scope.acquire(
-          () => void started.push('acquire'),
-          () => undefined,
-        ).catch((error: unknown) => void (rejection = error));
+        await scope
+          .acquire(
+            () => void started.push('acquire'),
+            () => undefined,
+          )
+          .catch((error: unknown) => void (rejection = error));
       })
       .limits({ hookMs: 100 })
       .build();
@@ -794,7 +934,11 @@ describe('a token acquired after retirement', () => {
     await settle();
     await elapse(100);
 
-    expect(events.filter((event) => event.phase === 'cleanup-error').map((event) => event.cleanupStep)).toEqual(['release', 'release']);
+    expect(
+      events
+        .filter((event) => event.phase === 'cleanup-error')
+        .map((event) => event.cleanupStep),
+    ).toEqual(['release', 'release']);
   });
 });
 
@@ -806,7 +950,9 @@ describe('an owner scopes release to exactly one acquisition', () => {
     const secondStart = gate<void>();
     const starts = [firstStart, secondStart];
     const action = Action.local<Press>('play')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(async ({ activation }) => {
         await starts[activation.token.id - 1]?.promise;
         await owner.start(activation.token);
@@ -830,7 +976,9 @@ describe('an owner scopes release to exactly one acquisition', () => {
     await settle();
 
     expect(owner.audible).toEqual(new Set([2]));
-    expect(owner.calls.filter((call) => call === 'end:1').length).toBeGreaterThanOrEqual(1);
+    expect(
+      owner.calls.filter((call) => call === 'end:1').length,
+    ).toBeGreaterThanOrEqual(1);
     expect(owner.calls).not.toContain('end:2');
     expect(owner.calls).not.toContain('endCurrent');
   });
@@ -872,7 +1020,9 @@ describe('transfer', () => {
     const stop = gate<void>();
     let transferred: boolean | undefined;
     const action = Action.local<Press>('ended-transfer')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(async ({ activation }) => {
         await stop.promise;
         transferred = activation.transfer((lease) => void adopted.push(lease));
@@ -897,7 +1047,9 @@ describe('transfer', () => {
     const adopted: Lease[] = [];
     const answers: boolean[] = [];
     const action = Action.local<Press>('decided-transfer')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(() => {
         throw new Error('handler failed');
       })
@@ -905,7 +1057,9 @@ describe('transfer', () => {
       .onFailure(({ stage, ...context }) => {
         // The failure is decided and this hook runs before the release step: the token is still held.
         if (stage === 'running' && 'activation' in context) {
-          answers.push(context.activation.transfer((lease) => void adopted.push(lease)));
+          answers.push(
+            context.activation.transfer((lease) => void adopted.push(lease)),
+          );
         }
       })
       .build();
@@ -923,7 +1077,9 @@ describe('transfer', () => {
     const failure = new Error('owner refused');
     let caught: unknown;
     const action = Action.local<Press>('adopt-throws')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(({ activation }) => {
         try {
           activation.transfer(() => {
@@ -956,7 +1112,9 @@ describe('transfer', () => {
       return adoption.promise;
     };
     const action = Action.local<Press>('adopt-thenable')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(({ activation }) => {
         try {
           activation.transfer(hidden);
@@ -981,17 +1139,25 @@ describe('transfer', () => {
     adoption.reject(new Error('late failure'));
     await settle();
 
-    expect(events.filter((event) => event.phase === 'cleanup-error').map((event) => event.cleanupStep)).toEqual(['adopt']);
+    expect(
+      events
+        .filter((event) => event.phase === 'cleanup-error')
+        .map((event) => event.cleanupStep),
+    ).toEqual(['adopt']);
   });
 
   it('transfers a token once: a second transfer adopts nothing', async () => {
     const adopted: string[] = [];
     let second: boolean | undefined;
     const action = Action.local<Press>('twice')
-      .atActivation(({ scope }) => scope.own('t', () => void adopted.push('released')))
+      .atActivation(({ scope }) =>
+        scope.own('t', () => void adopted.push('released')),
+      )
       .run(({ activation }) => {
         activation.transfer((token) => void adopted.push(`first:${token}`));
-        second = activation.transfer((token) => void adopted.push(`second:${token}`));
+        second = activation.transfer(
+          (token) => void adopted.push(`second:${token}`),
+        );
       })
       .limits({ hookMs: 100 })
       .build();
@@ -1005,7 +1171,9 @@ describe('transfer', () => {
     const released: string[] = [];
     const holder: { binding?: { dispose(): void } } = {};
     const action = Action.local<Press>('adopt-disposes')
-      .atActivation(({ scope }) => scope.own('t', () => void released.push('released')))
+      .atActivation(({ scope }) =>
+        scope.own('t', () => void released.push('released')),
+      )
       .run(async ({ activation }) => {
         await Promise.resolve();
         activation.transfer(() => {
@@ -1030,7 +1198,9 @@ describe('transfer', () => {
     const holder: { binding?: { dispose(): void } } = {};
     const answers: boolean[] = [];
     const action = Action.local<Press>('adopt-disposes-resumed')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(async ({ activation }) => {
         await Promise.resolve();
         answers.push(activation.transfer(() => holder.binding?.dispose()));
@@ -1054,12 +1224,16 @@ describe('transfer', () => {
     const answers: boolean[] = [];
     const order: string[] = [];
     const action = Action.local<Press>('adopt-disposes-sync')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(({ activation }) => {
         answers.push(activation.transfer(() => holder.binding?.dispose()));
       })
       .limits({ hookMs: 100 })
-      .onCanceled(() => void order.push(`canceled after ${owner.calls.join(',')}`))
+      .onCanceled(
+        () => void order.push(`canceled after ${owner.calls.join(',')}`),
+      )
       .build();
     const { control, binding } = rig(action);
     holder.binding = binding;
@@ -1079,16 +1253,16 @@ describe('transfer', () => {
     let caught: unknown;
     let again: boolean | undefined;
     const action = Action.local<Press>('adopt-hostile-then')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(({ activation }) => {
         try {
-          activation.transfer(
-            (): unknown => ({
-              get then(): never {
-                throw failure;
-              },
-            }),
-          );
+          activation.transfer((): unknown => ({
+            get then(): never {
+              throw failure;
+            },
+          }));
         } catch (error) {
           caught = error;
         }
@@ -1111,15 +1285,15 @@ describe('transfer', () => {
     const failure = new Error('then accessor refused');
     const outcomes: Outcome<unknown>[] = [];
     const action = Action.local<Press>('adopt-hostile-then-escapes')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(({ activation }) => {
-        activation.transfer(
-          (): unknown => ({
-            get then(): never {
-              throw failure;
-            },
-          }),
-        );
+        activation.transfer((): unknown => ({
+          get then(): never {
+            throw failure;
+          },
+        }));
       })
       .limits({ hookMs: 100 })
       .onFailure(() => undefined)
@@ -1130,7 +1304,13 @@ describe('transfer', () => {
     control.press();
     await settle();
 
-    expect(outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: failure, category: 'unknown' } }]);
+    expect(outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'handler-error', error: failure, category: 'unknown' },
+      },
+    ]);
     expect(owner.calls).toEqual(['begin:1', 'end:1']);
   });
 });
@@ -1157,7 +1337,9 @@ describe('cancellation before and after transfer', () => {
     const observed = gate<void>();
     const canceled: unknown[] = [];
     const action = Action.local<Press>('transfer-then-wait')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(async ({ activation }) => {
         await owner.start(activation.token);
         activation.transfer((lease) => owner.keep(lease));
@@ -1195,7 +1377,9 @@ describe('cancellation before and after transfer', () => {
     const owner = new PlayerOwner();
     const first = gate<void>();
     const action = Action.local<Press>('replaced')
-      .atActivation(({ scope }) => scope.own(owner.begin(), (lease) => owner.end(lease)))
+      .atActivation(({ scope }) =>
+        scope.own(owner.begin(), (lease) => owner.end(lease)),
+      )
       .run(async ({ activation }) => {
         if (activation.token.id === 1) await first.promise;
         await owner.start(activation.token);
@@ -1242,7 +1426,13 @@ describe('cancellation before and after transfer', () => {
         .onSuccess(async () => {
           if (stage === 'completing') await wait.promise;
         })
-        .onCanceled((context) => void seen.push({ stage: context.stage, token: context.activation.token.id }))
+        .onCanceled(
+          (context) =>
+            void seen.push({
+              stage: context.stage,
+              token: context.activation.token.id,
+            }),
+        )
         .build();
       const { control, binding } = rig(builder);
 
@@ -1260,7 +1450,9 @@ describe('a deliberately retained resource', () => {
   it('outlives a successful invocation, and a later disposal of the binding does not take over its teardown', async () => {
     const owner = new PlayerOwner();
     const presented: Presented[] = [];
-    const { control, binding } = rig(playAction(owner, [], { present: (state) => void presented.push(state) }));
+    const { control, binding } = rig(
+      playAction(owner, [], { present: (state) => void presented.push(state) }),
+    );
 
     control.press();
     await settle();
@@ -1321,7 +1513,10 @@ describe('a deliberately retained resource', () => {
     expect(report).toEqual(['failed']);
     expect(owner.kept.size).toBe(0);
     expect(owner.audible.size).toBe(0);
-    expect(owner.calls.filter((call) => call.startsWith('end:'))).toEqual(['end:1', 'end:1']);
+    expect(owner.calls.filter((call) => call.startsWith('end:'))).toEqual([
+      'end:1',
+      'end:1',
+    ]);
   });
 
   it('does not let a blocked start’s failure hook release a newer owner’s lease', async () => {
@@ -1364,7 +1559,10 @@ describe('failures of the event-turn callback', () => {
       })
       .run(() => void (ran = true))
       .limits({ hookMs: 100 })
-      .onFailure((context) => void failures.push([context.stage, context.failure, released.length]))
+      .onFailure(
+        (context) =>
+          void failures.push([context.stage, context.failure, released.length]),
+      )
       .build();
     const { control, binding } = rig(action);
 
@@ -1373,7 +1571,13 @@ describe('failures of the event-turn callback', () => {
 
     expect(ran).toBe(false);
     // The failure hook runs first; the release follows it.
-    expect(failures).toEqual([['input', { kind: 'activation-error', error: boom, category: 'unknown' }, 0]]);
+    expect(failures).toEqual([
+      [
+        'input',
+        { kind: 'activation-error', error: boom, category: 'unknown' },
+        0,
+      ],
+    ]);
     expect(released).toEqual(['first']);
     expect(binding.state.phase).toBe('idle');
   });
@@ -1408,13 +1612,23 @@ describe('failures of the event-turn callback', () => {
       .atActivation(() => void ran.push('bad-input'))
       .run(() => 0)
       .limits({ hookMs: 100 })
-      .onFailure((context) => void failures.push(context.stage === 'input' ? context.failure.kind : context.stage))
+      .onFailure(
+        (context) =>
+          void failures.push(
+            context.stage === 'input' ? context.failure.kind : context.stage,
+          ),
+      )
       .build();
     const badSubject = base('bad-subject')
       .atActivation(() => void ran.push('bad-subject'))
       .run(() => 0)
       .limits({ hookMs: 100 })
-      .onFailure((context) => void failures.push(context.stage === 'input' ? context.failure.kind : context.stage))
+      .onFailure(
+        (context) =>
+          void failures.push(
+            context.stage === 'input' ? context.failure.kind : context.stage,
+          ),
+      )
       .build();
 
     rig(badInput).control.press();
@@ -1439,13 +1653,19 @@ describe('failures of the event-turn callback', () => {
       .atActivation(hidden)
       .run(() => void (ran = true))
       .limits({ hookMs: 100 })
-      .onFailure((context) => void (seen = context.stage === 'input' ? context.failure : undefined))
+      .onFailure(
+        (context) =>
+          void (seen = context.stage === 'input' ? context.failure : undefined),
+      )
       .build();
     rig(action).control.press();
     await settle();
 
     expect(ran).toBe(false);
-    expect(seen).toMatchObject({ kind: 'activation-error', error: expect.any(TypeError) });
+    expect(seen).toMatchObject({
+      kind: 'activation-error',
+      error: expect.any(TypeError),
+    });
   });
 
   it('holds a resource without any declared limit, and refuses a release that is not a function', async () => {
@@ -1453,7 +1673,9 @@ describe('failures of the event-turn callback', () => {
     let handlerHeld: unknown;
     const released: string[] = [];
     const noLimits = Action.local<Press>('no-limits')
-      .atActivation(({ scope }) => scope.own('t', (token) => void released.push(token)))
+      .atActivation(({ scope }) =>
+        scope.own('t', (token) => void released.push(token)),
+      )
       .run(() => 0)
       .build();
     const { control, binding } = rig(noLimits);
@@ -1465,10 +1687,17 @@ describe('failures of the event-turn callback', () => {
       .atActivation(({ scope }) => scope.own('t', 'not a function' as never))
       .run(() => 0)
       .limits({ hookMs: 10 })
-      .onFailure((context) => void (activationFailure = context.stage === 'input' ? context.failure : undefined))
+      .onFailure(
+        (context) =>
+          void (activationFailure =
+            context.stage === 'input' ? context.failure : undefined),
+      )
       .build();
     rig(badRelease).control.press();
-    expect(activationFailure).toMatchObject({ kind: 'activation-error', error: expect.any(TypeError) });
+    expect(activationFailure).toMatchObject({
+      kind: 'activation-error',
+      error: expect.any(TypeError),
+    });
 
     const handlerNoLimits = Action.local<Press>('handler-no-limits')
       .run(async ({ scope }) => {
@@ -1511,14 +1740,23 @@ describe('what the types guarantee', () => {
       atActivation(perform: unknown): Anything;
       before(candidate: unknown): Anything;
     }
-    const draft = (): Anything => Action.local<Press>('order') as unknown as Anything;
+    const draft = (): Anything =>
+      Action.local<Press>('order') as unknown as Anything;
     const afterActivation = draft().atActivation(() => 1);
     const afterBefore = draft().before(prerequisite('p', () => proceed()));
 
-    expect(() => afterActivation.input(() => 2)).toThrow(/input can be declared once/);
-    expect(() => afterActivation.atActivation(() => 2)).toThrow(/atActivation can be declared once/);
-    expect(() => afterBefore.atActivation(() => 2)).toThrow(/atActivation can be declared once/);
-    expect(() => draft().atActivation('not a function')).toThrow(/needs a function/);
+    expect(() => afterActivation.input(() => 2)).toThrow(
+      /input can be declared once/,
+    );
+    expect(() => afterActivation.atActivation(() => 2)).toThrow(
+      /atActivation can be declared once/,
+    );
+    expect(() => afterBefore.atActivation(() => 2)).toThrow(
+      /atActivation can be declared once/,
+    );
+    expect(() => draft().atActivation('not a function')).toThrow(
+      /needs a function/,
+    );
   });
 
   // These lines are checked by `npm run typecheck`, not at runtime: the function is never called.
@@ -1573,7 +1811,9 @@ describe('what the types guarantee', () => {
         .atActivation(({ scope }) => scope.own({ id: 1 }, () => undefined))
         .run(({ activation }) => activation.token.id)
         .limits({ hookMs: 1 })
-        .onSuccess(({ activation, result }) => void (activation.token.id + result))
+        .onSuccess(
+          ({ activation, result }) => void (activation.token.id + result),
+        )
         .onFailure((context) => {
           // @ts-expect-error a failure in the activation prefix has no activation to carry
           if (context.stage === 'input') void context.activation;

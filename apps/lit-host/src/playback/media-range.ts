@@ -16,17 +16,32 @@ const SINGLE_BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
 const UNSATISFIABLE: RangeDecision = { kind: 'unsatisfiable' };
 
 /** Resolves `bytes=a-b`, `bytes=a-` and `bytes=-n` against a body of `length` bytes. */
-export function resolveRange(header: string | undefined, length: number): RangeDecision {
+export function resolveRange(
+  header: string | undefined,
+  length: number,
+): RangeDecision {
   const value = header?.trim();
-  if (value === undefined || !value.startsWith(BYTES_UNIT)) return { kind: 'whole' };
+  if (value === undefined || !value.startsWith(BYTES_UNIT))
+    return { kind: 'whole' };
   const match = SINGLE_BYTE_RANGE.exec(value);
   if (!match || length === 0) return UNSATISFIABLE;
   const [, start = '', end = ''] = match;
   if (start === '') {
     const suffix = Number(end);
-    return end === '' || suffix === 0 ? UNSATISFIABLE : { kind: 'partial', first: Math.max(length - suffix, 0), last: length - 1 };
+    return end === '' || suffix === 0
+      ? UNSATISFIABLE
+      : {
+          kind: 'partial',
+          first: Math.max(length - suffix, 0),
+          last: length - 1,
+        };
   }
   const first = Number(start);
-  if (first >= length || (end !== '' && Number(end) < first)) return UNSATISFIABLE;
-  return { kind: 'partial', first, last: Math.min(end === '' ? length - 1 : Number(end), length - 1) };
+  if (first >= length || (end !== '' && Number(end) < first))
+    return UNSATISFIABLE;
+  return {
+    kind: 'partial',
+    first,
+    last: Math.min(end === '' ? length - 1 : Number(end), length - 1),
+  };
 }

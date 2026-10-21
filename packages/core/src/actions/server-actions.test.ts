@@ -37,7 +37,10 @@ interface Recorded {
 }
 
 /** A transport the test controls: each request waits for the test to answer or reject it. */
-function controlledTransport(): { readonly transport: ServerTransport; readonly requests: Recorded[] } {
+function controlledTransport(): {
+  readonly transport: ServerTransport;
+  readonly requests: Recorded[];
+} {
   const requests: Recorded[] = [];
   const transport: ServerTransport = {
     callServerTool(request, options) {
@@ -50,7 +53,10 @@ function controlledTransport(): { readonly transport: ServerTransport; readonly 
 }
 
 const ok: Reply = { content: [{ type: 'text', text: 'archived' }] };
-const toolError: Reply = { content: [{ type: 'text', text: 'declined' }], isError: true };
+const toolError: Reply = {
+  content: [{ type: 'text', text: 'declined' }],
+  isError: true,
+};
 
 describe('a server action', () => {
   it('sends its request only after every prerequisite proceeded, with the invocation signal and the time left on the work deadline', async () => {
@@ -68,7 +74,10 @@ describe('a server action', () => {
       .before(session)
       .run(({ params, provided, call }) => {
         order.push('run');
-        return call('archive_note', { noteId: params.noteId, user: provided.user });
+        return call('archive_note', {
+          noteId: params.noteId,
+          user: provided.user,
+        });
       })
       .limits({ deadlineMs: 1_000, hookMs: 100 })
       .onFinally(({ outcome }) => void outcomes.push(outcome))
@@ -86,7 +95,10 @@ describe('a server action', () => {
     expect(order).toEqual(['session', 'run']);
     expect(requests).toHaveLength(1);
     const [sent] = requests;
-    expect(sent?.request).toEqual({ name: 'archive_note', arguments: { noteId: 'n-1', user: 'u-1' } });
+    expect(sent?.request).toEqual({
+      name: 'archive_note',
+      arguments: { noteId: 'n-1', user: 'u-1' },
+    });
     // 300 ms of the 1000 ms work deadline went to the prerequisite.
     expect(sent?.options?.timeout).toBe(700);
     expect(sent?.options?.signal).toBeInstanceOf(AbortSignal);
@@ -119,7 +131,16 @@ describe('a server action', () => {
     expect(sessionChecks).toBe(1);
     expect(requests).toHaveLength(0);
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'prerequisites', failure: { kind: 'refused', prerequisite: 'session', reason: 'sign-in-required', category: 'application' } },
+      {
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: {
+          kind: 'refused',
+          prerequisite: 'session',
+          reason: 'sign-in-required',
+          category: 'application',
+        },
+      },
     ]);
   });
 
@@ -160,7 +181,11 @@ describe('a server action', () => {
       .run(({ call }) => {
         narrowed = call('narrowed', {}, { timeoutMs: 250 });
         // A caller that bypasses the types: unknown options are not forwarded.
-        widened = call('widened', {}, { timeoutMs: 60_000, timeout: 90_000, signal: smuggled.signal } as unknown as ServerCallOptions);
+        widened = call('widened', {}, {
+          timeoutMs: 60_000,
+          timeout: 90_000,
+          signal: smuggled.signal,
+        } as unknown as ServerCallOptions);
         return Promise.all([narrowed, widened]);
       })
       .limits({ deadlineMs: 1_000, hookMs: 100 })
@@ -171,7 +196,10 @@ describe('a server action', () => {
     expect(requests.map((sent) => sent.options?.timeout)).toEqual([250, 1_000]);
     expect(requests[0]?.options?.signal).toBe(requests[1]?.options?.signal);
     expect(requests[1]?.options?.signal).not.toBe(smuggled.signal);
-    expect(Object.keys(requests[1]?.options ?? {}).sort()).toEqual(['signal', 'timeout']);
+    expect(Object.keys(requests[1]?.options ?? {}).sort()).toEqual([
+      'signal',
+      'timeout',
+    ]);
     for (const sent of requests) sent.answer.resolve(ok);
     await settle();
   });
@@ -182,7 +210,9 @@ describe('a server action', () => {
     const archive = Action.server<Press>('archive', transport)
       .run(async ({ call }) => {
         for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '5']) {
-          await call('bad', {}, { timeoutMs: bad as number }).catch((error: unknown) => failures.push(error));
+          await call('bad', {}, { timeoutMs: bad as number }).catch(
+            (error: unknown) => failures.push(error),
+          );
         }
         return ok;
       })
@@ -201,7 +231,11 @@ describe('a server action', () => {
     const key = { kty: 'EC', x: 'x-1' };
     const archive = Action.server<Press>('archive', transport)
       .run(async ({ call }) => {
-        const first = call('with_meta', { id: 'n-1' }, { meta: { 'vendor/key': key } });
+        const first = call(
+          'with_meta',
+          { id: 'n-1' },
+          { meta: { 'vendor/key': key } },
+        );
         const second = call('without_meta', { id: 'n-2' });
         return Promise.all([first, second]);
       })
@@ -211,11 +245,18 @@ describe('a server action', () => {
     await settle();
 
     expect(requests.map((sent) => sent.request)).toEqual([
-      { name: 'with_meta', arguments: { id: 'n-1' }, _meta: { 'vendor/key': key } },
+      {
+        name: 'with_meta',
+        arguments: { id: 'n-1' },
+        _meta: { 'vendor/key': key },
+      },
       { name: 'without_meta', arguments: { id: 'n-2' } },
     ]);
     // Metadata is request metadata only: no option of the transport carries it.
-    expect(Object.keys(requests[0]?.options ?? {}).sort()).toEqual(['signal', 'timeout']);
+    expect(Object.keys(requests[0]?.options ?? {}).sort()).toEqual([
+      'signal',
+      'timeout',
+    ]);
     expect('_meta' in (requests[1]?.request ?? {})).toBe(false);
     for (const sent of requests) sent.answer.resolve(ok);
     await settle();
@@ -248,7 +289,11 @@ describe('a server action', () => {
     const archive = Action.server<Press>('archive', transport)
       .run(async ({ call }) => {
         for (const bad of [null, 'key', 5, ['key'], () => undefined]) {
-          await call('bad', {}, { meta: bad as unknown as Record<string, unknown> }).catch((error: unknown) => failures.push(error));
+          await call(
+            'bad',
+            {},
+            { meta: bad as unknown as Record<string, unknown> },
+          ).catch((error: unknown) => failures.push(error));
         }
         return ok;
       })
@@ -277,18 +322,37 @@ describe('a server action', () => {
 
   it('builds without limits, and refuses an invalid one even from a caller that bypasses the types', () => {
     const { transport } = controlledTransport();
-    const base = Action.server<Press>('archive', transport).run(({ call }) => call('x', {}));
-    const untyped = base as unknown as { build(): unknown; limits(limits: unknown): { build(): unknown } };
+    const base = Action.server<Press>('archive', transport).run(({ call }) =>
+      call('x', {}),
+    );
+    const untyped = base as unknown as {
+      build(): unknown;
+      limits(limits: unknown): { build(): unknown };
+    };
     expect(() => untyped.build()).not.toThrow();
     expect(() => untyped.limits({ hookMs: 10 }).build()).not.toThrow();
-    expect(() => untyped.limits({ deadlineMs: 0, hookMs: 10 })).toThrow(/deadlineMs/);
-    expect(() => untyped.limits({ deadlineMs: 10, hookMs: Number.NaN })).toThrow(/hookMs/);
-    expect(() => untyped.limits({ deadlineMs: 10, hookMs: 10 }).build()).not.toThrow();
+    expect(() => untyped.limits({ deadlineMs: 0, hookMs: 10 })).toThrow(
+      /deadlineMs/,
+    );
+    expect(() =>
+      untyped.limits({ deadlineMs: 10, hookMs: Number.NaN }),
+    ).toThrow(/hookMs/);
+    expect(() =>
+      untyped.limits({ deadlineMs: 10, hookMs: 10 }).build(),
+    ).not.toThrow();
   });
 
   it('refuses a transport that is not an object with callServerTool', () => {
-    for (const bad of [undefined, null, {}, { callServerTool: 'x' }, () => undefined]) {
-      expect(() => Action.server<Press>('archive', bad as unknown as ServerTransport)).toThrow(TypeError);
+    for (const bad of [
+      undefined,
+      null,
+      {},
+      { callServerTool: 'x' },
+      () => undefined,
+    ]) {
+      expect(() =>
+        Action.server<Press>('archive', bad as unknown as ServerTransport),
+      ).toThrow(TypeError);
     }
   });
 
@@ -324,17 +388,23 @@ interface Archived {
 }
 
 /** The Blueprint's archive shape, reduced to what the outcomes need: input, one request, hooks. */
-function archiveWith(transport: ServerTransport, report: { outcomes: Outcome<Archived>[]; shown: string[] }, hooks: { failSuccess?: boolean } = {}) {
+function archiveWith(
+  transport: ServerTransport,
+  report: { outcomes: Outcome<Archived>[]; shown: string[] },
+  hooks: { failSuccess?: boolean } = {},
+) {
   return Action.server<Press>('archive', transport)
     .input((event) => ({ noteId: String(event.read('id')) }))
     .run(async ({ params, call }) => {
       const reply = await call('archive_note', { noteId: params.noteId });
-      if (reply.isError === true) throw new Declined('The server declined to archive the note');
+      if (reply.isError === true)
+        throw new Declined('The server declined to archive the note');
       return { archivedAt: 7 } satisfies Archived;
     })
     .limits({ deadlineMs: 1_000, hookMs: 100 })
     .onSuccess(({ current }) => {
-      if (hooks.failSuccess === true) throw new Error('the view could not record it');
+      if (hooks.failSuccess === true)
+        throw new Error('the view could not record it');
       if (current()) report.shown.push('archived');
     })
     .onFinally(({ outcome }) => void report.outcomes.push(outcome))
@@ -349,14 +419,18 @@ describe('how a server action ends', () => {
   it('succeeds when the reply is good and the required success work completes', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control, binding } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control, binding } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
 
     control.press();
     await settle();
     requests[0]?.answer.resolve(ok);
     await settle();
 
-    expect(report.outcomes).toEqual([{ status: 'succeeded', result: { archivedAt: 7 } }]);
+    expect(report.outcomes).toEqual([
+      { status: 'succeeded', result: { archivedAt: 7 } },
+    ]);
     expect(report.shown).toEqual(['archived']);
     expect(binding.state.phase).toBe('idle');
     expect(requests).toHaveLength(1);
@@ -365,7 +439,9 @@ describe('how a server action ends', () => {
   it('tells a returned tool-level failure from a rejected transport: only the second leaves the effect unknown by itself', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
 
     control.press();
     await settle();
@@ -377,9 +453,22 @@ describe('how a server action ends', () => {
     await settle();
 
     const [declined, lost] = report.outcomes;
-    expect(declined).toMatchObject({ status: 'failed', stage: 'running', failure: { kind: 'handler-error' } });
-    expect(declined?.status === 'failed' && declined.stage === 'running' && declined.failure.kind === 'handler-error' && declined.failure.error).toBeInstanceOf(Declined);
-    expect(lost).toMatchObject({ status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: new Error('connection lost') } });
+    expect(declined).toMatchObject({
+      status: 'failed',
+      stage: 'running',
+      failure: { kind: 'handler-error' },
+    });
+    expect(
+      declined?.status === 'failed' &&
+        declined.stage === 'running' &&
+        declined.failure.kind === 'handler-error' &&
+        declined.failure.error,
+    ).toBeInstanceOf(Declined);
+    expect(lost).toMatchObject({
+      status: 'failed',
+      stage: 'running',
+      failure: { kind: 'handler-error', error: new Error('connection lost') },
+    });
     // No automatic retry follows either: each press sent exactly one request.
     expect(requests).toHaveLength(2);
     expect(report.shown).toEqual([]);
@@ -403,7 +492,10 @@ describe('how a server action ends', () => {
   it('keeps the returned result when the required success work fails, and sends nothing again', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control } = rig(archiveWith(transport, report, { failSuccess: true }), { data: { id: 'n-1' } });
+    const { control } = rig(
+      archiveWith(transport, report, { failSuccess: true }),
+      { data: { id: 'n-1' } },
+    );
 
     control.press();
     await settle();
@@ -411,7 +503,11 @@ describe('how a server action ends', () => {
     await settle();
 
     expect(report.outcomes).toMatchObject([
-      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-error', result: { archivedAt: 7 } } },
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'success-hook-error', result: { archivedAt: 7 } },
+      },
     ]);
     expect(requests).toHaveLength(1);
   });
@@ -435,7 +531,15 @@ describe('how a server action ends', () => {
     await elapse(100);
 
     expect(outcomes).toEqual([
-      { status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result: { archivedAt: 9 }, category: 'timeout' } },
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: {
+          kind: 'success-hook-timeout',
+          result: { archivedAt: 9 },
+          category: 'timeout',
+        },
+      },
     ]);
     expect(requests).toHaveLength(1);
   });
@@ -443,7 +547,9 @@ describe('how a server action ends', () => {
   it('decides a timeout when the work deadline expires first, aborts the request signal, and drops a late reply', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control, binding } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control, binding } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
 
     control.press();
     await settle();
@@ -451,7 +557,13 @@ describe('how a server action ends', () => {
     await elapse(1_000);
 
     expect(signal?.aborted).toBe(true);
-    expect(report.outcomes).toEqual([{ status: 'failed', stage: 'running', failure: { kind: 'timeout', category: 'timeout' } }]);
+    expect(report.outcomes).toEqual([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
+    ]);
     expect(binding.state.phase).toBe('idle');
 
     // The reply that arrives afterwards is a late settlement: no success work, nothing reported.
@@ -464,7 +576,9 @@ describe('how a server action ends', () => {
   it('reports the transport’s own timeout as a failed handler, not as a refusal', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
 
     control.press();
     await settle();
@@ -473,14 +587,23 @@ describe('how a server action ends', () => {
     await settle();
 
     expect(report.outcomes).toMatchObject([
-      { status: 'failed', stage: 'running', failure: { kind: 'handler-error', error: new Error('Request timed out') } },
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: {
+          kind: 'handler-error',
+          error: new Error('Request timed out'),
+        },
+      },
     ]);
   });
 
   it('cancels with the effect unknown when the binding is disposed after the request was sent, and says nothing about the server', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control, binding } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control, binding } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
 
     control.press();
     await settle();
@@ -489,7 +612,9 @@ describe('how a server action ends', () => {
     await settle();
 
     expect(signal?.aborted).toBe(true);
-    expect(report.outcomes).toEqual([{ status: 'canceled', cause: 'disposed', stage: 'running' }]);
+    expect(report.outcomes).toEqual([
+      { status: 'canceled', cause: 'disposed', stage: 'running' },
+    ]);
     // The runtime made no further request, and a late reply changes nothing.
     requests[0]?.answer.resolve(ok);
     await settle();
@@ -528,7 +653,11 @@ describe('how a server action ends', () => {
 
     expect(outcomes).toEqual([
       { status: 'canceled', cause: 'disposed', stage: 'prerequisites' },
-      { status: 'failed', stage: 'prerequisites', failure: { kind: 'timeout', category: 'timeout' } },
+      {
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: { kind: 'timeout', category: 'timeout' },
+      },
     ]);
     expect(requests).toHaveLength(0); // the protected operation was never requested
     expect(sessionRequests).toBe(2); // the prerequisite’s own requests are counted apart
@@ -578,7 +707,9 @@ describe('a server action and its binding', () => {
   it('drops a second activation while busy under ignore: one request', async () => {
     const { transport, requests } = controlledTransport();
     const report = reportOf();
-    const { control } = rig(archiveWith(transport, report), { data: { id: 'n-1' } });
+    const { control } = rig(archiveWith(transport, report), {
+      data: { id: 'n-1' },
+    });
     control.press();
     control.press();
     await settle();
@@ -590,7 +721,9 @@ describe('a server action and its binding', () => {
     const outcomes: Outcome<Reply>[] = [];
     const archive = Action.server<Press>('archive', transport)
       .input((event) => ({ noteId: String(event.read('id')) }))
-      .run(({ params, call }) => call('archive_note', { noteId: params.noteId }))
+      .run(({ params, call }) =>
+        call('archive_note', { noteId: params.noteId }),
+      )
       .limits({ deadlineMs: 1_000, hookMs: 100 })
       .whenBusy('replace')
       .onFinally(({ outcome }) => void outcomes.push(outcome))
@@ -605,7 +738,9 @@ describe('a server action and its binding', () => {
     expect(requests).toHaveLength(2);
     expect(requests[0]?.options?.signal?.aborted).toBe(true);
     expect(requests[1]?.options?.signal?.aborted).toBe(false);
-    expect(outcomes).toEqual([{ status: 'canceled', cause: 'replaced', stage: 'running' }]);
+    expect(outcomes).toEqual([
+      { status: 'canceled', cause: 'replaced', stage: 'running' },
+    ]);
   });
 
   it('serves two instances of one definition independently, each from its own data and with its own state', async () => {
@@ -617,13 +752,18 @@ describe('a server action and its binding', () => {
 
     second.control.press();
     await settle();
-    expect(requests.map((sent) => sent.request.arguments)).toEqual([{ noteId: 'note-1' }]);
+    expect(requests.map((sent) => sent.request.arguments)).toEqual([
+      { noteId: 'note-1' },
+    ]);
     expect(second.binding.state.phase).toBe('running');
     expect(first.binding.state.phase).toBe('idle');
 
     first.control.press();
     await settle();
-    expect(requests.map((sent) => sent.request.arguments)).toEqual([{ noteId: 'note-1' }, { noteId: 'note-0' }]);
+    expect(requests.map((sent) => sent.request.arguments)).toEqual([
+      { noteId: 'note-1' },
+      { noteId: 'note-0' },
+    ]);
     requests[0]?.answer.resolve(ok);
     await settle();
     expect(second.binding.state.phase).toBe('idle');
@@ -644,7 +784,11 @@ describe('what the types allow and refuse for a server action', () => {
       .input((event) => ({ noteId: String(event.read('id')) }))
       .before(prerequisite('session', () => proceed({ user: 'u-1' })))
       .run(async ({ params, provided, call }) => {
-        const reply = await call('archive_note', { noteId: params.noteId, user: provided.user }, { timeoutMs: 5 });
+        const reply = await call(
+          'archive_note',
+          { noteId: params.noteId, user: provided.user },
+          { timeoutMs: 5 },
+        );
         const failed: boolean | undefined = reply.isError;
         return { failed, parts: reply.content.length };
       })
@@ -653,51 +797,72 @@ describe('what the types allow and refuse for a server action', () => {
       .whenBusy('replace')
       .build();
     expect(complete.label).toBe('complete');
-    Action.local<Press>('no-deadline').run(() => 1).limits({ hookMs: 5 }).onSuccess(() => undefined).build();
+    Action.local<Press>('no-deadline')
+      .run(() => 1)
+      .limits({ hookMs: 5 })
+      .onSuccess(() => undefined)
+      .build();
 
     // A transport keeps its own reply type, and the handler sees it without a cast.
     interface RichReply extends ServerReply {
       readonly structuredContent?: { readonly archivedAt: number };
     }
-    const rich: ServerTransport<RichReply> = { callServerTool: () => Promise.resolve({ content: [] }) };
+    const rich: ServerTransport<RichReply> = {
+      callServerTool: () => Promise.resolve({ content: [] }),
+    };
     Action.server<Press, RichReply>('rich', rich)
-      .run(async ({ call }) => (await call('x', {})).structuredContent?.archivedAt)
+      .run(
+        async ({ call }) => (await call('x', {})).structuredContent?.archivedAt,
+      )
       .limits({ deadlineMs: 1, hookMs: 1 })
       .build();
 
     // Negative. Some of these throw if they ran, so they are compiled and never called.
     const refusedByTheCompiler = (): void => {
-    // A server action builds without limits, takes hooks without them, and overrides either alone.
-    Action.server<Press>('n13', transport).run(() => 0).build();
-    Action.server<Press>('n14', transport).run(() => 0).onSuccess(() => undefined).build();
-    Action.server<Press>('n15', transport).run(() => 0).limits({ hookMs: 1 }).build();
-    Action.server<Press>('hook-ms', transport).run(() => 0).limits({ deadlineMs: 1 }).build();
-    Action.server<Press>('text', transport)
-      .run(() => 0)
-      // @ts-expect-error a limit is a number
-      .limits({ deadlineMs: '1' })
-      .build();
-    Action.local<Press>('n8').run(
-      // @ts-expect-error a local handler has no server call
-      ({ call }) => call('x', {}),
-    );
-    Action.server<Press>('arguments', transport).run(
-      // @ts-expect-error the tool name is a string
-      ({ call }) => call(1, {}),
-    );
-    Action.server<Press>('options', transport).run(
-      // @ts-expect-error the handler may only narrow the timeout: it has no signal or timeout of its own to supply
-      ({ call }) => call('x', {}, { signal: new AbortController().signal }),
-    );
-    Action.server<Press>('result', transport)
-      .run(() => ({ n: 1 }))
-      .limits({ deadlineMs: 1, hookMs: 1 })
-      // @ts-expect-error the success hook sees the handler’s actual result
-      .onSuccess(({ result }) => result.n.toUpperCase());
-    // @ts-expect-error a transport must return a reply with content
-    Action.server<Press>('transport', { callServerTool: () => Promise.resolve({}) });
-    // @ts-expect-error the transport is required
-    Action.server<Press>('no-transport');
+      // A server action builds without limits, takes hooks without them, and overrides either alone.
+      Action.server<Press>('n13', transport)
+        .run(() => 0)
+        .build();
+      Action.server<Press>('n14', transport)
+        .run(() => 0)
+        .onSuccess(() => undefined)
+        .build();
+      Action.server<Press>('n15', transport)
+        .run(() => 0)
+        .limits({ hookMs: 1 })
+        .build();
+      Action.server<Press>('hook-ms', transport)
+        .run(() => 0)
+        .limits({ deadlineMs: 1 })
+        .build();
+      Action.server<Press>('text', transport)
+        .run(() => 0)
+        // @ts-expect-error a limit is a number
+        .limits({ deadlineMs: '1' })
+        .build();
+      Action.local<Press>('n8').run(
+        // @ts-expect-error a local handler has no server call
+        ({ call }) => call('x', {}),
+      );
+      Action.server<Press>('arguments', transport).run(
+        // @ts-expect-error the tool name is a string
+        ({ call }) => call(1, {}),
+      );
+      Action.server<Press>('options', transport).run(
+        // @ts-expect-error the handler may only narrow the timeout: it has no signal or timeout of its own to supply
+        ({ call }) => call('x', {}, { signal: new AbortController().signal }),
+      );
+      Action.server<Press>('result', transport)
+        .run(() => ({ n: 1 }))
+        .limits({ deadlineMs: 1, hookMs: 1 })
+        // @ts-expect-error the success hook sees the handler’s actual result
+        .onSuccess(({ result }) => result.n.toUpperCase());
+      Action.server<Press>('transport', {
+        // @ts-expect-error a transport must return a reply with content
+        callServerTool: () => Promise.resolve({}),
+      });
+      // @ts-expect-error the transport is required
+      Action.server<Press>('no-transport');
     };
     void refusedByTheCompiler;
   });
@@ -712,14 +877,18 @@ describe('a server action with the earlier slices’ contract', () => {
     const kept: number[] = [];
     let lease = 0;
     const play = Action.server<Press>('play', transport)
-      .atActivation(({ scope }) => scope.own(++lease, (token) => void ends.push(`end:${token}`)))
+      .atActivation(({ scope }) =>
+        scope.own(++lease, (token) => void ends.push(`end:${token}`)),
+      )
       .run(async ({ activation, call }) => {
         await call('start', {});
         activation.transfer((token) => void kept.push(token));
         return activation.token;
       })
       .limits({ deadlineMs: 500, hookMs: 100 })
-      .onCanceled(({ activation }) => void ends.push(`canceled:${activation.token}`))
+      .onCanceled(
+        ({ activation }) => void ends.push(`canceled:${activation.token}`),
+      )
       .build();
     const { control } = rig(play);
 
@@ -743,10 +912,15 @@ describe('a server action with the earlier slices’ contract', () => {
     const { transport, requests } = controlledTransport();
     const events: string[] = [];
     const archive = Action.server<Press>('archive', transport)
-      .atActivation(({ scope }) => scope.own('lease-1', (token) => void events.push(`release:${token}`)))
+      .atActivation(({ scope }) =>
+        scope.own('lease-1', (token) => void events.push(`release:${token}`)),
+      )
       .run(({ call }) => call('x', {}))
       .limits({ deadlineMs: 500, hookMs: 100 })
-      .onCanceled(({ activation, stage }) => void events.push(`canceled:${stage}:${activation.token}`))
+      .onCanceled(
+        ({ activation, stage }) =>
+          void events.push(`canceled:${stage}:${activation.token}`),
+      )
       .onFinally(({ outcome }) => void events.push(`finally:${outcome.status}`))
       .build();
     const { control, binding } = rig(archive);
@@ -758,7 +932,11 @@ describe('a server action with the earlier slices’ contract', () => {
     requests[0]?.answer.resolve(ok);
     await settle();
 
-    expect(events).toEqual(['canceled:running:lease-1', 'release:lease-1', 'finally:canceled']);
+    expect(events).toEqual([
+      'canceled:running:lease-1',
+      'release:lease-1',
+      'finally:canceled',
+    ]);
   });
 
   it('stops waiting for a success hook, a release or a final hook that never settles, each after hookMs', async () => {
@@ -774,7 +952,11 @@ describe('a server action with the earlier slices’ contract', () => {
       .onFailure(() => never)
       .onFinally(({ outcome, cleanupErrors }) => {
         outcomes.push(outcome);
-        states.push(cleanupErrors.map((error) => `${error.step}:${error.reason}`).join(','));
+        states.push(
+          cleanupErrors
+            .map((error) => `${error.step}:${error.reason}`)
+            .join(','),
+        );
         return never;
       })
       .build();
@@ -789,7 +971,15 @@ describe('a server action with the earlier slices’ contract', () => {
     await elapse(100); // the release
     await elapse(100); // onFinally
     expect(binding.state.phase).toBe('idle');
-    expect(outcomes).toMatchObject([{ status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result: ok } }]);
-    expect(states).toEqual(['onFailure:budget-exceeded,release:budget-exceeded']);
+    expect(outcomes).toMatchObject([
+      {
+        status: 'failed',
+        stage: 'running',
+        failure: { kind: 'success-hook-timeout', result: ok },
+      },
+    ]);
+    expect(states).toEqual([
+      'onFailure:budget-exceeded,release:budget-exceeded',
+    ]);
   });
 });

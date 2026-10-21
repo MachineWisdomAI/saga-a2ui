@@ -40,7 +40,10 @@ export interface ServerReply {
  * request is then unknown. `Reply` lets a transport keep its own reply type.
  */
 export interface ServerTransport<Reply extends ServerReply = ServerReply> {
-  callServerTool(request: ServerRequest, options?: ServerRequestOptions): Promise<Reply>;
+  callServerTool(
+    request: ServerRequest,
+    options?: ServerRequestOptions,
+  ): Promise<Reply>;
 }
 
 /** What a handler may ask for beyond the arguments: a shorter wait, and request metadata. */
@@ -66,34 +69,64 @@ export interface ServerCalls<Reply extends ServerReply = ServerReply> {
    * invocation, and aborting the signal ends the client's wait: it does not show that the host
    * forwarded the cancellation or that the server stopped.
    */
-  call(name: string, args: Readonly<Record<string, unknown>>, options?: ServerCallOptions): Promise<Reply>;
+  call(
+    name: string,
+    args: Readonly<Record<string, unknown>>,
+    options?: ServerCallOptions,
+  ): Promise<Reply>;
 }
 
 /** Reads the transport an application passed: an object with a `callServerTool` function. */
-export function checkTransport(label: string, transport: unknown): ServerTransport {
-  const candidate = transport as { callServerTool?: unknown } | null | undefined;
-  if (typeof candidate !== 'object' || candidate === null || typeof candidate.callServerTool !== 'function') {
-    throw new TypeError(`Action '${label}': a server action needs a transport with a callServerTool function.`);
+export function checkTransport(
+  label: string,
+  transport: unknown,
+): ServerTransport {
+  const candidate = transport as
+    { callServerTool?: unknown } | null | undefined;
+  if (
+    typeof candidate !== 'object' ||
+    candidate === null ||
+    typeof candidate.callServerTool !== 'function'
+  ) {
+    throw new TypeError(
+      `Action '${label}': a server action needs a transport with a callServerTool function.`,
+    );
   }
   return candidate as ServerTransport;
 }
 
 /** The smallest of the time left and the handler's own narrower request, or why there is none. */
-export function requestTimeout(label: string, remainingMs: number, supplied: unknown): number {
-  if (supplied !== undefined && (typeof supplied !== 'number' || !Number.isFinite(supplied) || supplied <= 0)) {
-    throw new TypeError(`Action '${label}': timeoutMs must be a finite number greater than zero.`);
+export function requestTimeout(
+  label: string,
+  remainingMs: number,
+  supplied: unknown,
+): number {
+  if (
+    supplied !== undefined &&
+    (typeof supplied !== 'number' ||
+      !Number.isFinite(supplied) ||
+      supplied <= 0)
+  ) {
+    throw new TypeError(
+      `Action '${label}': timeoutMs must be a finite number greater than zero.`,
+    );
   }
   return supplied === undefined ? remainingMs : Math.min(remainingMs, supplied);
 }
 
 /** The request metadata a handler supplied, copied and frozen, or why there is none. */
-export function requestMeta(label: string, supplied: unknown): Readonly<Record<string, unknown>> | undefined {
+export function requestMeta(
+  label: string,
+  supplied: unknown,
+): Readonly<Record<string, unknown>> | undefined {
   if (supplied === undefined) return undefined;
   const plain =
     typeof supplied === 'object' &&
     supplied !== null &&
     !Array.isArray(supplied) &&
-    (Object.getPrototypeOf(supplied) === Object.prototype || Object.getPrototypeOf(supplied) === null);
-  if (!plain) throw new TypeError(`Action '${label}': meta must be a plain object.`);
+    (Object.getPrototypeOf(supplied) === Object.prototype ||
+      Object.getPrototypeOf(supplied) === null);
+  if (!plain)
+    throw new TypeError(`Action '${label}': meta must be a plain object.`);
   return Object.freeze({ ...(supplied as Record<string, unknown>) });
 }

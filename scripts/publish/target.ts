@@ -1,5 +1,11 @@
 import type { EndpointSnapshot } from './endpoint.js';
-import type { ARCHIVE_FILES, Finding, HandoffItem, PublicationRecord, TargetName } from './record.js';
+import type {
+  ARCHIVE_FILES,
+  Finding,
+  HandoffItem,
+  PublicationRecord,
+  TargetName,
+} from './record.js';
 import type { LoadedReleaseInput, ReleaseInput } from './release-input.js';
 import type { ZipEntry } from './zip.js';
 
@@ -16,7 +22,16 @@ export interface Evidence {
   readonly sagaPackages: PublicationRecord['application']['sagaPackages'];
   readonly releaseInputSha256: string;
   readonly views: PublicationRecord['inputs']['views'];
-  readonly endpoint: Pick<PublicationRecord['endpoint'], 'url' | 'server' | 'deploymentIdentity' | 'contractSha256' | 'instructionsSha256' | 'tools' | 'resources'>;
+  readonly endpoint: Pick<
+    PublicationRecord['endpoint'],
+    | 'url'
+    | 'server'
+    | 'deploymentIdentity'
+    | 'contractSha256'
+    | 'instructionsSha256'
+    | 'tools'
+    | 'resources'
+  >;
   /** What the endpoint served, or `undefined` when it could not be read. */
   readonly snapshot: EndpointSnapshot | undefined;
 }

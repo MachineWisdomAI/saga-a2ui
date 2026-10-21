@@ -42,9 +42,21 @@ export type {
 } from './server.js';
 export type { Synchronous } from './thenable.js';
 export { InvocationEndedError } from './scope.js';
-export type { ActivationScope, Held, InvocationScope, Release, ReleaseContext } from './scope.js';
+export type {
+  ActivationScope,
+  Held,
+  InvocationScope,
+  Release,
+  ReleaseContext,
+} from './scope.js';
 export { prerequisite, proceed, refuse } from './prerequisite.js';
-export type { Prerequisite, PrerequisiteContext, PrerequisiteResult, Proceed, Refuse } from './prerequisite.js';
+export type {
+  Prerequisite,
+  PrerequisiteContext,
+  PrerequisiteResult,
+  Proceed,
+  Refuse,
+} from './prerequisite.js';
 export type {
   ActionObserver,
   CancelCause,

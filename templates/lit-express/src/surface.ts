@@ -10,23 +10,46 @@ export const SURFACE_ID = 'starter';
 export const CLEAR_ID = 'clear';
 
 export const starterSurface: unknown[] = [
-  { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
+  {
+    version: 'v0.9',
+    createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID },
+  },
   {
     version: 'v0.9',
     updateComponents: {
       surfaceId: SURFACE_ID,
       components: [
         { id: 'root', component: 'Column', children: ['headline', CLEAR_ID] },
-        { id: 'headline', component: 'Line', kind: 'title', text: { path: '/headline' } },
+        {
+          id: 'headline',
+          component: 'Line',
+          kind: 'title',
+          text: { path: '/headline' },
+        },
         { id: CLEAR_ID, component: 'ActionButton', child: 'clear-label' },
-        { id: 'clear-label', component: 'Line', kind: 'body', text: 'Clear the note' },
+        {
+          id: 'clear-label',
+          component: 'Line',
+          kind: 'body',
+          text: 'Clear the note',
+        },
       ],
     },
   },
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, value: { headline: '' } } },
+  {
+    version: 'v0.9',
+    updateDataModel: { surfaceId: SURFACE_ID, value: { headline: '' } },
+  },
 ];
 
 /** Replaces the headline the surface shows. */
 export const headlineData = (headline: string): unknown[] => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, path: '/headline', value: headline } },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId: SURFACE_ID,
+      path: '/headline',
+      value: headline,
+    },
+  },
 ];

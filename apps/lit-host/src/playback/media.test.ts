@@ -18,8 +18,13 @@ import {
 
 const cleanup: { harness?: PlaybackHarness } = {};
 
-async function harness(options?: PlaybackHarnessOptions): Promise<PlaybackHarness> {
-  cleanup.harness = await startPlaybackHarness({ [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1'] }, options);
+async function harness(
+  options?: PlaybackHarnessOptions,
+): Promise<PlaybackHarness> {
+  cleanup.harness = await startPlaybackHarness(
+    { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1'] },
+    options,
+  );
   return cleanup.harness;
 }
 
@@ -35,8 +40,16 @@ describe('media acquisition by the authorized recipient', () => {
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
     expect(new URL(grant.mediaUrl).origin).toBe(new URL(h.listener.url).origin);
 
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(attempt.status).toBe(200);
     expect([...attempt.bytes]).toEqual([...MEDIA_BYTES]);
@@ -53,11 +66,21 @@ describe('media acquisition refused', () => {
     const bobKey = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, aliceKey);
 
-    const proof = await signMediaProof({ key: bobKey, capability: grant.capability, url: grant.mediaUrl });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+    const proof = await signMediaProof({
+      key: bobKey,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(attempt.status).toBe(403);
-    expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+    expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(
+      false,
+    );
     expect(h.playback.mediaReads).toEqual([]);
   });
 
@@ -66,7 +89,10 @@ describe('media acquisition refused', () => {
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
 
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+    });
 
     expect(attempt.status).toBe(403);
     expect(h.playback.mediaReads).toEqual([]);
@@ -78,8 +104,16 @@ describe('media acquisition refused', () => {
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key, 'ep-1');
     const otherEpisodeUrl = grant.mediaUrl.replace('/ep-1', '/ep-2');
 
-    const proof = await signMediaProof({ key, capability: grant.capability, url: otherEpisodeUrl });
-    const attempt = await acquireMedia({ url: otherEpisodeUrl, capability: grant.capability, proof });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: otherEpisodeUrl,
+    });
+    const attempt = await acquireMedia({
+      url: otherEpisodeUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(attempt.status).toBe(403);
     expect(h.playback.mediaReads).toEqual([]);
@@ -91,12 +125,29 @@ describe('media acquisition refused', () => {
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
     const other = await playAndGetGrant(h, DEV_TOKENS.alice, key, 'ep-2');
 
-    const wrongUrl = await signMediaProof({ key, capability: grant.capability, url: other.mediaUrl });
-    const wrongMethod = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, method: 'POST' });
-    const wrongCapability = await signMediaProof({ key, capability: other.capability, url: grant.mediaUrl });
+    const wrongUrl = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: other.mediaUrl,
+    });
+    const wrongMethod = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+      method: 'POST',
+    });
+    const wrongCapability = await signMediaProof({
+      key,
+      capability: other.capability,
+      url: grant.mediaUrl,
+    });
 
     for (const proof of [wrongUrl, wrongMethod, wrongCapability]) {
-      const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+      const attempt = await acquireMedia({
+        url: grant.mediaUrl,
+        capability: grant.capability,
+        proof,
+      });
       expect(attempt.status).toBe(403);
     }
     expect(h.playback.mediaReads).toEqual([]);
@@ -106,10 +157,30 @@ describe('media acquisition refused', () => {
     const h = await harness();
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
 
-    expect((await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof })).status).toBe(200);
-    expect((await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof })).status).toBe(403);
+    expect(
+      (
+        await acquireMedia({
+          url: grant.mediaUrl,
+          capability: grant.capability,
+          proof,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await acquireMedia({
+          url: grant.mediaUrl,
+          capability: grant.capability,
+          proof,
+        })
+      ).status,
+    ).toBe(403);
     expect(h.playback.mediaReads).toEqual(['ep-1']);
   });
 
@@ -123,23 +194,50 @@ describe('media acquisition refused', () => {
       url: grant.mediaUrl,
       issuedAt: Math.floor(Date.now() / 1000) - 3600,
     });
-    expect((await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof: stale })).status).toBe(403);
+    expect(
+      (
+        await acquireMedia({
+          url: grant.mediaUrl,
+          capability: grant.capability,
+          proof: stale,
+        })
+      ).status,
+    ).toBe(403);
 
     const forged = 'A'.repeat(43);
-    const proof = await signMediaProof({ key, capability: forged, url: grant.mediaUrl });
-    expect((await acquireMedia({ url: grant.mediaUrl, capability: forged, proof })).status).toBe(403);
+    const proof = await signMediaProof({
+      key,
+      capability: forged,
+      url: grant.mediaUrl,
+    });
+    expect(
+      (await acquireMedia({ url: grant.mediaUrl, capability: forged, proof }))
+        .status,
+    ).toBe(403);
     expect(h.playback.mediaReads).toEqual([]);
   });
 
   it('refuses an expired capability even with a valid proof', async () => {
     let now = 1_800_000_000;
-    const h = await harness({ capabilityTtlSeconds: 30, nowSeconds: () => now });
+    const h = await harness({
+      capabilityTtlSeconds: 30,
+      nowSeconds: () => now,
+    });
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
     now += 31;
 
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, issuedAt: now });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+      issuedAt: now,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(attempt.status).toBe(403);
     expect(h.playback.mediaReads).toEqual([]);
@@ -154,17 +252,31 @@ describe('media acquisition after access is revoked', () => {
     const first = await acquireMedia({
       url: grant.mediaUrl,
       capability: grant.capability,
-      proof: await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl }),
+      proof: await signMediaProof({
+        key,
+        capability: grant.capability,
+        url: grant.mediaUrl,
+      }),
     });
     expect(first.status).toBe(200);
     h.playback.mediaReads.length = 0;
 
     h.playback.setEntitled(DEV_ACCOUNTS.alice, []); // the subscription lapses after the capability was issued
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(attempt.status).toBe(403);
-    expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+    expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(
+      false,
+    );
     expect(h.playback.mediaReads).toEqual([]);
   });
 });
@@ -224,7 +336,11 @@ describe('a response already in flight when access is revoked', () => {
     const finished = await inFlight;
 
     expect(during.status).toBe(403);
-    expect(Buffer.from(during.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)))).toBe(false);
+    expect(
+      Buffer.from(during.bytes).includes(
+        Buffer.from(MEDIA_BYTES.subarray(0, 4)),
+      ),
+    ).toBe(false);
     expect(finished.status).toBe(200); // not retracted: it was authorized before the revocation
     expect([...finished.bytes]).toEqual([...MEDIA_BYTES]);
 
@@ -236,7 +352,10 @@ describe('a response already in flight when access is revoked', () => {
 
 describe('a later byte-range request repeats every check', () => {
   const RANGE = 'bytes=0-3';
-  const noBytes = (attempt: { bytes: Uint8Array }) => Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)));
+  const noBytes = (attempt: { bytes: Uint8Array }) =>
+    Buffer.from(attempt.bytes).includes(
+      Buffer.from(MEDIA_BYTES.subarray(0, 4)),
+    );
 
   it('refuses a range for an account whose entitlement was revoked after the capability was issued', async () => {
     const h = await harness();
@@ -244,8 +363,17 @@ describe('a later byte-range request repeats every check', () => {
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
     h.playback.setEntitled(DEV_ACCOUNTS.alice, []);
 
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: RANGE });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+      range: RANGE,
+    });
 
     expect(attempt.status).toBe(403);
     expect(noBytes(attempt)).toBe(false);
@@ -254,13 +382,26 @@ describe('a later byte-range request repeats every check', () => {
 
   it('refuses a range once the capability expired, even with a fresh proof', async () => {
     let now = 1_800_000_000;
-    const h = await harness({ capabilityTtlSeconds: 30, nowSeconds: () => now });
+    const h = await harness({
+      capabilityTtlSeconds: 30,
+      nowSeconds: () => now,
+    });
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
     now += 31;
 
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, issuedAt: now });
-    const attempt = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: RANGE });
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+      issuedAt: now,
+    });
+    const attempt = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+      range: RANGE,
+    });
 
     expect(attempt.status).toBe(403);
     expect(noBytes(attempt)).toBe(false);
@@ -277,13 +418,21 @@ describe('a later byte-range request repeats every check', () => {
     const asBob = await acquireMedia({
       url: grant.mediaUrl,
       capability: grant.capability,
-      proof: await signMediaProof({ key: bobKey, capability: grant.capability, url: grant.mediaUrl }),
+      proof: await signMediaProof({
+        key: bobKey,
+        capability: grant.capability,
+        url: grant.mediaUrl,
+      }),
       range: RANGE,
     });
     const otherEpisode = await acquireMedia({
       url: otherEpisodeUrl,
       capability: grant.capability,
-      proof: await signMediaProof({ key: aliceKey, capability: grant.capability, url: otherEpisodeUrl }),
+      proof: await signMediaProof({
+        key: aliceKey,
+        capability: grant.capability,
+        url: otherEpisodeUrl,
+      }),
       range: RANGE,
     });
 
@@ -303,8 +452,18 @@ async function acquireWithFreshProof(
   /** The service's clock when a test controls it: the proof must be fresh on that clock, not the real one. */
   issuedAt?: number,
 ) {
-  const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl, ...(issuedAt === undefined ? {} : { issuedAt }) });
-  return acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, ...(range === undefined ? {} : { range }) });
+  const proof = await signMediaProof({
+    key,
+    capability: grant.capability,
+    url: grant.mediaUrl,
+    ...(issuedAt === undefined ? {} : { issuedAt }),
+  });
+  return acquireMedia({
+    url: grant.mediaUrl,
+    capability: grant.capability,
+    proof,
+    ...(range === undefined ? {} : { range }),
+  });
 }
 
 describe('a supported byte range', () => {
@@ -326,12 +485,21 @@ describe('a supported byte range', () => {
       const attempt = await acquireWithFreshProof(key, grant, range);
 
       expect(attempt.status).toBe(206);
-      expect([...attempt.bytes]).toEqual([...MEDIA_BYTES.subarray(first, last + 1)]);
-      expect(attempt.headers.get('content-range')).toBe(`bytes ${first}-${last}/${MEDIA_BYTES.length}`);
-      expect(attempt.headers.get('content-length')).toBe(String(last - first + 1));
+      expect([...attempt.bytes]).toEqual([
+        ...MEDIA_BYTES.subarray(first, last + 1),
+      ]);
+      expect(attempt.headers.get('content-range')).toBe(
+        `bytes ${first}-${last}/${MEDIA_BYTES.length}`,
+      );
+      expect(attempt.headers.get('content-length')).toBe(
+        String(last - first + 1),
+      );
       expect(attempt.headers.get('cache-control')).toMatch(/private/);
       expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
-      expect(h.playback.entitlementChecks.at(-1)).toEqual({ accountId: DEV_ACCOUNTS.alice, episodeId: 'ep-1' });
+      expect(h.playback.entitlementChecks.at(-1)).toEqual({
+        accountId: DEV_ACCOUNTS.alice,
+        episodeId: 'ep-1',
+      });
     });
   }
 
@@ -350,13 +518,34 @@ describe('a supported byte range', () => {
     const h = await harness();
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-    expect((await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof })).status).toBe(200);
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    expect(
+      (
+        await acquireMedia({
+          url: grant.mediaUrl,
+          capability: grant.capability,
+          proof,
+        })
+      ).status,
+    ).toBe(200);
 
-    const replay = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof, range: 'bytes=0-3' });
+    const replay = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+      range: 'bytes=0-3',
+    });
 
     expect(replay.status).toBe(403);
-    expect(Buffer.from(replay.bytes).includes(Buffer.from(MEDIA_BYTES.subarray(0, 4)))).toBe(false);
+    expect(
+      Buffer.from(replay.bytes).includes(
+        Buffer.from(MEDIA_BYTES.subarray(0, 4)),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -384,7 +573,9 @@ describe('an invalid or unsatisfiable byte range', () => {
       const attempt = await acquireWithFreshProof(key, grant, range);
 
       expect(attempt.status).toBe(416);
-      expect(attempt.headers.get('content-range')).toBe(`bytes */${MEDIA_BYTES.length}`);
+      expect(attempt.headers.get('content-range')).toBe(
+        `bytes */${MEDIA_BYTES.length}`,
+      );
       expect(attempt.bytes.length).toBe(0);
       expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
     });
@@ -422,7 +613,8 @@ describe('cache controls keep one user’s media from another through a shared c
   // ignores no-store. A cache keyed on the URL alone could otherwise answer B with A's bytes.
   const SELECTORS = ['origin', 'range', 'x-saga-capability', 'x-saga-proof'];
 
-  const varies = (headers: Headers) => (headers.get('vary') ?? '').toLowerCase().split(/,\s*/);
+  const varies = (headers: Headers) =>
+    (headers.get('vary') ?? '').toLowerCase().split(/,\s*/);
 
   it('marks delivered bytes, a range, and every refusal private, uncacheable and varying on what selects them', async () => {
     const h = await harness();
@@ -437,8 +629,20 @@ describe('cache controls keep one user’s media from another through a shared c
     h.playback.failReadsWith('down');
     const unavailable = await acquireWithFreshProof(key, grant);
 
-    expect([whole.status, partial.status, unsatisfiable.status, refused.status, unavailable.status]).toEqual([200, 206, 416, 403, 503]);
-    for (const answer of [whole, partial, unsatisfiable, refused, unavailable]) {
+    expect([
+      whole.status,
+      partial.status,
+      unsatisfiable.status,
+      refused.status,
+      unavailable.status,
+    ]).toEqual([200, 206, 416, 403, 503]);
+    for (const answer of [
+      whole,
+      partial,
+      unsatisfiable,
+      refused,
+      unavailable,
+    ]) {
       expect(answer.headers.get('cache-control')).toMatch(/private/);
       expect(answer.headers.get('cache-control')).toMatch(/no-store/);
       expect(varies(answer.headers)).toEqual(expect.arrayContaining(SELECTORS));
@@ -452,12 +656,21 @@ describe('cache controls keep one user’s media from another through a shared c
 
     const preflight = await fetch(grant.mediaUrl, {
       method: 'OPTIONS',
-      headers: { origin: 'null', 'access-control-request-method': 'GET', 'access-control-request-headers': 'x-saga-capability, x-saga-proof, range' },
+      headers: {
+        origin: 'null',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers':
+          'x-saga-capability, x-saga-proof, range',
+      },
     });
 
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('content-length') ?? '0').toBe('0');
-    expect((preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase()).toContain('range');
+    expect(
+      (
+        preflight.headers.get('access-control-allow-headers') ?? ''
+      ).toLowerCase(),
+    ).toContain('range');
     expect(h.playback.mediaReads).toEqual([]);
   });
 });
@@ -470,8 +683,14 @@ describe('media acquisition when a dependency of the service fails', () => {
   const FAULT = 'canary-media-dependency-detail';
 
   for (const [dependency, fail] of [
-    ['entitlement lookup', (h: PlaybackHarness) => h.playback.failEntitlementWith(FAULT)],
-    ['protected storage read', (h: PlaybackHarness) => h.playback.failReadsWith(FAULT)],
+    [
+      'entitlement lookup',
+      (h: PlaybackHarness) => h.playback.failEntitlementWith(FAULT),
+    ],
+    [
+      'protected storage read',
+      (h: PlaybackHarness) => h.playback.failReadsWith(FAULT),
+    ],
   ] as const) {
     it(`answers a failed ${dependency} with a readable, uncacheable 503 and no bytes, text or log line`, async () => {
       const h = await harness();
@@ -489,7 +708,9 @@ describe('media acquisition when a dependency of the service fails', () => {
       expect(attempt.status).toBe(503);
       expect(attempt.headers.get('cache-control')).toMatch(/no-store/);
       expect(attempt.headers.get('access-control-allow-origin')).toBe('*'); // the sandboxed view can read it
-      expect(Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES))).toBe(false);
+      expect(
+        Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES)),
+      ).toBe(false);
       expect(Buffer.from(attempt.bytes).toString('utf8')).not.toContain(FAULT);
       expect(logs.text()).not.toContain(FAULT);
       expect(h.playback.mediaReads).toEqual([]);
@@ -515,9 +736,17 @@ describe('media responses for a sandboxed view in another origin', () => {
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
     expect(preflight.headers.get('access-control-allow-methods')).toBe('GET');
-    const allowed = (preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase().split(/,\s*/);
-    expect(allowed).toEqual(expect.arrayContaining(['x-saga-capability', 'x-saga-proof']));
-    expect(preflight.headers.get('access-control-allow-credentials')).toBeNull(); // no cookie ever authorizes media
+    const allowed = (
+      preflight.headers.get('access-control-allow-headers') ?? ''
+    )
+      .toLowerCase()
+      .split(/,\s*/);
+    expect(allowed).toEqual(
+      expect.arrayContaining(['x-saga-capability', 'x-saga-proof']),
+    );
+    expect(
+      preflight.headers.get('access-control-allow-credentials'),
+    ).toBeNull(); // no cookie ever authorizes media
     expect(h.playback.mediaReads).toEqual([]);
   });
 
@@ -526,9 +755,20 @@ describe('media responses for a sandboxed view in another origin', () => {
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
 
-    const refused = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability }); // no proof
-    const proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-    const delivered = await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof });
+    const refused = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+    }); // no proof
+    const proof = await signMediaProof({
+      key,
+      capability: grant.capability,
+      url: grant.mediaUrl,
+    });
+    const delivered = await acquireMedia({
+      url: grant.mediaUrl,
+      capability: grant.capability,
+      proof,
+    });
 
     expect(refused.status).toBe(403);
     expect(refused.headers.get('access-control-allow-origin')).toBe('*');
@@ -544,16 +784,25 @@ describe('capability lifetime', () => {
   // a range. A new Play issues a new capability with a new lifetime; nothing extends an old one.
   it('is valid until its expiry second, refused from it, and reports that instant to the view', async () => {
     let now = 1_800_000_000;
-    const h = await harness({ capabilityTtlSeconds: 30, nowSeconds: () => now });
+    const h = await harness({
+      capabilityTtlSeconds: 30,
+      nowSeconds: () => now,
+    });
     const key = await createRecipientKey();
     const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
 
     expect(grant.expiresAt).toBe(1_800_000_030);
     now = 1_800_000_029;
-    expect((await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status).toBe(206);
+    expect(
+      (await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status,
+    ).toBe(206);
     now = 1_800_000_030;
-    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(403);
-    expect((await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status).toBe(403);
+    expect(
+      (await acquireWithFreshProof(key, grant, undefined, now)).status,
+    ).toBe(403);
+    expect(
+      (await acquireWithFreshProof(key, grant, 'bytes=0-3', now)).status,
+    ).toBe(403);
   });
 
   it('defaults to a short lifetime, and using a capability does not extend it', async () => {
@@ -564,9 +813,13 @@ describe('capability lifetime', () => {
     expect(grant.expiresAt - now).toBe(60);
 
     now += 59;
-    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(200); // used late, still inside the lifetime
+    expect(
+      (await acquireWithFreshProof(key, grant, undefined, now)).status,
+    ).toBe(200); // used late, still inside the lifetime
     now += 2;
-    expect((await acquireWithFreshProof(key, grant, undefined, now)).status).toBe(403); // that use bought no extra time
+    expect(
+      (await acquireWithFreshProof(key, grant, undefined, now)).status,
+    ).toBe(403); // that use bought no extra time
   });
 });
 
@@ -580,8 +833,16 @@ describe('what the media path writes to ordinary logs', () => {
     let proof: string;
     try {
       grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
-      proof = await signMediaProof({ key, capability: grant.capability, url: grant.mediaUrl });
-      await acquireMedia({ url: grant.mediaUrl, capability: grant.capability, proof }); // delivered
+      proof = await signMediaProof({
+        key,
+        capability: grant.capability,
+        url: grant.mediaUrl,
+      });
+      await acquireMedia({
+        url: grant.mediaUrl,
+        capability: grant.capability,
+        proof,
+      }); // delivered
       await acquireWithFreshProof(key, grant, 'bytes=0-3'); // a range
       await acquireWithFreshProof(bobKey, grant); // another user
       h.playback.setEntitled(DEV_ACCOUNTS.alice, []);

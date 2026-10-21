@@ -1,6 +1,9 @@
 import type { ServerToClientMessage } from '@lynx-js/genui/a2ui';
 import { createInstanceHost, type InstanceHost } from '@saga-a2ui/core/actions';
-import { createAdmittingMessageStore, type Rejection } from '../adapter/admission.js';
+import {
+  createAdmittingMessageStore,
+  type Rejection,
+} from '../adapter/admission.js';
 import { ACTION_BUTTON_NAME } from '../adapter/kind.js';
 import { trace } from '../trace.js';
 
@@ -28,7 +31,10 @@ function createSession(generation: number): Session {
     host: createInstanceHost({
       onSetupError(error) {
         setupErrors.push(error);
-        trace({ ev: 'setup-error', message: error instanceof Error ? error.message : String(error) });
+        trace({
+          ev: 'setup-error',
+          message: error instanceof Error ? error.message : String(error),
+        });
       },
     }),
     store: createAdmittingMessageStore({

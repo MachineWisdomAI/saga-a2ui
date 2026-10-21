@@ -1,5 +1,8 @@
 import { App } from '@modelcontextprotocol/ext-apps';
-import { AppBridge, type McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps/app-bridge';
+import {
+  AppBridge,
+  type McpUiHostCapabilities,
+} from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAppHostLinks } from './host-links.js';
@@ -14,8 +17,16 @@ async function connected(
   capabilities: McpUiHostCapabilities,
   onOpenLink?: (url: string) => Promise<{ isError?: boolean }>,
 ): Promise<App> {
-  const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, capabilities);
+  const app = new App(
+    { name: 'test-view', version: '0.0.0' },
+    {},
+    { autoResize: false },
+  );
+  const bridge = new AppBridge(
+    null,
+    { name: 'test-host', version: '0.0.0' },
+    capabilities,
+  );
   if (onOpenLink) bridge.onopenlink = ({ url }) => onOpenLink(url);
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
@@ -38,20 +49,28 @@ describe('opening a link through the host', () => {
       received.push(url);
       return {};
     });
-    await expect(createAppHostLinks(app).open('https://docs.example.com/guide')).resolves.toBe('opened');
+    await expect(
+      createAppHostLinks(app).open('https://docs.example.com/guide'),
+    ).resolves.toBe('opened');
     expect(received).toEqual(['https://docs.example.com/guide']);
   });
 
   it('reports a denial when the host refuses the request', async () => {
-    const app = await connected({ openLinks: {} }, async () => ({ isError: true }));
-    await expect(createAppHostLinks(app).open('https://docs.example.com/')).resolves.toBe('denied');
+    const app = await connected({ openLinks: {} }, async () => ({
+      isError: true,
+    }));
+    await expect(
+      createAppHostLinks(app).open('https://docs.example.com/'),
+    ).resolves.toBe('denied');
   });
 
   it('reports a failure when the host cannot be reached for the request', async () => {
     const app = await connected({ openLinks: {} }, async () => {
       throw new Error('host exploded');
     });
-    await expect(createAppHostLinks(app).open('https://docs.example.com/')).resolves.toBe('failed');
+    await expect(
+      createAppHostLinks(app).open('https://docs.example.com/'),
+    ).resolves.toBe('failed');
   });
 
   it('reports the capability as unavailable and makes no request when the host does not advertise it', async () => {
@@ -60,12 +79,20 @@ describe('opening a link through the host', () => {
       received.push(url);
       return {};
     });
-    await expect(createAppHostLinks(app).open('https://docs.example.com/')).resolves.toBe('unavailable');
+    await expect(
+      createAppHostLinks(app).open('https://docs.example.com/'),
+    ).resolves.toBe('unavailable');
     expect(received).toEqual([]);
   });
 
   it('reports the capability as unavailable before the view has connected', async () => {
-    const app = new App({ name: 'unconnected', version: '0.0.0' }, {}, { autoResize: false });
-    await expect(createAppHostLinks(app).open('https://docs.example.com/')).resolves.toBe('unavailable');
+    const app = new App(
+      { name: 'unconnected', version: '0.0.0' },
+      {},
+      { autoResize: false },
+    );
+    await expect(
+      createAppHostLinks(app).open('https://docs.example.com/'),
+    ).resolves.toBe('unavailable');
   });
 });

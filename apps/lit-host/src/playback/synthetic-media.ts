@@ -18,6 +18,7 @@ export function toneWav(seconds = 3, rate = 8_000): Uint8Array {
   out.writeUInt16LE(16, 34);
   out.write('data', 36);
   out.writeUInt32LE(samples * 2, 40);
-  for (let i = 0; i < samples; i += 1) out.writeInt16LE(Math.round(Math.sin(i / 6) * 1_500), 44 + i * 2);
+  for (let i = 0; i < samples; i += 1)
+    out.writeInt16LE(Math.round(Math.sin(i / 6) * 1_500), 44 + i * 2);
   return new Uint8Array(out);
 }

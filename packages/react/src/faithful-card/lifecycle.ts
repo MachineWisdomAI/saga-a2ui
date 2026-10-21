@@ -1,5 +1,16 @@
-import type { HostLinks, ImageConsent, ImageContext, LinkOpenOutcome } from '@saga-a2ui/components/faithful-card';
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type {
+  HostLinks,
+  ImageConsent,
+  ImageContext,
+  LinkOpenOutcome,
+} from '@saga-a2ui/components/faithful-card';
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { FaithfulCardView } from './view.js';
 
 // The committed lifecycle of one card: what belongs to the content the reader is looking at, and
@@ -73,7 +84,12 @@ const NO_UNSUBSCRIBE = (): void => undefined;
 /** What this card's image consent stands at, read from the scope and the card's own grant. */
 type Standing = 'granted' | 'ended' | 'none';
 
-function startOf(generation: number, view: FaithfulCardView | undefined, contractVersion: unknown, markdown: unknown): Revision {
+function startOf(
+  generation: number,
+  view: FaithfulCardView | undefined,
+  contractVersion: unknown,
+  markdown: unknown,
+): Revision {
   return {
     generation,
     view,
@@ -98,10 +114,16 @@ export function useCardLifecycle(
   markdown: unknown,
   isLive: () => boolean = ALWAYS_LIVE,
 ): CardLifecycle {
-  const [stored, setStored] = useState<Revision>(() => startOf(0, view, contractVersion, markdown));
+  const [stored, setStored] = useState<Revision>(() =>
+    startOf(0, view, contractVersion, markdown),
+  );
   let revision = stored;
   // `Object.is` so that a value that is not equal to itself (NaN) cannot restart the revision forever.
-  if (!Object.is(stored.view, view) || !Object.is(stored.contractVersion, contractVersion) || !Object.is(stored.markdown, markdown)) {
+  if (
+    !Object.is(stored.view, view) ||
+    !Object.is(stored.contractVersion, contractVersion) ||
+    !Object.is(stored.markdown, markdown)
+  ) {
     revision = startOf(stored.generation + 1, view, contractVersion, markdown);
     setStored(revision);
   }
@@ -140,28 +162,46 @@ export function useCardLifecycle(
     },
     [scope],
   );
-  const readStanding = (): Standing => (grant?.live === true ? 'granted' : scope?.retired === true ? 'ended' : 'none');
+  const readStanding = (): Standing =>
+    grant?.live === true
+      ? 'granted'
+      : scope?.retired === true
+        ? 'ended'
+        : 'none';
   const standing = useSyncExternalStore(subscribe, readStanding, () => 'none');
 
   /** Whether this control's revision is still the committed one and its owner still stands. */
-  const stands = (): boolean => committed.current.generation === generation && owner.current();
+  const stands = (): boolean =>
+    committed.current.generation === generation && owner.current();
   /** Applies a change to the card's state, but only if this control's revision is still current. */
   const update = (change: (previous: Revision) => Revision): void =>
-    setStored((previous) => (previous.generation === generation ? change(previous) : previous));
+    setStored((previous) =>
+      previous.generation === generation ? change(previous) : previous,
+    );
 
   return {
     sourceRevealed: revision.sourceRevealed,
     linkOutcomes: revision.linkOutcomes,
-    images: { enforcement: view?.imageEnforcement ?? 'unestablished', consent: standing === 'granted' ? 'granted' : 'not-granted' },
+    images: {
+      enforcement: view?.imageEnforcement ?? 'unestablished',
+      consent: standing === 'granted' ? 'granted' : 'not-granted',
+    },
     imageStillPermitted(source) {
       if (view === undefined || !isLive()) return false;
       const consent = grant?.live === true ? 'granted' : 'not-granted';
-      return view.policy.decideImage(source, { enforcement: view.imageEnforcement, consent }).allowed;
+      return view.policy.decideImage(source, {
+        enforcement: view.imageEnforcement,
+        consent,
+      }).allowed;
     },
     imagesEnded: standing === 'ended',
     failedImages: revision.failedImages,
     toggleSource() {
-      if (owner.current()) update((previous) => ({ ...previous, sourceRevealed: !previous.sourceRevealed }));
+      if (owner.current())
+        update((previous) => ({
+          ...previous,
+          sourceRevealed: !previous.sourceRevealed,
+        }));
     },
     openLink(hostLinks, ordinal, url) {
       if (!owner.current()) return;
@@ -174,25 +214,46 @@ export function useCardLifecycle(
           outcome = 'failed';
         }
         // An answer for a revision that is gone (new content, a replaced view, an unmounted card) is not shown.
-        if (owner.current()) update((previous) => ({ ...previous, linkOutcomes: new Map(previous.linkOutcomes).set(ordinal, outcome) }));
+        if (owner.current())
+          update((previous) => ({
+            ...previous,
+            linkOutcomes: new Map(previous.linkOutcomes).set(ordinal, outcome),
+          }));
       })();
     },
     showImages(sources) {
       if (view === undefined || !stands()) return;
-      if (!view.policy.offerImages(sources, view.imageEnforcement).available) return;
+      if (!view.policy.offerImages(sources, view.imageEnforcement).available)
+        return;
       committed.current.grant?.revoke();
       const next = view.consent.grant();
       made.current.push(next);
       // A retired scope hands out only dead grants: nothing to show, and the card reports that the view ended.
-      if (next.live) update((previous) => ({ ...previous, grant: next, failedImages: new Set() }));
+      if (next.live)
+        update((previous) => ({
+          ...previous,
+          grant: next,
+          failedImages: new Set(),
+        }));
     },
     hideImages() {
       if (!stands()) return;
       committed.current.grant?.revoke();
-      update((previous) => ({ ...previous, grant: undefined, failedImages: new Set() }));
+      update((previous) => ({
+        ...previous,
+        grant: undefined,
+        failedImages: new Set(),
+      }));
     },
     imageFailed(ordinal) {
-      update((previous) => (previous.failedImages.has(ordinal) ? previous : { ...previous, failedImages: new Set(previous.failedImages).add(ordinal) }));
+      update((previous) =>
+        previous.failedImages.has(ordinal)
+          ? previous
+          : {
+              ...previous,
+              failedImages: new Set(previous.failedImages).add(ordinal),
+            },
+      );
     },
   };
 }

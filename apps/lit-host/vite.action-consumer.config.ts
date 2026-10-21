@@ -6,5 +6,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'e2e/action-consumer',
   base: './',
-  build: { outDir: '../../dist/action-consumer', emptyOutDir: true, target: 'es2022' },
+  build: {
+    outDir: '../../dist/action-consumer',
+    emptyOutDir: true,
+    target: 'es2022',
+  },
 });

@@ -1,4 +1,9 @@
-import { createInstanceHost, snapshotLimits, type InstanceView, type Limits } from '@saga-a2ui/core/actions';
+import {
+  createInstanceHost,
+  snapshotLimits,
+  type InstanceView,
+  type Limits,
+} from '@saga-a2ui/core/actions';
 import type { A2uiActions } from '../a2ui/app-element.js';
 import { mountOwners } from './mount-owner.js';
 
@@ -38,12 +43,20 @@ export function createLitActions(options: LitActionsOptions): A2uiActions {
   const limits = snapshotLimits(options.limits);
   return {
     begin(presentation) {
-      const host = createInstanceHost({ onSetupError: options.onSetupError, limits });
+      const host = createInstanceHost({
+        onSetupError: options.onSetupError,
+        limits,
+      });
       const end = (): void => {
         host.close();
-        if (mountOwners.get(presentation.owner)?.host === host) mountOwners.delete(presentation.owner);
+        if (mountOwners.get(presentation.owner)?.host === host)
+          mountOwners.delete(presentation.owner);
       };
-      mountOwners.set(presentation.owner, { host, surface: presentation.surface, mount: presentation.mount });
+      mountOwners.set(presentation.owner, {
+        host,
+        surface: presentation.surface,
+        mount: presentation.mount,
+      });
       try {
         host.register(options.attach);
       } catch (error) {

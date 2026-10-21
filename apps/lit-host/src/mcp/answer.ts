@@ -17,7 +17,8 @@ export const ANSWER_LIMITS = {
 } as const;
 
 /** Tool failure: the application has no answer for that question. */
-export const ANSWER_NOT_AVAILABLE_TEXT = 'No answer is available for that question.';
+export const ANSWER_NOT_AVAILABLE_TEXT =
+  'No answer is available for that question.';
 
 /** Tool failure: the answer could not be produced. Safe to retry. Carries no backend detail. */
 export const ANSWER_UNAVAILABLE_TEXT = 'The answer is unavailable.';
