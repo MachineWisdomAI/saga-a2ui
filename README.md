@@ -1,6 +1,6 @@
 # saga a2ui - a framework for building agentic apps with A2UI and MCP
 
-![saga a2ui: the Wyrm dragon and wordmark](assets/brand/readme-banner.svg)
+![saga a2ui: the Wyrm dragon and wordmark](assets/brand/readme-banner.png)
 
 **Bring your services to AI assistants and agents, including Alexa+, ChatGPT, Claude and more, with less engineering work.**
 

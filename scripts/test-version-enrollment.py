@@ -42,6 +42,23 @@ class EnrollmentTest(unittest.TestCase):
             run("git", "add", "package.json", ".version-policy.json")
             run("git", "commit", "-m", "feat: enroll package")
             enrolled = run("git", "rev-parse", "HEAD").strip()
+            for name in ["README.md", "packages/core/README.MD", "docs/setup.md",
+                         "assets/brand/banner.png", "docs/images/flow.svg"]:
+                file = root / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("documentation")
+            update("update", enrolled)
+            update("check", enrolled)
+            self.assertEqual(json.loads(package.read_text())["version"], "0.1.0-rc.1")
+            # A runtime asset mixed with documentation must still trigger a bump.
+            asset = root / "src/icon.png"
+            asset.parent.mkdir(parents=True, exist_ok=True)
+            asset.write_text("runtime image")
+            update("update", enrolled)
+            update("check", enrolled)
+            self.assertNotEqual(json.loads(package.read_text())["version"], "0.1.0-rc.1")
+            asset.unlink()
+            package.write_text('{"name":"fixture","version":"0.1.0-rc.1"}\n')
             (root / "implementation.txt").write_text("changed")
             update("update", enrolled)
             update("check", enrolled)
