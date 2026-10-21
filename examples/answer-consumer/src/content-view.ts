@@ -5,7 +5,10 @@ import {
   establishImageEnforcement,
   type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
-import { documentContentSecurityPolicies, type ContentView } from '@saga-a2ui/lit/faithful-card';
+import {
+  documentContentSecurityPolicies,
+  type ContentView,
+} from '@saga-a2ui/lit/faithful-card';
 
 /**
  * The trusted settings of the card, created once by the application: the Markdown dialect and a
@@ -18,8 +21,14 @@ export function createContentView(settings: {
   readonly imageHosts: readonly string[];
   readonly hostLinks: HostLinks;
 }): ContentView {
-  const reader = createFaithfulCardReader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 });
-  const policy = createContentPolicy({ level: settings.level, imageHosts: settings.imageHosts });
+  const reader = createFaithfulCardReader({
+    dialect: 'commonmark-tables-strikethrough',
+    maxLength: 50_000,
+  });
+  const policy = createContentPolicy({
+    level: settings.level,
+    imageHosts: settings.imageHosts,
+  });
   if (!reader.ok) throw new Error(reader.failure.message);
   if (!policy.ok) throw new Error(policy.failure.message);
   return {
@@ -28,7 +37,10 @@ export function createContentView(settings: {
     hostLinks: settings.hostLinks,
     // Images load only if this document declares exactly the restrictions the policy derives (a
     // Content-Security-Policy meta element, or the host's equivalent); otherwise they stay inert.
-    imageEnforcement: establishImageEnforcement(policy.policy, documentContentSecurityPolicies(document)),
+    imageEnforcement: establishImageEnforcement(
+      policy.policy,
+      documentContentSecurityPolicies(document),
+    ),
     consent: createImageConsentScope(),
   };
 }

@@ -39,7 +39,10 @@ export type CreatePolicyResult =
 
 export type LinkDecision =
   | { readonly allowed: true; readonly url: string; readonly hostname: string }
-  | { readonly allowed: false; readonly reason: 'malformed' | 'not-https' | 'credentials' | 'strict' };
+  | {
+      readonly allowed: false;
+      readonly reason: 'malformed' | 'not-https' | 'credentials' | 'strict';
+    };
 
 export type ImageDecision =
   | { readonly allowed: true; readonly url: string }
@@ -70,7 +73,10 @@ export interface ImageContext {
 /** Whether the reader should be offered Show images for the images a description references. */
 export type ImageOffer =
   | { readonly available: true; readonly qualifying: number }
-  | { readonly available: false; readonly reason: 'not-applicable' | 'no-images' | 'none-qualify' };
+  | {
+      readonly available: false;
+      readonly reason: 'not-applicable' | 'no-images' | 'none-qualify';
+    };
 
 /** Content-related restrictions the resource must declare before it is mounted. */
 export interface ResourcePolicy {
@@ -137,7 +143,10 @@ export interface ContentPolicy {
    * Whether Show images is offered for these image sources: only under Strict, and only when at
    * least one of them would load once the reader consents. Consent cannot expand what qualifies.
    */
-  offerImages(sources: readonly string[], enforcement: ImageEnforcement): ImageOffer;
+  offerImages(
+    sources: readonly string[],
+    enforcement: ImageEnforcement,
+  ): ImageOffer;
 }
 
 const ConfigSchema = z
@@ -165,10 +174,16 @@ const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
  * rejected, as are single-label wildcards and empty labels.
  */
 function isExactHost(candidate: unknown): candidate is string {
-  if (typeof candidate !== 'string' || candidate === '' || candidate.length > 253 || candidate.endsWith('.')) {
+  if (
+    typeof candidate !== 'string' ||
+    candidate === '' ||
+    candidate.length > 253 ||
+    candidate.endsWith('.')
+  ) {
     return false;
   }
-  if (!candidate.split('.').every((label) => DNS_LABEL.test(label))) return false;
+  if (!candidate.split('.').every((label) => DNS_LABEL.test(label)))
+    return false;
   try {
     return new URL(`https://${candidate}`).hostname === candidate;
   } catch {
@@ -191,7 +206,8 @@ const FONT_ORIGIN = /^https:\/\/[^/?#\\@\s:]+(?::\d+)?\/?$/i;
  * derived `font-src`; a canonical dotted IPv4 address is an exact host and is accepted.
  */
 function normalizeFontOrigin(candidate: unknown): string | undefined {
-  if (typeof candidate !== 'string' || !FONT_ORIGIN.test(candidate)) return undefined;
+  if (typeof candidate !== 'string' || !FONT_ORIGIN.test(candidate))
+    return undefined;
   let url: URL;
   try {
     url = new URL(candidate);
@@ -203,7 +219,10 @@ function normalizeFontOrigin(candidate: unknown): string | undefined {
 
 type ParsedUrl =
   | { readonly ok: true; readonly url: URL }
-  | { readonly ok: false; readonly reason: 'malformed' | 'not-https' | 'credentials' };
+  | {
+      readonly ok: false;
+      readonly reason: 'malformed' | 'not-https' | 'credentials';
+    };
 
 function parseHttpsUrl(raw: string): ParsedUrl {
   let url: URL;
@@ -213,7 +232,8 @@ function parseHttpsUrl(raw: string): ParsedUrl {
     return { ok: false, reason: 'malformed' };
   }
   if (url.protocol !== 'https:') return { ok: false, reason: 'not-https' };
-  if (url.username !== '' || url.password !== '') return { ok: false, reason: 'credentials' };
+  if (url.username !== '' || url.password !== '')
+    return { ok: false, reason: 'credentials' };
   return { ok: true, url };
 }
 
@@ -233,9 +253,13 @@ function deriveResourcePolicy(
   imageHosts: readonly string[],
   fontOrigins: readonly string[],
 ): ResourcePolicy {
-  const imageOrigins = Object.freeze(imageHosts.map((host) => `https://${host}`));
+  const imageOrigins = Object.freeze(
+    imageHosts.map((host) => `https://${host}`),
+  );
   const baseline = BASELINE_SCHEMES[level];
-  const resourceDomains = Object.freeze([...new Set([...imageOrigins, ...fontOrigins])].sort());
+  const resourceDomains = Object.freeze(
+    [...new Set([...imageOrigins, ...fontOrigins])].sort(),
+  );
   const contentSecurityPolicy = [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
@@ -249,18 +273,33 @@ function deriveResourcePolicy(
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ');
-  return Object.freeze({ imageOrigins, fontOrigins, resourceDomains, contentSecurityPolicy });
+  return Object.freeze({
+    imageOrigins,
+    fontOrigins,
+    resourceDomains,
+    contentSecurityPolicy,
+  });
 }
 
 function failureFor(error: z.ZodError): PolicyFailure {
   const settings = error.issues.map((issue) => issue.path[0]);
   if (settings.includes('level')) {
-    return { kind: 'invalid-level', message: 'The content level must be "standard" or "strict".' };
+    return {
+      kind: 'invalid-level',
+      message: 'The content level must be "standard" or "strict".',
+    };
   }
   if (settings.includes('blockedPresentation')) {
-    return { kind: 'invalid-presentation', message: 'The blocked presentation must be "placeholder" or "inert-text".' };
+    return {
+      kind: 'invalid-presentation',
+      message:
+        'The blocked presentation must be "placeholder" or "inert-text".',
+    };
   }
-  return { kind: 'invalid-config', message: 'The content policy configuration is not valid.' };
+  return {
+    kind: 'invalid-config',
+    message: 'The content policy configuration is not valid.',
+  };
 }
 
 /**
@@ -278,7 +317,10 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
   if (level === 'standard' && parsed.data.blockedPresentation !== undefined) {
     return {
       ok: false,
-      failure: { kind: 'invalid-presentation', message: 'A blocked presentation applies to the "strict" level only.' },
+      failure: {
+        kind: 'invalid-presentation',
+        message: 'A blocked presentation applies to the "strict" level only.',
+      },
     };
   }
   const requested = parsed.data.imageHosts ?? [];
@@ -288,7 +330,8 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
         ok: false,
         failure: {
           kind: 'invalid-image-host',
-          message: 'Each image host must be an exact lowercase hostname: no wildcard, scheme, port, path or credentials.',
+          message:
+            'Each image host must be an exact lowercase hostname: no wildcard, scheme, port, path or credentials.',
         },
       };
     }
@@ -317,16 +360,23 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
     ? (parsed.data.blockedPresentation ?? 'placeholder')
     : 'inert-text';
   const configuration: PolicyConfiguration = Object.freeze(
-    strict ? { level, imageHosts, fontOrigins, blockedPresentation } : { level, imageHosts, fontOrigins },
+    strict
+      ? { level, imageHosts, fontOrigins, blockedPresentation }
+      : { level, imageHosts, fontOrigins },
   );
 
   /** Whether this image could load at all, before the reader's consent is considered. */
-  const decideDestination = (source: string, enforcement: ImageEnforcement): ImageDecision => {
+  const decideDestination = (
+    source: string,
+    enforcement: ImageEnforcement,
+  ): ImageDecision => {
     const image = parseHttpsUrl(source);
     if (!image.ok) return { allowed: false, reason: image.reason };
     // `origin` includes a non-default port, so only the exact `https://host` origin matches.
-    if (!allowedOrigins.has(image.url.origin)) return { allowed: false, reason: 'host-not-allowed' };
-    if (enforcement !== 'established') return { allowed: false, reason: 'enforcement-unestablished' };
+    if (!allowedOrigins.has(image.url.origin))
+      return { allowed: false, reason: 'host-not-allowed' };
+    if (enforcement !== 'established')
+      return { allowed: false, reason: 'enforcement-unestablished' };
     return { allowed: true, url: image.url.href };
   };
 
@@ -350,11 +400,19 @@ export function createContentPolicy(config: unknown): CreatePolicyResult {
       }
       return decision;
     },
-    offerImages(sources: readonly string[], enforcement: ImageEnforcement): ImageOffer {
+    offerImages(
+      sources: readonly string[],
+      enforcement: ImageEnforcement,
+    ): ImageOffer {
       if (!strict) return { available: false, reason: 'not-applicable' };
-      if (sources.length === 0) return { available: false, reason: 'no-images' };
-      const qualifying = sources.filter((source) => decideDestination(source, enforcement).allowed).length;
-      return qualifying === 0 ? { available: false, reason: 'none-qualify' } : { available: true, qualifying };
+      if (sources.length === 0)
+        return { available: false, reason: 'no-images' };
+      const qualifying = sources.filter(
+        (source) => decideDestination(source, enforcement).allowed,
+      ).length;
+      return qualifying === 0
+        ? { available: false, reason: 'none-qualify' }
+        : { available: true, qualifying };
     },
   });
   return { ok: true, policy };
@@ -376,5 +434,7 @@ export function establishImageEnforcement(
   policy: ContentPolicy,
   appliedPolicies: readonly string[],
 ): ImageEnforcement {
-  return appliedPolicies.includes(policy.resource.contentSecurityPolicy) ? 'established' : 'unestablished';
+  return appliedPolicies.includes(policy.resource.contentSecurityPolicy)
+    ? 'established'
+    : 'unestablished';
 }

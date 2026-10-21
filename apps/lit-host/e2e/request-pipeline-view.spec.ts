@@ -1,9 +1,21 @@
 import { readFile } from 'node:fs/promises';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
-import { ANSWER_INVALID_OUTPUT_TEXT, ANSWER_LIMITS, ANSWER_TOOL_NAME, ANSWER_UNAVAILABLE_TEXT, ANSWER_VIEW_URI } from '../src/mcp/answer.js';
+import {
+  ANSWER_INVALID_OUTPUT_TEXT,
+  ANSWER_LIMITS,
+  ANSWER_TOOL_NAME,
+  ANSWER_UNAVAILABLE_TEXT,
+  ANSWER_VIEW_URI,
+} from '../src/mcp/answer.js';
 import type { AnswerBackend } from '../src/mcp/answer-server.js';
-import { startEpisodeListener, type EpisodeListener } from '../src/mcp/listener.js';
+import {
+  startEpisodeListener,
+  type EpisodeListener,
+} from '../src/mcp/listener.js';
 import { builtUrl } from './built-artifacts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
@@ -42,7 +54,9 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await Promise.all(Object.values(listeners).map((listener) => listener.close()));
+  await Promise.all(
+    Object.values(listeners).map((listener) => listener.close()),
+  );
 });
 
 test.beforeEach(() => {
@@ -52,27 +66,44 @@ test.beforeEach(() => {
 
 async function connect(mode: 'json' | 'event-stream'): Promise<Client> {
   const client = new Client({ name: 'e2e-host', version: '0.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(listeners[mode].answerUrl ?? '')));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(listeners[mode].answerUrl ?? '')),
+  );
   return client;
 }
 
 async function mountedView(page: Page, client: Client): Promise<FrameLocator> {
   const { contents } = await client.readResource({ uri: ANSWER_VIEW_URI });
   const [content] = contents;
-  if (!content || !('text' in content)) throw new Error('resources/read returned no text');
+  if (!content || !('text' in content))
+    throw new Error('resources/read returned no text');
   const ui = (content._meta as { ui: { csp: HostedResource['csp'] } }).ui;
   await page.goto('/host-fixture/index.html');
-  await page.evaluate((resource) => window.mountView?.(resource), { html: content.text, csp: ui.csp });
+  await page.evaluate((resource) => window.mountView?.(resource), {
+    html: content.text,
+    csp: ui.csp,
+  });
   return page.frameLocator('iframe[title="MCP App view"]');
 }
 
-const sendInput = (page: Page, question: string) => page.evaluate((arguments_) => window.deliverToolInput?.({ arguments: arguments_ }), { question } as never);
-const sendResult = (page: Page, result: unknown) => page.evaluate((payload) => window.deliverToolResult?.(payload), result as never);
-const callAnswer = (client: Client, question: string) => client.callTool({ name: ANSWER_TOOL_NAME, arguments: { question } });
+const sendInput = (page: Page, question: string) =>
+  page.evaluate(
+    (arguments_) => window.deliverToolInput?.({ arguments: arguments_ }),
+    { question } as never,
+  );
+const sendResult = (page: Page, result: unknown) =>
+  page.evaluate(
+    (payload) => window.deliverToolResult?.(payload),
+    result as never,
+  );
+const callAnswer = (client: Client, question: string) =>
+  client.callTool({ name: ANSWER_TOOL_NAME, arguments: { question } });
 
 for (const mode of ['json', 'event-stream'] as const) {
   test.describe(`${mode} responses`, () => {
-    test('a stalled application ends at the operation limit with the safe text, and its late answer changes nothing', async ({ page }) => {
+    test('a stalled application ends at the operation limit with the safe text, and its late answer changes nothing', async ({
+      page,
+    }) => {
       let release: (answer: string) => void = () => undefined;
       const late = new Promise<string>((resolve) => (release = resolve));
       behavior = () => late;
@@ -84,17 +115,27 @@ for (const mode of ['json', 'event-stream'] as const) {
       expect(Date.now() - started).toBeLessThan(2_000);
       expect(failed.isError).toBe(true);
       await sendResult(page, failed);
-      await expect(view.getByTestId('answer-root')).toHaveAttribute('data-state', 'problem');
-      await expect(view.getByTestId('answer-status')).toHaveText(ANSWER_UNAVAILABLE_TEXT);
+      await expect(view.getByTestId('answer-root')).toHaveAttribute(
+        'data-state',
+        'problem',
+      );
+      await expect(view.getByTestId('answer-status')).toHaveText(
+        ANSWER_UNAVAILABLE_TEXT,
+      );
       release(`${CANARY} late answer`);
       await page.waitForTimeout(100);
-      await expect(view.getByTestId('answer-root')).toHaveAttribute('data-state', 'problem');
+      await expect(view.getByTestId('answer-root')).toHaveAttribute(
+        'data-state',
+        'problem',
+      );
       await expect(view.getByText(CANARY)).toHaveCount(0);
       expect(asked).toBe(1);
       await client.close();
     });
 
-    test('an oversized answer is refused before serialization and shows only the contract-failure text', async ({ page }) => {
+    test('an oversized answer is refused before serialization and shows only the contract-failure text', async ({
+      page,
+    }) => {
       behavior = async () => `${CANARY}${'x'.repeat(ANSWER_LIMITS.maxAnswer)}`;
       const client = await connect(mode);
       const view = await mountedView(page, client);
@@ -103,25 +144,38 @@ for (const mode of ['json', 'event-stream'] as const) {
       expect(refused.structuredContent).toBeUndefined();
       expect(JSON.stringify(refused)).not.toContain(CANARY);
       await sendResult(page, refused);
-      await expect(view.getByTestId('answer-root')).toHaveAttribute('data-state', 'problem');
-      await expect(view.getByTestId('answer-status')).toHaveText(ANSWER_INVALID_OUTPUT_TEXT);
+      await expect(view.getByTestId('answer-root')).toHaveAttribute(
+        'data-state',
+        'problem',
+      );
+      await expect(view.getByTestId('answer-status')).toHaveText(
+        ANSWER_INVALID_OUTPUT_TEXT,
+      );
       await expect(view.getByText(CANARY)).toHaveCount(0);
       await client.close();
     });
 
-    test('a new question recovers the view after a failure, and the failed call is never retried by the server', async ({ page }) => {
+    test('a new question recovers the view after a failure, and the failed call is never retried by the server', async ({
+      page,
+    }) => {
       behavior = async (question) => {
-        if (question === 'Fails?') throw new Error(`database exploded: ${CANARY}`);
+        if (question === 'Fails?')
+          throw new Error(`database exploded: ${CANARY}`);
         return `Answer to ${question}`;
       };
       const client = await connect(mode);
       const view = await mountedView(page, client);
       await sendInput(page, 'Fails?');
       await sendResult(page, await callAnswer(client, 'Fails?'));
-      await expect(view.getByTestId('answer-root')).toHaveAttribute('data-state', 'problem');
+      await expect(view.getByTestId('answer-root')).toHaveAttribute(
+        'data-state',
+        'problem',
+      );
       await sendInput(page, 'Works?');
       await sendResult(page, await callAnswer(client, 'Works?'));
-      await expect(view.getByTestId('answer-text')).toHaveText('Answer to Works?');
+      await expect(view.getByTestId('answer-text')).toHaveText(
+        'Answer to Works?',
+      );
       await expect(view.getByText(CANARY)).toHaveCount(0);
       expect(asked).toBe(2);
       await client.close();

@@ -25,9 +25,26 @@ import {
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ActionButton, type ActionButtonActivation, type ActionButtonEvents } from './action-button.js';
-import { columnHooks, mount, openSession, SURFACE_ID, surfaceView, type Mounted, type Session } from './fixture.test-support.js';
-import { ActionScopeContext, InstanceHostProvider, useActionSetup, type ActionScope } from './instance-host.js';
+import {
+  ActionButton,
+  type ActionButtonActivation,
+  type ActionButtonEvents,
+} from './action-button.js';
+import {
+  columnHooks,
+  mount,
+  openSession,
+  SURFACE_ID,
+  surfaceView,
+  type Mounted,
+  type Session,
+} from './fixture.test-support.js';
+import {
+  ActionScopeContext,
+  InstanceHostProvider,
+  useActionSetup,
+  type ActionScope,
+} from './instance-host.js';
 
 // Real React 19 rendering of a real `A2uiSurface` from the published `@a2ui/react` 0.13.0, with
 // the application's own catalog: upstream-contract Column, Row, List, Text and Button, plus the
@@ -53,11 +70,16 @@ const named = (label: string): ActionDefinition<ActionButtonActivation> =>
 /** Copies the pressed row's `id` through the instance's own data scope. */
 const archive = Action.local<ActionButtonActivation>('archive')
   .input((event) => ({ noteId: String(event.read('id')), at: event.dataPath }))
-  .run(({ params }) => void log.push({ archived: params.noteId, at: params.at }))
+  .run(
+    ({ params }) => void log.push({ archived: params.noteId, at: params.at }),
+  )
   .build();
 const probe = named('probe');
 
-function start(options: { messages?: unknown[]; strict?: boolean } = {}): { session: Session; view: Mounted } {
+function start(options: { messages?: unknown[]; strict?: boolean } = {}): {
+  session: Session;
+  view: Mounted;
+} {
   log.length = 0;
   const session = openSession(options.messages);
   sessions.push(session);
@@ -72,10 +94,12 @@ function recorder() {
   return {
     delivered,
     bindings,
-    bind: (definition: ActionDefinition<ActionButtonActivation>) => (handle: Handle) => {
-      delivered.push(handle);
-      bindings.push(handle.bindAction('activate', definition));
-    },
+    bind:
+      (definition: ActionDefinition<ActionButtonActivation>) =>
+      (handle: Handle) => {
+        delivered.push(handle);
+        bindings.push(handle.bindAction('activate', definition));
+      },
   };
 }
 
@@ -94,7 +118,10 @@ const updateComponents = (...components: object[]) => [
   { version: 'v0.9', updateComponents: { surfaceId: SURFACE_ID, components } },
 ];
 const updateRows = (rows: { id: string; title: string }[]) => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, path: '/rows', value: rows } },
+  {
+    version: 'v0.9',
+    updateDataModel: { surfaceId: SURFACE_ID, path: '/rows', value: rows },
+  },
 ];
 
 describe('attaching one definition to one rendered control', () => {
@@ -104,8 +131,16 @@ describe('attaching one definition to one rendered control', () => {
       surfaceView({
         surface: session.surface,
         setup: (setupView) => {
-          setupView.watchById('mark-a', ActionButton, (handle) => void handle.bindAction('activate', named('mark-a')));
-          setupView.watchById('mark-b', ActionButton, (handle) => void handle.bindAction('activate', named('mark-b')));
+          setupView.watchById(
+            'mark-a',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', named('mark-a')),
+          );
+          setupView.watchById(
+            'mark-b',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', named('mark-b')),
+          );
         },
       }),
     );
@@ -132,14 +167,23 @@ describe('attaching one definition to one rendered control', () => {
         id: 'mark-a',
         component: 'ActionButton',
         child: 'mark-a-label',
-        checks: [{ condition: { call: 'required', args: { value: '' } }, message: 'Required' }],
+        checks: [
+          {
+            condition: { call: 'required', args: { value: '' } },
+            message: 'Required',
+          },
+        ],
       }),
     );
     view.render(
       surfaceView({
         surface: session.surface,
         setup: (setupView) =>
-          setupView.watchById('mark-a', ActionButton, (handle) => void handle.bindAction('activate', named('mark-a'))),
+          setupView.watchById(
+            'mark-a',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', named('mark-a')),
+          ),
       }),
     );
 
@@ -152,11 +196,23 @@ describe('attaching one definition to one rendered control', () => {
     const { session } = start();
     expect(() =>
       session.ingest(
-        updateComponents({ id: 'mark-a', component: 'ActionButton', child: 'mark-a-label', action: { event: { name: 'x' } } }),
+        updateComponents({
+          id: 'mark-a',
+          component: 'ActionButton',
+          child: 'mark-a-label',
+          action: { event: { name: 'x' } },
+        }),
       ),
     ).toThrow(/action/);
     expect(() =>
-      session.ingest(updateComponents({ id: 'mark-a', component: 'ActionButton', child: 'mark-a-label', handler: 'x' })),
+      session.ingest(
+        updateComponents({
+          id: 'mark-a',
+          component: 'ActionButton',
+          child: 'mark-a-label',
+          handler: 'x',
+        }),
+      ),
     ).toThrow(/handler/);
   });
 });
@@ -168,19 +224,28 @@ describe('Strict Mode', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a'))),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named('mark-a')),
+          ),
       }),
     );
 
     // Development Strict Mode set up, cleaned up and set up again: more than one handle was delivered.
     expect(seen.delivered.length).toBeGreaterThan(1);
-    const liveBindings = seen.bindings.filter((binding) => binding.state.phase !== 'disposed');
+    const liveBindings = seen.bindings.filter(
+      (binding) => binding.state.phase !== 'disposed',
+    );
     expect(liveBindings).toHaveLength(1);
 
     const outcomes = seen.delivered.map(tryBind);
     expect(outcomes.filter(isStale)).toHaveLength(seen.delivered.length - 1);
     // The one live handle is refused only because its slot is taken, never silently replaced.
-    expect(outcomes.filter((outcome) => !isStale(outcome))).toEqual([expect.stringContaining('already has a live binding')]);
+    expect(outcomes.filter((outcome) => !isStale(outcome))).toEqual([
+      expect.stringContaining('already has a live binding'),
+    ]);
 
     view.press(view.button('Mark A'));
     expect(log).toEqual(['mark-a']);
@@ -194,20 +259,31 @@ describe('work React starts and discards', () => {
     const third = openSession();
     sessions.push(second, third);
     const seen = recorder();
-    const setup = (setupView: InstanceView): void => void setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a')));
+    const setup = (setupView: InstanceView): void =>
+      void setupView.watchById(
+        'mark-a',
+        ActionButton,
+        seen.bind(named('mark-a')),
+      );
 
-    const controls: { swap(surface: Session['surface'], gate: Promise<void> | undefined): void } = { swap: () => undefined };
+    const controls: {
+      swap(surface: Session['surface'], gate: Promise<void> | undefined): void;
+    } = { swap: () => undefined };
     function Gate(props: { gate: Promise<void> | undefined }): null {
       if (props.gate) use(props.gate);
       return null;
     }
     function Switcher(): ReactNode {
-      const [shown, setShown] = useState<{ surface: Session['surface']; gate: Promise<void> | undefined }>({
+      const [shown, setShown] = useState<{
+        surface: Session['surface'];
+        gate: Promise<void> | undefined;
+      }>({
         surface: session.surface,
         gate: undefined,
       });
       const [, startTransition] = useTransition();
-      controls.swap = (surface, gate) => startTransition(() => setShown({ surface, gate }));
+      controls.swap = (surface, gate) =>
+        startTransition(() => setShown({ surface, gate }));
       return createElement(InstanceHostProvider, {
         onSetupError: () => undefined,
         children: createElement(
@@ -259,12 +335,25 @@ describe('replacement', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a'))),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named('mark-a')),
+          ),
       }),
     );
     expect(seen.delivered).toHaveLength(1);
 
-    act(() => session.ingest(updateComponents({ id: 'mark-a', component: 'Column', children: ['mark-a-label'] })));
+    act(() =>
+      session.ingest(
+        updateComponents({
+          id: 'mark-a',
+          component: 'Column',
+          children: ['mark-a-label'],
+        }),
+      ),
+    );
     expect(seen.bindings[0]!.state.phase).toBe('disposed');
     expect(view.buttons('Mark A')).toHaveLength(0);
     expect(tryBind(seen.delivered[0]!)).toContain('is stale');
@@ -272,8 +361,17 @@ describe('replacement', () => {
     // The parent's layout effect runs after its children's: by then the new instance is open and delivered,
     // so no frame shows a live-looking control that has no instance.
     const atParentLayout: number[] = [];
-    columnHooks.afterLayout = () => void atParentLayout.push(seen.delivered.length);
-    act(() => session.ingest(updateComponents({ id: 'mark-a', component: 'ActionButton', child: 'mark-a-label' })));
+    columnHooks.afterLayout = () =>
+      void atParentLayout.push(seen.delivered.length);
+    act(() =>
+      session.ingest(
+        updateComponents({
+          id: 'mark-a',
+          component: 'ActionButton',
+          child: 'mark-a-label',
+        }),
+      ),
+    );
     columnHooks.afterLayout = undefined;
     expect(atParentLayout.at(-1)).toBe(2);
     expect(seen.delivered).toHaveLength(2);
@@ -287,7 +385,14 @@ describe('replacement', () => {
   it('swapping the surface retires the old root instance; the registration binds the new one', () => {
     log.length = 0;
     const rootOnly = [
-      { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: 'https://saga-a2ui.local/catalogs/react-action-consumer/v1' } },
+      {
+        version: 'v0.9',
+        createSurface: {
+          surfaceId: SURFACE_ID,
+          catalogId:
+            'https://saga-a2ui.local/catalogs/react-action-consumer/v1',
+        },
+      },
       ...updateComponents(
         { id: 'root', component: 'ActionButton', child: 'root-label' },
         { id: 'root-label', component: 'Text', text: 'Root' },
@@ -298,14 +403,18 @@ describe('replacement', () => {
     sessions.push(first, second);
     mounted = mount({ strict: false });
     const seen = recorder();
-    const setup = (setupView: InstanceView): void => void setupView.watchById('root', ActionButton, seen.bind(named('root')));
+    const setup = (setupView: InstanceView): void =>
+      void setupView.watchById('root', ActionButton, seen.bind(named('root')));
 
     mounted.render(surfaceView({ surface: first.surface, setup }));
     const firstButton = mounted.button('Root');
     mounted.render(surfaceView({ surface: second.surface, setup }));
 
     expect(seen.delivered).toHaveLength(2);
-    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual(['disposed', 'idle']);
+    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual([
+      'disposed',
+      'idle',
+    ]);
     expect(tryBind(seen.delivered[0]!)).toContain('is stale');
     // The old element is gone; a click that still reached its node would find a retired instance.
     expect(firstButton.isConnected).toBe(false);
@@ -319,14 +428,27 @@ describe('replacement', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a'))),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named('mark-a')),
+          ),
       }),
     );
     const oldButton = view.button('Mark A');
 
     // Outside `act`: React has been told but has not rendered yet.
-    const complaints = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    session.ingest(updateComponents({ id: 'mark-a', component: 'Column', children: ['mark-a-label'] }));
+    const complaints = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    session.ingest(
+      updateComponents({
+        id: 'mark-a',
+        component: 'Column',
+        children: ['mark-a-label'],
+      }),
+    );
     complaints.mockRestore();
 
     expect(oldButton.isConnected).toBe(true);
@@ -340,15 +462,36 @@ describe('replacement', () => {
 describe('host changes under a node that stays', () => {
   it('a new host retires the old instance within the commit; the old handle cannot bind and a press reaches only the new binding', () => {
     const { session, view } = start({ strict: false });
-    const scopeFor = (): ActionScope => ({ host: createInstanceHost({ onSetupError: () => undefined }), onSetupError: () => undefined });
+    const scopeFor = (): ActionScope => ({
+      host: createInstanceHost({ onSetupError: () => undefined }),
+      onSetupError: () => undefined,
+    });
     const oldScope = scopeFor();
     const newScope = scopeFor();
     const oldSeen = recorder();
     const newSeen = recorder();
-    oldScope.host.register((setupView) => void setupView.watchById('mark-a', ActionButton, oldSeen.bind(named('old'))));
-    newScope.host.register((setupView) => void setupView.watchById('mark-a', ActionButton, newSeen.bind(named('new'))));
+    oldScope.host.register(
+      (setupView) =>
+        void setupView.watchById(
+          'mark-a',
+          ActionButton,
+          oldSeen.bind(named('old')),
+        ),
+    );
+    newScope.host.register(
+      (setupView) =>
+        void setupView.watchById(
+          'mark-a',
+          ActionButton,
+          newSeen.bind(named('new')),
+        ),
+    );
     const under = (scope: ActionScope) =>
-      createElement(ActionScopeContext.Provider, { value: scope }, createElement(A2uiSurface, { surface: session.surface }));
+      createElement(
+        ActionScopeContext.Provider,
+        { value: scope },
+        createElement(A2uiSurface, { surface: session.surface }),
+      );
 
     view.render(under(oldScope));
     const button = view.button('Mark A');
@@ -374,7 +517,13 @@ describe('teardown', () => {
       kept = useContext(ActionScopeContext);
       return null;
     }
-    view.render(surfaceView({ surface: session.surface, setup: () => undefined, after: createElement(Keep) }));
+    view.render(
+      surfaceView({
+        surface: session.surface,
+        setup: () => undefined,
+        after: createElement(Keep),
+      }),
+    );
     expect(kept).toBeDefined();
 
     view.unmount();
@@ -403,7 +552,11 @@ describe('teardown', () => {
         surface: session.surface,
         setup: (setupView) => {
           captured = setupView;
-          setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a')));
+          setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named('mark-a')),
+          );
           setupView.watchById('row-archive', ActionButton, seen.bind(archive));
         },
       }),
@@ -413,10 +566,22 @@ describe('teardown', () => {
     view.unmount();
     mounted = undefined;
 
-    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual(['disposed', 'disposed', 'disposed']);
-    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([true, true, true]);
-    expect(() => captured?.getById('mark-a', ActionButton)).toThrow(/has ended/);
-    expect(() => captured?.watchById('mark-a', ActionButton, () => undefined)).toThrow(/has ended/);
+    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual([
+      'disposed',
+      'disposed',
+      'disposed',
+    ]);
+    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(() => captured?.getById('mark-a', ActionButton)).toThrow(
+      /has ended/,
+    );
+    expect(() =>
+      captured?.watchById('mark-a', ActionButton, () => undefined),
+    ).toThrow(/has ended/);
   });
 });
 
@@ -447,11 +612,19 @@ describe('teardown between a commit’s layout and passive effects', () => {
       root.render(
         surfaceView({
           surface: session.surface,
-          setup: (setupView) => setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a'))),
+          setup: (setupView) =>
+            setupView.watchById(
+              'mark-a',
+              ActionButton,
+              seen.bind(named('mark-a')),
+            ),
           onSetupError: (error) => void errors.push(error),
         }),
       );
-      await vi.waitFor(() => expect(container.querySelector('button')).toBeNull(), { timeout: 2_000 });
+      await vi.waitFor(
+        () => expect(container.querySelector('button')).toBeNull(),
+        { timeout: 2_000 },
+      );
       // Let any passive effect React still held run before judging what is left.
       await new Promise((resolve) => setTimeout(resolve, 50));
     } finally {
@@ -463,8 +636,12 @@ describe('teardown between a commit’s layout and passive effects', () => {
     expect(queued).toBe(true);
     expect(errors).toEqual([]);
     // Whatever was bound before the unmount took effect is disposed, and nothing can bind again.
-    expect(seen.bindings.filter((binding) => binding.state.phase !== 'disposed')).toEqual([]);
-    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual(seen.delivered.map(() => true));
+    expect(
+      seen.bindings.filter((binding) => binding.state.phase !== 'disposed'),
+    ).toEqual([]);
+    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual(
+      seen.delivered.map(() => true),
+    );
     expect(log).toEqual([]);
   });
 });
@@ -479,7 +656,11 @@ describe('repeated IDs and data scopes', () => {
         surface: session.surface,
         setup: (received) => {
           setupView = received;
-          received.watchById('row-archive', ActionButton, (handle) => void handle.bindAction('activate', archive));
+          received.watchById(
+            'row-archive',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', archive),
+          );
           try {
             received.getById('row-archive', ActionButton);
           } catch (error) {
@@ -515,18 +696,43 @@ describe('repeated IDs and data scopes', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, seen.bind(archive)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            seen.bind(archive),
+          ),
       }),
     );
     expect(seen.delivered).toHaveLength(2);
 
-    act(() => session.ingest(updateRows([{ id: 'n-1', title: 'Alpha' }, { id: 'n-2', title: 'Beta' }, { id: 'n-3', title: 'Gamma' }])));
+    act(() =>
+      session.ingest(
+        updateRows([
+          { id: 'n-1', title: 'Alpha' },
+          { id: 'n-2', title: 'Beta' },
+          { id: 'n-3', title: 'Gamma' },
+        ]),
+      ),
+    );
     expect(seen.delivered).toHaveLength(3);
-    expect(seen.delivered.map((handle) => handle.dataPath)).toEqual(['/rows/0', '/rows/1', '/rows/2']);
+    expect(seen.delivered.map((handle) => handle.dataPath)).toEqual([
+      '/rows/0',
+      '/rows/1',
+      '/rows/2',
+    ]);
 
     act(() => session.ingest(updateRows([{ id: 'n-1', title: 'Alpha' }])));
-    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual(['idle', 'disposed', 'disposed']);
-    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([false, true, true]);
+    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual([
+      'idle',
+      'disposed',
+      'disposed',
+    ]);
+    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([
+      false,
+      true,
+      true,
+    ]);
     view.press(view.button('Archive'));
     expect(log).toEqual([{ archived: 'n-1', at: '/rows/0' }]);
   });
@@ -537,14 +743,26 @@ describe('repeated IDs and data scopes', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, seen.bind(archive)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            seen.bind(archive),
+          ),
       }),
     );
     const [firstHandle] = seen.delivered;
     const [firstBinding] = seen.bindings;
     expect(firstHandle!.read('id')).toBe('n-1');
 
-    act(() => session.ingest(updateRows([{ id: 'n-9', title: 'Replaced' }, { id: 'n-2', title: 'Beta' }])));
+    act(() =>
+      session.ingest(
+        updateRows([
+          { id: 'n-9', title: 'Replaced' },
+          { id: 'n-2', title: 'Beta' },
+        ]),
+      ),
+    );
 
     expect(seen.delivered).toHaveLength(2); // nothing was re-delivered
     expect(firstBinding!.state.phase).toBe('idle');
@@ -564,13 +782,20 @@ describe('repeated IDs and data scopes', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, seen.bind(keep)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            seen.bind(keep),
+          ),
       }),
     );
 
     view.press(view.buttons('Archive')[1]!);
     expect(kept).toHaveLength(1);
-    expect(() => kept[0]!.read('id')).toThrow(/only while the event is being delivered/);
+    expect(() => kept[0]!.read('id')).toThrow(
+      /only while the event is being delivered/,
+    );
     expect(kept[0]!.dataPath).toBe('/rows/1');
 
     act(() => session.ingest(updateRows([{ id: 'n-1', title: 'Alpha' }])));
@@ -579,7 +804,10 @@ describe('repeated IDs and data scopes', () => {
 });
 
 describe('failure, duplicates and rebinding', () => {
-  class Boundary extends Component<{ children: ReactNode; onCatch(error: unknown): void }, { failed: boolean }> {
+  class Boundary extends Component<
+    { children: ReactNode; onCatch(error: unknown): void },
+    { failed: boolean }
+  > {
     override state = { failed: false };
     static getDerivedStateFromError() {
       return { failed: true };
@@ -588,7 +816,9 @@ describe('failure, duplicates and rebinding', () => {
       this.props.onCatch(error);
     }
     override render() {
-      return this.state.failed ? createElement('p', { role: 'alert' }, 'Actions are unavailable') : this.props.children;
+      return this.state.failed
+        ? createElement('p', { role: 'alert' }, 'Actions are unavailable')
+        : this.props.children;
     }
   }
 
@@ -597,13 +827,25 @@ describe('failure, duplicates and rebinding', () => {
     const seen = recorder();
     const reported: unknown[] = [];
     const caught: unknown[] = [];
-    const guarded = (generation: number, setup: (setupView: InstanceView) => void) =>
+    const guarded = (
+      generation: number,
+      setup: (setupView: InstanceView) => void,
+    ) =>
       createElement(Boundary, {
         key: generation,
         onCatch: (error) => caught.push(error),
-        children: surfaceView({ surface: session.surface, onSetupError: (error) => reported.push(error), setup }),
+        children: surfaceView({
+          surface: session.surface,
+          onSetupError: (error) => reported.push(error),
+          setup,
+        }),
       });
-    const working = (setupView: InstanceView): void => void setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a')));
+    const working = (setupView: InstanceView): void =>
+      void setupView.watchById(
+        'mark-a',
+        ActionButton,
+        seen.bind(named('mark-a')),
+      );
     // Instances exist by now, so this setup binds the present control and only then fails.
     const failing = (setupView: InstanceView): void => {
       setupView.watchById('mark-a', ActionButton, seen.bind(named('mark-a')));
@@ -613,16 +855,26 @@ describe('failure, duplicates and rebinding', () => {
     view.render(guarded(1, working));
     expect(seen.bindings).toHaveLength(1);
 
-    const complaints = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const complaints = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
     // Same boundary and provider, a different setup function: React ends the first registration and runs the second.
     view.render(guarded(1, failing));
     complaints.mockRestore();
 
     expect(reported.map(String)).toEqual(['Error: setup failed on purpose']);
     expect(caught.map(String)).toEqual(['Error: setup failed on purpose']);
-    expect(view.container.querySelector('[role="alert"]')?.textContent).toBe('Actions are unavailable');
-    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual(['disposed', 'disposed']);
-    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([true, true]);
+    expect(view.container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Actions are unavailable',
+    );
+    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual([
+      'disposed',
+      'disposed',
+    ]);
+    expect(seen.delivered.map((handle) => isStale(tryBind(handle)))).toEqual([
+      true,
+      true,
+    ]);
 
     // A fresh view over the same surface model recovers and binds again.
     view.render(guarded(2, working));
@@ -642,7 +894,11 @@ describe('failure, duplicates and rebinding', () => {
             handle.bindAction('activate', named('mark-a'));
             throw new Error('callback failed');
           });
-          setupView.watchById('mark-b', ActionButton, (handle) => void handle.bindAction('activate', named('mark-b')));
+          setupView.watchById(
+            'mark-b',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', named('mark-b')),
+          );
         },
       }),
     );
@@ -657,8 +913,18 @@ describe('failure, duplicates and rebinding', () => {
     const { session, view } = start({ strict: false });
     const reported: unknown[] = [];
     const first = recorder();
-    function Registered(props: { name: string; seen: ReturnType<typeof recorder> }): null {
-      useActionSetup((setupView) => void setupView.watchById('mark-a', ActionButton, props.seen.bind(named(props.name))));
+    function Registered(props: {
+      name: string;
+      seen: ReturnType<typeof recorder>;
+    }): null {
+      useActionSetup(
+        (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            props.seen.bind(named(props.name)),
+          ),
+      );
       return null;
     }
     // Hooks run per component, so two registrations share one host through one provider.
@@ -689,7 +955,12 @@ describe('failure, duplicates and rebinding', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('mark-a', ActionButton, seen.bind(named('one'))),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named('one')),
+          ),
       }),
     );
     const [handle] = seen.delivered;
@@ -718,7 +989,10 @@ describe('failure, duplicates and rebinding', () => {
     view.render(surfaceView({ surface: session.surface, setup: setupA }));
     view.render(surfaceView({ surface: session.surface, setup: setupB }));
 
-    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual(['disposed', 'idle']);
+    expect(seen.bindings.map((binding) => binding.state.phase)).toEqual([
+      'disposed',
+      'idle',
+    ]);
     view.press(view.button('Mark A'));
     expect(log).toEqual(['B']);
   });
@@ -741,9 +1015,21 @@ describe('an unrelated host is not an instance host', () => {
     const scoped = (seen: ReturnType<typeof recorder>, name: string) =>
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('mark-a', ActionButton, seen.bind(named(name))),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'mark-a',
+            ActionButton,
+            seen.bind(named(name)),
+          ),
       });
-    view.render(createElement(Fragment, null, createElement('section', { key: 'one' }, scoped(oneSeen, 'one')), createElement('section', { key: 'two' }, scoped(twoSeen, 'two'))));
+    view.render(
+      createElement(
+        Fragment,
+        null,
+        createElement('section', { key: 'one' }, scoped(oneSeen, 'one')),
+        createElement('section', { key: 'two' }, scoped(twoSeen, 'two')),
+      ),
+    );
 
     const [first, second] = view.buttons('Mark A');
     view.press(second!);

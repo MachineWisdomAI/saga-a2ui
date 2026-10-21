@@ -1,10 +1,23 @@
-import type { ActionBinding, InstanceHandle, InstanceView } from '@saga-a2ui/core/actions';
+import type {
+  ActionBinding,
+  InstanceHandle,
+  InstanceView,
+} from '@saga-a2ui/core/actions';
 import { ActionButton, type ActionButtonEvents } from '../adapter/kind.js';
-import { archiveNote, cancelOrder, reviewOrder, stageNote, submitOrder } from './definitions.js';
+import {
+  archiveNote,
+  cancelOrder,
+  reviewOrder,
+  stageNote,
+  submitOrder,
+} from './definitions.js';
 
 /** Test-driver hook: told about each handle and binding the application's setup makes. */
 export interface SetupObserver {
-  bound(handle: InstanceHandle<ActionButtonEvents>, binding: ActionBinding): void;
+  bound(
+    handle: InstanceHandle<ActionButtonEvents>,
+    binding: ActionBinding,
+  ): void;
   discovered(handle: InstanceHandle<ActionButtonEvents>): void;
 }
 
@@ -36,11 +49,21 @@ export function attach(view: InstanceView, observer: SetupObserver): void {
   // a position that starts showing another item is told apart from the item it showed at the tap.
   view.watchById('review-order', ActionButton, (handle) => {
     observer.discovered(handle);
-    observer.bound(handle, handle.bindAction('activate', reviewOrder, { subject: () => handle.read('orderId') }));
+    observer.bound(
+      handle,
+      handle.bindAction('activate', reviewOrder, {
+        subject: () => handle.read('orderId'),
+      }),
+    );
   });
   view.watchById('row-stage', ActionButton, (handle) => {
     observer.discovered(handle);
-    observer.bound(handle, handle.bindAction('activate', stageNote, { subject: () => handle.read('noteId') }));
+    observer.bound(
+      handle,
+      handle.bindAction('activate', stageNote, {
+        subject: () => handle.read('noteId'),
+      }),
+    );
   });
   // Setup that binds and then throws: nothing may stay bound.
   view.watchById('flaky', ActionButton, (handle) => {

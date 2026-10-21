@@ -17,7 +17,9 @@ export function isThenable(value: unknown): value is PromiseLike<unknown> {
  * callback that always throws returns `never` and stays valid. The types cannot see a promise
  * hidden behind a declared `unknown` or `void`, so the runtime checks the returned value too.
  */
-export type Synchronous<Returned> = [Extract<Returned, PromiseLike<unknown>>] extends [never]
+export type Synchronous<Returned> = [
+  Extract<Returned, PromiseLike<unknown>>,
+] extends [never]
   ? []
   : [returnedAThenable: never];
 

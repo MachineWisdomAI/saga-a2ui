@@ -27,8 +27,13 @@ export function pngBytes(): Buffer {
   header.writeUInt32BE(ARTWORK_SIZE.width, 0);
   header.writeUInt32BE(ARTWORK_SIZE.height, 4);
   header.set([8, 6, 0, 0, 0], 8); // 8-bit RGBA, no interlace
-  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(ARTWORK_SIZE.width * 4, 0x80)]);
-  const pixels = Buffer.concat(Array.from({ length: ARTWORK_SIZE.height }, () => row));
+  const row = Buffer.concat([
+    Buffer.from([0]),
+    Buffer.alloc(ARTWORK_SIZE.width * 4, 0x80),
+  ]);
+  const pixels = Buffer.concat(
+    Array.from({ length: ARTWORK_SIZE.height }, () => row),
+  );
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     pngChunk('IHDR', header),
@@ -37,7 +42,8 @@ export function pngBytes(): Buffer {
   ]);
 }
 
-export const imageDataUrl = (): string => `data:image/png;base64,${pngBytes().toString('base64')}`;
+export const imageDataUrl = (): string =>
+  `data:image/png;base64,${pngBytes().toString('base64')}`;
 
 const UNITS_PER_EM = 1000;
 /** The advance of "A" in em: 2, wide enough that no fallback face produces it for a letter A. */
@@ -45,7 +51,9 @@ export const PROBE_ADVANCE_EM = 2;
 
 function u16(...values: number[]): Buffer {
   const out = Buffer.alloc(values.length * 2);
-  values.forEach((value, index) => out.writeUInt16BE(value & 0xffff, index * 2));
+  values.forEach((value, index) =>
+    out.writeUInt16BE(value & 0xffff, index * 2),
+  );
   return out;
 }
 
@@ -62,12 +70,15 @@ function pad4(data: Buffer): Buffer {
 function checksum(data: Buffer): number {
   const padded = pad4(data);
   let sum = 0;
-  for (let offset = 0; offset < padded.length; offset += 4) sum = (sum + padded.readUInt32BE(offset)) >>> 0;
+  for (let offset = 0; offset < padded.length; offset += 4)
+    sum = (sum + padded.readUInt32BE(offset)) >>> 0;
   return sum;
 }
 
 function nameTable(family: string): Buffer {
-  const strings = [family, 'Regular', family, family].map((value) => Buffer.from(value, 'utf16le').swap16());
+  const strings = [family, 'Regular', family, family].map((value) =>
+    Buffer.from(value, 'utf16le').swap16(),
+  );
   const ids = [1, 2, 4, 6];
   const header = Buffer.concat([u16(0, ids.length, 6 + ids.length * 12)]);
   let offset = 0;
@@ -81,7 +92,9 @@ function nameTable(family: string): Buffer {
 }
 
 /** The font's tables in the order a WOFF2 file lists them (glyf directly before loca). */
-function tables(family: string): ReadonlyArray<readonly [tag: string, data: Buffer]> {
+function tables(
+  family: string,
+): ReadonlyArray<readonly [tag: string, data: Buffer]> {
   const head = Buffer.concat([
     u32(0x00010000, 0x00010000, 0, 0x5f0f3cf5),
     u16(0x000b, UNITS_PER_EM),
@@ -94,7 +107,10 @@ function tables(family: string): ReadonlyArray<readonly [tag: string, data: Buff
     Buffer.alloc(8), // reserved
     u16(0, 2),
   ]);
-  const maxp = Buffer.concat([u32(0x00010000), u16(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)]);
+  const maxp = Buffer.concat([
+    u32(0x00010000),
+    u16(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0),
+  ]);
   const hmtx = u16(500, 0, PROBE_ADVANCE_EM * UNITS_PER_EM, 0);
   const cmap = Buffer.concat([
     u16(0, 1, 3, 1),
@@ -114,7 +130,11 @@ function tables(family: string): ReadonlyArray<readonly [tag: string, data: Buff
     Buffer.from('NONE', 'ascii'),
     u16(0x40, 0x41, 0x41, 800, -200, 0, 1000, 200),
   ]);
-  const post = Buffer.concat([u32(0x00030000, 0), u16(-100, 50), u32(0, 0, 0, 0, 0)]);
+  const post = Buffer.concat([
+    u32(0x00030000, 0),
+    u16(-100, 50),
+    u32(0, 0, 0, 0, 0),
+  ]);
   const glyf = Buffer.alloc(4);
   const loca = u16(0, 0, 0);
   return [
@@ -138,7 +158,12 @@ export function fontBytes(family = 'Probe'): Buffer {
   const bodies: Buffer[] = [];
   let offset = 12 + 16 * parts.length;
   for (const [tag, data] of parts) {
-    directory.push(Buffer.concat([Buffer.from(tag, 'ascii'), u32(checksum(data), offset, data.length)]));
+    directory.push(
+      Buffer.concat([
+        Buffer.from(tag, 'ascii'),
+        u32(checksum(data), offset, data.length),
+      ]),
+    );
     const padded = pad4(data);
     bodies.push(padded);
     offset += padded.length;
@@ -147,14 +172,20 @@ export function fontBytes(family = 'Probe'): Buffer {
   const searchRange = 16 * 2 ** entrySelector;
   const file = Buffer.concat([
     u32(0x00010000),
-    u16(parts.length, searchRange, entrySelector, parts.length * 16 - searchRange),
+    u16(
+      parts.length,
+      searchRange,
+      entrySelector,
+      parts.length * 16 - searchRange,
+    ),
     ...directory,
     ...bodies,
   ]);
   // checkSumAdjustment: 0xB1B0AFBA minus the sum of the whole file, stored in the head table.
   const headRecord = parts.findIndex(([tag]) => tag === 'head');
   let headOffset = 12 + 16 * parts.length;
-  for (let index = 0; index < headRecord; index += 1) headOffset += pad4((parts[index] as [string, Buffer])[1]).length;
+  for (let index = 0; index < headRecord; index += 1)
+    headOffset += pad4((parts[index] as [string, Buffer])[1]).length;
   file.writeUInt32BE((0xb1b0afba - checksum(file)) >>> 0, headOffset + 8);
   return file;
 }
@@ -175,7 +206,8 @@ const WOFF2_TAG_INDEX: Readonly<Record<string, number>> = {
 
 function base128(value: number): Buffer {
   const bytes = [value & 0x7f];
-  for (let rest = value >>> 7; rest > 0; rest >>>= 7) bytes.unshift((rest & 0x7f) | 0x80);
+  for (let rest = value >>> 7; rest > 0; rest >>>= 7)
+    bytes.unshift((rest & 0x7f) | 0x80);
   return Buffer.from(bytes);
 }
 
@@ -186,9 +218,14 @@ export function woff2Bytes(family = 'Probe'): Buffer {
   const directory = parts.map(([tag, data]) => {
     // glyf and loca use transform version 3, the null transform; the others use version 0.
     const nullTransform = tag === 'glyf' || tag === 'loca' ? 0xc0 : 0;
-    return Buffer.concat([Buffer.from([(WOFF2_TAG_INDEX[tag] as number) | nullTransform]), base128(data.length)]);
+    return Buffer.concat([
+      Buffer.from([(WOFF2_TAG_INDEX[tag] as number) | nullTransform]),
+      base128(data.length),
+    ]);
   });
-  const compressed = brotliCompressSync(Buffer.concat(parts.map(([, data]) => data)));
+  const compressed = brotliCompressSync(
+    Buffer.concat(parts.map(([, data]) => data)),
+  );
   const body = pad4(Buffer.concat([...directory, compressed]));
   const header = Buffer.concat([
     Buffer.from('wOF2', 'ascii'),
@@ -200,7 +237,10 @@ export function woff2Bytes(family = 'Probe'): Buffer {
   return Buffer.concat([header, body]);
 }
 
-export const fontDataUrl = (format: 'ttf' | 'woff2' = 'woff2', family = 'Probe'): string =>
+export const fontDataUrl = (
+  format: 'ttf' | 'woff2' = 'woff2',
+  family = 'Probe',
+): string =>
   format === 'woff2'
     ? `data:font/woff2;base64,${woff2Bytes(family).toString('base64')}`
     : `data:font/ttf;base64,${fontBytes(family).toString('base64')}`;

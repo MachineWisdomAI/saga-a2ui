@@ -5,5 +5,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'e2e/card-workflow',
   base: './',
-  build: { outDir: '../../dist/card-workflow', emptyOutDir: true, target: 'es2022' },
+  build: {
+    outDir: '../../dist/card-workflow',
+    emptyOutDir: true,
+    target: 'es2022',
+  },
 });

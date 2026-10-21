@@ -11,13 +11,17 @@ import { repoRoot, type SdkPackage } from './packed-consumer.js';
 export const templatesRoot = path.join(repoRoot, 'templates');
 
 /** Where the maintained template of that name lives. */
-export const templateDirectory = (name: string): string => path.join(templatesRoot, name);
+export const templateDirectory = (name: string): string =>
+  path.join(templatesRoot, name);
 
 /** What a template says about itself in `template.json`, which is not part of the starter it exports. */
 export interface TemplateMetadata {
   readonly stack: string;
   readonly server: string;
-  readonly serverAdapter: { readonly package: string; readonly version: string };
+  readonly serverAdapter: {
+    readonly package: string;
+    readonly version: string;
+  };
   readonly sdkPackages: readonly SdkPackage[];
   readonly snippets: readonly string[];
 }
@@ -35,7 +39,10 @@ const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist']);
 
 export function readTemplateMetadata(template: string): TemplateMetadata {
   const file = path.join(template, 'template.json');
-  if (!fs.existsSync(file)) throw new TemplateError(`${template} is not a template: it has no template.json.`);
+  if (!fs.existsSync(file))
+    throw new TemplateError(
+      `${template} is not a template: it has no template.json.`,
+    );
   return JSON.parse(fs.readFileSync(file, 'utf8')) as TemplateMetadata;
 }
 
@@ -44,7 +51,8 @@ export function templateFiles(template: string): string[] {
   const walk = (directory: string): string[] =>
     fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
       const full = path.join(directory, entry.name);
-      if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : walk(full);
+      if (entry.isDirectory())
+        return SKIPPED_DIRECTORIES.has(entry.name) ? [] : walk(full);
       return [path.relative(template, full).split(path.sep).join('/')];
     });
   return walk(template)
@@ -52,7 +60,8 @@ export function templateFiles(template: string): string[] {
     .sort();
 }
 
-const REGION = /^\s*\/\/ #(region|endregion) saga-snippet:([a-z][a-z0-9-]*)\s*$/;
+const REGION =
+  /^\s*\/\/ #(region|endregion) saga-snippet:([a-z][a-z0-9-]*)\s*$/;
 
 /** One snippet: the lines between a region's markers, verbatim, and the template file they come from. */
 export interface Snippet {
@@ -70,9 +79,13 @@ export interface Snippet {
  */
 export function extractSnippets(template: string): Snippet[] {
   const found: Snippet[] = [];
-  for (const file of templateFiles(template).filter((one) => one.endsWith('.ts'))) {
+  for (const file of templateFiles(template).filter((one) =>
+    one.endsWith('.ts'),
+  )) {
     let open: { readonly name: string; readonly lines: string[] } | undefined;
-    for (const line of fs.readFileSync(path.join(template, file), 'utf8').split('\n')) {
+    for (const line of fs
+      .readFileSync(path.join(template, file), 'utf8')
+      .split('\n')) {
       const marker = REGION.exec(line);
       if (marker === null) {
         open?.lines.push(line);
@@ -81,16 +94,28 @@ export function extractSnippets(template: string): Snippet[] {
       const kind = marker[1];
       const name = marker[2] as string;
       if (kind === 'region') {
-        if (open) throw new TemplateError(`${file}: snippet "${name}" opens inside "${open.name}".`);
-        if (found.some((one) => one.name === name)) throw new TemplateError(`${file}: snippet "${name}" is defined twice.`);
+        if (open)
+          throw new TemplateError(
+            `${file}: snippet "${name}" opens inside "${open.name}".`,
+          );
+        if (found.some((one) => one.name === name))
+          throw new TemplateError(
+            `${file}: snippet "${name}" is defined twice.`,
+          );
         open = { name, lines: [] };
       } else {
-        if (open?.name !== name) throw new TemplateError(`${file}: the end of snippet "${name}" does not match an open snippet.`);
+        if (open?.name !== name)
+          throw new TemplateError(
+            `${file}: the end of snippet "${name}" does not match an open snippet.`,
+          );
         found.push({ name, file, text: open.lines.join('\n') });
         open = undefined;
       }
     }
-    if (open) throw new TemplateError(`${file}: snippet "${open.name}" is never closed.`);
+    if (open)
+      throw new TemplateError(
+        `${file}: snippet "${open.name}" is never closed.`,
+      );
   }
   return found;
 }
@@ -122,15 +147,25 @@ const stripMarkers = (source: string): string =>
  * `sdkVersion`, so the starter is matched to one SDK build and a package manager refuses any other.
  * The template declares `*` for an SDK package; any other form is rejected rather than rewritten.
  */
-export function stampSdkVersion(manifest: Record<string, unknown>, sdkVersion: string): Record<string, unknown> {
+export function stampSdkVersion(
+  manifest: Record<string, unknown>,
+  sdkVersion: string,
+): Record<string, unknown> {
   const stamped: Record<string, unknown> = { ...manifest };
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+  ] as const) {
     const group = manifest[field] as Record<string, string> | undefined;
     if (group === undefined) continue;
     stamped[field] = Object.fromEntries(
       Object.entries(group).map(([dependency, range]) => {
         if (!dependency.startsWith('@saga-a2ui/')) return [dependency, range];
-        if (range !== '*') throw new TemplateError(`The template declares ${dependency} as "${range}"; an SDK package is declared as "*" and stamped at export.`);
+        if (range !== '*')
+          throw new TemplateError(
+            `The template declares ${dependency} as "${range}"; an SDK package is declared as "*" and stamped at export.`,
+          );
         return [dependency, sdkVersion];
       }),
     );
@@ -160,18 +195,26 @@ const isSymlink = (file: string): boolean => {
 
 /** Refuses a path that is already taken: a file, a directory or a symbolic link, a dangling one included. Nothing is written or changed. */
 export function refuseExisting(target: string): void {
-  if (fs.existsSync(target) || isSymlink(target)) throw new TemplateError(`${target} already exists; choose a new directory.`);
+  if (fs.existsSync(target) || isSymlink(target))
+    throw new TemplateError(
+      `${target} already exists; choose a new directory.`,
+    );
 }
 
 /** An interrupt was seen during the export. `removed` is whether the directory this call created was taken away again. */
 export class ExportInterrupted extends Error {
   constructor(readonly removed: boolean) {
-    super(removed ? 'The export was interrupted; the directory it created was removed.' : 'The export was interrupted; the output path had been replaced, so nothing there was removed.');
+    super(
+      removed
+        ? 'The export was interrupted; the directory it created was removed.'
+        : 'The export was interrupted; the output path had been replaced, so nothing there was removed.',
+    );
     this.name = 'ExportInterrupted';
   }
 }
 
-export const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
+export const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean =>
+  a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
 
 /**
  * Creating a new directory with the given files, as a generator that suspends before each file and
@@ -186,12 +229,18 @@ export const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean => 
  * directory-relative file calls, so the check narrows the window between check and write to the
  * instant between two adjacent calls; it does not close it, and docs/development-reference.md (CLI1) documents that limitation.
  */
-function* createDirectorySteps(destination: string, files: readonly OutputFile[]): Generator<void, string, void> {
+function* createDirectorySteps(
+  destination: string,
+  files: readonly OutputFile[],
+): Generator<void, string, void> {
   const target = path.resolve(destination);
   refuseExisting(target);
   for (const file of files) {
     const out = path.resolve(target, file.path);
-    if (path.isAbsolute(file.path) || !out.startsWith(`${target}${path.sep}`)) throw new TemplateError(`${file.path} is not inside the new directory; nothing was written.`);
+    if (path.isAbsolute(file.path) || !out.startsWith(`${target}${path.sep}`))
+      throw new TemplateError(
+        `${file.path} is not inside the new directory; nothing was written.`,
+      );
   }
   // The existence check above can be overtaken by another process, so the directory itself is
   // created without `recursive`, which fails if it exists.
@@ -199,7 +248,10 @@ function* createDirectorySteps(destination: string, files: readonly OutputFile[]
   try {
     fs.mkdirSync(target);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new TemplateError(`${target} already exists; choose a new directory.`);
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+      throw new TemplateError(
+        `${target} already exists; choose a new directory.`,
+      );
     throw error;
   }
   const created = fs.lstatSync(target, { bigint: true });
@@ -210,7 +262,9 @@ function* createDirectorySteps(destination: string, files: readonly OutputFile[]
       return false;
     }
   };
-  const replaced = new TemplateError(`${target} was replaced while the output was being written; nothing at that path was changed or removed.`);
+  const replaced = new TemplateError(
+    `${target} was replaced while the output was being written; nothing at that path was changed or removed.`,
+  );
   const removeIfOurs = (): boolean => {
     if (!stillOurs()) return false;
     fs.rmSync(target, { recursive: true, force: true });
@@ -228,21 +282,30 @@ function* createDirectorySteps(destination: string, files: readonly OutputFile[]
     if (!stillOurs()) throw replaced;
   } catch (error) {
     const removed = removeIfOurs();
-    if (error instanceof ExportInterrupted) throw new ExportInterrupted(removed);
+    if (error instanceof ExportInterrupted)
+      throw new ExportInterrupted(removed);
     if (removed || error === replaced) throw error;
-    throw new TemplateError(`${(error as Error).message} (${target} was replaced meanwhile, so nothing there was removed.)`);
+    throw new TemplateError(
+      `${(error as Error).message} (${target} was replaced meanwhile, so nothing there was removed.)`,
+    );
   }
   return target;
 }
 
-function* exportSteps(template: string, destination: string, options: { readonly sdkVersion: string }): Generator<void, ExportedStarter, void> {
+function* exportSteps(
+  template: string,
+  destination: string,
+  options: { readonly sdkVersion: string },
+): Generator<void, ExportedStarter, void> {
   readTemplateMetadata(template); // an unknown template fails before anything is written
   const files = templateFiles(template);
   const outputs = files.map((file): OutputFile => ({
     path: file,
     content: () => {
       const source = fs.readFileSync(path.join(template, file), 'utf8');
-      return file === 'package.json' ? `${JSON.stringify(stampSdkVersion(JSON.parse(source) as Record<string, unknown>, options.sdkVersion), null, 2)}\n` : stripMarkers(source);
+      return file === 'package.json'
+        ? `${JSON.stringify(stampSdkVersion(JSON.parse(source) as Record<string, unknown>, options.sdkVersion), null, 2)}\n`
+        : stripMarkers(source);
     },
   }));
   const directory = yield* createDirectorySteps(destination, outputs);
@@ -256,7 +319,11 @@ function* exportSteps(template: string, destination: string, options: { readonly
  * export fails part-way, the directory this call created is removed again; nothing that existed
  * before is touched, and a path that was replaced meanwhile is left exactly as it is.
  */
-export function exportTemplate(template: string, destination: string, options: { readonly sdkVersion: string }): ExportedStarter {
+export function exportTemplate(
+  template: string,
+  destination: string,
+  options: { readonly sdkVersion: string },
+): ExportedStarter {
   const steps = exportSteps(template, destination, options);
   for (;;) {
     const step = steps.next();
@@ -265,14 +332,20 @@ export function exportTemplate(template: string, destination: string, options: {
 }
 
 /** Resumes the event loop twice, which runs a pending signal callback in between. */
-const letSignalsRun = (): Promise<void> => new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+const letSignalsRun = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
 
 /** Runs the steps, handing control back to the event loop before each; an aborted `signal` is then seen before the next write or before the end is reported as done. */
-async function runInterruptibly<Result>(steps: Generator<void, Result, void>, signal: AbortSignal | undefined): Promise<Result> {
+async function runInterruptibly<Result>(
+  steps: Generator<void, Result, void>,
+  signal: AbortSignal | undefined,
+): Promise<Result> {
   let step = steps.next();
   while (!step.done) {
     await letSignalsRun();
-    step = signal?.aborted ? steps.throw(new ExportInterrupted(false)) : steps.next();
+    step = signal?.aborted
+      ? steps.throw(new ExportInterrupted(false))
+      : steps.next();
   }
   return step.value;
 }
@@ -286,9 +359,15 @@ async function runInterruptibly<Result>(steps: Generator<void, Result, void>, si
 export function exportTemplateInterruptibly(
   template: string,
   destination: string,
-  options: { readonly sdkVersion: string; readonly signal?: AbortSignal | undefined },
+  options: {
+    readonly sdkVersion: string;
+    readonly signal?: AbortSignal | undefined;
+  },
 ): Promise<ExportedStarter> {
-  return runInterruptibly(exportSteps(template, destination, options), options.signal);
+  return runInterruptibly(
+    exportSteps(template, destination, options),
+    options.signal,
+  );
 }
 
 /**
@@ -296,6 +375,13 @@ export function exportTemplateInterruptibly(
  * holding exactly `files`, never over or into anything that exists, removed again (only if it is
  * still the directory this call made) when a write fails or `signal` aborts. Returns the directory.
  */
-export function createDirectoryInterruptibly(destination: string, files: readonly OutputFile[], options: { readonly signal?: AbortSignal | undefined } = {}): Promise<string> {
-  return runInterruptibly(createDirectorySteps(destination, files), options.signal);
+export function createDirectoryInterruptibly(
+  destination: string,
+  files: readonly OutputFile[],
+  options: { readonly signal?: AbortSignal | undefined } = {},
+): Promise<string> {
+  return runInterruptibly(
+    createDirectorySteps(destination, files),
+    options.signal,
+  );
 }

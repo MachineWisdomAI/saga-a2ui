@@ -1,5 +1,9 @@
 import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { componentKind, type InstanceEvent, type OpenInstance } from '@saga-a2ui/core/actions';
+import {
+  componentKind,
+  type InstanceEvent,
+  type OpenInstance,
+} from '@saga-a2ui/core/actions';
 import { html, nothing } from 'lit';
 import { ActionButtonApi } from '@saga-a2ui/core/actions/action-button-schema';
 import { hostOf } from './mount-owner.js';
@@ -28,7 +32,9 @@ export const ActionButton = componentKind<ActionButtonEvents>('ActionButton');
  * Do not add another click listener to a rendered button as a shortcut: for an upstream Button it
  * would run in addition to the Button's own action.
  */
-export class ActionButtonElement extends A2uiLitElement<typeof ActionButtonApi> {
+export class ActionButtonElement extends A2uiLitElement<
+  typeof ActionButtonApi
+> {
   protected readonly api = ActionButtonApi;
   #instance: OpenInstance<ActionButtonEvents> | undefined;
 
@@ -74,7 +80,10 @@ export class ActionButtonElement extends A2uiLitElement<typeof ActionButtonApi> 
       events: ['activate'],
       isLive,
       // This instance's own scope, not this.context, which a same-tag reuse may already have replaced.
-      read: (dataPath) => (isLive() ? context.dataContext.resolveDynamicValue<unknown>({ path: dataPath }) : undefined),
+      read: (dataPath) =>
+        isLive()
+          ? context.dataContext.resolveDynamicValue<unknown>({ path: dataPath })
+          : undefined,
       // The runtime holds this only while an invocation is not settled. `DataModel.subscribe` calls
       // back synchronously inside `set` and also for an ancestor or descendant of the scope's path;
       // the microtask lets the whole change finish before the runtime reads the application's
@@ -82,7 +91,9 @@ export class ActionButtonElement extends A2uiLitElement<typeof ActionButtonApi> 
       // A subject that reads state outside the data model gets no wake-up here, only the runtime's
       // own checkpoints.
       watchScope: (revalidate) => {
-        const subscription = surface.dataModel.subscribe(path, () => queueMicrotask(revalidate));
+        const subscription = surface.dataModel.subscribe(path, () =>
+          queueMicrotask(revalidate),
+        );
         return () => subscription.unsubscribe();
       },
     });
@@ -96,7 +107,11 @@ export class ActionButtonElement extends A2uiLitElement<typeof ActionButtonApi> 
   protected override render() {
     const props = this.controller?.props;
     if (!props) return nothing;
-    return html`<button type="button" ?disabled=${props.isValid === false} @click=${this.#onClick}>
+    return html`<button
+      type="button"
+      ?disabled=${props.isValid === false}
+      @click=${this.#onClick}
+    >
       ${props.child ? this.renderNode(props.child) : nothing}
     </button>`;
   }

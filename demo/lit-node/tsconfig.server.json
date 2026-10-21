@@ -9,5 +9,10 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server", "fixtures", "vite.host.config.ts", "vite.notes.config.ts"]
+  "include": [
+    "server",
+    "fixtures",
+    "vite.host.config.ts",
+    "vite.notes.config.ts"
+  ]
 }

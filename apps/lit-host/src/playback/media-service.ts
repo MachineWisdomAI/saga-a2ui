@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { calculateJwkThumbprint, EmbeddedJWK, jwtVerify } from 'jose';
-import { throwIfEnded, valueOrThrow, type BoundedScope } from '@saga-a2ui/mcp/server';
+import {
+  throwIfEnded,
+  valueOrThrow,
+  type BoundedScope,
+} from '@saga-a2ui/mcp/server';
 import { MEDIA_PROOF_TYP } from './media-proof.js';
 import { resolveRange } from './media-range.js';
 
@@ -54,7 +58,13 @@ export interface MediaRequest {
 export type MediaOutcome =
   | { readonly kind: 'delivered'; readonly media: ProtectedMedia }
   /** A supported byte range: `media.bytes` is exactly bytes `first`..`last` of a body of `total`. */
-  | { readonly kind: 'partial'; readonly media: ProtectedMedia; readonly first: number; readonly last: number; readonly total: number }
+  | {
+      readonly kind: 'partial';
+      readonly media: ProtectedMedia;
+      readonly first: number;
+      readonly last: number;
+      readonly total: number;
+    }
   /** An authorized caller asked for a range that cannot be served. It carries the length and no bytes. */
   | { readonly kind: 'unsatisfiable'; readonly total: number }
   | { readonly kind: 'refused' };
@@ -68,7 +78,11 @@ export type EntitlementDecision = 'entitled' | 'denied';
  * capability has not expired. A lookup that throws is a fault, not a revocation. `signal` aborts
  * when the lookup is abandoned; an answer that arrives after that changes nothing.
  */
-export type EntitlementLookup = (accountId: string, episodeId: string, signal: AbortSignal) => Promise<EntitlementDecision>;
+export type EntitlementLookup = (
+  accountId: string,
+  episodeId: string,
+  signal: AbortSignal,
+) => Promise<EntitlementDecision>;
 
 /**
  * The synthetic media service. It issues capabilities and decides every later acquisition.
@@ -111,18 +125,25 @@ const PROOF_MAX_AGE_SECONDS = 60;
 const PROOF_CLOCK_TOLERANCE_SECONDS = 5;
 const REFUSED: MediaOutcome = { kind: 'refused' };
 
-const sha256Base64Url = (value: string) => createHash('sha256').update(value).digest('base64url');
+const sha256Base64Url = (value: string) =>
+  createHash('sha256').update(value).digest('base64url');
 
 export function createMediaService(options: MediaServiceOptions): MediaService {
   const ttlSeconds = options.ttlSeconds ?? DEFAULT_TTL_SECONDS;
-  const nowSeconds = options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
+  const nowSeconds =
+    options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
   // Keyed by the capability's hash, so the table never holds the usable value itself.
-  const grants = new Map<string, CapabilityGrant & { readonly expiresAt: number }>();
+  const grants = new Map<
+    string,
+    CapabilityGrant & { readonly expiresAt: number }
+  >();
   const usedProofs = new Map<string, number>(); // jti -> when it can be forgotten
 
   function forgetExpired(now: number): void {
-    for (const [hash, grant] of grants) if (grant.expiresAt <= now) grants.delete(hash);
-    for (const [jti, forgetAt] of usedProofs) if (forgetAt <= now) usedProofs.delete(jti);
+    for (const [hash, grant] of grants)
+      if (grant.expiresAt <= now) grants.delete(hash);
+    for (const [jti, forgetAt] of usedProofs)
+      if (forgetAt <= now) usedProofs.delete(jti);
   }
 
   return {
@@ -139,32 +160,54 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       throwIfEnded(scope);
       const now = nowSeconds();
       forgetExpired(now);
-      if (request.capability === undefined || request.proof === undefined) return REFUSED;
+      if (request.capability === undefined || request.proof === undefined)
+        return REFUSED;
       const capabilityHash = sha256Base64Url(request.capability);
       const grant = grants.get(capabilityHash);
       if (!grant || grant.episodeId !== request.episodeId) return REFUSED;
 
       try {
-        const { payload, protectedHeader } = await jwtVerify(request.proof, EmbeddedJWK, {
-          algorithms: ['ES256'],
-          typ: MEDIA_PROOF_TYP,
-          requiredClaims: ['iat', 'jti'],
-          maxTokenAge: PROOF_MAX_AGE_SECONDS,
-          clockTolerance: PROOF_CLOCK_TOLERANCE_SECONDS,
-          currentDate: new Date(now * 1000),
-        });
-        if (payload.htm !== request.method || payload.htu !== request.url || payload.cap !== capabilityHash) return REFUSED;
-        if (!protectedHeader.jwk || (await calculateJwkThumbprint(protectedHeader.jwk)) !== grant.recipientThumbprint) return REFUSED;
+        const { payload, protectedHeader } = await jwtVerify(
+          request.proof,
+          EmbeddedJWK,
+          {
+            algorithms: ['ES256'],
+            typ: MEDIA_PROOF_TYP,
+            requiredClaims: ['iat', 'jti'],
+            maxTokenAge: PROOF_MAX_AGE_SECONDS,
+            clockTolerance: PROOF_CLOCK_TOLERANCE_SECONDS,
+            currentDate: new Date(now * 1000),
+          },
+        );
+        if (
+          payload.htm !== request.method ||
+          payload.htu !== request.url ||
+          payload.cap !== capabilityHash
+        )
+          return REFUSED;
+        if (
+          !protectedHeader.jwk ||
+          (await calculateJwkThumbprint(protectedHeader.jwk)) !==
+            grant.recipientThumbprint
+        )
+          return REFUSED;
         const { jti } = payload;
         if (jti === undefined || usedProofs.has(jti)) return REFUSED;
-        usedProofs.set(jti, now + PROOF_MAX_AGE_SECONDS + PROOF_CLOCK_TOLERANCE_SECONDS);
+        usedProofs.set(
+          jti,
+          now + PROOF_MAX_AGE_SECONDS + PROOF_CLOCK_TOLERANCE_SECONDS,
+        );
       } catch {
         return REFUSED;
       }
 
       // The lookup and the storage read are bounded stages of this acquisition. An answer that loses
       // the race is dropped by `run`, so it cannot reach the grant table or start the read below.
-      const decision = valueOrThrow(await scope.run('authorization', (stage) => options.entitlement(grant.accountId, grant.episodeId, stage.signal)));
+      const decision = valueOrThrow(
+        await scope.run('authorization', (stage) =>
+          options.entitlement(grant.accountId, grant.episodeId, stage.signal),
+        ),
+      );
       throwIfEnded(scope);
       if (decision !== 'entitled') {
         // A denial is final for this capability: access granted again later needs a new Play. A
@@ -175,13 +218,27 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
         return REFUSED;
       }
 
-      const media = valueOrThrow(await scope.run('storage', (stage) => options.store.read(grant.episodeId, stage.signal)));
+      const media = valueOrThrow(
+        await scope.run('storage', (stage) =>
+          options.store.read(grant.episodeId, stage.signal),
+        ),
+      );
       throwIfEnded(scope);
       const range = resolveRange(request.range, media.bytes.length);
       if (range.kind === 'whole') return { kind: 'delivered', media };
-      if (range.kind === 'unsatisfiable') return { kind: 'unsatisfiable', total: media.bytes.length };
-      const slice = { contentType: media.contentType, bytes: media.bytes.subarray(range.first, range.last + 1) };
-      return { kind: 'partial', media: slice, first: range.first, last: range.last, total: media.bytes.length };
+      if (range.kind === 'unsatisfiable')
+        return { kind: 'unsatisfiable', total: media.bytes.length };
+      const slice = {
+        contentType: media.contentType,
+        bytes: media.bytes.subarray(range.first, range.last + 1),
+      };
+      return {
+        kind: 'partial',
+        media: slice,
+        first: range.first,
+        last: range.last,
+        total: media.bytes.length,
+      };
     },
   };
 }

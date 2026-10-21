@@ -16,7 +16,11 @@ export default defineConfig<PlayerOptions>({
   use: { baseURL: 'http://127.0.0.1:4173' },
   projects: [
     { name: 'lit', use: { playerRenderer: 'lit' } },
-    { name: 'react', testMatch: '**/playback-view.spec.ts', use: { playerRenderer: 'react' } },
+    {
+      name: 'react',
+      testMatch: '**/playback-view.spec.ts',
+      use: { playerRenderer: 'react' },
+    },
   ],
   webServer: {
     command: `npm run preview -- --outDir ${builtDirectory()}`,

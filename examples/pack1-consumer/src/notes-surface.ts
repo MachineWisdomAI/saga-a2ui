@@ -19,39 +19,108 @@ export interface BodyEntry {
   readonly [property: string]: unknown;
 }
 
-export const ownBody: BodyEntry = { id: 'note-body', component: 'Line', kind: 'body', text: { path: 'body' } };
+export const ownBody: BodyEntry = {
+  id: 'note-body',
+  component: 'Line',
+  kind: 'body',
+  text: { path: 'body' },
+};
 
 export function notesSurface(body: BodyEntry): unknown[] {
   return [
-    { version: 'v0.9', createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID } },
+    {
+      version: 'v0.9',
+      createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID },
+    },
     {
       version: 'v0.9',
       updateComponents: {
         surfaceId: SURFACE_ID,
         components: [
-          { id: 'root', component: 'List', children: { componentId: 'note-row', path: '/notes' } },
-          { id: 'note-row', component: 'Column', children: ['note-title', 'note-body', 'note-actions', 'note-status'] },
-          { id: 'note-title', component: 'Line', kind: 'title', text: { path: 'title' } },
+          {
+            id: 'root',
+            component: 'List',
+            children: { componentId: 'note-row', path: '/notes' },
+          },
+          {
+            id: 'note-row',
+            component: 'Column',
+            children: [
+              'note-title',
+              'note-body',
+              'note-actions',
+              'note-status',
+            ],
+          },
+          {
+            id: 'note-title',
+            component: 'Line',
+            kind: 'title',
+            text: { path: 'title' },
+          },
           body,
-          { id: 'note-actions', component: 'Row', children: ['row-read', 'row-archive'] },
-          { id: 'row-read', component: 'ActionButton', child: 'row-read-label' },
-          { id: 'row-read-label', component: 'Line', kind: 'body', text: 'Mark read' },
-          { id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
-          { id: 'row-archive-label', component: 'Line', kind: 'body', text: 'Archive' },
-          { id: 'note-status', component: 'Line', kind: 'status', text: { path: 'status' } },
+          {
+            id: 'note-actions',
+            component: 'Row',
+            children: ['row-read', 'row-archive'],
+          },
+          {
+            id: 'row-read',
+            component: 'ActionButton',
+            child: 'row-read-label',
+          },
+          {
+            id: 'row-read-label',
+            component: 'Line',
+            kind: 'body',
+            text: 'Mark read',
+          },
+          {
+            id: 'row-archive',
+            component: 'ActionButton',
+            child: 'row-archive-label',
+          },
+          {
+            id: 'row-archive-label',
+            component: 'Line',
+            kind: 'body',
+            text: 'Archive',
+          },
+          {
+            id: 'note-status',
+            component: 'Line',
+            kind: 'status',
+            text: { path: 'status' },
+          },
         ],
       },
     },
-    { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, value: { notes: [] } } },
+    {
+      version: 'v0.9',
+      updateDataModel: { surfaceId: SURFACE_ID, value: { notes: [] } },
+    },
   ];
 }
 
 /** Replaces the whole list. Every row starts with an empty status line. */
 export const notesData = (notes: readonly PublicNote[]): unknown[] => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, value: { notes: notes.map((note) => ({ ...note, status: '' })) } } },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId: SURFACE_ID,
+      value: { notes: notes.map((note) => ({ ...note, status: '' })) },
+    },
+  },
 ];
 
 /** Writes one row's status line, in the data scope of the instance that was pressed. */
 export const statusAt = (dataPath: string, text: string): unknown[] => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, path: `${dataPath}/status`, value: text } },
+  {
+    version: 'v0.9',
+    updateDataModel: {
+      surfaceId: SURFACE_ID,
+      path: `${dataPath}/status`,
+      value: text,
+    },
+  },
 ];

@@ -23,7 +23,9 @@ export interface HostLinks {
 }
 
 /** For a page that has no host at all: every link stays inert and nothing navigates. */
-export const NO_HOST_LINKS: HostLinks = Object.freeze({ open: () => Promise.resolve<LinkOpenOutcome>('unavailable') });
+export const NO_HOST_LINKS: HostLinks = Object.freeze({
+  open: () => Promise.resolve<LinkOpenOutcome>('unavailable'),
+});
 
 const LINK_OUTCOME_MESSAGES: Record<LinkOpenOutcome, string> = {
   opened: '',
@@ -36,6 +38,11 @@ const LINK_OUTCOME_MESSAGES: Record<LinkOpenOutcome, string> = {
  * The text a reader sees for a link request's outcome. A link that was not opened stays readable:
  * its destination follows as plain text.
  */
-export function describeLinkOutcome(outcome: LinkOpenOutcome, url: string): string {
-  return outcome === 'opened' ? LINK_OUTCOME_MESSAGES.opened : `${LINK_OUTCOME_MESSAGES[outcome]} Destination: ${url}`;
+export function describeLinkOutcome(
+  outcome: LinkOpenOutcome,
+  url: string,
+): string {
+  return outcome === 'opened'
+    ? LINK_OUTCOME_MESSAGES.opened
+    : `${LINK_OUTCOME_MESSAGES[outcome]} Destination: ${url}`;
 }

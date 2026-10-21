@@ -1,11 +1,25 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport, type CallToolRequest, type CallToolResult } from '@modelcontextprotocol/client';
+import {
+  InMemoryTransport,
+  type CallToolRequest,
+  type CallToolResult,
+} from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PublicEpisode } from '../mcp/episode.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
-import { MEDIA_BYTES, startPlaybackHarness, startRecorder, type PlaybackHarness } from './playback-fixture.js';
-import { createInstanceHost, type InstanceHost, type Limits, type OpenInstance } from '@saga-a2ui/core/actions';
+import {
+  MEDIA_BYTES,
+  startPlaybackHarness,
+  startRecorder,
+  type PlaybackHarness,
+} from './playback-fixture.js';
+import {
+  createInstanceHost,
+  type InstanceHost,
+  type Limits,
+  type OpenInstance,
+} from '@saga-a2ui/core/actions';
 import {
   connectPlaybackView,
   PLAY_CONTROL_ID,
@@ -20,8 +34,16 @@ import {
 // listener over HTTP with a real bearer credential. The view's media request is also real HTTP.
 // Only the audio device is a double.
 
-const EP1: PublicEpisode = { episodeId: 'ep-1', title: 'The protected episode', description: 'A public description.' };
-const EP2: PublicEpisode = { episodeId: 'ep-2', title: 'Another protected episode', description: 'Also public.' };
+const EP1: PublicEpisode = {
+  episodeId: 'ep-1',
+  title: 'The protected episode',
+  description: 'A public description.',
+};
+const EP2: PublicEpisode = {
+  episodeId: 'ep-2',
+  title: 'Another protected episode',
+  description: 'Also public.',
+};
 
 interface FakePlayer extends AudioPlayer {
   readonly started: ArrayBuffer[];
@@ -31,7 +53,9 @@ interface FakePlayer extends AudioPlayer {
    * a player that does not reject a pending start when `stop()` runs, which the AudioPlayer contract
    * forbids; the real player's own ordering is checked separately in the browser.
    */
-  holdNextStart(options?: { survivesStop?: boolean }): { release(outcome?: 'started' | 'blocked'): void };
+  holdNextStart(options?: { survivesStop?: boolean }): {
+    release(outcome?: 'started' | 'blocked'): void;
+  };
   failNextStart(): void;
   outcome: 'started' | 'blocked';
   /** What the next `resume` reports once the audio clock has (or has not) advanced. */
@@ -45,9 +69,19 @@ interface FakePlayer extends AudioPlayer {
 
 function fakePlayer(): FakePlayer {
   let ended: (() => void) | undefined;
-  let held: { resolve(outcome: 'started' | 'blocked'): void; reject(error: Error): void } | undefined;
+  let held:
+    | {
+        resolve(outcome: 'started' | 'blocked'): void;
+        reject(error: Error): void;
+      }
+    | undefined;
   let heldSurvivesStop = false;
-  let heldResume: { resolve(outcome: 'resumed' | 'blocked'): void; reject(error: Error): void } | undefined;
+  let heldResume:
+    | {
+        resolve(outcome: 'resumed' | 'blocked'): void;
+        reject(error: Error): void;
+      }
+    | undefined;
   let hold = false;
   let holdSurvivesStop = false;
   let fail = false;
@@ -66,7 +100,10 @@ function fakePlayer(): FakePlayer {
     },
     start(bytes) {
       player.calls.push('start');
-      if (!live) return Promise.reject(new Error('no prepared context: stop() ran after prepare()'));
+      if (!live)
+        return Promise.reject(
+          new Error('no prepared context: stop() ran after prepare()'),
+        );
       if (fail) {
         fail = false;
         return Promise.reject(new Error('undecodable'));
@@ -142,7 +179,10 @@ interface ControlPresses {
 }
 
 /** The rendered Play control as the test sees it: an instance on the host, with its own liveness. */
-function renderControl(host: InstanceHost): { readonly instance: OpenInstance<PlayControlEvents>; destroy(): void } {
+function renderControl(host: InstanceHost): {
+  readonly instance: OpenInstance<PlayControlEvents>;
+  destroy(): void;
+} {
   let live = true;
   const instance = host.open<PlayControlEvents>({
     kind: PlayControl,
@@ -187,31 +227,41 @@ interface Rig {
   deliver(episode: PublicEpisode): Promise<void>;
 }
 
-const cleanup: { app: App; bridge: AppBridge; harness: PlaybackHarness; actions: InstanceHost }[] = [];
+const cleanup: {
+  app: App;
+  bridge: AppBridge;
+  harness: PlaybackHarness;
+  actions: InstanceHost;
+}[] = [];
 const setupErrors: unknown[] = [];
 
-async function rig(options: {
-  token?: string;
-  serverTools?: boolean;
-  dropMeta?: boolean;
-  entitlements?: Record<string, readonly string[]>;
-  /** Runs at the host after the listener granted a Play and before the view sees the grant. */
-  afterGrant?: (harness: PlaybackHarness) => void;
-  /** Lets a test change the view projection the host hands over, as a buggy or hostile path would. */
-  tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
-  /** Replaces the whole Play answer the host resolves with, after the server handled the call. */
-  rewriteAnswer?: (result: CallToolResult) => CallToolResult;
-  /** The shared runtime's limits for every action on the host (work deadline, hook budget). Defaults to the SDK's. */
-  limits?: Limits;
-  /** Makes presenting a state fail, as a presenter that throws would. */
-  showThrowsFor?: PlaybackViewState['kind'];
-  /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
-  harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
-  /** Joins a description card's consent scope to the view, recording its calls beside every presented state. */
-  withContentConsent?: boolean;
-} = {}): Promise<Rig> {
+async function rig(
+  options: {
+    token?: string;
+    serverTools?: boolean;
+    dropMeta?: boolean;
+    entitlements?: Record<string, readonly string[]>;
+    /** Runs at the host after the listener granted a Play and before the view sees the grant. */
+    afterGrant?: (harness: PlaybackHarness) => void;
+    /** Lets a test change the view projection the host hands over, as a buggy or hostile path would. */
+    tamperGrant?: (grant: Record<string, unknown>) => Record<string, unknown>;
+    /** Replaces the whole Play answer the host resolves with, after the server handled the call. */
+    rewriteAnswer?: (result: CallToolResult) => CallToolResult;
+    /** The shared runtime's limits for every action on the host (work deadline, hook budget). Defaults to the SDK's. */
+    limits?: Limits;
+    /** Makes presenting a state fail, as a presenter that throws would. */
+    showThrowsFor?: PlaybackViewState['kind'];
+    /** Lets a test make the media service's storage slow without stalling the listener's own limits. */
+    harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
+    /** Joins a description card's consent scope to the view, recording its calls beside every presented state. */
+    withContentConsent?: boolean;
+  } = {},
+): Promise<Rig> {
   const harness = await startPlaybackHarness(
-    options.entitlements ?? { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: [] },
+    options.entitlements ?? {
+      [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'],
+      [DEV_ACCOUNTS.bob]: [],
+    },
     options.harnessOptions,
   );
   const states: PlaybackViewState[] = [];
@@ -220,8 +270,16 @@ async function rig(options: {
   let token: string | undefined = options.token ?? DEV_TOKENS.alice;
   let gate: Promise<void> | undefined;
   const player = fakePlayer();
-  const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, options.serverTools === false ? {} : { serverTools: {} });
+  const app = new App(
+    { name: 'test-view', version: '0.0.0' },
+    {},
+    { autoResize: false },
+  );
+  const bridge = new AppBridge(
+    null,
+    { name: 'test-host', version: '0.0.0' },
+    options.serverTools === false ? {} : { serverTools: {} },
+  );
   bridge.oncalltool = async (params, extra) => {
     forwarded.push(params);
     hostSignals.push(extra?.mcpReq?.signal);
@@ -230,7 +288,9 @@ async function rig(options: {
       gate = undefined;
       await waiting;
     }
-    const sent = options.dropMeta ? { name: params.name, arguments: params.arguments } : params;
+    const sent = options.dropMeta
+      ? { name: params.name, arguments: params.arguments }
+      : params;
     const response = await fetch(harness.listener.playbackUrl ?? '', {
       method: 'POST',
       headers: {
@@ -238,17 +298,30 @@ async function rig(options: {
         accept: 'application/json, text/event-stream',
         ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
       },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: sent }),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: sent,
+      }),
     });
-    if (response.status === 401 || response.status === 403) throw new Error(`listener refused (${response.status})`);
-    const result = ((await response.json()) as { result: CallToolResult }).result;
+    if (response.status === 401 || response.status === 403)
+      throw new Error(`listener refused (${response.status})`);
+    const result = ((await response.json()) as { result: CallToolResult })
+      .result;
     // The server really handled the call (and may have issued a capability); only the answer changes.
-    if (params.name === 'play_episode' && options.rewriteAnswer) return options.rewriteAnswer(result);
+    if (params.name === 'play_episode' && options.rewriteAnswer)
+      return options.rewriteAnswer(result);
     const grant = result._meta?.['saga-a2ui/playback'];
-    if (params.name !== 'play_episode' || result.isError || !grant) return result;
+    if (params.name !== 'play_episode' || result.isError || !grant)
+      return result;
     options.afterGrant?.(harness);
-    const shown = options.tamperGrant?.(grant as Record<string, unknown>) ?? grant;
-    return { ...result, _meta: { ...result._meta, 'saga-a2ui/playback': shown } };
+    const shown =
+      options.tamperGrant?.(grant as Record<string, unknown>) ?? grant;
+    return {
+      ...result,
+      _meta: { ...result._meta, 'saga-a2ui/playback': shown },
+    };
   };
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
@@ -260,16 +333,26 @@ async function rig(options: {
     show: (state) => {
       states.push(state);
       consentLog.push(`show:${state.kind}`);
-      if (state.kind === options.showThrowsFor) throw new Error('the presenter failed');
+      if (state.kind === options.showThrowsFor)
+        throw new Error('the presenter failed');
     },
     ...(options.withContentConsent
-      ? { contentConsent: { revokeAll: () => void consentLog.push('revokeAll'), retire: () => void consentLog.push('retire') } }
+      ? {
+          contentConsent: {
+            revokeAll: () => void consentLog.push('revokeAll'),
+            retire: () => void consentLog.push('retire'),
+          },
+        }
       : {}),
   });
-  const actions = createInstanceHost({ onSetupError: (error) => void setupErrors.push(error), ...(options.limits ? { limits: options.limits } : {}) });
+  const actions = createInstanceHost({
+    onSetupError: (error) => void setupErrors.push(error),
+    ...(options.limits ? { limits: options.limits } : {}),
+  });
   actions.register(connection.attach);
   const { instance: control } = renderControl(actions);
-  const press = (action: 'play' | 'pause' | 'resume') => void control.activate(action, new Event('click'));
+  const press = (action: 'play' | 'pause' | 'resume') =>
+    void control.activate(action, new Event('click'));
   const view: ControlPresses = {
     play: () => press('play'),
     pause: () => press('pause'),
@@ -300,7 +383,9 @@ async function rig(options: {
     // The host mounts the view by running the model-visible opener, then delivers its real result.
     select: async (episode) => {
       await deliver(episode);
-      await expect.poll(() => states.at(-1)).toMatchObject({ episode: { episodeId: episode.episodeId } });
+      await expect
+        .poll(() => states.at(-1))
+        .toMatchObject({ episode: { episodeId: episode.episodeId } });
     },
   };
 
@@ -317,10 +402,15 @@ async function rig(options: {
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/call',
-        params: { name: 'get_playable_episode', arguments: { episodeId: episode.episodeId } },
+        params: {
+          name: 'get_playable_episode',
+          arguments: { episodeId: episode.episodeId },
+        },
       }),
     });
-    await bridge.sendToolResult(((await response.json()) as { result: CallToolResult }).result);
+    await bridge.sendToolResult(
+      ((await response.json()) as { result: CallToolResult }).result,
+    );
   }
 }
 
@@ -347,7 +437,11 @@ describe('Play from the view for the entitled listener', () => {
 
     decoding.release('started');
     await expect.poll(() => r.last()?.kind).toBe('playing');
-    expect(r.states.map((state) => state.kind)).toEqual(['ready', 'pending', 'playing']);
+    expect(r.states.map((state) => state.kind)).toEqual([
+      'ready',
+      'pending',
+      'playing',
+    ]);
   });
 
   it('plays the protected bytes fetched with the capability and a proof from the view’s own key', async () => {
@@ -357,11 +451,15 @@ describe('Play from the view for the entitled listener', () => {
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
 
-    expect([...new Uint8Array(r.player.started[0] ?? new ArrayBuffer(0))]).toEqual([...MEDIA_BYTES]);
+    expect([
+      ...new Uint8Array(r.player.started[0] ?? new ArrayBuffer(0)),
+    ]).toEqual([...MEDIA_BYTES]);
     expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
     // The call carried only the episode id as an argument; the key travelled as call metadata.
     expect(r.forwarded[0]?.arguments).toEqual({ episodeId: 'ep-1' });
-    expect(Object.keys(r.forwarded[0]?._meta ?? {})).toContain('saga-a2ui/recipient-key');
+    expect(Object.keys(r.forwarded[0]?._meta ?? {})).toContain(
+      'saga-a2ui/recipient-key',
+    );
   });
 });
 
@@ -388,7 +486,10 @@ describe('Play from the view when access is refused', () => {
 
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('unavailable');
-    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown' });
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      requestOutcome: 'unknown',
+    });
     expect(kinds(r)).not.toContain('denied');
     expect(kinds(r)).not.toContain('sign-in-required');
     expect(r.harness.playback.entitlementChecks).toEqual([]);
@@ -432,7 +533,9 @@ describe('Play request discipline', () => {
     await new Promise((resolve) => setTimeout(resolve, 80)); // a restart would need this long to surface
 
     expect(kinds(r)).toEqual(['ready', 'pending', 'playing']);
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(1);
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(1);
     expect(r.player.calls.filter((call) => call === 'start')).toHaveLength(1);
     // A suppressed press must not touch the player at all: not even the user-gesture unlock.
     expect(r.player.calls.filter((call) => call === 'prepare')).toHaveLength(1);
@@ -444,13 +547,20 @@ describe('Play request discipline', () => {
     const inFlight = r.holdNextToolCall();
 
     r.view.play();
-    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+    await expect
+      .poll(
+        () => r.forwarded.filter((call) => call.name === 'play_episode').length,
+      )
+      .toBe(1);
     await r.select(EP2); // the new selection retires the pending Play
     inFlight.release();
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     expect(r.harness.playback.mediaReads).toEqual([]);
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(kinds(r)).not.toContain('playing');
   });
 
@@ -460,12 +570,19 @@ describe('Play request discipline', () => {
     const inFlight = r.holdNextToolCall();
 
     r.view.play();
-    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+    await expect
+      .poll(
+        () => r.forwarded.filter((call) => call.name === 'play_episode').length,
+      )
+      .toBe(1);
     await r.select(EP2);
     inFlight.release(); // the server now answers the retired request: denied
     await new Promise((resolve) => setTimeout(resolve, 80));
 
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(kinds(r)).not.toContain('denied');
   });
 
@@ -494,14 +611,21 @@ describe('Play request discipline', () => {
   });
 
   it('rejects a grant minted for a different sign-in than the one that opened the view, fetching nothing', async () => {
-    const r = await rig({ entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1'], [DEV_ACCOUNTS.bob]: ['ep-1'] } });
+    const r = await rig({
+      entitlements: {
+        [DEV_ACCOUNTS.alice]: ['ep-1'],
+        [DEV_ACCOUNTS.bob]: ['ep-1'],
+      },
+    });
     await r.select(EP1); // opened by Alice
     r.useToken(DEV_TOKENS.bob); // the host's credential changes before the press; Bob is entitled, so the server grants
 
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
 
-    expect(r.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' }]);
+    expect(r.harness.playback.entitlementChecks).toEqual([
+      { accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' },
+    ]);
     expect(r.harness.playback.mediaReads).toEqual([]);
     expect(kinds(r)).not.toContain('playing');
   });
@@ -533,11 +657,17 @@ describe('Play request discipline', () => {
     await expect.poll(() => r.player.calls.includes('start')).toBe(true);
 
     await r.select(EP2);
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     decoding.release('started');
     await new Promise((resolve) => setTimeout(resolve, 60));
 
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(kinds(r)).not.toContain('playing');
   });
 
@@ -597,7 +727,9 @@ describe('Play outcomes after the server said yes', () => {
     // The service is asked for the bytes after its clock has passed the capability's expiry.
     const real = globalThis.fetch;
     globalThis.fetch = (async (input, init) =>
-      String(input).includes('/playback/media/') ? new Response('{"error":"forbidden"}', { status: 403 }) : real(input, init)) as typeof fetch;
+      String(input).includes('/playback/media/')
+        ? new Response('{"error":"forbidden"}', { status: 403 })
+        : real(input, init)) as typeof fetch;
     try {
       r.view.play();
       await expect.poll(() => r.last()?.kind).toBe('expired');
@@ -654,7 +786,13 @@ describe('Pause and Resume report what the audio actually did', () => {
 
     r.view.resume();
     await expect.poll(() => r.last()?.kind).toBe('resume-blocked');
-    expect(kinds(r)).toEqual(['ready', 'pending', 'playing', 'paused', 'resume-blocked']);
+    expect(kinds(r)).toEqual([
+      'ready',
+      'pending',
+      'playing',
+      'paused',
+      'resume-blocked',
+    ]);
     // One Play check and one acquisition check for the single Play; recovery adds none.
     expect(r.harness.playback.entitlementChecks).toHaveLength(2);
 
@@ -685,7 +823,10 @@ describe('Pause and Resume report what the audio actually did', () => {
     settling.release('resumed');
     await new Promise((resolve) => setTimeout(resolve, 40));
 
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(r.states.slice(afterSelection)).toEqual([]); // the retired resume presented nothing at all
   });
 
@@ -722,7 +863,10 @@ describe('Pause and Resume report what the audio actually did', () => {
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
     let settle!: () => void;
-    r.player.pause = () => (r.player.calls.push('pause'), new Promise<void>((resolve) => void (settle = resolve)));
+    r.player.pause = () => (
+      r.player.calls.push('pause'),
+      new Promise<void>((resolve) => void (settle = resolve))
+    );
 
     r.view.pause();
     r.view.pause();
@@ -739,7 +883,8 @@ describe('Pause and Resume report what the audio actually did', () => {
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
     let settle!: () => void;
-    r.player.pause = () => new Promise<void>((resolve) => void (settle = resolve));
+    r.player.pause = () =>
+      new Promise<void>((resolve) => void (settle = resolve));
 
     r.view.pause();
     r.player.endPlayback();
@@ -779,7 +924,10 @@ describe('Play when the media ends before the start is confirmed', () => {
     await expect.poll(() => r.last()?.kind).toBe('playing');
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'playing',
+      episode: { episodeId: 'ep-2' },
+    });
   });
 
   it('keeps a retired request from restoring playing after the end, once a new selection cleared it', async () => {
@@ -794,7 +942,10 @@ describe('Play when the media ends before the start is confirmed', () => {
     decoding.release('started');
     await new Promise((resolve) => setTimeout(resolve, 40));
 
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(kinds(r)).not.toContain('playing');
     expect(kinds(r)).not.toContain('ended');
   });
@@ -811,7 +962,9 @@ describe('Play when the browser cannot play audio', () => {
     expect(() => r.view.play()).not.toThrow(); // the press happens inside a browser event handler
     await expect.poll(() => r.last()?.kind).toBe('unsupported');
 
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual(
+      [],
+    );
     expect(r.harness.playback.entitlementChecks).toEqual([]);
     expect(r.harness.playback.mediaReads).toEqual([]);
   });
@@ -824,10 +977,21 @@ describe('Play when the media origin redirects', () => {
   it('does not follow a redirect to another destination: the capability and proof reach nobody else', async () => {
     const elsewhere = await startRecorder();
     const redirecting = await startRecorder((req, res) => {
-      res.writeHead(302, { location: `${elsewhere.origin}${req.url}`, 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }).end();
+      res
+        .writeHead(302, {
+          location: `${elsewhere.origin}${req.url}`,
+          'access-control-allow-origin': '*',
+          'access-control-allow-headers': '*',
+        })
+        .end();
     });
     try {
-      const r = await rig({ tamperGrant: (grant) => ({ ...grant, mediaUrl: `${redirecting.origin}/playback/media/ep-1` }) });
+      const r = await rig({
+        tamperGrant: (grant) => ({
+          ...grant,
+          mediaUrl: `${redirecting.origin}/playback/media/ep-1`,
+        }),
+      });
       await r.select(EP1);
 
       r.view.play();
@@ -844,10 +1008,15 @@ describe('Play when the media origin redirects', () => {
 });
 
 /** Records every URL the view fetches while `run` executes, so a test can show where requests went. */
-async function fetchedUrls<T>(run: () => Promise<T>): Promise<{ readonly result: T; readonly urls: string[] }> {
+async function fetchedUrls<T>(
+  run: () => Promise<T>,
+): Promise<{ readonly result: T; readonly urls: string[] }> {
   const real = globalThis.fetch;
   const urls: string[] = [];
-  globalThis.fetch = ((input, init) => (urls.push(String(input instanceof Request ? input.url : input)), real(input, init))) as typeof fetch;
+  globalThis.fetch = ((input, init) => (
+    urls.push(String(input instanceof Request ? input.url : input)),
+    real(input, init)
+  )) as typeof fetch;
   try {
     return { result: await run(), urls };
   } finally {
@@ -855,12 +1024,15 @@ async function fetchedUrls<T>(run: () => Promise<T>): Promise<{ readonly result:
   }
 }
 
-const mediaFetches = (urls: readonly string[]) => urls.filter((url) => url.includes('/playback/media/'));
+const mediaFetches = (urls: readonly string[]) =>
+  urls.filter((url) => url.includes('/playback/media/'));
 
 describe('Recovery after access ends between the grant and the media fetch', () => {
   it('stops, clears the source and offers a deliberate retry; the retry re-checks entitlement and shows denial when revoked', async () => {
     // The subscription lapses after Play was granted but before the bytes were requested.
-    const r = await rig({ afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []) });
+    const r = await rig({
+      afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []),
+    });
     await r.select(EP1);
 
     r.view.play();
@@ -872,7 +1044,9 @@ describe('Recovery after access ends between the grant and the media fetch', () 
     // Retry is a new Play with fresh checks: this time the entitlement check itself says no.
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('denied');
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(2);
     expect(r.player.started).toHaveLength(0);
     expect(r.harness.playback.mediaReads).toEqual([]);
   });
@@ -896,12 +1070,20 @@ describe('Recovery after access ends between the grant and the media fetch', () 
 
     const grants = r.forwarded.filter((call) => call.name === 'play_episode');
     expect(grants).toHaveLength(2); // two separate Play calls, each with the same business input
-    expect(grants.every((call) => JSON.stringify(call.arguments) === JSON.stringify({ episodeId: 'ep-1' }))).toBe(true);
+    expect(
+      grants.every(
+        (call) =>
+          JSON.stringify(call.arguments) ===
+          JSON.stringify({ episodeId: 'ep-1' }),
+      ),
+    ).toBe(true);
     expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
   });
 
   it('does not retry on its own: after expiry no further Play or media request is made until the user presses', async () => {
-    const r = await rig({ afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []) });
+    const r = await rig({
+      afterGrant: (h) => h.playback.setEntitled(DEV_ACCOUNTS.alice, []),
+    });
     await r.select(EP1);
     const { urls } = await fetchedUrls(async () => {
       r.view.play();
@@ -910,7 +1092,9 @@ describe('Recovery after access ends between the grant and the media fetch', () 
     });
 
     expect(mediaFetches(urls)).toHaveLength(1);
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(1);
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(1);
     expect(r.harness.playback.entitlementChecks).toHaveLength(2); // one for Play, one for the single acquisition
   });
 });
@@ -936,10 +1120,13 @@ describe('Recovery when the media service is unavailable', () => {
     });
 
     const allowed = new URL(r.harness.listener.playbackUrl ?? '').origin;
-    for (const url of [...first.urls, ...second.urls]) expect(new URL(url).origin).toBe(allowed); // no public mp3 or chat URL
+    for (const url of [...first.urls, ...second.urls])
+      expect(new URL(url).origin).toBe(allowed); // no public mp3 or chat URL
     expect(mediaFetches(first.urls)).toHaveLength(1);
     expect(mediaFetches(second.urls)).toHaveLength(1);
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(2);
   });
 });
 
@@ -1020,7 +1207,11 @@ describe('host teardown of the playback view', () => {
     await r.select(EP1);
     const inFlight = r.holdNextToolCall();
     r.view.play();
-    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+    await expect
+      .poll(
+        () => r.forwarded.filter((call) => call.name === 'play_episode').length,
+      )
+      .toBe(1);
     await r.bridge.teardownResource({});
     const shown = r.states.length;
 
@@ -1053,7 +1244,7 @@ describe('host teardown of the playback view', () => {
     await r.select(EP1);
     let closes = 0;
     const close = r.app.close.bind(r.app);
-    r.app.close = () => (closes += 1, close());
+    r.app.close = () => ((closes += 1), close());
     await r.bridge.teardownResource({});
     expect(closes).toBe(0);
 
@@ -1078,7 +1269,9 @@ describe('late player-start cleanup is scoped to its own acquisition', () => {
 
     await r.select(EP2); // retires the older Play
     r.view.play();
-    await expect.poll(() => r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    await expect
+      .poll(() => r.last())
+      .toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
     const shown = r.states.length;
     const calls = r.player.calls.length;
 
@@ -1087,7 +1280,10 @@ describe('late player-start cleanup is scoped to its own acquisition', () => {
 
     expect(r.player.calls.slice(calls)).toEqual([]);
     expect(r.states.length).toBe(shown);
-    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'playing',
+      episode: { episodeId: 'ep-2' },
+    });
   });
 
   it('still releases the player when a retired start settles and no newer Play exists', async () => {
@@ -1113,10 +1309,24 @@ describe('late player-start cleanup is scoped to its own acquisition', () => {
 // and Play, Pause and Resume cannot reactivate the view or issue protected work.
 describe('final loss of the pinned sign-in label', () => {
   const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
-  const BOTH = { entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'] } };
-  const playRequests = (r: Rig) => r.forwarded.filter((call) => call.name === 'play_episode').length;
-  const unreadable = (r: Rig) => r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
-  const garbled = (r: Rig) => r.bridge.sendToolResult({ content: [{ type: 'text', text: 'x' }], structuredContent: { surprise: true } });
+  const BOTH = {
+    entitlements: {
+      [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'],
+      [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'],
+    },
+  };
+  const playRequests = (r: Rig) =>
+    r.forwarded.filter((call) => call.name === 'play_episode').length;
+  const unreadable = (r: Rig) =>
+    r.bridge.sendToolResult({
+      isError: true,
+      content: [{ type: 'text', text: 'Episode unavailable.' }],
+    });
+  const garbled = (r: Rig) =>
+    r.bridge.sendToolResult({
+      content: [{ type: 'text', text: 'x' }],
+      structuredContent: { surprise: true },
+    });
 
   /** Presses every control and reports whether anything reached the host, the player or the media service. */
   async function pressEverything(r: Rig): Promise<void> {
@@ -1127,9 +1337,16 @@ describe('final loss of the pinned sign-in label', () => {
   }
 
   /** The state the view must hold for good once the label is lost, with nothing selected or playing. */
-  function expectRetired(r: Rig, before: { states: number; calls: number; playRequests: number }): void {
+  function expectRetired(
+    r: Rig,
+    before: { states: number; calls: number; playRequests: number },
+  ): void {
     expect(r.last()).toEqual({ kind: 'session-changed' });
-    expect(r.states.slice(before.states).every((state) => state.kind === 'session-changed')).toBe(true);
+    expect(
+      r.states
+        .slice(before.states)
+        .every((state) => state.kind === 'session-changed'),
+    ).toBe(true);
     expect(playRequests(r)).toBe(before.playRequests);
     expect(r.harness.playback.mediaReads).toEqual([]);
     expect(r.player.calls.slice(before.calls)).not.toContain('prepare');
@@ -1143,7 +1360,11 @@ describe('final loss of the pinned sign-in label', () => {
     r.useToken(DEV_TOKENS.bob);
     await r.deliver(EP1);
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
-    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const before = {
+      states: r.states.length,
+      calls: r.player.calls.length,
+      playRequests: playRequests(r),
+    };
 
     r.useToken(DEV_TOKENS.alice); // the old label is back
     await r.deliver(EP1);
@@ -1159,7 +1380,11 @@ describe('final loss of the pinned sign-in label', () => {
     r.useToken(DEV_TOKENS.bob);
     await r.deliver(EP1);
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
-    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const before = {
+      states: r.states.length,
+      calls: r.player.calls.length,
+      playRequests: playRequests(r),
+    };
 
     await r.deliver(EP2); // still Bob: the label that caused the loss
     await pressEverything(r);
@@ -1174,7 +1399,11 @@ describe('final loss of the pinned sign-in label', () => {
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
     expect(r.last()).toEqual({ kind: 'session-changed' }); // no selected episode is carried
-    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const before = {
+      states: r.states.length,
+      calls: r.player.calls.length,
+      playRequests: playRequests(r),
+    };
 
     await unreadable(r); // an unreadable opener cannot fall back to the old selection
     await garbled(r);
@@ -1183,7 +1412,9 @@ describe('final loss of the pinned sign-in label', () => {
     await pressEverything(r);
 
     expectRetired(r, before);
-    expect(r.harness.playback.entitlementChecks).toEqual([{ accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' }]);
+    expect(r.harness.playback.entitlementChecks).toEqual([
+      { accountId: DEV_ACCOUNTS.bob, episodeId: 'ep-1' },
+    ]);
   });
 
   it('stays retired through an unreadable opener, which neither reselects nor offers Try again', async () => {
@@ -1192,7 +1423,11 @@ describe('final loss of the pinned sign-in label', () => {
     r.useToken(DEV_TOKENS.bob);
     await r.deliver(EP1);
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
-    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const before = {
+      states: r.states.length,
+      calls: r.player.calls.length,
+      playRequests: playRequests(r),
+    };
 
     await unreadable(r);
     await garbled(r);
@@ -1210,7 +1445,11 @@ describe('final loss of the pinned sign-in label', () => {
     await r.deliver(EP1);
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
     expect(r.player.calls.at(-1)).toBe('stop');
-    const before = { states: r.states.length, calls: r.player.calls.length, playRequests: playRequests(r) };
+    const before = {
+      states: r.states.length,
+      calls: r.player.calls.length,
+      playRequests: playRequests(r),
+    };
     const reads = r.harness.playback.mediaReads.length;
 
     r.useToken(DEV_TOKENS.alice);
@@ -1219,7 +1458,11 @@ describe('final loss of the pinned sign-in label', () => {
     await pressEverything(r);
 
     expect(r.last()).toEqual({ kind: 'session-changed' });
-    expect(r.states.slice(before.states).every((state) => state.kind === 'session-changed')).toBe(true);
+    expect(
+      r.states
+        .slice(before.states)
+        .every((state) => state.kind === 'session-changed'),
+    ).toBe(true);
     expect(r.player.calls.slice(before.calls)).toEqual([]);
     expect(playRequests(r)).toBe(before.playRequests);
     expect(r.harness.playback.mediaReads.length).toBe(reads);
@@ -1291,12 +1534,18 @@ describe('final loss of the pinned sign-in label', () => {
     const r = await rig(BOTH);
     await r.select(EP1);
     await r.select(EP2);
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-2' },
+    });
 
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
 
-    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'playing',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(r.harness.playback.mediaReads).toEqual(['ep-2']);
   });
 
@@ -1321,11 +1570,23 @@ describe('final loss of the pinned sign-in label', () => {
 });
 
 describe('the bound on one Play attempt', () => {
-  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const settle = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
 
   it('takes its bound from the action host, which refuses an unusable one where it is supplied, before anything is requested', () => {
-    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '30000' as unknown as number]) {
-      expect(() => createInstanceHost({ onSetupError: () => undefined, limits: { deadlineMs: bad } })).toThrow(TypeError);
+    for (const bad of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '30000' as unknown as number,
+    ]) {
+      expect(() =>
+        createInstanceHost({
+          onSetupError: () => undefined,
+          limits: { deadlineMs: bad },
+        }),
+      ).toThrow(TypeError);
     }
   });
 
@@ -1350,9 +1611,14 @@ describe('the bound on one Play attempt', () => {
     const held = r.holdNextToolCall();
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
-    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown' });
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      requestOutcome: 'unknown',
+    });
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     await expect.poll(() => r.hostSignals[0]?.aborted).toBe(true);
     expect(r.player.calls).toContain('stop');
@@ -1368,11 +1634,18 @@ describe('the bound on one Play attempt', () => {
     const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
     // Key creation never finishes, so the Play request is never sent.
-    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
-    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' } });
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      episode: { episodeId: 'ep-1' },
+    });
     expect(r.last()).not.toHaveProperty('requestOutcome'); // nothing left the view, so a retry is honest
     expect(r.forwarded).toEqual([]);
 
@@ -1383,10 +1656,14 @@ describe('the bound on one Play attempt', () => {
   it('ends a stalled proof signature after the grant is known, with no media request', async () => {
     const r = await rig({ limits: { deadlineMs: 200 } });
     await r.select(EP1);
-    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(() => new Promise(() => undefined));
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     expect(r.last()).toMatchObject({ kind: 'unavailable' });
     expect(r.last()).not.toHaveProperty('requestOutcome');
@@ -1401,7 +1678,9 @@ describe('the bound on one Play attempt', () => {
 
     r.view.play();
     await read.reached;
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     expect(r.last()).toMatchObject({ kind: 'unavailable' });
     expect(r.last()).not.toHaveProperty('requestOutcome');
@@ -1418,14 +1697,18 @@ describe('the bound on one Play attempt', () => {
 
     r.view.play();
     await expect.poll(() => r.player.calls.includes('start')).toBe(true);
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
     expect(r.player.calls.at(-1)).toBe('stop');
 
     decoding.release('started');
     await settle(100);
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     // The late start released the player again only because no later press had taken it over.
-    expect(r.player.calls.filter((call) => call === 'stop').length).toBeGreaterThanOrEqual(2);
+    expect(
+      r.player.calls.filter((call) => call === 'stop').length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it('keeps successful playback going past the bound: the clock ends with the outcome, not the audio', async () => {
@@ -1474,7 +1757,8 @@ describe('the bound on one Play attempt', () => {
 });
 
 describe('the bound on one Play attempt does not depend on timer delivery', () => {
-  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const settle = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
   /** Blocks the thread: the promise continuation that follows is delivered before the attempt's timer. */
   const blockFor = (ms: number) => {
     const until = performance.now() + ms;
@@ -1500,14 +1784,18 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
     const r = await rig({ limits: { deadlineMs: 100 } });
     await r.select(EP1);
     const sign = crypto.subtle.sign.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
-      const signature = await sign(...args);
-      blockFor(150);
-      return signature;
-    });
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(
+      async (...args: Parameters<typeof sign>) => {
+        const signature = await sign(...args);
+        blockFor(150);
+        return signature;
+      },
+    );
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     expect(r.harness.playback.mediaReads).toEqual([]);
     expect(r.player.calls).not.toContain('start');
@@ -1523,7 +1811,9 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
     });
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     expect(r.player.calls.at(-1)).toBe('stop');
@@ -1531,24 +1821,42 @@ describe('the bound on one Play attempt does not depend on timer delivery', () =
 });
 
 describe('a resolved Play result that does not establish its effect', () => {
-  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const settle = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
   const PLAY_RESULT_META = 'saga-a2ui/playback';
   /** The server really handled the call (issuing a capability for a good request); the host resolves with this instead. */
-  const genericError = (text = 'Playback is unavailable.'): ((result: CallToolResult) => CallToolResult) => () => ({
-    isError: true,
-    content: [{ type: 'text', text }],
-  });
-  const withGrant = (change: (grant: Record<string, unknown>) => Record<string, unknown>) => (result: CallToolResult): CallToolResult => ({
-    ...result,
-    _meta: { ...result._meta, [PLAY_RESULT_META]: change(result._meta?.[PLAY_RESULT_META] as Record<string, unknown>) },
-  });
+  const genericError =
+    (
+      text = 'Playback is unavailable.',
+    ): ((result: CallToolResult) => CallToolResult) =>
+    () => ({
+      isError: true,
+      content: [{ type: 'text', text }],
+    });
+  const withGrant =
+    (change: (grant: Record<string, unknown>) => Record<string, unknown>) =>
+    (result: CallToolResult): CallToolResult => ({
+      ...result,
+      _meta: {
+        ...result._meta,
+        [PLAY_RESULT_META]: change(
+          result._meta?.[PLAY_RESULT_META] as Record<string, unknown>,
+        ),
+      },
+    });
 
   /** An unknown outcome sends nothing more on its own: one Play call, no media request, no player start. */
   async function expectUnknownAndInert(r: Rig): Promise<void> {
-    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' }, requestOutcome: 'unknown' });
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      episode: { episodeId: 'ep-1' },
+      requestOutcome: 'unknown',
+    });
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     await settle(200);
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(1);
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(1);
     expect(r.harness.playback.mediaReads).toEqual([]);
     expect(r.player.calls).not.toContain('start');
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
@@ -1566,18 +1874,30 @@ describe('a resolved Play result that does not establish its effect', () => {
   });
 
   it.each([
-    ['unusable private metadata', withGrant(({ capability: _capability, ...rest }) => rest)],
-    ['metadata for another episode', withGrant((grant) => ({ ...grant, episodeId: 'ep-2' }))],
-    ['no private metadata at all', (result: CallToolResult): CallToolResult => ({ content: result.content })],
-  ])('keeps a success result carrying %s unknown, never grant-known, and fetches nothing', async (_name, rewriteAnswer) => {
-    const r = await rig({ rewriteAnswer });
-    await r.select(EP1);
+    [
+      'unusable private metadata',
+      withGrant(({ capability: _capability, ...rest }) => rest),
+    ],
+    [
+      'metadata for another episode',
+      withGrant((grant) => ({ ...grant, episodeId: 'ep-2' })),
+    ],
+    [
+      'no private metadata at all',
+      (result: CallToolResult): CallToolResult => ({ content: result.content }),
+    ],
+  ])(
+    'keeps a success result carrying %s unknown, never grant-known, and fetches nothing',
+    async (_name, rewriteAnswer) => {
+      const r = await rig({ rewriteAnswer });
+      await r.select(EP1);
 
-    r.view.play();
-    await expect.poll(() => r.last()?.kind).toBe('unavailable');
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('unavailable');
 
-    await expectUnknownAndInert(r);
-  });
+      await expectUnknownAndInert(r);
+    },
+  );
 
   it('still reads a precise early refusal as its own outcome, whatever else a generic error says', async () => {
     const denied = await rig({ token: DEV_TOKENS.bob });
@@ -1587,7 +1907,11 @@ describe('a resolved Play result that does not establish its effect', () => {
     expect(denied.last()).not.toHaveProperty('requestOutcome');
 
     // Wording that merely resembles the fixed sentences is not a refusal.
-    const lookalike = await rig({ rewriteAnswer: genericError('Playback denied: this account does not have access to this episode. ') });
+    const lookalike = await rig({
+      rewriteAnswer: genericError(
+        'Playback denied: this account does not have access to this episode. ',
+      ),
+    });
     await lookalike.select(EP1);
     lookalike.view.play();
     await expect.poll(() => lookalike.last()?.kind).toBe('unavailable');
@@ -1609,7 +1933,9 @@ describe('a resolved Play result that does not establish its effect', () => {
     await r.select(EP1);
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     await expectUnknownAndInert(r);
   });
@@ -1630,7 +1956,9 @@ describe('a resolved Play result that does not establish its effect', () => {
     });
     await malformed.select(EP1);
     malformed.view.play();
-    await expect.poll(() => malformed.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => malformed.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
     await expectUnknownAndInert(malformed);
 
     // A valid, matching grant is a known result even when late: nothing is revived and no media is requested.
@@ -1643,7 +1971,9 @@ describe('a resolved Play result that does not establish its effect', () => {
     });
     await late.select(EP1);
     late.view.play();
-    await expect.poll(() => late.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => late.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
     expect(late.last()).not.toHaveProperty('requestOutcome');
     await settle(150);
     expect(late.harness.playback.mediaReads).toEqual([]);
@@ -1651,7 +1981,12 @@ describe('a resolved Play result that does not establish its effect', () => {
   });
 
   it('still reads a valid grant under another sign-in label as a permanent session change', async () => {
-    const r = await rig({ rewriteAnswer: withGrant((grant) => ({ ...grant, viewSession: `vs_${'z'.repeat(22)}` })) });
+    const r = await rig({
+      rewriteAnswer: withGrant((grant) => ({
+        ...grant,
+        viewSession: `vs_${'z'.repeat(22)}`,
+      })),
+    });
     await r.select(EP1);
 
     r.view.play();
@@ -1673,8 +2008,12 @@ describe('a resolved Play result that does not establish its effect', () => {
 
     r.view.play(); // the deliberate recovery is a new Play, with a freshly granted capability
     await expect.poll(() => r.last()?.kind).toBe('playing');
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toHaveLength(2);
-    const [first, second] = r.forwarded.filter((call) => call.name === 'play_episode');
+    expect(
+      r.forwarded.filter((call) => call.name === 'play_episode'),
+    ).toHaveLength(2);
+    const [first, second] = r.forwarded.filter(
+      (call) => call.name === 'play_episode',
+    );
     expect(second?._meta).not.toBe(first?._meta);
   });
 });
@@ -1683,7 +2022,8 @@ describe('a resolved Play result that does not establish its effect', () => {
 // pending stage, from creating the recipient key through starting the player. The binding's own
 // phase is the pending presentation's source, and the application keeps the rest as its own state.
 describe('Play as one action on the rendered control', () => {
-  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const settle = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
   const playBinding = (r: Rig) => r.control.attached('play');
 
   it('is pending exactly while the binding runs, and the binding is idle again once audio plays', async () => {
@@ -1708,7 +2048,8 @@ describe('Play as one action on the rendered control', () => {
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('playing');
     await expect.poll(() => playBinding(r)?.state.phase).toBe('idle');
-    const plays = () => r.forwarded.filter((call) => call.name === 'play_episode').length;
+    const plays = () =>
+      r.forwarded.filter((call) => call.name === 'play_episode').length;
 
     r.view.play();
     await settle(60);
@@ -1727,25 +2068,40 @@ describe('Play as one action on the rendered control', () => {
     await expect.poll(() => r.last()?.kind).toBe('ended');
 
     r.view.play();
-    await expect.poll(() => r.states.filter((state) => state.kind === 'playing')).toHaveLength(2);
+    await expect
+      .poll(() => r.states.filter((state) => state.kind === 'playing'))
+      .toHaveLength(2);
 
-    const keys = r.forwarded.map((call) => (call._meta?.['saga-a2ui/recipient-key'] as { x: string } | undefined)?.x);
+    const keys = r.forwarded.map(
+      (call) =>
+        (call._meta?.['saga-a2ui/recipient-key'] as { x: string } | undefined)
+          ?.x,
+    );
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBeDefined();
     expect(keys[0]).not.toBe(keys[1]);
-    expect(r.forwarded.map((call) => call.arguments)).toEqual([{ episodeId: 'ep-1' }, { episodeId: 'ep-1' }]);
+    expect(r.forwarded.map((call) => call.arguments)).toEqual([
+      { episodeId: 'ep-1' },
+      { episodeId: 'ep-1' },
+    ]);
   });
 
   it('ends a stalled key creation at the work deadline: the host call never starts and nothing is unknown', async () => {
     const r = await rig({ limits: { deadlineMs: 150 } });
     await r.select(EP1);
-    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     expect(r.last()).not.toHaveProperty('requestOutcome');
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual(
+      [],
+    );
     expect(kinds(r)).toEqual(['ready', 'pending', 'unavailable']);
     expect(playBinding(r)?.state.phase).toBe('idle');
   });
@@ -1753,12 +2109,16 @@ describe('Play as one action on the rendered control', () => {
   it('shows unsupported when the recipient key cannot be created, without sending the protected request', async () => {
     const r = await rig();
     await r.select(EP1);
-    vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(new Error('no WebCrypto'));
+    vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(
+      new Error('no WebCrypto'),
+    );
 
     r.view.play();
     await expect.poll(() => r.last()?.kind).toBe('unsupported');
 
-    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual([]);
+    expect(r.forwarded.filter((call) => call.name === 'play_episode')).toEqual(
+      [],
+    );
     expect(r.player.calls).toContain('stop'); // the lease taken for this press is given back
   });
 
@@ -1774,12 +2134,17 @@ describe('Play as one action on the rendered control', () => {
 
     await r.select(EP2);
     r.view.play(); // the binding notices the changed subject and starts the new Play at once
-    await expect.poll(() => r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    await expect
+      .poll(() => r.last())
+      .toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
     held.release();
     await settle(60);
 
     expect(firstSignal?.aborted).toBe(true);
-    expect(r.last()).toMatchObject({ kind: 'playing', episode: { episodeId: 'ep-2' } });
+    expect(r.last()).toMatchObject({
+      kind: 'playing',
+      episode: { episodeId: 'ep-2' },
+    });
     expect(r.harness.playback.mediaReads).toEqual(['ep-2']);
   });
 
@@ -1796,7 +2161,12 @@ describe('Play as one action on the rendered control', () => {
   });
 
   it('ends the bindings with the view: a lost label, a teardown and a disposal each leave nothing to press', async () => {
-    const lost = await rig({ entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1'], [DEV_ACCOUNTS.bob]: ['ep-1'] } });
+    const lost = await rig({
+      entitlements: {
+        [DEV_ACCOUNTS.alice]: ['ep-1'],
+        [DEV_ACCOUNTS.bob]: ['ep-1'],
+      },
+    });
     await lost.select(EP1);
     lost.useToken(DEV_TOKENS.bob);
     await lost.deliver(EP1);
@@ -1815,37 +2185,47 @@ describe('Play as one action on the rendered control', () => {
     await disposed.select(EP1);
     disposed.view.dispose();
     expect(disposed.control.attached('resume')).toBeUndefined();
-    expect(disposed.control.activate('play', new Event('click'))).toBe('unbound');
+    expect(disposed.control.activate('play', new Event('click'))).toBe(
+      'unbound',
+    );
   });
 });
 
 // Review repair for PR 133: the three behaviours the migration to one action must keep. Each test
 // drives the public rig and checks what was dispatched, not only what the server recorded.
 describe('a Play that is retired keeps its protected fetch unsent and its presentation accurate', () => {
-  const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const settle = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
   const blockFor = (ms: number) => {
     const until = performance.now() + ms;
     while (performance.now() < until) {
       // Synchronous work that overruns the bound.
     }
   };
-  const playRequests = (r: Rig) => r.forwarded.filter((call) => call.name === 'play_episode').length;
+  const playRequests = (r: Rig) =>
+    r.forwarded.filter((call) => call.name === 'play_episode').length;
   const mediaDispatches = (fetchSpy: { mock: { calls: unknown[][] } }) =>
-    fetchSpy.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/media/'));
+    fetchSpy.mock.calls.filter(([input]) =>
+      String(input instanceof Request ? input.url : input).includes('/media/'),
+    );
 
   it('dispatches no protected fetch when the proof finished after the work deadline, even before the timer ran', async () => {
     const r = await rig({ limits: { deadlineMs: 100 } });
     await r.select(EP1);
     const sign = crypto.subtle.sign.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
-      const signature = await sign(...args);
-      blockFor(150);
-      return signature;
-    });
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(
+      async (...args: Parameters<typeof sign>) => {
+        const signature = await sign(...args);
+        blockFor(150);
+        return signature;
+      },
+    );
     const dispatched = vi.spyOn(globalThis, 'fetch');
 
     r.view.play();
-    await expect.poll(() => r.last()?.kind, { timeout: 2_000 }).toBe('unavailable');
+    await expect
+      .poll(() => r.last()?.kind, { timeout: 2_000 })
+      .toBe('unavailable');
 
     // The capability and the proof never left the view: not "the server saw nothing", but no dispatch.
     expect(mediaDispatches(dispatched)).toEqual([]);
@@ -1856,11 +2236,13 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
     const r = await rig();
     await r.select(EP1);
     const sign = crypto.subtle.sign.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(async (...args: Parameters<typeof sign>) => {
-      const signature = await sign(...args);
-      r.control.retire(); // the control leaves while the proof is being signed
-      return signature;
-    });
+    vi.spyOn(crypto.subtle, 'sign').mockImplementationOnce(
+      async (...args: Parameters<typeof sign>) => {
+        const signature = await sign(...args);
+        r.control.retire(); // the control leaves while the proof is being signed
+        return signature;
+      },
+    );
     const dispatched = vi.spyOn(globalThis, 'fetch');
 
     r.view.play();
@@ -1884,11 +2266,17 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
     await settle(80);
 
     // Honest about what is unknown, offering no blind retry, and never fetching for the old press.
-    expect(r.last()).toMatchObject({ kind: 'unavailable', requestOutcome: 'unknown', episode: { episodeId: 'ep-1' } });
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      requestOutcome: 'unknown',
+      episode: { episodeId: 'ep-1' },
+    });
     expect(r.harness.playback.mediaReads).toEqual([]);
 
     // The replacement control is not stuck behind a stale pending state.
-    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    expect(replacement.instance.activate('play', new Event('click'))).toBe(
+      'started',
+    );
     await expect.poll(() => r.last()?.kind).toBe('playing');
     expect(playRequests(r)).toBe(2);
     expect(r.harness.playback.mediaReads).toEqual(['ep-1']);
@@ -1897,16 +2285,23 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
   it('returns to ready when its control is retired before any request was sent', async () => {
     const r = await rig();
     await r.select(EP1);
-    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(() => new Promise(() => undefined));
+    vi.spyOn(crypto.subtle, 'generateKey').mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
     r.view.play();
     expect(r.last()?.kind).toBe('pending');
 
     r.control.retire();
     const replacement = renderControl(r.actions);
 
-    expect(r.last()).toMatchObject({ kind: 'ready', episode: { episodeId: 'ep-1' } });
+    expect(r.last()).toMatchObject({
+      kind: 'ready',
+      episode: { episodeId: 'ep-1' },
+    });
     expect(playRequests(r)).toBe(0);
-    expect(replacement.instance.activate('play', new Event('click'))).toBe('started');
+    expect(replacement.instance.activate('play', new Event('click'))).toBe(
+      'started',
+    );
     await expect.poll(() => r.last()?.kind).toBe('playing');
     expect(r.player.calls).toContain('stop'); // the lease taken for the retired press was given back
   });
@@ -1935,14 +2330,20 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
     await expect.poll(() => playRequests(r)).toBe(1);
     const dispatched = vi.spyOn(globalThis, 'fetch');
 
-    await r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+    await r.bridge.sendToolResult({
+      isError: true,
+      content: [{ type: 'text', text: 'Episode unavailable.' }],
+    });
     await expect.poll(() => r.last()?.kind).toBe('unavailable');
     held.release(); // the old, valid grant arrives after the opener retired the presentation
     await settle(80);
 
     expect(mediaDispatches(dispatched)).toEqual([]);
     expect(r.harness.playback.mediaReads).toEqual([]);
-    expect(r.last()).toMatchObject({ kind: 'unavailable', episode: { episodeId: 'ep-1' } });
+    expect(r.last()).toMatchObject({
+      kind: 'unavailable',
+      episode: { episodeId: 'ep-1' },
+    });
     expect(r.player.calls).not.toContain('start');
 
     // The unchanged selection stays pressable: a deliberate new Play asks the server afresh.
@@ -1959,8 +2360,14 @@ describe('a Play that is retired keeps its protected fetch unsent and its presen
 // ending never touches a Play.
 describe('the description card’s image consent beside the Play control', () => {
   const settled = () => new Promise((resolve) => setTimeout(resolve, 80));
-  const BOTH = { entitlements: { [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'], [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'] } };
-  const consentCalls = (r: Rig) => r.consentLog.filter((entry) => !entry.startsWith('show:'));
+  const BOTH = {
+    entitlements: {
+      [DEV_ACCOUNTS.alice]: ['ep-1', 'ep-2'],
+      [DEV_ACCOUNTS.bob]: ['ep-1', 'ep-2'],
+    },
+  };
+  const consentCalls = (r: Rig) =>
+    r.consentLog.filter((entry) => !entry.startsWith('show:'));
 
   it('ends consent before each opener presents, so images agreed to for one selection never show beside the next', async () => {
     const r = await rig({ withContentConsent: true });
@@ -1969,16 +2376,22 @@ describe('the description card’s image consent beside the Play control', () =>
     await r.select(EP2); // the same episode again is still a new selection
 
     expect(r.consentLog).toEqual([
-      'revokeAll', 'show:ready',
-      'revokeAll', 'show:ready',
-      'revokeAll', 'show:ready',
+      'revokeAll',
+      'show:ready',
+      'revokeAll',
+      'show:ready',
+      'revokeAll',
+      'show:ready',
     ]);
   });
 
   it('ends consent for an opener the view cannot read as well, before it presents the unavailable state', async () => {
     const r = await rig({ withContentConsent: true });
     await r.select(EP1);
-    await r.bridge.sendToolResult({ isError: true, content: [{ type: 'text', text: 'Episode unavailable.' }] });
+    await r.bridge.sendToolResult({
+      isError: true,
+      content: [{ type: 'text', text: 'Episode unavailable.' }],
+    });
     await expect.poll(() => r.last()?.kind).toBe('unavailable');
 
     expect(r.consentLog.slice(-2)).toEqual(['revokeAll', 'show:unavailable']);
@@ -2005,13 +2418,21 @@ describe('the description card’s image consent beside the Play control', () =>
     await r.deliver(EP1);
     await expect.poll(() => r.last()?.kind).toBe('session-changed');
     // The opener under the other label still revokes first (every opener does), then the loss retires.
-    expect(r.consentLog.slice(-3)).toEqual(['revokeAll', 'retire', 'show:session-changed']);
+    expect(r.consentLog.slice(-3)).toEqual([
+      'revokeAll',
+      'retire',
+      'show:session-changed',
+    ]);
 
     r.useToken(DEV_TOKENS.alice);
     await r.deliver(EP2);
     await settled();
 
-    expect(r.consentLog.slice(-3)).toEqual(['revokeAll', 'retire', 'show:session-changed']);
+    expect(r.consentLog.slice(-3)).toEqual([
+      'revokeAll',
+      'retire',
+      'show:session-changed',
+    ]);
     expect(r.last()).toEqual({ kind: 'session-changed' });
   });
 
@@ -2043,7 +2464,11 @@ describe('the description card’s image consent beside the Play control', () =>
     await r.select(EP1);
     const held = r.holdNextToolCall();
     r.view.play();
-    await expect.poll(() => r.forwarded.filter((call) => call.name === 'play_episode').length).toBe(1);
+    await expect
+      .poll(
+        () => r.forwarded.filter((call) => call.name === 'play_episode').length,
+      )
+      .toBe(1);
 
     held.release();
     await expect.poll(() => r.last()?.kind).toBe('playing');

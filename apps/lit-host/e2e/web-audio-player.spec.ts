@@ -8,12 +8,22 @@ import { toneWav } from '../src/playback/synthetic-media.js';
 // what `stop()` and a following `prepare()` do to a start that is still waiting. They are evidence
 // about this player in headless Chromium, not about any assistant host.
 
-const playerSource = new URL('../src/playback/web-audio-player.ts', import.meta.url);
+const playerSource = new URL(
+  '../src/playback/web-audio-player.ts',
+  import.meta.url,
+);
 
 /** Loads the player module from its TypeScript source into a blank page and runs `scenario`. */
-async function inPage<T>(page: Page, scenario: string, bytes: readonly number[]): Promise<T> {
+async function inPage<T>(
+  page: Page,
+  scenario: string,
+  bytes: readonly number[],
+): Promise<T> {
   const transpiled = ts.transpileModule(await readFile(playerSource, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
   // Records every context the player creates, so a scenario can hold one back from running.
   await page.addInitScript(() => {
@@ -31,8 +41,12 @@ async function inPage<T>(page: Page, scenario: string, bytes: readonly number[])
   await page.mouse.click(5, 5); // user activation, so the audio context may run
   return page.evaluate(
     async ({ code, scenarioSource, wav }) => {
-      const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-      const { createWebAudioPlayer } = (await import(/* @vite-ignore */ url)) as {
+      const url = URL.createObjectURL(
+        new Blob([code], { type: 'text/javascript' }),
+      );
+      const { createWebAudioPlayer } = (await import(
+        /* @vite-ignore */ url
+      )) as {
         createWebAudioPlayer(): {
           prepare(): void;
           start(bytes: ArrayBuffer): Promise<'started' | 'blocked'>;
@@ -43,9 +57,15 @@ async function inPage<T>(page: Page, scenario: string, bytes: readonly number[])
       const settle = (promise: Promise<unknown>) =>
         promise.then(
           (value) => `resolved:${String(value)}`,
-          (error: unknown) => `rejected:${error instanceof Error ? error.message : String(error)}`,
+          (error: unknown) =>
+            `rejected:${error instanceof Error ? error.message : String(error)}`,
         );
-      const run = new Function('createWebAudioPlayer', 'fresh', 'settle', `return (async () => { ${scenarioSource} })();`);
+      const run = new Function(
+        'createWebAudioPlayer',
+        'fresh',
+        'settle',
+        `return (async () => { ${scenarioSource} })();`,
+      );
       return run(createWebAudioPlayer, fresh, settle);
     },
     { code: transpiled, scenarioSource: scenario, wav: bytes },
@@ -55,7 +75,9 @@ async function inPage<T>(page: Page, scenario: string, bytes: readonly number[])
 const WAV = [...toneWav(1)];
 
 test.describe('the real Web Audio player and a start that is still waiting', () => {
-  test('stop() while a start is decoding or waiting for the clock rejects that start', async ({ page }) => {
+  test('stop() while a start is decoding or waiting for the clock rejects that start', async ({
+    page,
+  }) => {
     const outcome = await inPage<string[]>(
       page,
       `
@@ -75,7 +97,9 @@ test.describe('the real Web Audio player and a start that is still waiting', () 
     expect(outcome).toEqual(['rejected:stopped', 'rejected:stopped']);
   });
 
-  test('a start belonging to an earlier prepare() is rejected by the next prepare() and cannot end the newer start', async ({ page }) => {
+  test('a start belonging to an earlier prepare() is rejected by the next prepare() and cannot end the newer start', async ({
+    page,
+  }) => {
     const outcome = await inPage<{ older: string; newer: string }>(
       page,
       `

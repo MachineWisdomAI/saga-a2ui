@@ -12,8 +12,19 @@ import {
 import { createElement } from 'react';
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ActionButton, type ActionButtonActivation, type ActionButtonEvents } from './action-button.js';
-import { mount, openSession, SURFACE_ID, surfaceView, type Mounted, type Session } from './fixture.test-support.js';
+import {
+  ActionButton,
+  type ActionButtonActivation,
+  type ActionButtonEvents,
+} from './action-button.js';
+import {
+  mount,
+  openSession,
+  SURFACE_ID,
+  surfaceView,
+  type Mounted,
+  type Session,
+} from './fixture.test-support.js';
 import { ActionScopeContext, type ActionScope } from './instance-host.js';
 
 // ACT4 common-seam qualification on React: the shared runtime's admission and currentness against
@@ -52,7 +63,10 @@ function start(): { session: Session; view: Mounted } {
 }
 
 const updateRows = (rows: { id: string; title: string }[]) => [
-  { version: 'v0.9', updateDataModel: { surfaceId: SURFACE_ID, path: '/rows', value: rows } },
+  {
+    version: 'v0.9',
+    updateDataModel: { surfaceId: SURFACE_ID, path: '/rows', value: rows },
+  },
 ];
 
 interface Trace {
@@ -62,10 +76,17 @@ interface Trace {
 }
 
 /** An asynchronous archive action: a pending prerequisite, then the handler, with hooks that record. */
-function archiveAfter(pending: Gate<unknown>, trace: Trace): ActionDefinition<ActionButtonActivation> {
+function archiveAfter(
+  pending: Gate<unknown>,
+  trace: Trace,
+): ActionDefinition<ActionButtonActivation> {
   return Action.local<ActionButtonActivation>('archive')
     .input((event) => ({ noteId: String(event.read('id')) }))
-    .before(prerequisite('session', () => pending.promise.then(() => proceed({ session: 'ok' }))))
+    .before(
+      prerequisite('session', () =>
+        pending.promise.then(() => proceed({ session: 'ok' })),
+      ),
+    )
     .run(({ params }) => {
       trace.calls.push(`run ${params.noteId}`);
       return params.noteId;
@@ -74,15 +95,26 @@ function archiveAfter(pending: Gate<unknown>, trace: Trace): ActionDefinition<Ac
     .onSuccess(({ params, current }) => {
       if (current()) trace.calls.push(`shown ${params.noteId}`);
     })
-    .onCanceled(({ params, cause }) => void trace.calls.push(`canceled ${params.noteId}: ${cause}`))
+    .onCanceled(
+      ({ params, cause }) =>
+        void trace.calls.push(`canceled ${params.noteId}: ${cause}`),
+    )
     .build();
 }
 
-function bindRows(trace: Trace, definition: ActionDefinition<ActionButtonActivation>, withSubject: boolean) {
+function bindRows(
+  trace: Trace,
+  definition: ActionDefinition<ActionButtonActivation>,
+  withSubject: boolean,
+) {
   return (handle: Handle): void => {
     trace.handles.push(handle);
     trace.bindings.push(
-      handle.bindAction('activate', definition, withSubject ? { subject: () => handle.read('id') } : {}),
+      handle.bindAction(
+        'activate',
+        definition,
+        withSubject ? { subject: () => handle.read('id') } : {},
+      ),
     );
   };
 }
@@ -97,7 +129,12 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), true)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), true),
+          ),
       }),
     );
 
@@ -121,14 +158,26 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), true)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), true),
+          ),
       }),
     );
     const [first, second] = view.buttons('Archive');
     view.press(first!);
     view.press(second!);
 
-    await act(async () => session.ingest(updateRows([{ id: 'n-9', title: 'Replaced' }, { id: 'n-2', title: 'Beta' }])));
+    await act(async () =>
+      session.ingest(
+        updateRows([
+          { id: 'n-9', title: 'Replaced' },
+          { id: 'n-2', title: 'Beta' },
+        ]),
+      ),
+    );
 
     // The data model's own subscription woke the runtime: no press, no checkpoint of the application.
     expect(seen.calls).toEqual(['canceled n-1: subject-changed']);
@@ -138,7 +187,11 @@ describe('an asynchronous action on a rendered React control', () => {
 
     pending.resolve(undefined);
     await view.settle();
-    expect(seen.calls).toEqual(['canceled n-1: subject-changed', 'run n-2', 'shown n-2']);
+    expect(seen.calls).toEqual([
+      'canceled n-1: subject-changed',
+      'run n-2',
+      'shown n-2',
+    ]);
 
     view.press(first!);
     await view.settle();
@@ -152,12 +205,24 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), false)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), false),
+          ),
       }),
     );
     view.press(view.buttons('Archive')[0]!);
 
-    await act(async () => session.ingest(updateRows([{ id: 'n-9', title: 'Replaced' }, { id: 'n-2', title: 'Beta' }])));
+    await act(async () =>
+      session.ingest(
+        updateRows([
+          { id: 'n-9', title: 'Replaced' },
+          { id: 'n-2', title: 'Beta' },
+        ]),
+      ),
+    );
     pending.resolve(undefined);
     await view.settle();
 
@@ -171,19 +236,34 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), true)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), true),
+          ),
       }),
     );
-    const original = [{ id: 'n-1', title: 'Alpha' }, { id: 'n-2', title: 'Beta' }];
+    const original = [
+      { id: 'n-1', title: 'Alpha' },
+      { id: 'n-2', title: 'Beta' },
+    ];
     view.press(view.buttons('Archive')[0]!);
 
     // Both messages apply in one call stack: each wake-up is a queued microtask, and both read A.
-    await act(async () => session.ingest([...updateRows([{ id: 'n-9', title: 'B' }, original[1]!]), ...updateRows(original)]));
+    await act(async () =>
+      session.ingest([
+        ...updateRows([{ id: 'n-9', title: 'B' }, original[1]!]),
+        ...updateRows(original),
+      ]),
+    );
     expect(seen.calls).toEqual([]);
     expect(seen.bindings[0]!.state.phase).toBe('running');
 
     // Observed at a checkpoint between the two: canceled, and A coming back later changes nothing.
-    await act(async () => session.ingest(updateRows([{ id: 'n-9', title: 'B' }, original[1]!])));
+    await act(async () =>
+      session.ingest(updateRows([{ id: 'n-9', title: 'B' }, original[1]!])),
+    );
     await act(async () => session.ingest(updateRows(original)));
     expect(seen.calls).toEqual(['canceled n-1: subject-changed']);
     pending.resolve(undefined);
@@ -198,12 +278,19 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), true)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), true),
+          ),
       }),
     );
     view.press(view.buttons('Archive')[1]!);
 
-    await act(async () => session.ingest(updateRows([{ id: 'n-1', title: 'Alpha' }])));
+    await act(async () =>
+      session.ingest(updateRows([{ id: 'n-1', title: 'Alpha' }])),
+    );
     expect(seen.calls).toEqual(['canceled n-2: disposed']);
     expect(seen.bindings[1]!.state.phase).toBe('disposed');
 
@@ -220,7 +307,12 @@ describe('an asynchronous action on a rendered React control', () => {
     view.render(
       surfaceView({
         surface: session.surface,
-        setup: (setupView) => void setupView.watchById('row-archive', ActionButton, bindRows(seen, archiveAfter(pending, seen), true)),
+        setup: (setupView) =>
+          void setupView.watchById(
+            'row-archive',
+            ActionButton,
+            bindRows(seen, archiveAfter(pending, seen), true),
+          ),
       }),
     );
     view.press(view.buttons('Archive')[0]!);
@@ -250,12 +342,26 @@ describe('an asynchronous action on a rendered React control', () => {
       .limits({ hookMs: 60_000 })
       .onCanceled(({ cause }) => void seen.calls.push(`canceled: ${cause}`))
       .build();
-    const scopeFor = (): ActionScope => ({ host: createInstanceHost({ onSetupError: () => undefined }), onSetupError: () => undefined });
+    const scopeFor = (): ActionScope => ({
+      host: createInstanceHost({ onSetupError: () => undefined }),
+      onSetupError: () => undefined,
+    });
     const oldScope = scopeFor();
     const newScope = scopeFor();
-    oldScope.host.register((setupView) => void setupView.watchById('mark-a', ActionButton, (handle) => void handle.bindAction('activate', probing)));
+    oldScope.host.register(
+      (setupView) =>
+        void setupView.watchById(
+          'mark-a',
+          ActionButton,
+          (handle) => void handle.bindAction('activate', probing),
+        ),
+    );
     const under = (scope: ActionScope) =>
-      createElement(ActionScopeContext.Provider, { value: scope }, createElement(A2uiSurface, { surface: session.surface }));
+      createElement(
+        ActionScopeContext.Provider,
+        { value: scope },
+        createElement(A2uiSurface, { surface: session.surface }),
+      );
 
     view.render(under(oldScope));
     view.press(view.button('Mark A'));

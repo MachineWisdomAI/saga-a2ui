@@ -1,6 +1,11 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
-import { connectToolResultView, type ToolInput, type ToolResult, type ToolResultViewConnection } from '@saga-a2ui/mcp/view';
+import {
+  connectToolResultView,
+  type ToolInput,
+  type ToolResult,
+  type ToolResultViewConnection,
+} from '@saga-a2ui/mcp/view';
 import {
   AnswerRequestSchema,
   AnswerResultSchema,
@@ -57,7 +62,9 @@ function knownFailureText(result: ToolResult): string | undefined {
  *   texts. The next valid delivery recovers.
  * - After dispose or host teardown, nothing is delivered (see `connectToolResultView`).
  */
-export function connectAnswerView(deps: AnswerViewDependencies): Promise<AnswerViewConnection> {
+export function connectAnswerView(
+  deps: AnswerViewDependencies,
+): Promise<AnswerViewConnection> {
   let awaited: string | undefined;
   let shown: AnswerResult | undefined;
 
@@ -78,13 +85,27 @@ export function connectAnswerView(deps: AnswerViewDependencies): Promise<AnswerV
   };
 
   const onToolResult = (result: ToolResult) => {
-    if (result.isError) return present({ kind: 'problem', message: knownFailureText(result) ?? PROBLEM_TEXT });
+    if (result.isError)
+      return present({
+        kind: 'problem',
+        message: knownFailureText(result) ?? PROBLEM_TEXT,
+      });
     const answer = AnswerResultSchema.safeParse(result.structuredContent);
-    if (!answer.success) return present({ kind: 'problem', message: PROBLEM_TEXT });
+    if (!answer.success)
+      return present({ kind: 'problem', message: PROBLEM_TEXT });
     if (awaited !== undefined && answer.data.question !== awaited) return;
-    if (shown?.question === answer.data.question && shown.answer === answer.data.answer) return;
+    if (
+      shown?.question === answer.data.question &&
+      shown.answer === answer.data.answer
+    )
+      return;
     present({ kind: 'answer', result: answer.data });
   };
 
-  return connectToolResultView({ app: deps.app, transport: deps.transport, onToolInput, onToolResult });
+  return connectToolResultView({
+    app: deps.app,
+    transport: deps.transport,
+    onToolInput,
+    onToolResult,
+  });
 }

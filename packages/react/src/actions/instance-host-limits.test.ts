@@ -2,8 +2,18 @@
 import { Action, type InstanceHandle } from '@saga-a2ui/core/actions';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActionButton, type ActionButtonActivation, type ActionButtonEvents } from './action-button.js';
-import { mount, openSession, surfaceView, type Mounted, type Session } from './fixture.test-support.js';
+import {
+  ActionButton,
+  type ActionButtonActivation,
+  type ActionButtonEvents,
+} from './action-button.js';
+import {
+  mount,
+  openSession,
+  surfaceView,
+  type Mounted,
+  type Session,
+} from './fixture.test-support.js';
 import type { Limits } from '@saga-a2ui/core/actions';
 
 // The provider hands the application's action limits to the one host it owns. A real
@@ -25,10 +35,15 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const waiting = Action.local<ActionButtonActivation>('wait').run(() => new Promise<void>(() => undefined)).build();
+const waiting = Action.local<ActionButtonActivation>('wait')
+  .run(() => new Promise<void>(() => undefined))
+  .build();
 
 /** Renders the surface under a provider with `limits`, presses Mark A once and returns its binding's phase reader. */
-function pressWithLimits(limits: Limits | undefined, options: { readonly render?: boolean } = {}): () => string {
+function pressWithLimits(
+  limits: Limits | undefined,
+  options: { readonly render?: boolean } = {},
+): () => string {
   session = openSession();
   mounted = mount({ strict: true });
   let phase = (): string => 'unbound';
@@ -78,10 +93,16 @@ describe('InstanceHostProvider limits', () => {
   });
 
   it('refuses an invalid value before the surface mounts or anything binds', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
     try {
-      expect(() => pressWithLimits({ hookMs: 0 }, { render: false })).toThrow(/hookMs/);
-      expect(() => pressWithLimits({ deadlineMs: Number.NaN }, { render: false })).toThrow(/deadlineMs/);
+      expect(() => pressWithLimits({ hookMs: 0 }, { render: false })).toThrow(
+        /hookMs/,
+      );
+      expect(() =>
+        pressWithLimits({ deadlineMs: Number.NaN }, { render: false }),
+      ).toThrow(/deadlineMs/);
     } finally {
       error.mockRestore();
     }

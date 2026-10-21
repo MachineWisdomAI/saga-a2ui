@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { Action, type ActionBinding, type InstanceEvent, type InstanceHandle } from './index.js';
-import { Control, newHost, OtherKind, renderInstance, type ControlEvents } from './fake-adapter.test-support.js';
+import {
+  Action,
+  type ActionBinding,
+  type InstanceEvent,
+  type InstanceHandle,
+} from './index.js';
+import {
+  Control,
+  newHost,
+  OtherKind,
+  renderInstance,
+  type ControlEvents,
+} from './fake-adapter.test-support.js';
 
 /** Attaches through the setup seam the way an application does, and returns what it bound. */
 function bindOne(
@@ -14,7 +25,8 @@ function bindOne(
       binding = bind(handle);
     });
   });
-  if (binding === undefined) throw new Error(`no instance ${id} was discovered`);
+  if (binding === undefined)
+    throw new Error(`no instance ${id} was discovered`);
   return binding;
 }
 
@@ -28,7 +40,10 @@ describe('a synchronous local action bound to a rendered instance', () => {
         seen.push(params);
       })
       .build();
-    const row = renderInstance(host, 'row-save', { dataPath: '/rows/1', data: { id: 'n-2' } });
+    const row = renderInstance(host, 'row-save', {
+      dataPath: '/rows/1',
+      data: { id: 'n-2' },
+    });
     bindOne(host, 'row-save', (handle) => handle.bindAction('activate', save));
 
     expect(row.press()).toBe('started');
@@ -52,7 +67,9 @@ describe('a synchronous local action bound to a rendered instance', () => {
       })
       .build();
     const control = renderInstance(host, 'toggle');
-    const binding = bindOne(host, 'toggle', (handle) => handle.bindAction('activate', toggle));
+    const binding = bindOne(host, 'toggle', (handle) =>
+      handle.bindAction('activate', toggle),
+    );
     binding.subscribe(() => phases.push(binding.state.phase));
 
     expect(binding.state.phase).toBe('idle');
@@ -65,8 +82,12 @@ describe('a synchronous local action bound to a rendered instance', () => {
   it('replaces the state object on every change and never mutates one that was handed out', () => {
     const host = newHost();
     const control = renderInstance(host, 'c');
-    const toggle = Action.local<InstanceEvent<string>>('toggle').run(() => undefined).build();
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle));
+    const toggle = Action.local<InstanceEvent<string>>('toggle')
+      .run(() => undefined)
+      .build();
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', toggle),
+    );
     const before = binding.state;
 
     control.press();
@@ -76,20 +97,35 @@ describe('a synchronous local action bound to a rendered instance', () => {
   });
 });
 
-const toggle = () => Action.local<InstanceEvent<string>>('toggle').run(() => undefined).build();
+const toggle = () =>
+  Action.local<InstanceEvent<string>>('toggle')
+    .run(() => undefined)
+    .build();
 
 describe('one instance and event admits one live binding', () => {
   it('refuses a second binding while the first is live, and the first keeps running', () => {
     const errors: unknown[] = [];
     const host = newHost((error) => errors.push(error));
     const runs: string[] = [];
-    const first = Action.local<InstanceEvent<string>>('first').run(() => void runs.push('first')).build();
-    const second = Action.local<InstanceEvent<string>>('second').run(() => void runs.push('second')).build();
+    const first = Action.local<InstanceEvent<string>>('first')
+      .run(() => void runs.push('first'))
+      .build();
+    const second = Action.local<InstanceEvent<string>>('second')
+      .run(() => void runs.push('second'))
+      .build();
     const control = renderInstance(host, 'c');
-    const firstBinding = bindOne(host, 'c', (handle) => handle.bindAction('activate', first));
+    const firstBinding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', first),
+    );
 
     // A second setup tries to claim the same event; its discovery callback fails and is reported.
-    host.register((view) => view.watchById('c', Control, (handle) => void handle.bindAction('activate', second)));
+    host.register((view) =>
+      view.watchById(
+        'c',
+        Control,
+        (handle) => void handle.bindAction('activate', second),
+      ),
+    );
     control.press();
 
     expect(errors).toHaveLength(1);
@@ -105,7 +141,9 @@ describe('one instance and event admits one live binding', () => {
     host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
     handle!.bindAction('activate', toggle());
 
-    expect(() => handle!.bindAction('activate', toggle())).toThrow(/already has a live binding/);
+    expect(() => handle!.bindAction('activate', toggle())).toThrow(
+      /already has a live binding/,
+    );
   });
 
   it('refuses an event the instance does not offer, naming it', () => {
@@ -114,7 +152,9 @@ describe('one instance and event admits one live binding', () => {
     let handle: InstanceHandle<ControlEvents> | undefined;
     host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
 
-    expect(() => handle!.bindAction('hover' as 'activate', toggle())).toThrow(/does not offer the event 'hover'/);
+    expect(() => handle!.bindAction('hover' as 'activate', toggle())).toThrow(
+      /does not offer the event 'hover'/,
+    );
   });
 
   it('refuses a value that Action did not build', () => {
@@ -124,15 +164,21 @@ describe('one instance and event admits one live binding', () => {
     host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
     const forged = { label: 'forged' };
 
-    expect(() => handle!.bindAction('activate', forged)).toThrow(/not an action definition/);
+    expect(() => handle!.bindAction('activate', forged)).toThrow(
+      /not an action definition/,
+    );
     expect(renderInstance(host, 'd').press()).toBe('unbound');
   });
 
   it('disposes idempotently, stops running, and lets the same live handle bind again', () => {
     const host = newHost();
     const runs: string[] = [];
-    const first = Action.local<InstanceEvent<string>>('first').run(() => void runs.push('first')).build();
-    const second = Action.local<InstanceEvent<string>>('second').run(() => void runs.push('second')).build();
+    const first = Action.local<InstanceEvent<string>>('first')
+      .run(() => void runs.push('first'))
+      .build();
+    const second = Action.local<InstanceEvent<string>>('second')
+      .run(() => void runs.push('second'))
+      .build();
     const control = renderInstance(host, 'c');
     let handle: InstanceHandle<ControlEvents> | undefined;
     host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
@@ -166,10 +212,20 @@ describe('one instance and event admits one live binding', () => {
         whileRunning.push(others());
       })
       .build();
-    const rowA = renderInstance(host, 'row', { dataPath: '/rows/0', data: { id: 'a' } });
-    const rowB = renderInstance(host, 'row', { dataPath: '/rows/1', data: { id: 'b' } });
+    const rowA = renderInstance(host, 'row', {
+      dataPath: '/rows/0',
+      data: { id: 'a' },
+    });
+    const rowB = renderInstance(host, 'row', {
+      dataPath: '/rows/1',
+      data: { id: 'b' },
+    });
     const bindings: ActionBinding[] = [];
-    host.register((view) => view.watchById('row', Control, (h) => bindings.push(h.bindAction('activate', archive))));
+    host.register((view) =>
+      view.watchById('row', Control, (h) =>
+        bindings.push(h.bindAction('activate', archive)),
+      ),
+    );
     const [bindingA, bindingB] = bindings as [ActionBinding, ActionBinding];
     const phasesOfA: string[] = [];
     bindingA.subscribe(() => phasesOfA.push(bindingA.state.phase));
@@ -225,7 +281,9 @@ describe('discovery by component ID', () => {
 
     host.register((view) => {
       expect(() => view.getById('missing', Control)).toThrow(/'missing'/);
-      expect(() => view.getById('row', Control)).toThrow(/2 rendered instances.*'row'/);
+      expect(() => view.getById('row', Control)).toThrow(
+        /2 rendered instances.*'row'/,
+      );
       expect(() => view.getById('other', Control)).toThrow(/'other'/);
     });
   });
@@ -237,7 +295,10 @@ describe('discovery by component ID', () => {
       .input((event) => `${event.dataPath}:${String(event.read('id'))}`)
       .run(({ params }) => void pressed.push(params))
       .build();
-    const first = renderInstance(host, 'row', { dataPath: '/rows/0', data: { id: 'a' } });
+    const first = renderInstance(host, 'row', {
+      dataPath: '/rows/0',
+      data: { id: 'a' },
+    });
     let delivered = 0;
     host.register((view) =>
       view.watchById('row', Control, (handle) => {
@@ -245,7 +306,10 @@ describe('discovery by component ID', () => {
         handle.bindAction('activate', archive);
       }),
     );
-    const later = renderInstance(host, 'row', { dataPath: '/rows/1', data: { id: 'b' } });
+    const later = renderInstance(host, 'row', {
+      dataPath: '/rows/1',
+      data: { id: 'b' },
+    });
     renderInstance(host, 'unrelated');
 
     later.press();
@@ -257,9 +321,14 @@ describe('discovery by component ID', () => {
 
   it('delivers handles with the instance data path and a live reader that answers undefined after retirement', () => {
     const host = newHost();
-    const row = renderInstance(host, 'row', { dataPath: '/rows/3', data: { id: 'n-3' } });
+    const row = renderInstance(host, 'row', {
+      dataPath: '/rows/3',
+      data: { id: 'n-3' },
+    });
     let handle: InstanceHandle<ControlEvents> | undefined;
-    host.register((view) => view.watchById('row', Control, (h) => (handle = h)));
+    host.register((view) =>
+      view.watchById('row', Control, (h) => (handle = h)),
+    );
 
     expect([handle!.dataPath, handle!.read('id')]).toEqual(['/rows/3', 'n-3']);
     row.destroy();
@@ -269,11 +338,17 @@ describe('discovery by component ID', () => {
   it('unsubscribing discovery stops new handles but disposes no binding; ending the registration does', () => {
     const host = newHost();
     const runs: string[] = [];
-    const action = Action.local<InstanceEvent<string>>('a').run(() => void runs.push('ran')).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => void runs.push('ran'))
+      .build();
     const early = renderInstance(host, 'row', { dataPath: '/rows/0' });
     let stopDiscovery!: () => void;
     const endRegistration = host.register((view) => {
-      stopDiscovery = view.watchById('row', Control, (handle) => void handle.bindAction('activate', action));
+      stopDiscovery = view.watchById(
+        'row',
+        Control,
+        (handle) => void handle.bindAction('activate', action),
+      );
     });
 
     stopDiscovery();
@@ -309,7 +384,9 @@ describe('instance lifetime', () => {
     const host = newHost();
     const old = renderInstance(host, 'c');
     const handles: InstanceHandle<ControlEvents>[] = [];
-    host.register((view) => view.watchById('c', Control, (h) => handles.push(h)));
+    host.register((view) =>
+      view.watchById('c', Control, (h) => handles.push(h)),
+    );
     const oldBinding = handles[0]!.bindAction('activate', toggle());
 
     old.destroy();
@@ -326,7 +403,9 @@ describe('instance lifetime', () => {
   it('refuses a press once the instance is no longer live, before the renderer has retired it', () => {
     const host = newHost();
     let runs = 0;
-    const action = Action.local<InstanceEvent<string>>('a').run(() => void (runs += 1)).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => void (runs += 1))
+      .build();
     const control = renderInstance(host, 'c');
     bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
 
@@ -351,7 +430,9 @@ describe('instance lifetime', () => {
 
     control.press();
 
-    expect(() => kept!.read('id')).toThrow(/only while the event is being delivered/);
+    expect(() => kept!.read('id')).toThrow(
+      /only while the event is being delivered/,
+    );
   });
 });
 
@@ -361,7 +442,9 @@ describe('the binding an instance exposes to its adapter', () => {
     const control = renderInstance(host, 'c');
     expect(control.instance.attached('activate')).toBeUndefined();
 
-    const first = bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()));
+    const first = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', toggle()),
+    );
     expect(control.instance.attached('activate')).toBe(first);
     expect(control.instance.attached('change')).toBeUndefined();
 
@@ -386,7 +469,9 @@ describe('the binding an instance exposes to its adapter', () => {
     const host = newHost();
     const control = renderInstance(host, 'c');
     const seen: Array<string | undefined> = [];
-    const unsubscribe = control.instance.subscribe(() => seen.push(control.instance.attached('activate')?.id));
+    const unsubscribe = control.instance.subscribe(() =>
+      seen.push(control.instance.attached('activate')?.id),
+    );
     let handle: InstanceHandle<ControlEvents> | undefined;
     host.register((view) => view.watchById('c', Control, (h) => (handle = h)));
 
@@ -404,13 +489,17 @@ describe('the binding an instance exposes to its adapter', () => {
     const control = renderInstance(host, 'c');
     bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()));
     const seen: Array<string | undefined> = [];
-    control.instance.subscribe(() => seen.push(control.instance.attached('activate')?.id));
+    control.instance.subscribe(() =>
+      seen.push(control.instance.attached('activate')?.id),
+    );
 
     control.destroy();
     control.destroy();
 
     expect(seen).toEqual([undefined]);
-    expect(control.instance.subscribe(() => seen.push('late'))).toBeTypeOf('function');
+    expect(control.instance.subscribe(() => seen.push('late'))).toBeTypeOf(
+      'function',
+    );
     expect(seen).toEqual([undefined]);
   });
 
@@ -430,7 +519,9 @@ describe('the binding an instance exposes to its adapter', () => {
     removed = control.instance.subscribe(() => calls.push('removed'));
     control.instance.subscribe(() => calls.push('last'));
 
-    expect(() => bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle()))).not.toThrow();
+    expect(() =>
+      bindOne(host, 'c', (handle) => handle.bindAction('activate', toggle())),
+    ).not.toThrow();
 
     expect(calls).toEqual(['throws', 'removes-next', 'last']);
   });
@@ -444,7 +535,11 @@ describe('setup ownership', () => {
 
     expect(() =>
       host.register((view) => {
-        view.watchById('c', Control, (handle) => void handle.bindAction('activate', toggle()));
+        view.watchById(
+          'c',
+          Control,
+          (handle) => void handle.bindAction('activate', toggle()),
+        );
         throw failure;
       }),
     ).toThrow(failure);
@@ -459,7 +554,11 @@ describe('setup ownership', () => {
     const bad = renderInstance(host, 'bad');
     const failure = new Error('callback failed');
     host.register((view) => {
-      view.watchById('ok', Control, (handle) => void handle.bindAction('activate', toggle()));
+      view.watchById(
+        'ok',
+        Control,
+        (handle) => void handle.bindAction('activate', toggle()),
+      );
       view.watchById('bad', Control, (handle) => {
         handle.bindAction('activate', toggle());
         throw failure;
@@ -491,7 +590,9 @@ describe('setup ownership', () => {
     const host = newHost();
     renderInstance(host, 'c');
     let kept: InstanceHandle<ControlEvents> | undefined;
-    const end = host.register((view) => view.watchById('c', Control, (h) => (kept = h)));
+    const end = host.register((view) =>
+      view.watchById('c', Control, (h) => (kept = h)),
+    );
 
     end();
 
@@ -503,11 +604,15 @@ describe('failures of an invocation', () => {
   it('finishes the invocation, returns to idle, then rethrows the handler error to the event caller', () => {
     const host = newHost();
     const failure = new Error('boom');
-    const action = Action.local<InstanceEvent<string>>('boom').run(() => {
-      throw failure;
-    }).build();
+    const action = Action.local<InstanceEvent<string>>('boom')
+      .run(() => {
+        throw failure;
+      })
+      .build();
     const control = renderInstance(host, 'c');
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
 
     expect(() => control.press()).toThrow(failure);
     expect(binding.state.phase).toBe('idle');
@@ -541,7 +646,9 @@ describe('failures of an invocation', () => {
         .run(() => undefined)
         .build();
       const control = renderInstance(host, 'c');
-      const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+      const binding = bindOne(host, 'c', (handle) =>
+        handle.bindAction('activate', action),
+      );
 
       expect(() => control.press()).toThrow(/returned a promise/);
       expect(binding.state.phase).toBe('idle');
@@ -555,9 +662,13 @@ describe('failures of an invocation', () => {
   it('a listener that throws does not affect the action', () => {
     const host = newHost();
     let runs = 0;
-    const action = Action.local<InstanceEvent<string>>('a').run(() => void (runs += 1)).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => void (runs += 1))
+      .build();
     const control = renderInstance(host, 'c');
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
     binding.subscribe(() => {
       throw new Error('listener');
     });
@@ -570,9 +681,13 @@ describe('failures of an invocation', () => {
   it('stays disposed when the handler disposes its own binding', () => {
     const host = newHost();
     let binding!: ActionBinding;
-    const action = Action.local<InstanceEvent<string>>('self-dispose').run(() => binding.dispose()).build();
+    const action = Action.local<InstanceEvent<string>>('self-dispose')
+      .run(() => binding.dispose())
+      .build();
     const control = renderInstance(host, 'c');
-    binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
 
     control.press();
 
@@ -585,9 +700,13 @@ describe('reentrant disposal during a state notification', () => {
   it('does not run the handler when a subscriber disposes the binding on running, and notifies each listener once', () => {
     const host = newHost();
     let runs = 0;
-    const action = Action.local<InstanceEvent<string>>('a').run(() => void (runs += 1)).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => void (runs += 1))
+      .build();
     const control = renderInstance(host, 'c');
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
     binding.subscribe(() => {
       if (binding.state.phase === 'running') binding.dispose();
     });
@@ -605,9 +724,13 @@ describe('reentrant disposal during a state notification', () => {
 
   it('finishes with one final notification when a subscriber disposes on settling', () => {
     const host = newHost();
-    const action = Action.local<InstanceEvent<string>>('a').run(() => undefined).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => undefined)
+      .build();
     const control = renderInstance(host, 'c');
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
     binding.subscribe(() => {
       if (binding.state.phase === 'settling') binding.dispose();
     });
@@ -623,9 +746,13 @@ describe('reentrant disposal during a state notification', () => {
 
   it('does not call a listener that unsubscribed during the same notification', () => {
     const host = newHost();
-    const action = Action.local<InstanceEvent<string>>('a').run(() => undefined).build();
+    const action = Action.local<InstanceEvent<string>>('a')
+      .run(() => undefined)
+      .build();
     const control = renderInstance(host, 'c');
-    const binding = bindOne(host, 'c', (handle) => handle.bindAction('activate', action));
+    const binding = bindOne(host, 'c', (handle) =>
+      handle.bindAction('activate', action),
+    );
     let unsubscribeLater = (): void => undefined;
     binding.subscribe(() => unsubscribeLater());
     let laterCalls = 0;
@@ -645,7 +772,9 @@ describe('reentrant disposal during a state notification', () => {
       .build();
     const first = renderInstance(host, 'one');
     const second = renderInstance(host, 'two');
-    const bindingOne = bindOne(host, 'one', (handle) => handle.bindAction('activate', action));
+    const bindingOne = bindOne(host, 'one', (handle) =>
+      handle.bindAction('activate', action),
+    );
     bindOne(host, 'two', (handle) => handle.bindAction('activate', action));
     bindingOne.subscribe(() => bindingOne.dispose());
 
@@ -691,7 +820,9 @@ describe('a handle during the model-replacement gap', () => {
   it('does not announce a stale open instance to a registered watch, and a later live instance binds normally', () => {
     const host = newHost();
     const found: string[] = [];
-    host.register((view) => void view.watchById('c', Control, (h) => found.push(h.id)));
+    host.register(
+      (view) => void view.watchById('c', Control, (h) => found.push(h.id)),
+    );
     const old = renderInstance(host, 'c');
     expect(found).toEqual(['c']);
 
@@ -699,7 +830,9 @@ describe('a handle during the model-replacement gap', () => {
     const fresh = renderInstance(host, 'c');
     expect(found).toEqual(['c', 'c']);
     let handle: InstanceHandle<ControlEvents> | undefined;
-    host.register((view) => void view.watchById('c', Control, (h) => (handle = h)));
+    host.register(
+      (view) => void view.watchById('c', Control, (h) => (handle = h)),
+    );
 
     expect(handle).toBeDefined();
     expect(() => handle!.bindAction('activate', toggle())).not.toThrow();
@@ -711,9 +844,15 @@ describe('the immutable builder', () => {
   it('treats a retained alias as a branch, so two definitions never see each other', () => {
     const host = newHost();
     const ran: string[] = [];
-    const alias = Action.local<InstanceEvent<string>>('branch').input(() => 'p');
-    const one = alias.run(({ params }) => void ran.push(`one:${params}`)).build();
-    const two = alias.run(({ params }) => void ran.push(`two:${params}`)).build();
+    const alias = Action.local<InstanceEvent<string>>('branch').input(
+      () => 'p',
+    );
+    const one = alias
+      .run(({ params }) => void ran.push(`one:${params}`))
+      .build();
+    const two = alias
+      .run(({ params }) => void ran.push(`two:${params}`))
+      .build();
     const a = renderInstance(host, 'a');
     const b = renderInstance(host, 'b');
     host.register((view) => {
@@ -728,13 +867,28 @@ describe('the immutable builder', () => {
   });
 
   it('refuses a repeated or misordered step even when the types are bypassed', () => {
-    const draft = Action.local<InstanceEvent<string>>('x') as unknown as Record<string, (...args: unknown[]) => unknown>;
-    const afterInput = draft.input!(() => 1) as Record<string, (...args: unknown[]) => unknown>;
-    const withHandler = afterInput.run!(() => undefined) as Record<string, (...args: unknown[]) => unknown>;
+    const draft = Action.local<InstanceEvent<string>>('x') as unknown as Record<
+      string,
+      (...args: unknown[]) => unknown
+    >;
+    const afterInput = draft.input!(() => 1) as Record<
+      string,
+      (...args: unknown[]) => unknown
+    >;
+    const withHandler = afterInput.run!(() => undefined) as Record<
+      string,
+      (...args: unknown[]) => unknown
+    >;
 
-    expect(() => afterInput.input!(() => 2)).toThrow(/input can be declared once/);
-    expect(() => withHandler.run!(() => undefined)).toThrow(/run can be declared once/);
-    expect(() => withHandler.input!(() => 2)).toThrow(/input can be declared once/);
+    expect(() => afterInput.input!(() => 2)).toThrow(
+      /input can be declared once/,
+    );
+    expect(() => withHandler.run!(() => undefined)).toThrow(
+      /run can be declared once/,
+    );
+    expect(() => withHandler.input!(() => 2)).toThrow(
+      /input can be declared once/,
+    );
     expect(() => draft.build!()).toThrow(/before run/);
     expect(() => Action.local('')).toThrow(/label/);
   });
@@ -746,14 +900,18 @@ describe('what the types refuse', () => {
     // @ts-expect-error an async input extractor
     Action.local<InstanceEvent<string>>('async-input').input(async () => 1);
     // @ts-expect-error a union with a promise is still asynchronous
-    Action.local<InstanceEvent<string>>('union-input').input((): Promise<number> | undefined => undefined);
+    Action.local<InstanceEvent<string>>('union-input').input(
+      (): Promise<number> | undefined => undefined,
+    );
     // An asynchronous handler is valid, and so is one that always throws.
     Action.local<InstanceEvent<string>>('async-run').run(async () => undefined);
     Action.local<InstanceEvent<string>>('throws').run(() => {
       throw new Error('x');
     });
 
-    const needsNumber = Action.local<{ readonly value: number }>('needs-number').run(() => undefined).build();
+    const needsNumber = Action.local<{ readonly value: number }>('needs-number')
+      .run(() => undefined)
+      .build();
     const host = newHost();
     renderInstance(host, 'c');
     host.register((view) => {
@@ -764,8 +922,10 @@ describe('what the types refuse', () => {
         handle.bindAction('activate', needsNumber);
         // @ts-expect-error a local handler has no `call`: only a server action can reach a server
         Action.local<InstanceEvent<string>>('ctx').run(({ call }) => call);
-        // @ts-expect-error `eventTurn` is a later slice and is not declared
-        void Action.local<InstanceEvent<string>>('later').run(() => undefined).build().eventTurn;
+        void Action.local<InstanceEvent<string>>('later')
+          .run(() => undefined)
+          // @ts-expect-error `eventTurn` is a later slice and is not declared
+          .build().eventTurn;
         // @ts-expect-error bindAction takes the subject reader and nothing else
         handle.bindAction('activate', toggle(), { resource: 1 });
       });

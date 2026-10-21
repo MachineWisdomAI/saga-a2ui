@@ -8,7 +8,10 @@ import { fileURLToPath } from 'node:url';
 // pristine-head only when the commit and tracked dirty state stay clean and
 // unchanged across every command boundary. See docs/development-reference.md#repository-verification.
 
-const toolRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const toolRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 
 type Command = { name: string; argv: string[] };
 
@@ -42,7 +45,11 @@ type VerifyReceipt = {
   exitCode: number;
 };
 
-function parseArgs(argv: string[]): { cwd: string; receiptDir: string | undefined; exec: Command[] } {
+function parseArgs(argv: string[]): {
+  cwd: string;
+  receiptDir: string | undefined;
+  exec: Command[];
+} {
   let cwd = toolRoot;
   let receiptDir: string | undefined;
   const exec: Command[] = [];
@@ -66,7 +73,11 @@ function parseArgs(argv: string[]): { cwd: string; receiptDir: string | undefine
       const value = argv[index + 1];
       if (!value) throw new Error('--exec requires a JSON command');
       const parsed = JSON.parse(value) as { name?: unknown; argv?: unknown };
-      if (typeof parsed.name !== 'string' || !Array.isArray(parsed.argv) || parsed.argv.length === 0) {
+      if (
+        typeof parsed.name !== 'string' ||
+        !Array.isArray(parsed.argv) ||
+        parsed.argv.length === 0
+      ) {
         throw new Error('--exec requires {"name":"...","argv":["..."]}');
       }
       if (!parsed.argv.every((item) => typeof item === 'string')) {
@@ -88,15 +99,24 @@ function capture(bin: string, args: string[]): string {
 }
 
 function gitSnapshot(cwd: string): GitSnapshot {
-  const commitResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' });
-  const statusResult = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], {
+  const commitResult = spawnSync('git', ['rev-parse', 'HEAD'], {
     cwd,
     encoding: 'utf8',
   });
-  const commit = commitResult.status === 0 ? (commitResult.stdout ?? '').trim() : null;
-  const trackedStatus = statusResult.status === 0
-    ? (statusResult.stdout ?? '').split('\n').filter(Boolean).sort()
-    : null;
+  const statusResult = spawnSync(
+    'git',
+    ['status', '--porcelain=v1', '--untracked-files=no'],
+    {
+      cwd,
+      encoding: 'utf8',
+    },
+  );
+  const commit =
+    commitResult.status === 0 ? (commitResult.stdout ?? '').trim() : null;
+  const trackedStatus =
+    statusResult.status === 0
+      ? (statusResult.stdout ?? '').split('\n').filter(Boolean).sort()
+      : null;
   return { commit: commit || null, trackedStatus };
 }
 
@@ -109,14 +129,23 @@ function sameStatus(left: string[] | null, right: string[] | null): boolean {
 function repositorySuite(): Command[] {
   const tsx = path.join(toolRoot, 'node_modules', '.bin', 'tsx');
   return [
-    { name: 'static-guard', argv: [tsx, path.join(toolRoot, 'scripts', 'guard-fixed-or.ts')] },
-    { name: 'test-discovery', argv: [tsx, path.join(toolRoot, 'scripts', 'check-test-discovery.ts')] },
+    {
+      name: 'static-guard',
+      argv: [tsx, path.join(toolRoot, 'scripts', 'guard-fixed-or.ts')],
+    },
+    {
+      name: 'test-discovery',
+      argv: [tsx, path.join(toolRoot, 'scripts', 'check-test-discovery.ts')],
+    },
     { name: 'typecheck', argv: ['npm', 'run', 'typecheck'] },
     { name: 'build', argv: ['npm', 'run', 'build'] },
     { name: 'test:headless', argv: ['npm', 'run', 'test:headless'] },
     { name: 'test:browser', argv: ['npm', 'run', 'test:browser'] },
     { name: 'lfs-pointers', argv: ['python3', 'scripts/check-lfs.py'] },
-    { name: 'version-enrollment', argv: ['python3', 'scripts/check-version-enrollment.py'] },
+    {
+      name: 'version-enrollment',
+      argv: ['python3', 'scripts/check-version-enrollment.py'],
+    },
   ];
 }
 
@@ -152,7 +181,10 @@ function main(): number {
 
   for (const command of commands) {
     const commandStarted = new Date();
-    const result = spawnSync(command.argv[0], command.argv.slice(1), { cwd, stdio: 'inherit' });
+    const result = spawnSync(command.argv[0], command.argv.slice(1), {
+      cwd,
+      stdio: 'inherit',
+    });
     const commandEnded = new Date();
     commandReceipts.push({
       name: command.name,
@@ -170,15 +202,19 @@ function main(): number {
 
   const ended = new Date();
   const endSnapshot = snapshots[snapshots.length - 1] ?? startSnapshot;
-  const revisionChanged = snapshots.some((snapshot) => snapshot.commit !== startSnapshot.commit);
-  const trackedStateChanged = snapshots.some(
-    (snapshot) => !sameStatus(snapshot.trackedStatus, startSnapshot.trackedStatus),
+  const revisionChanged = snapshots.some(
+    (snapshot) => snapshot.commit !== startSnapshot.commit,
   );
-  const pristineHead = startSnapshot.commit !== null
-    && startSnapshot.trackedStatus !== null
-    && startSnapshot.trackedStatus.length === 0
-    && !revisionChanged
-    && !trackedStateChanged;
+  const trackedStateChanged = snapshots.some(
+    (snapshot) =>
+      !sameStatus(snapshot.trackedStatus, startSnapshot.trackedStatus),
+  );
+  const pristineHead =
+    startSnapshot.commit !== null &&
+    startSnapshot.trackedStatus !== null &&
+    startSnapshot.trackedStatus.length === 0 &&
+    !revisionChanged &&
+    !trackedStateChanged;
   const receipt: VerifyReceipt = {
     startedAt: started.toISOString(),
     endedAt: ended.toISOString(),
@@ -198,7 +234,8 @@ function main(): number {
     commands: commandReceipts,
     exitCode,
   };
-  const receiptDir = parsed.receiptDir ?? path.join(cwd, '.wise-agents', 'verify-receipts');
+  const receiptDir =
+    parsed.receiptDir ?? path.join(cwd, '.wise-agents', 'verify-receipts');
   writeReceipt(receiptDir, started, receipt);
   console.log(`receipt: ${path.join(receiptDir, 'latest.json')}`);
   return exitCode;

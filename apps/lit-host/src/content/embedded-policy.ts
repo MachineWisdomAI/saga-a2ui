@@ -1,4 +1,8 @@
-import { createContentPolicy, type ContentPolicy, type CreatePolicyResult } from '@saga-a2ui/components/faithful-card';
+import {
+  createContentPolicy,
+  type ContentPolicy,
+  type CreatePolicyResult,
+} from '@saga-a2ui/components/faithful-card';
 
 // How a policy travels inside a resource document. The server writes it into the HTML it serves
 // and the view rebuilds the same policy from it, validating again. Both sides use this module so
@@ -22,7 +26,10 @@ function inertJson(value: unknown): string {
  */
 export function embedPolicy(viewHtml: string, policy: ContentPolicy): string {
   const head = HEAD_OPENING.exec(viewHtml);
-  if (head === null) throw new Error('The view document has no <head> to carry its content restrictions.');
+  if (head === null)
+    throw new Error(
+      'The view document has no <head> to carry its content restrictions.',
+    );
   const restrictions = `<meta http-equiv="Content-Security-Policy" content="${policy.resource.contentSecurityPolicy}">`;
   const configuration = `<script type="application/json" id="${CONTENT_POLICY_ELEMENT_ID}">${inertJson(policy.configuration)}</script>`;
   const charset = CHARSET_META.exec(viewHtml);
@@ -30,7 +37,12 @@ export function embedPolicy(viewHtml: string, policy: ContentPolicy): string {
     charset !== null && charset.index > head.index
       ? charset.index + charset[0].length
       : head.index + head[0].length;
-  return viewHtml.slice(0, insertAt) + restrictions + configuration + viewHtml.slice(insertAt);
+  return (
+    viewHtml.slice(0, insertAt) +
+    restrictions +
+    configuration +
+    viewHtml.slice(insertAt)
+  );
 }
 
 /**
@@ -46,7 +58,10 @@ export function policyFromEmbedded(text: string | null): CreatePolicyResult {
   } catch {
     return {
       ok: false,
-      failure: { kind: 'invalid-config', message: 'The embedded content policy is not valid JSON.' },
+      failure: {
+        kind: 'invalid-config',
+        message: 'The embedded content policy is not valid JSON.',
+      },
     };
   }
   return createContentPolicy(config);

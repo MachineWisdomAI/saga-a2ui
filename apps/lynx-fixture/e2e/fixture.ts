@@ -36,23 +36,39 @@ export class Fixture {
   static async open(page: Page): Promise<Fixture> {
     const fixture = new Fixture(page);
     await page.goto('/');
-    await expect.poll(() => fixture.records().then((all) => all.some((record) => record.ev === 'booted')), { timeout: 30_000 }).toBe(true);
+    await expect
+      .poll(
+        () =>
+          fixture
+            .records()
+            .then((all) => all.some((record) => record.ev === 'booted')),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     return fixture;
   }
 
   /** Starts recording removals of elements, by ID, from the rendered tree. */
   watchRemovals(): Promise<void> {
-    return this.page.evaluate(() => (window as unknown as { sagaWatchRemoval(): void }).sagaWatchRemoval());
+    return this.page.evaluate(() =>
+      (window as unknown as { sagaWatchRemoval(): void }).sagaWatchRemoval(),
+    );
   }
 
   removals(): Promise<Array<{ id: string; at: number }>> {
-    return this.page.evaluate(() => (window as unknown as { sagaRemovals: Array<{ id: string; at: number }> }).sagaRemovals.slice());
+    return this.page.evaluate(() =>
+      (
+        window as unknown as { sagaRemovals: Array<{ id: string; at: number }> }
+      ).sagaRemovals.slice(),
+    );
   }
 
   /** Scrolls the first scrollable list container by `top` pixels, inside the page. */
   async scrollList(top: number): Promise<void> {
     await this.page.evaluate((to) => {
-      const list = document.querySelector('lynx-view')?.shadowRoot?.querySelector('x-list') as HTMLElement | null;
+      const list = document
+        .querySelector('lynx-view')
+        ?.shadowRoot?.querySelector('x-list') as HTMLElement | null;
       if (!list) throw new Error('no list');
       list.scrollTop = to;
       list.dispatchEvent(new Event('scroll'));
@@ -61,7 +77,9 @@ export class Fixture {
   }
 
   records(): Promise<ProbeRecord[]> {
-    return this.page.evaluate(() => (window as unknown as { sagaRecords: ProbeRecord[] }).sagaRecords.slice());
+    return this.page.evaluate(() =>
+      (window as unknown as { sagaRecords: ProbeRecord[] }).sagaRecords.slice(),
+    );
   }
 
   async recordsOf(ev: string): Promise<ProbeRecord[]> {
@@ -69,26 +87,41 @@ export class Fixture {
   }
 
   /** Sends one command to the background thread and waits for its reply. */
-  async send<Result = Record<string, unknown>>(op: string, args: Record<string, unknown> = {}): Promise<Result> {
+  async send<Result = Record<string, unknown>>(
+    op: string,
+    args: Record<string, unknown> = {},
+  ): Promise<Result> {
     const id = this.#nextId++;
     await this.page.evaluate(
       ({ id: commandId, op: operation, args: rest }) => {
-        (window as unknown as { sagaSend(command: unknown): void }).sagaSend({ id: commandId, op: operation, ...rest });
+        (window as unknown as { sagaSend(command: unknown): void }).sagaSend({
+          id: commandId,
+          op: operation,
+          ...rest,
+        });
       },
       { id, op, args },
     );
     let reply: ProbeRecord | undefined;
     await expect
-      .poll(async () => {
-        reply = (await this.records()).find((record) => record.ev === 'reply' && record['id'] === id);
-        return reply !== undefined;
-      }, { message: `reply to ${op}`, timeout: 15_000 })
+      .poll(
+        async () => {
+          reply = (await this.records()).find(
+            (record) => record.ev === 'reply' && record['id'] === id,
+          );
+          return reply !== undefined;
+        },
+        { message: `reply to ${op}`, timeout: 15_000 },
+      )
       .toBe(true);
-    if (reply?.['ok'] !== true) throw new Error(`command ${op} failed: ${String(reply?.['error'])}`);
+    if (reply?.['ok'] !== true)
+      throw new Error(`command ${op} failed: ${String(reply?.['error'])}`);
     return reply['result'] as Result;
   }
 
-  push(...messages: readonly unknown[]): Promise<{ rejected: Array<Record<string, unknown>> }> {
+  push(
+    ...messages: readonly unknown[]
+  ): Promise<{ rejected: Array<Record<string, unknown>> }> {
     return this.send('push', { messages });
   }
 
@@ -100,10 +133,16 @@ export class Fixture {
   async untilLive(...labels: readonly string[]): Promise<FixtureState> {
     let last: FixtureState | undefined;
     await expect
-      .poll(async () => {
-        last = await this.state();
-        return last.instances.filter((instance) => instance.live).map((instance) => instance.label).sort();
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          last = await this.state();
+          return last.instances
+            .filter((instance) => instance.live)
+            .map((instance) => instance.label)
+            .sort();
+        },
+        { timeout: 20_000 },
+      )
       .toEqual([...labels].sort());
     return last as FixtureState;
   }
@@ -123,12 +162,20 @@ export class Fixture {
   }
 
   /** The slot probe events since the last call, in the order the background reported them. */
-  async watchLog(): Promise<Array<{ label: string; type: string; [key: string]: unknown }>> {
-    return (await this.send<{ log: Array<{ label: string; type: string }> }>('watch-log')).log;
+  async watchLog(): Promise<
+    Array<{ label: string; type: string; [key: string]: unknown }>
+  > {
+    return (
+      await this.send<{ log: Array<{ label: string; type: string }> }>(
+        'watch-log',
+      )
+    ).log;
   }
 
   async instance(label: string): Promise<InstanceState> {
-    const found = (await this.state()).instances.find((instance) => instance.label === label);
+    const found = (await this.state()).instances.find(
+      (instance) => instance.label === label,
+    );
     if (found === undefined) throw new Error(`no instance ${label}`);
     return found;
   }
@@ -139,7 +186,9 @@ export class Fixture {
 
   /** Waits for the number of recorded invocations, then returns them. */
   async untilInvocations(count: number): Promise<ProbeRecord[]> {
-    await expect.poll(async () => (await this.invocations()).length, { timeout: 10_000 }).toBe(count);
+    await expect
+      .poll(async () => (await this.invocations()).length, { timeout: 10_000 })
+      .toBe(count);
     return this.invocations();
   }
 

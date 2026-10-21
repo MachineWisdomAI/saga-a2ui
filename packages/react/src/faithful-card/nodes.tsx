@@ -59,7 +59,9 @@ function never(node: never): never {
 
 /** Each element of an ordered, never-reordered list of nodes is identified by its position. */
 function inOrder(elements: readonly ReactNode[]): ReactNode {
-  return elements.map((element, index) => <Fragment key={index}>{element}</Fragment>);
+  return elements.map((element, index) => (
+    <Fragment key={index}>{element}</Fragment>
+  ));
 }
 
 type BlockedKind = 'link' | 'image' | 'markup';
@@ -80,8 +82,17 @@ function BlockedFragment(props: {
   readonly label?: ReactNode;
   readonly block?: boolean;
 }): ReactElement {
-  const { kind, testId, reason, revealed, placeholder, source, label, block } = props;
-  const content = revealed ? source(label) : label === undefined ? placeholder : <>{label} {placeholder}</>;
+  const { kind, testId, reason, revealed, placeholder, source, label, block } =
+    props;
+  const content = revealed ? (
+    source(label)
+  ) : label === undefined ? (
+    placeholder
+  ) : (
+    <>
+      {label} {placeholder}
+    </>
+  );
   const common = {
     'data-testid': testId,
     'data-kind': kind,
@@ -104,8 +115,14 @@ function BlockedFragment(props: {
  * second render of the same props (Strict Mode, or a render React discards) numbers links and
  * tables from the start again instead of continuing where the first stopped.
  */
-export function Blocks(props: { readonly nodes: readonly BlockNode[]; readonly rendering: Rendering }): ReactElement {
-  const pass: Pass = { ...props.rendering, counters: { link: 0, image: 0, table: 0 } };
+export function Blocks(props: {
+  readonly nodes: readonly BlockNode[];
+  readonly rendering: Rendering;
+}): ReactElement {
+  const pass: Pass = {
+    ...props.rendering,
+    counters: { link: 0, image: 0, table: 0 },
+  };
   return <>{inOrder(props.nodes.map((node) => block(node, pass, false)))}</>;
 }
 
@@ -125,10 +142,22 @@ function block(node: BlockNode, r: Pass, inContainer: boolean): ReactNode {
       return <h6 dir={dir}>{content}</h6>;
     }
     case 'quote':
-      return <blockquote dir="auto">{inOrder(node.children.map((child) => block(child, r, true)))}</blockquote>;
+      return (
+        <blockquote dir="auto">
+          {inOrder(node.children.map((child) => block(child, r, true)))}
+        </blockquote>
+      );
     case 'list': {
-      const items = node.items.map((item) => <li dir="auto">{inOrder(item.map((child) => block(child, r, true)))}</li>);
-      return node.ordered ? <ol start={node.start}>{inOrder(items)}</ol> : <ul>{inOrder(items)}</ul>;
+      const items = node.items.map((item) => (
+        <li dir="auto">
+          {inOrder(item.map((child) => block(child, r, true)))}
+        </li>
+      ));
+      return node.ordered ? (
+        <ol start={node.start}>{inOrder(items)}</ol>
+      ) : (
+        <ul>{inOrder(items)}</ul>
+      );
     }
     case 'table':
       return table(node, r);
@@ -165,7 +194,10 @@ function block(node: BlockNode, r: Pass, inContainer: boolean): ReactNode {
  * A table scrolls inside a keyboard-focusable region so a narrow screen never forces the page to
  * scroll sideways. Each cell keeps its own inline content, in source order.
  */
-function table(node: Extract<BlockNode, { kind: 'table' }>, r: Pass): ReactNode {
+function table(
+  node: Extract<BlockNode, { kind: 'table' }>,
+  r: Pass,
+): ReactNode {
   const ordinal = ++r.counters.table;
   const cell = (tag: 'th' | 'td', one: TableCell): ReactNode => {
     const content = inlines(one.children, r);
@@ -180,12 +212,24 @@ function table(node: Extract<BlockNode, { kind: 'table' }>, r: Pass): ReactNode 
     );
   };
   return (
-    <div className="saga-card-table-scroll" role="region" tabIndex={0} aria-label={`Table ${ordinal}`} data-testid="md-table">
+    <div
+      className="saga-card-table-scroll"
+      role="region"
+      tabIndex={0}
+      aria-label={`Table ${ordinal}`}
+      data-testid="md-table"
+    >
       <table>
         <thead>
           <tr>{inOrder(node.header.map((one) => cell('th', one)))}</tr>
         </thead>
-        <tbody>{inOrder(node.rows.map((row) => <tr>{inOrder(row.map((one) => cell('td', one)))}</tr>))}</tbody>
+        <tbody>
+          {inOrder(
+            node.rows.map((row) => (
+              <tr>{inOrder(row.map((one) => cell('td', one)))}</tr>
+            )),
+          )}
+        </tbody>
       </table>
     </div>
   );
@@ -248,14 +292,23 @@ function link(node: Extract<InlineNode, { kind: 'link' }>, r: Pass): ReactNode {
           revealed={r.revealed}
           placeholder="[Link blocked]"
           label={label}
-          source={(text) => <>[{text}]({node.destination})</>}
+          source={(text) => (
+            <>
+              [{text}]({node.destination})
+            </>
+          )}
         />
       );
     }
     // Not activatable: the text and its destination are shown, and nothing can be invoked.
     return (
-      <span className="saga-card-link-inert" data-testid="md-link-inert" data-reason={decision.reason}>
-        {label} <span className="saga-card-link-destination">({node.destination})</span>
+      <span
+        className="saga-card-link-inert"
+        data-testid="md-link-inert"
+        data-reason={decision.reason}
+      >
+        {label}{' '}
+        <span className="saga-card-link-destination">({node.destination})</span>
       </span>
     );
   }
@@ -264,11 +317,26 @@ function link(node: Extract<InlineNode, { kind: 'link' }>, r: Pass): ReactNode {
   // control has no destination of its own (no href), so there is no navigation to fall back to.
   return (
     <>
-      <button type="button" className="saga-card-link" data-testid="md-link" onClick={() => r.openLink(ordinal, decision.url)}>
-        {label} <span className="saga-card-link-host" data-testid="md-link-host">({decision.hostname})</span>
+      <button
+        type="button"
+        className="saga-card-link"
+        data-testid="md-link"
+        onClick={() => r.openLink(ordinal, decision.url)}
+      >
+        {label}{' '}
+        <span className="saga-card-link-host" data-testid="md-link-host">
+          ({decision.hostname})
+        </span>
       </button>
-      <span className="saga-card-link-status" role="status" data-testid="md-link-status" data-outcome={outcome}>
-        {outcome === undefined ? null : describeLinkOutcome(outcome, decision.url)}
+      <span
+        className="saga-card-link-status"
+        role="status"
+        data-testid="md-link-status"
+        data-outcome={outcome}
+      >
+        {outcome === undefined
+          ? null
+          : describeLinkOutcome(outcome, decision.url)}
       </span>
     </>
   );
@@ -280,7 +348,10 @@ function link(node: Extract<InlineNode, { kind: 'link' }>, r: Pass): ReactNode {
  * an image that failed to load, stays inert text in its original position (under Strict it can be
  * revealed as source). Data and blob references are never permitted, so they are always that text.
  */
-function image(node: Extract<InlineNode, { kind: 'image' }>, r: Pass): ReactNode {
+function image(
+  node: Extract<InlineNode, { kind: 'image' }>,
+  r: Pass,
+): ReactNode {
   const ordinal = r.counters.image++;
   const decision = r.policy.decideImage(node.source, r.images);
   if (decision.allowed && !r.failedImages.has(ordinal)) {
@@ -309,7 +380,11 @@ function image(node: Extract<InlineNode, { kind: 'image' }>, r: Pass): ReactNode
     );
   }
   return (
-    <span className="saga-card-placeholder" data-testid="md-image-blocked" data-reason={reason}>
+    <span
+      className="saga-card-placeholder"
+      data-testid="md-image-blocked"
+      data-reason={reason}
+    >
       [Image not loaded: {alt}]
     </span>
   );

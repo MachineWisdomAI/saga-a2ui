@@ -10,9 +10,19 @@ import { defineConfig } from 'vite';
 // React is built as its development build on purpose. Strict Mode's extra setup and cleanup, which
 // the lifecycle claims depend on, only exist there. The installed package versions are read here and
 // compiled in, so the browser spec asserts the identities this bundle was actually built from.
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
 const versionOf = (name: string): string =>
-  (JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8')) as { version: string }).version;
+  (
+    JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'node_modules', name, 'package.json'),
+        'utf8',
+      ),
+    ) as { version: string }
+  ).version;
 
 export default defineConfig({
   root: 'e2e/react-faithful-card',
@@ -28,5 +38,10 @@ export default defineConfig({
       reactBuild: 'development',
     }),
   },
-  build: { outDir: '../../dist/react-faithful-card', emptyOutDir: true, target: 'es2022', minify: false },
+  build: {
+    outDir: '../../dist/react-faithful-card',
+    emptyOutDir: true,
+    target: 'es2022',
+    minify: false,
+  },
 });

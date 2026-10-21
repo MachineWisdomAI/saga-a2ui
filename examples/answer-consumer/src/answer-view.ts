@@ -1,6 +1,13 @@
-import { provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
+import {
+  provideContentView,
+  type ContentView,
+} from '@saga-a2ui/lit/faithful-card';
 import { html } from 'lit';
-import { answerData, answerFrameStyles, createAnswerSurfaceElement } from './answer-surface.js';
+import {
+  answerData,
+  answerFrameStyles,
+  createAnswerSurfaceElement,
+} from './answer-surface.js';
 import { applyBranding, type Branding } from './branding.js';
 
 // The page an MCP host mounts. It composes the same answer surface and card as the standalone page
@@ -18,10 +25,18 @@ const WAITING_TEXT = 'Waiting for the answer…';
 const PROBLEM_TEXT = 'The answer could not be shown.';
 
 /** The Markdown of the server's published output (`{ contractVersion: 1, markdown }`), or nothing if it is anything else. */
-export function readAnswerMarkdown(structuredContent: unknown): string | undefined {
-  if (typeof structuredContent !== 'object' || structuredContent === null) return undefined;
-  const { contractVersion, markdown } = structuredContent as { contractVersion?: unknown; markdown?: unknown };
-  return contractVersion === 1 && typeof markdown === 'string' ? markdown : undefined;
+export function readAnswerMarkdown(
+  structuredContent: unknown,
+): string | undefined {
+  if (typeof structuredContent !== 'object' || structuredContent === null)
+    return undefined;
+  const { contractVersion, markdown } = structuredContent as {
+    contractVersion?: unknown;
+    markdown?: unknown;
+  };
+  return contractVersion === 1 && typeof markdown === 'string'
+    ? markdown
+    : undefined;
 }
 
 export function createAnswerViewElement(deps: AnswerViewDependencies) {
@@ -47,8 +62,14 @@ export function createAnswerViewElement(deps: AnswerViewDependencies) {
      * Shows one delivered tool result, replacing whatever was shown before. An error or a result
      * outside the published output clears the answer and says so; the next valid result recovers.
      */
-    show(result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void {
-      const markdown = result.isError === true ? undefined : readAnswerMarkdown(result.structuredContent);
+    show(result: {
+      readonly isError?: boolean;
+      readonly structuredContent?: unknown;
+    }): void {
+      const markdown =
+        result.isError === true
+          ? undefined
+          : readAnswerMarkdown(result.structuredContent);
       this.ingest(answerData(markdown ?? ''));
       this.#status = markdown === undefined ? PROBLEM_TEXT : 'Answer';
       this.requestUpdate();

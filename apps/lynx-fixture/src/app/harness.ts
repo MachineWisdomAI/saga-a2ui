@@ -3,7 +3,15 @@ import type { ActionBinding, InstanceHandle } from '@saga-a2ui/core/actions';
 import type { InstanceSlot, SlotProbe } from '../adapter/instance-slot.js';
 import type { ActionButtonEvents, LynxTap } from '../adapter/kind.js';
 import { onBackground, onMainThread, trace } from '../trace.js';
-import { archiveNote, cancelOrder, failingAction, pendingRows, pendingSessions, presentation, submitOrder } from './definitions.js';
+import {
+  archiveNote,
+  cancelOrder,
+  failingAction,
+  pendingRows,
+  pendingSessions,
+  presentation,
+  submitOrder,
+} from './definitions.js';
 import type { SessionHolder } from './session.js';
 import type { SetupObserver } from './setup.js';
 
@@ -17,10 +25,17 @@ import type { SetupObserver } from './setup.js';
 
 declare const SystemInfo: Record<string, unknown> | undefined;
 
-const rebindable = { 'submit-order': submitOrder, 'cancel-order': cancelOrder, 'archive-note': archiveNote, failing: failingAction };
+const rebindable = {
+  'submit-order': submitOrder,
+  'cancel-order': cancelOrder,
+  'archive-note': archiveNote,
+  failing: failingAction,
+};
 type RebindName = keyof typeof rebindable;
 
-type Command = { readonly id: number; readonly op: string } & Readonly<Record<string, unknown>>;
+type Command = { readonly id: number; readonly op: string } & Readonly<
+  Record<string, unknown>
+>;
 
 export interface Driver {
   readonly observer: SetupObserver;
@@ -34,7 +49,8 @@ export function installHarness(holder: SessionHolder): Driver {
   const bindings = new Map<string, ActionBinding>();
   const captured = new Map<string, (event: LynxTap) => unknown>();
   const watchLog: Array<Record<string, unknown>> = [];
-  const labelOf = (handle: InstanceHandle<ActionButtonEvents>): string => `${handle.id}@${handle.dataPath}`;
+  const labelOf = (handle: InstanceHandle<ActionButtonEvents>): string =>
+    `${handle.id}@${handle.dataPath}`;
 
   const driver: Driver = {
     observer: {
@@ -44,7 +60,9 @@ export function installHarness(holder: SessionHolder): Driver {
       bound(handle, binding) {
         const label = labelOf(handle);
         bindings.set(label, binding);
-        binding.subscribe(() => trace({ ev: 'binding-state', label, phase: binding.state.phase }));
+        binding.subscribe(() =>
+          trace({ ev: 'binding-state', label, phase: binding.state.phase }),
+        );
       },
     },
     probe(slot, event) {
@@ -54,7 +72,10 @@ export function installHarness(holder: SessionHolder): Driver {
         bindings.delete(slot.label);
       }
       const { type, ...rest } = event;
-      const { where: _where, ...detail } = rest as { where?: unknown } & Record<string, unknown>;
+      const { where: _where, ...detail } = rest as { where?: unknown } & Record<
+        string,
+        unknown
+      >;
       watchLog.push({ label: slot.label, type, ...detail });
       trace({ ev: 'probe', label: slot.label, type, ...detail });
     },
@@ -65,7 +86,8 @@ export function installHarness(holder: SessionHolder): Driver {
 
   const slotOf = (label: unknown): InstanceSlot => {
     const slot = typeof label === 'string' ? slots.get(label) : undefined;
-    if (slot === undefined) throw new Error(`no open instance '${String(label)}'`);
+    if (slot === undefined)
+      throw new Error(`no open instance '${String(label)}'`);
     return slot;
   };
 
@@ -90,7 +112,11 @@ export function installHarness(holder: SessionHolder): Driver {
           bound: bindings.has(label),
           bindingPhase: bindings.get(label)?.state.phase ?? null,
         })),
-        setupErrors: holder.current().setupErrors.map((error) => (error instanceof Error ? error.message : String(error))),
+        setupErrors: holder
+          .current()
+          .setupErrors.map((error) =>
+            error instanceof Error ? error.message : String(error),
+          ),
         presentation: Object.fromEntries(presentation),
       };
     },
@@ -104,7 +130,10 @@ export function installHarness(holder: SessionHolder): Driver {
       const label = String(command['label']);
       const handle = handles.get(label);
       if (handle === undefined) throw new Error(`no handle '${label}'`);
-      const binding = handle.bindAction('activate', rebindable[command['definition'] as RebindName]);
+      const binding = handle.bindAction(
+        'activate',
+        rebindable[command['definition'] as RebindName],
+      );
       bindings.set(label, binding);
       return { phase: binding.state.phase };
     },
@@ -112,10 +141,16 @@ export function installHarness(holder: SessionHolder): Driver {
       const handle = handles.get(String(command['label']));
       if (handle === undefined) throw new Error('no handle');
       try {
-        handle.bindAction('activate', rebindable[command['definition'] as RebindName]);
+        handle.bindAction(
+          'activate',
+          rebindable[command['definition'] as RebindName],
+        );
         return { threw: false };
       } catch (error) {
-        return { threw: true, message: error instanceof Error ? error.message : String(error) };
+        return {
+          threw: true,
+          message: error instanceof Error ? error.message : String(error),
+        };
       }
     },
     'capture-tap'(command) {
@@ -135,7 +170,12 @@ export function installHarness(holder: SessionHolder): Driver {
     },
     'read-prop'(command) {
       const handle = handles.get(String(command['label']));
-      return { value: handle === undefined ? null : (handle.read(String(command['prop'])) ?? null) };
+      return {
+        value:
+          handle === undefined
+            ? null
+            : (handle.read(String(command['prop'])) ?? null),
+      };
     },
     'watch-log'() {
       return { log: watchLog.splice(0) };
@@ -146,28 +186,51 @@ export function installHarness(holder: SessionHolder): Driver {
       const slot = slotOf(command['label']);
       const snapshot = slot.getSnapshot();
       if (snapshot.installation === undefined) throw new Error('not open');
-      return { outcome: slot.activate({ installation: snapshot.installation, epoch: snapshot.epoch, binding: snapshot.binding, shownKey: command['shownKey'] }, { type: 'tap' }) };
+      return {
+        outcome: slot.activate(
+          {
+            installation: snapshot.installation,
+            epoch: snapshot.epoch,
+            binding: snapshot.binding,
+            shownKey: command['shownKey'],
+          },
+          { type: 'tap' },
+        ),
+      };
     },
     'set-store'(command) {
       // Writes the signal store directly, inside one batch, the way a processor update does.
       const surface = slotOf(command['label']).where?.surface;
       if (surface === undefined) throw new Error('not open');
-      surface.store.updateBatch(command['updates'] as Array<{ path: string; value: unknown }>);
+      surface.store.updateBatch(
+        command['updates'] as Array<{ path: string; value: unknown }>,
+      );
       return { written: (command['updates'] as unknown[]).length };
     },
-    'describe'(command) {
+    describe(command) {
       const where = slotOf(command['label']).where;
-      return { componentId: where?.componentId ?? null, sourceComponentId: where?.sourceComponentId ?? null, dataContextPath: where?.dataContextPath ?? null };
+      return {
+        componentId: where?.componentId ?? null,
+        sourceComponentId: where?.sourceComponentId ?? null,
+        dataContextPath: where?.dataContextPath ?? null,
+      };
     },
     // What a definition value carries. Nothing records which environment its callbacks were written
     // for, so `bindAction` could not reject a mismatch even if one existed.
     'definition-shape'() {
       const plan = (submitOrder as unknown as { plan?: object }).plan ?? {};
-      return { definitionKeys: Object.getOwnPropertyNames(submitOrder).sort(), planKeys: Object.getOwnPropertyNames(plan).sort(), frozen: Object.isFrozen(submitOrder) };
+      return {
+        definitionKeys: Object.getOwnPropertyNames(submitOrder).sort(),
+        planKeys: Object.getOwnPropertyNames(plan).sort(),
+        frozen: Object.isFrozen(submitOrder),
+      };
     },
     // ACT4: the test answers the pending prerequisite or releases a row's work, in the order it chooses.
     'pending-sessions'() {
-      return { count: pendingSessions.length, rows: pendingRows.map((row) => row.noteId) };
+      return {
+        count: pendingSessions.length,
+        rows: pendingRows.map((row) => row.noteId),
+      };
     },
     'answer-session'(command) {
       const answer = pendingSessions.shift();
@@ -176,7 +239,9 @@ export function installHarness(holder: SessionHolder): Driver {
       return { answered: true };
     },
     'release-row'(command) {
-      const index = pendingRows.findIndex((row) => row.noteId === command['noteId']);
+      const index = pendingRows.findIndex(
+        (row) => row.noteId === command['noteId'],
+      );
       if (index < 0) throw new Error('no pending row work');
       pendingRows.splice(index, 1)[0]?.release();
       return { released: true };
@@ -194,13 +259,20 @@ export function installHarness(holder: SessionHolder): Driver {
     async 'abort-fetch'(command) {
       const controller = new AbortController();
       const started = Date.now();
-      const settled = fetch(String(command['url']), { signal: controller.signal }).then(
+      const settled = fetch(String(command['url']), {
+        signal: controller.signal,
+      }).then(
         () => 'resolved',
-        (error: unknown) => (error as { name?: string } | undefined)?.name ?? String(error),
+        (error: unknown) =>
+          (error as { name?: string } | undefined)?.name ?? String(error),
       );
       setTimeout(() => controller.abort(), Number(command['afterMs'] ?? 150));
       const outcome = await settled;
-      return { outcome, elapsedMs: Date.now() - started, signalAborted: controller.signal.aborted };
+      return {
+        outcome,
+        elapsedMs: Date.now() - started,
+        signalAborted: controller.signal.aborted,
+      };
     },
   };
 
@@ -210,11 +282,17 @@ export function installHarness(holder: SessionHolder): Driver {
     emitter.addListener('saga:cmd', (...args: unknown[]) => {
       const command = args[0] as Command;
       const fail = (error: unknown): void => {
-        trace({ ev: 'reply', id: command.id, ok: false, error: error instanceof Error ? error.message : String(error) });
+        trace({
+          ev: 'reply',
+          id: command.id,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
       };
       try {
         const operation = operations[command.op];
-        if (operation === undefined) throw new Error(`unknown op ${command.op}`);
+        if (operation === undefined)
+          throw new Error(`unknown op ${command.op}`);
         Promise.resolve(operation(command)).then((result) => {
           trace({ ev: 'reply', id: command.id, ok: true, result });
         }, fail);
@@ -236,11 +314,13 @@ function runtimeFacts(): Record<string, unknown> {
     typeofWorkerGlobalScope: typeof scope['WorkerGlobalScope'],
     selfIsWorker:
       typeof scope['WorkerGlobalScope'] === 'function' &&
-      (scope['self'] as object) instanceof (scope['WorkerGlobalScope'] as new () => object),
+      (scope['self'] as object) instanceof
+        (scope['WorkerGlobalScope'] as new () => object),
     typeofAbortController: typeof AbortController,
     typeofAbortSignal: typeof AbortSignal,
     typeofFetch: typeof fetch,
-    typeofLynxFetch: typeof (scope['lynx'] as { fetch?: unknown } | undefined)?.fetch,
+    typeofLynxFetch: typeof (scope['lynx'] as { fetch?: unknown } | undefined)
+      ?.fetch,
     typeofQueueMicrotask: typeof queueMicrotask,
     typeofSetTimeout: typeof setTimeout,
     typeofPerformance: typeof performance,
@@ -253,7 +333,8 @@ function runtimeFacts(): Record<string, unknown> {
     controller.abort();
     facts['abortSignalAborted'] = controller.signal.aborted;
     facts['abortEventsDelivered'] = events;
-    facts['abortReasonName'] = (controller.signal.reason as { name?: string } | undefined)?.name ?? null;
+    facts['abortReasonName'] =
+      (controller.signal.reason as { name?: string } | undefined)?.name ?? null;
   }
   return facts;
 }

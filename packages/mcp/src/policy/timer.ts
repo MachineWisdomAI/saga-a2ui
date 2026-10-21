@@ -10,7 +10,10 @@ const MAX_SEGMENT_MS = 2_147_483_647;
  * Calls `onExpire` once, after `ms` of monotonic time, however large `ms` is. Returns a function
  * that cancels it. A timer that fires early re-arms for the remainder instead of expiring early.
  */
-export function startBoundedTimer(ms: number, onExpire: () => void): () => void {
+export function startBoundedTimer(
+  ms: number,
+  onExpire: () => void,
+): () => void {
   const deadline = performance.now() + ms;
   let handle: ReturnType<typeof setTimeout> | undefined;
   let cancelled = false;

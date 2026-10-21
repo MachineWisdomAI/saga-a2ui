@@ -18,7 +18,10 @@ export interface ReleaseContext {
  * Must affect only the acquisition that `token` identifies, and must be a no-op when the owner has
  * since superseded that token. The scope calls it once per owned token that was not transferred.
  */
-export type Release<Token> = (token: Token, context: ReleaseContext) => void | PromiseLike<void>;
+export type Release<Token> = (
+  token: Token,
+  context: ReleaseContext,
+) => void | PromiseLike<void>;
 
 /** A token the scope owns, and the one way to hand it to a longer-lived owner. */
 export interface Held<Token> {
@@ -36,7 +39,10 @@ export interface Held<Token> {
    * later rejection reaches the observer as a `cleanup-error` with step `adopt`. Work the callback
    * already started is not recalled, so the owner's own `end(token)` must be idempotent.
    */
-  transfer<Returned>(adopt: (token: Token) => Returned, ...synchronous: Synchronous<Returned>): boolean;
+  transfer<Returned>(
+    adopt: (token: Token) => Returned,
+    ...synchronous: Synchronous<Returned>
+  ): boolean;
 }
 
 /** The part of the scope that may be used inside the event turn. */
@@ -60,13 +66,18 @@ export interface InvocationScope extends ActivationScope {
    * released at once and the acquisition rejects with `InvocationEndedError`; an invocation that has
    * already ended does not start the acquisition at all.
    */
-  acquire<Token>(acquire: () => Token | PromiseLike<Token>, release: Release<Token>): Promise<Held<Token>>;
+  acquire<Token>(
+    acquire: () => Token | PromiseLike<Token>,
+    release: Release<Token>,
+  ): Promise<Held<Token>>;
 }
 
 /** The invocation's outcome was already decided, so nothing may be added to its scope. */
 export class InvocationEndedError extends Error {
   constructor(label: string) {
-    super(`Action '${label}': the invocation has ended, so the token was released instead of owned.`);
+    super(
+      `Action '${label}': the invocation has ended, so the token was released instead of owned.`,
+    );
     this.name = 'InvocationEndedError';
   }
 }
@@ -106,7 +117,8 @@ export class InvocationResources {
 
   constructor(private readonly host: ScopeHost) {
     const active = (): boolean => host.isActive();
-    const own = <Token>(token: Token, release: Release<Token>): Held<Token> => this.own(token, release);
+    const own = <Token>(token: Token, release: Release<Token>): Held<Token> =>
+      this.own(token, release);
     this.activation = Object.freeze({
       get active() {
         return active();
@@ -118,8 +130,10 @@ export class InvocationResources {
         return active();
       },
       own,
-      acquire: <Token>(acquire: () => Token | PromiseLike<Token>, release: Release<Token>): Promise<Held<Token>> =>
-        this.acquire(acquire, release),
+      acquire: <Token>(
+        acquire: () => Token | PromiseLike<Token>,
+        release: Release<Token>,
+      ): Promise<Held<Token>> => this.acquire(acquire, release),
     });
   }
 
@@ -141,7 +155,10 @@ export class InvocationResources {
 
   private own<Token>(token: Token, release: Release<Token>): Held<Token> {
     const { host } = this;
-    if (typeof release !== 'function') throw new TypeError(`Action '${host.label}': scope.own needs a release function.`);
+    if (typeof release !== 'function')
+      throw new TypeError(
+        `Action '${host.label}': scope.own needs a release function.`,
+      );
     // Interop assertion: the entry keeps `token` and `release` together, so the scope only ever
     // calls this release with the token it was given.
     const erased = release as Release<unknown>;
@@ -153,15 +170,24 @@ export class InvocationResources {
     this.entries.push(entry);
     return Object.freeze({
       token,
-      transfer: <Returned>(adopt: (token: Token) => Returned, ...synchronous: Synchronous<Returned>): boolean => {
+      transfer: <Returned>(
+        adopt: (token: Token) => Returned,
+        ...synchronous: Synchronous<Returned>
+      ): boolean => {
         void synchronous;
         return this.transfer(entry, adopt);
       },
     });
   }
 
-  private async acquire<Token>(acquire: () => Token | PromiseLike<Token>, release: Release<Token>): Promise<Held<Token>> {
-    if (typeof acquire !== 'function') throw new TypeError(`Action '${this.host.label}': scope.acquire needs an acquire function.`);
+  private async acquire<Token>(
+    acquire: () => Token | PromiseLike<Token>,
+    release: Release<Token>,
+  ): Promise<Held<Token>> {
+    if (typeof acquire !== 'function')
+      throw new TypeError(
+        `Action '${this.host.label}': scope.acquire needs an acquire function.`,
+      );
     if (!this.host.isActive()) throw new InvocationEndedError(this.host.label);
     const token = await acquire();
     // Ownership begins when the token exists. If the invocation ended meanwhile, `own` releases it
@@ -169,9 +195,15 @@ export class InvocationResources {
     return this.own(token, release);
   }
 
-  private transfer<Token>(entry: Entry, adopt: (token: Token) => unknown): boolean {
+  private transfer<Token>(
+    entry: Entry,
+    adopt: (token: Token) => unknown,
+  ): boolean {
     if (entry.state !== 'held' || !this.host.isActive()) return false;
-    if (typeof adopt !== 'function') throw new TypeError(`Action '${this.host.label}': transfer needs an adopt function.`);
+    if (typeof adopt !== 'function')
+      throw new TypeError(
+        `Action '${this.host.label}': transfer needs an adopt function.`,
+      );
     // While the owner adopts, the entry is not the runtime's to release, whatever adoption does.
     entry.state = 'adopting';
     let completed = false;
@@ -232,7 +264,11 @@ export class InvocationResources {
    * Releases a token the invocation can no longer own, with no hook involved and within `hookMs`. A
    * failure or overrun reaches only the observer: the outcome and the hooks are long past.
    */
-  private releaseAtOnce(token: unknown, release: Release<unknown>, hookMs: number): void {
+  private releaseAtOnce(
+    token: unknown,
+    release: Release<unknown>,
+    hookMs: number,
+  ): void {
     const controller = new AbortController();
     let returned: unknown;
     try {

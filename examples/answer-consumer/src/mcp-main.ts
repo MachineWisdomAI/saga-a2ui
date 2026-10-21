@@ -15,9 +15,12 @@ const app = new App({ name: 'answer-consumer-view', version: '0.0.0' });
 
 const hostLinks: HostLinks = {
   async open(url) {
-    if (app.getHostCapabilities()?.openLinks === undefined) return 'unavailable';
+    if (app.getHostCapabilities()?.openLinks === undefined)
+      return 'unavailable';
     try {
-      return (await app.openLink({ url })).isError === true ? 'denied' : 'opened';
+      return (await app.openLink({ url })).isError === true
+        ? 'denied'
+        : 'opened';
     } catch {
       return 'failed';
     }
@@ -31,7 +34,8 @@ const AnswerView = createAnswerViewElement({
 });
 customElements.define('answer-view', AnswerView);
 
-const view = document.querySelector<InstanceType<typeof AnswerView>>('answer-view');
+const view =
+  document.querySelector<InstanceType<typeof AnswerView>>('answer-view');
 if (!view) throw new Error('mcp.html has no answer-view element');
 
 const connection = await connectToolResultView({

@@ -1,23 +1,39 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import { FAITHFUL_CARD_CONTRACT_VERSION } from '@saga-a2ui/components/faithful-card';
 import { createInstanceHost } from '@saga-a2ui/core/actions';
-import { FaithfulCardContentElement, provideContentView } from '@saga-a2ui/lit/faithful-card';
+import {
+  FaithfulCardContentElement,
+  provideContentView,
+} from '@saga-a2ui/lit/faithful-card';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { PlayControlElement } from './lit/play-control.js';
 import { createAppHostLinks } from './mcp/host-links.js';
-import { connectPlaybackView, type PlaybackViewState } from './playback/playback-view.js';
+import {
+  connectPlaybackView,
+  type PlaybackViewState,
+} from './playback/playback-view.js';
 import { createWebAudioPlayer } from './playback/web-audio-player.js';
 
 // Composition root of the player view (built into one HTML resource by vite.playback-view.config.ts).
 // No server code and no credential: the sign-in and the capability arrive only through the host's
 // bridge, and every value is written through Lit text bindings.
-if (!customElements.get('saga-play-control')) customElements.define('saga-play-control', PlayControlElement);
-if (!customElements.get('saga-faithful-card-content')) customElements.define('saga-faithful-card-content', FaithfulCardContentElement);
+if (!customElements.get('saga-play-control'))
+  customElements.define('saga-play-control', PlayControlElement);
+if (!customElements.get('saga-faithful-card-content'))
+  customElements.define(
+    'saga-faithful-card-content',
+    FaithfulCardContentElement,
+  );
 
 const control = document.querySelector<PlayControlElement>('saga-play-control');
-const title = document.querySelector<HTMLElement>('[data-testid="playback-title"]');
-const descriptionRoot = document.querySelector<HTMLElement>('[data-testid="playback-description"]');
-if (!control || !title || !descriptionRoot) throw new Error('playback.html is missing its control, title or description');
+const title = document.querySelector<HTMLElement>(
+  '[data-testid="playback-title"]',
+);
+const descriptionRoot = document.querySelector<HTMLElement>(
+  '[data-testid="playback-description"]',
+);
+if (!control || !title || !descriptionRoot)
+  throw new Error('playback.html is missing its control, title or description');
 const descriptionHost: HTMLElement = descriptionRoot;
 
 const app = new App({ name: 'saga-a2ui-playback-view', version: '0.0.0' });
@@ -66,9 +82,13 @@ function showDescription(state: PlaybackViewState): void {
     descriptionHost.replaceChildren();
     return;
   }
-  let card = descriptionHost.querySelector<FaithfulCardContentElement>('saga-faithful-card-content');
+  let card = descriptionHost.querySelector<FaithfulCardContentElement>(
+    'saga-faithful-card-content',
+  );
   if (!card) {
-    card = document.createElement('saga-faithful-card-content') as FaithfulCardContentElement;
+    card = document.createElement(
+      'saga-faithful-card-content',
+    ) as FaithfulCardContentElement;
     descriptionHost.append(card);
   }
   card.contractVersion = FAITHFUL_CARD_CONTRACT_VERSION;
@@ -84,7 +104,8 @@ const connection = await connectPlaybackView({
   ...(contentConsent ? { contentConsent } : {}),
   show(state: PlaybackViewState) {
     control.state = state;
-    title.textContent = 'episode' in state && state.episode ? state.episode.title : 'Player';
+    title.textContent =
+      'episode' in state && state.episode ? state.episode.title : 'Player';
     showDescription(state);
   },
 });

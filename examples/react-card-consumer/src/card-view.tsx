@@ -2,7 +2,10 @@ import { A2uiSurface } from '@saga-a2ui/react/a2ui';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { HostLinks } from '@saga-a2ui/components/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
-import { FaithfulCardProvider, type FaithfulCardView } from '@saga-a2ui/react/faithful-card';
+import {
+  FaithfulCardProvider,
+  type FaithfulCardView,
+} from '@saga-a2ui/react/faithful-card';
 import '@saga-a2ui/react/faithful-card.css';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -10,7 +13,10 @@ import { readAnswerMarkdown } from './answer-result.js';
 import { openAnswerSurface, type AnswerSurface } from './answer-surface.js';
 import './card-view.css';
 import { createContentView } from './content-view.js';
-import { CONTENT_POLICY_ELEMENT_ID, policyFromEmbedded } from './embedded-policy.js';
+import {
+  CONTENT_POLICY_ELEMENT_ID,
+  policyFromEmbedded,
+} from './embedded-policy.js';
 
 // The application: one React root that shows whatever answer the host last delivered, and nothing
 // else. The page is built once. Its policy comes from the document it was served in, its brand from
@@ -50,7 +56,12 @@ function createStatusStore() {
 }
 type StatusStore = ReturnType<typeof createStatusStore>;
 
-function CardApp(props: { readonly brand: Brand; readonly view: FaithfulCardView; readonly answer: AnswerSurface; readonly status: StatusStore }) {
+function CardApp(props: {
+  readonly brand: Brand;
+  readonly view: FaithfulCardView;
+  readonly answer: AnswerSurface;
+  readonly status: StatusStore;
+}) {
   const { brand, view, answer, status } = props;
   const current = useSyncExternalStore(status.subscribe, status.get);
   return (
@@ -73,7 +84,9 @@ function PolicyProblem(props: { readonly brand: Brand }) {
   return (
     <main className="card-app">
       <h1 className="card-title">{props.brand.name}</h1>
-      <p role="alert">This view could not start: its content policy is not valid.</p>
+      <p role="alert">
+        This view could not start: its content policy is not valid.
+      </p>
     </main>
   );
 }
@@ -86,7 +99,9 @@ export async function mountCardView(brand: Brand): Promise<void> {
   const container = document.getElementById('root');
   if (container === null) throw new Error('The page has no #root element.');
   const root = createRoot(container);
-  const policy = policyFromEmbedded(document.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null);
+  const policy = policyFromEmbedded(
+    document.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
+  );
   if (!policy.ok) {
     root.render(<PolicyProblem brand={brand} />);
     return;
@@ -95,15 +110,22 @@ export async function mountCardView(brand: Brand): Promise<void> {
   const app = new App({ name: 'react-card-consumer-view', version: '0.0.0' });
   const hostLinks: HostLinks = {
     async open(url) {
-      if (app.getHostCapabilities()?.openLinks === undefined) return 'unavailable';
+      if (app.getHostCapabilities()?.openLinks === undefined)
+        return 'unavailable';
       try {
-        return (await app.openLink({ url })).isError === true ? 'denied' : 'opened';
+        return (await app.openLink({ url })).isError === true
+          ? 'denied'
+          : 'opened';
       } catch {
         return 'failed';
       }
     },
   };
-  const view = createContentView({ policy: policy.policy, hostLinks, document });
+  const view = createContentView({
+    policy: policy.policy,
+    hostLinks,
+    document,
+  });
   const answer = openAnswerSurface();
   const status = createStatusStore();
   root.render(
@@ -117,9 +139,15 @@ export async function mountCardView(brand: Brand): Promise<void> {
    * Every result is a new selection, so it first revokes the view's image consent: an answer whose Markdown
    * equals the previous one would otherwise look unchanged to the card and keep the earlier grant.
    */
-  const show = (result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void => {
+  const show = (result: {
+    readonly isError?: boolean;
+    readonly structuredContent?: unknown;
+  }): void => {
     view.consent.revokeAll();
-    const markdown = result.isError === true ? undefined : readAnswerMarkdown(result.structuredContent);
+    const markdown =
+      result.isError === true
+        ? undefined
+        : readAnswerMarkdown(result.structuredContent);
     const shown = answer.show(markdown ?? '');
     status.set(markdown !== undefined && shown.ok ? 'answer' : 'problem');
   };

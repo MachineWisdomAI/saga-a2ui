@@ -30,8 +30,16 @@ export type InputFailure = (
 
 /** Failures while prerequisites run. The handler has not started and `provided` is incomplete. */
 export type PrerequisiteFailure = (
-  | { readonly kind: 'refused'; readonly prerequisite: string; readonly reason: string }
-  | { readonly kind: 'prerequisite-error'; readonly prerequisite: string; readonly error: unknown }
+  | {
+      readonly kind: 'refused';
+      readonly prerequisite: string;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: 'prerequisite-error';
+      readonly prerequisite: string;
+      readonly error: unknown;
+    }
   | { readonly kind: 'timeout' }
 ) &
   Categorized;
@@ -46,18 +54,30 @@ export type PrerequisiteFailure = (
 export type RunningFailure<Result> = (
   | { readonly kind: 'handler-error'; readonly error: unknown }
   | { readonly kind: 'timeout' }
-  | { readonly kind: 'success-hook-error'; readonly error: unknown; readonly result: Result }
+  | {
+      readonly kind: 'success-hook-error';
+      readonly error: unknown;
+      readonly result: Result;
+    }
   | { readonly kind: 'success-hook-timeout'; readonly result: Result }
 ) &
   Categorized;
 
 /** Steps after the outcome is decided. 'adopt' is a transfer callback that returned a thenable. */
-export type CleanupStep = 'onFailure' | 'onCanceled' | 'onFinally' | 'release' | 'adopt';
+export type CleanupStep =
+  'onFailure' | 'onCanceled' | 'onFinally' | 'release' | 'adopt';
 
 /** A diagnostic about cleanup. It never changes the primary outcome. */
 export type CleanupError =
-  | { readonly step: CleanupStep; readonly reason: 'threw'; readonly error: unknown }
-  | { readonly step: CleanupStep; readonly reason: 'budget-exceeded' | 'obsolete' };
+  | {
+      readonly step: CleanupStep;
+      readonly reason: 'threw';
+      readonly error: unknown;
+    }
+  | {
+      readonly step: CleanupStep;
+      readonly reason: 'budget-exceeded' | 'obsolete';
+    };
 
 /**
  * Canceled stages: 'prerequisites' and 'running' are before the handler's result was observed, so
@@ -66,12 +86,37 @@ export type CleanupError =
  */
 export type Outcome<Result> =
   | { readonly status: 'succeeded'; readonly result: Result }
-  | { readonly status: 'failed'; readonly stage: 'input'; readonly failure: InputFailure }
-  | { readonly status: 'failed'; readonly stage: 'prerequisites'; readonly failure: PrerequisiteFailure }
-  | { readonly status: 'failed'; readonly stage: 'running'; readonly failure: RunningFailure<Result> }
-  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'prerequisites' }
-  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'running' }
-  | { readonly status: 'canceled'; readonly cause: CancelCause; readonly stage: 'completing'; readonly result: Result };
+  | {
+      readonly status: 'failed';
+      readonly stage: 'input';
+      readonly failure: InputFailure;
+    }
+  | {
+      readonly status: 'failed';
+      readonly stage: 'prerequisites';
+      readonly failure: PrerequisiteFailure;
+    }
+  | {
+      readonly status: 'failed';
+      readonly stage: 'running';
+      readonly failure: RunningFailure<Result>;
+    }
+  | {
+      readonly status: 'canceled';
+      readonly cause: CancelCause;
+      readonly stage: 'prerequisites';
+    }
+  | {
+      readonly status: 'canceled';
+      readonly cause: CancelCause;
+      readonly stage: 'running';
+    }
+  | {
+      readonly status: 'canceled';
+      readonly cause: CancelCause;
+      readonly stage: 'completing';
+      readonly result: Result;
+    };
 
 /**
  * The freshness check supplied to one callback. Each prerequisite, the handler and each hook gets

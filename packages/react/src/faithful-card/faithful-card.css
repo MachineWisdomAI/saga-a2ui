@@ -66,7 +66,8 @@
 .saga-card blockquote {
   margin-inline: 1em;
   padding-inline-start: 0.75em;
-  border-inline-start: 3px solid var(--saga-card-accent-color, var(--saga-card-border-color, #999));
+  border-inline-start: 3px solid
+    var(--saga-card-accent-color, var(--saga-card-border-color, #999));
 }
 
 .saga-card pre {

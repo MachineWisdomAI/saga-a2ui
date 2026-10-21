@@ -1,7 +1,14 @@
-import { provideContentView, type ContentView } from '@saga-a2ui/lit/faithful-card';
+import {
+  provideContentView,
+  type ContentView,
+} from '@saga-a2ui/lit/faithful-card';
 import { css, html } from 'lit';
 import type { AnswerFunction } from './answer-function.js';
-import { answerData, answerFrameStyles, createAnswerSurfaceElement } from './answer-surface.js';
+import {
+  answerData,
+  answerFrameStyles,
+  createAnswerSurfaceElement,
+} from './answer-surface.js';
 import { applyBranding, type Branding } from './branding.js';
 
 // The standalone page's composition: the shared answer surface (answer-surface.ts), its own chrome
@@ -23,9 +30,22 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
     static override styles = [
       answerFrameStyles,
       css`
-        form { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block-end: 0.5rem; }
-        input { flex: 1 1 12rem; min-width: 0; font: inherit; padding: 0.35rem; }
-        button { font: inherit; padding: 0.35rem 0.75rem; }
+        form {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-block-end: 0.5rem;
+        }
+        input {
+          flex: 1 1 12rem;
+          min-width: 0;
+          font: inherit;
+          padding: 0.35rem;
+        }
+        button {
+          font: inherit;
+          padding: 0.35rem 0.75rem;
+        }
       `,
     ];
 

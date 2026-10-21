@@ -5,5 +5,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'e2e/host-fixture',
   base: './',
-  build: { outDir: '../../dist/host-fixture', emptyOutDir: true, target: 'es2022' },
+  build: {
+    outDir: '../../dist/host-fixture',
+    emptyOutDir: true,
+    target: 'es2022',
+  },
 });

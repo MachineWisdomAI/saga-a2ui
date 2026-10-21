@@ -8,7 +8,11 @@ export const CANARY = 'PRIVATE-FIELD-CANARY';
 
 export interface BackendHooks {
   /** Awaited at the start of each backend call; a test holds a call open by returning a pending promise. */
-  before?(call: 'notesFor' | 'isSignedIn' | 'archive', accountId: string, noteId?: string): Promise<void> | void;
+  before?(
+    call: 'notesFor' | 'isSignedIn' | 'archive',
+    accountId: string,
+    noteId?: string,
+  ): Promise<void> | void;
   /** Awaited after an archive was applied and before it answers; throwing here is a failure that follows a write. */
   afterArchive?(accountId: string, noteId: string): Promise<void> | void;
 }
@@ -28,7 +32,12 @@ export const alice = 'acct-alice';
 export const bob = 'acct-bob';
 
 export function fixtureNotes(): NoteRecord[] {
-  const note = (id: string, ownerAccountId: string, title: string, body: string): NoteRecord => ({
+  const note = (
+    id: string,
+    ownerAccountId: string,
+    title: string,
+    body: string,
+  ): NoteRecord => ({
     id,
     ownerAccountId,
     title,
@@ -37,13 +46,26 @@ export function fixtureNotes(): NoteRecord[] {
     privateMemo: `${CANARY}-memo-${id}`,
   });
   return [
-    note('n-1', alice, 'Alpha', 'First **note** with a [link](https://docs.example.com/alpha).'),
-    note('n-2', alice, 'Beta', 'Second note\n\n![tracker](https://tracker.example.com/pixel.png)'),
+    note(
+      'n-1',
+      alice,
+      'Alpha',
+      'First **note** with a [link](https://docs.example.com/alpha).',
+    ),
+    note(
+      'n-2',
+      alice,
+      'Beta',
+      'Second note\n\n![tracker](https://tracker.example.com/pixel.png)',
+    ),
     note('n-3', bob, 'Gamma', 'Bob’s note, never shown to Alice.'),
   ];
 }
 
-export function createFixtureBackend(hooks: BackendHooks = {}, records: readonly NoteRecord[] = fixtureNotes()): FixtureBackend {
+export function createFixtureBackend(
+  hooks: BackendHooks = {},
+  records: readonly NoteRecord[] = fixtureNotes(),
+): FixtureBackend {
   const calls = { notesFor: 0, isSignedIn: 0, archive: 0 };
   const archived: string[] = [];
   const signedOut = new Set<string>();
@@ -57,7 +79,9 @@ export function createFixtureBackend(hooks: BackendHooks = {}, records: readonly
     async notesFor(accountId) {
       calls.notesFor += 1;
       await hooks.before?.('notesFor', accountId);
-      return records.filter((note) => note.ownerAccountId === accountId && !done.has(note.id));
+      return records.filter(
+        (note) => note.ownerAccountId === accountId && !done.has(note.id),
+      );
     },
     async isSignedIn(accountId) {
       calls.isSignedIn += 1;
@@ -68,7 +92,13 @@ export function createFixtureBackend(hooks: BackendHooks = {}, records: readonly
       calls.archive += 1;
       await hooks.before?.('archive', accountId, noteId);
       const note = records.find((one) => one.id === noteId);
-      if (!note || note.ownerAccountId !== accountId || revoked.has(accountId) || done.has(noteId)) return undefined;
+      if (
+        !note ||
+        note.ownerAccountId !== accountId ||
+        revoked.has(accountId) ||
+        done.has(noteId)
+      )
+        return undefined;
       done.add(noteId);
       archived.push(noteId);
       await hooks.afterArchive?.(accountId, noteId);

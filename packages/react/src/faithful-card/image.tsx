@@ -31,7 +31,8 @@ export function CommittedImage(props: {
   // permitted later; once set it is never set again.
   useLayoutEffect(() => {
     const image = element.current;
-    if (image !== null && image.getAttribute('src') !== url && stillPermitted()) image.setAttribute('src', url);
+    if (image !== null && image.getAttribute('src') !== url && stillPermitted())
+      image.setAttribute('src', url);
   });
   return (
     <img

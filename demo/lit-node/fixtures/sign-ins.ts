@@ -1,5 +1,8 @@
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
-import { createDevelopmentVerifier, DEV_TOKENS } from '../../../apps/lit-host/src/mcp/dev-auth.js';
+import {
+  createDevelopmentVerifier,
+  DEV_TOKENS,
+} from '../../../apps/lit-host/src/mcp/dev-auth.js';
 import { ACCOUNT_SCOPE } from '../../../templates/lit-node/server/authenticate.js';
 
 // DEMO-OWNED, LOCAL-ONLY authentication. The credentials are fixed, public strings that anyone who
@@ -9,7 +12,8 @@ import { ACCOUNT_SCOPE } from '../../../templates/lit-node/server/authenticate.j
 // shows these choices under a banner that says so, and `NODE_ENV=production` refuses to start.
 
 export interface SignIn {
-  readonly id: 'alice' | 'bob' | 'expired' | 'service' | 'unknown' | 'signed-out';
+  readonly id:
+    'alice' | 'bob' | 'expired' | 'service' | 'unknown' | 'signed-out';
   readonly label: string;
   /** What the host would send as the bearer credential; `undefined` sends none. */
   readonly token: string | undefined;
@@ -18,12 +22,43 @@ export interface SignIn {
 }
 
 export const SIGN_INS: readonly SignIn[] = [
-  { id: 'alice', label: 'Alice', token: DEV_TOKENS.alice, effect: 'A subscriber who may play the first episode.' },
-  { id: 'bob', label: 'Bob', token: DEV_TOKENS.bob, effect: 'A subscriber who may not play any episode.' },
-  { id: 'expired', label: 'Expired credential', token: DEV_TOKENS.expired, effect: 'Alice’s credential after it ran out; the server refuses it.' },
-  { id: 'service', label: 'Service credential', token: DEV_TOKENS.service, effect: 'Valid for the application itself, not for any account; protected endpoints refuse it.' },
-  { id: 'unknown', label: 'Unknown credential', token: 'not-a-demo-credential', effect: 'Nobody issued it; the server refuses it.' },
-  { id: 'signed-out', label: 'Signed out', token: undefined, effect: 'No credential at all; protected endpoints refuse the request.' },
+  {
+    id: 'alice',
+    label: 'Alice',
+    token: DEV_TOKENS.alice,
+    effect: 'A subscriber who may play the first episode.',
+  },
+  {
+    id: 'bob',
+    label: 'Bob',
+    token: DEV_TOKENS.bob,
+    effect: 'A subscriber who may not play any episode.',
+  },
+  {
+    id: 'expired',
+    label: 'Expired credential',
+    token: DEV_TOKENS.expired,
+    effect: 'Alice’s credential after it ran out; the server refuses it.',
+  },
+  {
+    id: 'service',
+    label: 'Service credential',
+    token: DEV_TOKENS.service,
+    effect:
+      'Valid for the application itself, not for any account; protected endpoints refuse it.',
+  },
+  {
+    id: 'unknown',
+    label: 'Unknown credential',
+    token: 'not-a-demo-credential',
+    effect: 'Nobody issued it; the server refuses it.',
+  },
+  {
+    id: 'signed-out',
+    label: 'Signed out',
+    token: undefined,
+    effect: 'No credential at all; protected endpoints refuse the request.',
+  },
 ];
 
 /**
@@ -36,7 +71,9 @@ export function createDemoVerifier(): OAuthTokenVerifier {
   return {
     async verifyAccessToken(token) {
       const info = await development.verifyAccessToken(token);
-      return typeof info.extra?.accountId === 'string' ? { ...info, scopes: [...info.scopes, ACCOUNT_SCOPE] } : info;
+      return typeof info.extra?.accountId === 'string'
+        ? { ...info, scopes: [...info.scopes, ACCOUNT_SCOPE] }
+        : info;
     },
   };
 }

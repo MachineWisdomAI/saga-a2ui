@@ -6,7 +6,13 @@ export const ANSWER_SURFACE_ID = 'answer';
 
 /** Creates the card; each field binds to the data model. */
 export const answerSurface = [
-  { version: 'v0.9', createSurface: { surfaceId: ANSWER_SURFACE_ID, catalogId: ANSWER_CATALOG_ID } },
+  {
+    version: 'v0.9',
+    createSurface: {
+      surfaceId: ANSWER_SURFACE_ID,
+      catalogId: ANSWER_CATALOG_ID,
+    },
+  },
   {
     version: 'v0.9',
     updateComponents: {
@@ -31,19 +37,35 @@ export const answerSurface = [
  */
 export function answerCardData(state: AnswerViewState): readonly A2uiMessage[] {
   const value = { state: state.kind, ...fields(state) };
-  return [{ version: 'v0.9', updateDataModel: { surfaceId: ANSWER_SURFACE_ID, value } }];
+  return [
+    {
+      version: 'v0.9',
+      updateDataModel: { surfaceId: ANSWER_SURFACE_ID, value },
+    },
+  ];
 }
 
-function fields(state: AnswerViewState): { status: string; question: string; answer: string } {
+function fields(state: AnswerViewState): {
+  status: string;
+  question: string;
+  answer: string;
+} {
   switch (state.kind) {
     case 'waiting':
       return {
-        status: state.question === undefined ? 'Waiting for a question…' : 'Waiting for the answer…',
+        status:
+          state.question === undefined
+            ? 'Waiting for a question…'
+            : 'Waiting for the answer…',
         question: state.question ?? '',
         answer: '',
       };
     case 'answer':
-      return { status: 'Answer', question: state.result.question, answer: state.result.answer };
+      return {
+        status: 'Answer',
+        question: state.result.question,
+        answer: state.result.answer,
+      };
     case 'problem':
       return { status: state.message, question: '', answer: '' };
   }

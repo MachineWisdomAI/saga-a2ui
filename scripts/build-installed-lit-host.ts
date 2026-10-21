@@ -30,7 +30,12 @@ export const litHostSource = path.join(repoRoot, 'apps', 'lit-host');
 export const installedLitHostDist = path.join(litHostSource, 'dist-installed');
 
 /** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React; the only page built here that uses it, the React player, needs only the core and MCP packages, so `react` is a third-party dependency of the application, not an installed SDK package). */
-export const INSTALLED_SDK_PACKAGES = ['core', 'lit', 'components', 'mcp'] as const;
+export const INSTALLED_SDK_PACKAGES = [
+  'core',
+  'lit',
+  'components',
+  'mcp',
+] as const;
 
 /** The packages the application itself imports, besides the SDK packages, plus the build tooling its Vite configurations load. */
 export const LIT_HOST_OWN_DEPENDENCIES = [
@@ -64,7 +69,17 @@ export const INSTALLED_PAGE_CONFIGS = [
   'vite.card-workflow.config.ts',
 ] as const;
 
-const COPIED_ENTRIES = ['src', 'e2e/action-consumer', 'e2e/archive-fixture', 'e2e/card-workflow', 'e2e/catalog-isolation', 'e2e/faithful-card', 'e2e/host-fixture', 'tsconfig.json', ...INSTALLED_PAGE_CONFIGS];
+const COPIED_ENTRIES = [
+  'src',
+  'e2e/action-consumer',
+  'e2e/archive-fixture',
+  'e2e/card-workflow',
+  'e2e/catalog-isolation',
+  'e2e/faithful-card',
+  'e2e/host-fixture',
+  'tsconfig.json',
+  ...INSTALLED_PAGE_CONFIGS,
+];
 
 export interface PreparedLitHost {
   readonly consumer: string;
@@ -75,13 +90,22 @@ export interface PreparedLitHost {
 export function prepareInstalledLitHost(work: string): PreparedLitHost {
   const consumer = path.join(work, 'consumer');
   const isTest = (from: string): boolean => /\.(test|spec)\.ts$/.test(from);
-  for (const entry of [...COPIED_ENTRIES, ...fs.readdirSync(litHostSource).filter((name) => name.endsWith('.html'))]) {
+  for (const entry of [
+    ...COPIED_ENTRIES,
+    ...fs.readdirSync(litHostSource).filter((name) => name.endsWith('.html')),
+  ]) {
     const target = path.join(consumer, entry);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.cpSync(path.join(litHostSource, entry), target, { recursive: true, filter: (from) => !from.includes('node_modules') && !isTest(from) });
+    fs.cpSync(path.join(litHostSource, entry), target, {
+      recursive: true,
+      filter: (from) => !from.includes('node_modules') && !isTest(from),
+    });
   }
   // The application is an ES module package, so its Vite configurations load as such.
-  fs.writeFileSync(path.join(consumer, 'package.json'), `${JSON.stringify({ private: true, type: 'module' })}\n`);
+  fs.writeFileSync(
+    path.join(consumer, 'package.json'),
+    `${JSON.stringify({ private: true, type: 'module' })}\n`,
+  );
   const sdk = installPackedSdk(work, consumer, INSTALLED_SDK_PACKAGES);
   linkDeclaredDependencies(consumer, sdk, LIT_HOST_OWN_DEPENDENCIES);
   return { consumer, sdk };
@@ -94,7 +118,11 @@ function sha256(file: string): string {
 function filesUnder(directory: string): string[] {
   return fs
     .readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => (entry.isDirectory() ? filesUnder(path.join(directory, entry.name)) : [path.join(directory, entry.name)]))
+    .flatMap((entry) =>
+      entry.isDirectory()
+        ? filesUnder(path.join(directory, entry.name))
+        : [path.join(directory, entry.name)],
+    )
     .sort();
 }
 
@@ -111,7 +139,9 @@ export interface ModuleProvenance {
 
 function thirdPartyPackageName(file: string): string {
   const marker = `${path.sep}node_modules${path.sep}`;
-  const parts = file.slice(file.lastIndexOf(marker) + marker.length).split(path.sep);
+  const parts = file
+    .slice(file.lastIndexOf(marker) + marker.length)
+    .split(path.sep);
   return parts[0]!.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]!;
 }
 
@@ -131,9 +161,13 @@ function canonical(file: string): string {
  * location differently. A workspace alias still resolves into `packages/` or the application's
  * workspace sources and so is still unexpected.
  */
-export function classifyModules(consumer: string, modules: readonly string[]): ModuleProvenance {
+export function classifyModules(
+  consumer: string,
+  modules: readonly string[],
+): ModuleProvenance {
   const consumerRoot = canonical(consumer);
-  const installedRoot = path.join(consumerRoot, 'node_modules', '@saga-a2ui') + path.sep;
+  const installedRoot =
+    path.join(consumerRoot, 'node_modules', '@saga-a2ui') + path.sep;
   const repoModules = canonical(path.join(repoRoot, 'node_modules')) + path.sep;
   const installedSdkFiles: string[] = [];
   const thirdParty = new Set<string>();
@@ -144,16 +178,29 @@ export function classifyModules(consumer: string, modules: readonly string[]): M
     if (reported.startsWith('\0') || !path.isAbsolute(reported)) continue; // Vite's virtual helpers
     const file = canonical(reported);
     if (file.startsWith(installedRoot)) {
-      installedSdkFiles.push(`@saga-a2ui/${file.slice(installedRoot.length).split(path.sep).join('/')}`);
-    } else if (file.startsWith(consumerRoot + path.sep) && !file.includes(`${path.sep}node_modules${path.sep}`)) {
+      installedSdkFiles.push(
+        `@saga-a2ui/${file.slice(installedRoot.length).split(path.sep).join('/')}`,
+      );
+    } else if (
+      file.startsWith(consumerRoot + path.sep) &&
+      !file.includes(`${path.sep}node_modules${path.sep}`)
+    ) {
       applicationModules += 1;
-    } else if (file.startsWith(repoModules) && !file.includes(`${path.sep}@saga-a2ui${path.sep}`)) {
+    } else if (
+      file.startsWith(repoModules) &&
+      !file.includes(`${path.sep}@saga-a2ui${path.sep}`)
+    ) {
       thirdParty.add(thirdPartyPackageName(file));
     } else {
       unexpected.push(file);
     }
   }
-  return { installedSdkFiles: installedSdkFiles.sort(), applicationModules, thirdPartyPackages: [...thirdParty].sort(), unexpected: unexpected.sort() };
+  return {
+    installedSdkFiles: installedSdkFiles.sort(),
+    applicationModules,
+    thirdPartyPackages: [...thirdParty].sort(),
+    unexpected: unexpected.sort(),
+  };
 }
 
 export interface BuiltPage {
@@ -185,11 +232,16 @@ export interface InstalledLitHostIdentity {
   /** The listener built from the same install as the pages. Its bytes are not written under the output directory. */
   readonly server: Omit<BuiltServer, 'file'>;
   /** The served playback view against the accepted CARD2 production hash; recorded, not asserted (see CARD2_PLAYBACK_SHA256). */
-  readonly playbackView: { readonly sha256: string; readonly cardTwoSha256: string; readonly matchesCardTwo: boolean };
+  readonly playbackView: {
+    readonly sha256: string;
+    readonly cardTwoSha256: string;
+    readonly matchesCardTwo: boolean;
+  };
 }
 
 /** The installed playback document CARD2 accepted ("reviewed installed playback HTML", issue #20 comment 6280435005). A different value names a changed view, for the coordinator to assess. */
-export const CARD2_PLAYBACK_SHA256 = '7ea1d8d0d696a20921896d1df45905cd22455f5f17fa20cd1d41243591224afd';
+export const CARD2_PLAYBACK_SHA256 =
+  '7ea1d8d0d696a20921896d1df45905cd22455f5f17fa20cd1d41243591224afd';
 
 /** The application entry the external listener is bundled from: the same one `npm run serve:mcp` runs. */
 export const INSTALLED_SERVER_ENTRY = 'src/mcp/serve.ts';
@@ -198,10 +250,16 @@ export const INSTALLED_SERVER_ENTRY = 'src/mcp/serve.ts';
 export function externalImportsOf(file: string): string[] {
   const code = fs.readFileSync(file, 'utf8');
   const found = new Set<string>();
-  for (const match of code.matchAll(/(?:^|\n)\s*import\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+  for (const match of code.matchAll(
+    /(?:^|\n)\s*import\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g,
+  )) {
     const specifier = match[1] as string;
     if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
-    found.add(specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : (specifier.split('/')[0] as string));
+    found.add(
+      specifier.startsWith('@')
+        ? specifier.split('/').slice(0, 2).join('/')
+        : (specifier.split('/')[0] as string),
+    );
   }
   return [...found].sort();
 }
@@ -219,21 +277,47 @@ export interface BuiltInstalledHost {
  * The listener is bundled against the same installed copies the pages were: a module loaded from the
  * workspace instead fails the build rather than being reported.
  */
-export async function buildInstalledHost(work: string): Promise<BuiltInstalledHost> {
+export async function buildInstalledHost(
+  work: string,
+): Promise<BuiltInstalledHost> {
   const { consumer, sdk } = prepareInstalledLitHost(work);
   const pages: BuiltPage[] = [];
   for (const config of INSTALLED_PAGE_CONFIGS) {
-    const provenance = classifyModules(consumer, await buildConsumerFromConfig(consumer, config));
-    if (provenance.unexpected.length > 0) throw new Error(`${config} loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`);
+    const provenance = classifyModules(
+      consumer,
+      await buildConsumerFromConfig(consumer, config),
+    );
+    if (provenance.unexpected.length > 0)
+      throw new Error(
+        `${config} loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`,
+      );
     pages.push({ config, provenance });
   }
   const bundled = await bundleConsumerServer(consumer, INSTALLED_SERVER_ENTRY);
   const provenance = classifyModules(consumer, bundled.modules);
-  if (provenance.unexpected.length > 0) throw new Error(`the listener loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`);
+  if (provenance.unexpected.length > 0)
+    throw new Error(
+      `the listener loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`,
+    );
   const externalImports = externalImportsOf(bundled.file);
-  const sdkImports = externalImports.filter((name) => name.startsWith('@saga-a2ui/'));
-  if (sdkImports.length > 0) throw new Error(`the listener bundle still imports ${sdkImports.join(', ')} at run time instead of carrying the installed copies`);
-  return { consumer, sdk, pages, server: { file: bundled.file, sha256: sha256(bundled.file), provenance, externalImports } };
+  const sdkImports = externalImports.filter((name) =>
+    name.startsWith('@saga-a2ui/'),
+  );
+  if (sdkImports.length > 0)
+    throw new Error(
+      `the listener bundle still imports ${sdkImports.join(', ')} at run time instead of carrying the installed copies`,
+    );
+  return {
+    consumer,
+    sdk,
+    pages,
+    server: {
+      file: bundled.file,
+      sha256: sha256(bundled.file),
+      provenance,
+      externalImports,
+    },
+  };
 }
 
 export interface RunningInstalledListener {
@@ -259,35 +343,67 @@ const LISTENER_READY_MS = 30_000;
  * authentication. It is ready only when it printed its URL, which it does after reading every view;
  * a missing view ends the process before that and rejects here with what it wrote.
  */
-export async function startInstalledListener(built: BuiltInstalledHost, viewsDirectory = path.join(built.consumer, 'dist')): Promise<RunningInstalledListener> {
+export async function startInstalledListener(
+  built: BuiltInstalledHost,
+  viewsDirectory = path.join(built.consumer, 'dist'),
+): Promise<RunningInstalledListener> {
   const child = spawn(process.execPath, [built.server.file], {
     cwd: built.consumer,
-    env: { PATH: process.env.PATH ?? '', PORT: '0', SAGA_VIEWS_DIR: viewsDirectory },
+    env: {
+      PATH: process.env.PATH ?? '',
+      PORT: '0',
+      SAGA_VIEWS_DIR: viewsDirectory,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let written = '';
-  child.stdout.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
-  child.stderr.setEncoding('utf8').on('data', (chunk: string) => void (written += chunk));
-  const exited = new Promise<number | null>((resolve) => child.once('exit', resolve));
+  child.stdout
+    .setEncoding('utf8')
+    .on('data', (chunk: string) => void (written += chunk));
+  child.stderr
+    .setEncoding('utf8')
+    .on('data', (chunk: string) => void (written += chunk));
+  const exited = new Promise<number | null>((resolve) =>
+    child.once('exit', resolve),
+  );
   const stop = async (): Promise<void> => {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill('SIGTERM');
     await exited;
   };
-  const urlOf = (label: string): string | undefined => new RegExp(`${label}[^\\n]*?(http://127\\.0\\.0\\.1:\\d+/\\S+)`).exec(written)?.[1];
+  const urlOf = (label: string): string | undefined =>
+    new RegExp(`${label}[^\\n]*?(http://127\\.0\\.0\\.1:\\d+/\\S+)`).exec(
+      written,
+    )?.[1];
   const deadline = Date.now() + LISTENER_READY_MS;
   while (Date.now() < deadline) {
-    const mcp = /MCP server listening at (http:\/\/127\.0\.0\.1:\d+)\/mcp/.exec(written);
+    const mcp = /MCP server listening at (http:\/\/127\.0\.0\.1:\d+)\/mcp/.exec(
+      written,
+    );
     const subscriptions = urlOf('subscriptions endpoint');
     const playback = urlOf('playback endpoint');
     const answer = urlOf('answer endpoint');
     if (mcp?.[1] && subscriptions && playback && answer) {
-      return { origin: mcp[1], mcpUrl: `${mcp[1]}/mcp`, subscriptionsUrl: subscriptions, playbackUrl: playback, answerUrl: answer, output: () => written, stop };
+      return {
+        origin: mcp[1],
+        mcpUrl: `${mcp[1]}/mcp`,
+        subscriptionsUrl: subscriptions,
+        playbackUrl: playback,
+        answerUrl: answer,
+        output: () => written,
+        stop,
+      };
     }
-    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`the installed listener ended before it was ready (exit ${child.exitCode ?? child.signalCode}):\n${written}`);
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(
+        `the installed listener ended before it was ready (exit ${child.exitCode ?? child.signalCode}):\n${written}`,
+      );
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   await stop();
-  throw new Error(`the installed listener was not ready within ${LISTENER_READY_MS} ms:\n${written}`);
+  throw new Error(
+    `the installed listener was not ready within ${LISTENER_READY_MS} ms:\n${written}`,
+  );
 }
 
 /**
@@ -296,31 +412,62 @@ export async function startInstalledListener(built: BuiltInstalledHost, viewsDir
  * listener, where its modules came from. A module loaded from the workspace instead of an installed
  * copy fails the build rather than being reported.
  */
-export async function buildInstalledLitHost(outDir: string): Promise<InstalledLitHostIdentity> {
+export async function buildInstalledLitHost(
+  outDir: string,
+): Promise<InstalledLitHostIdentity> {
   const work = createWorkDirectory('saga-installed-lit-host-');
   try {
     const { consumer, sdk, pages, server } = await buildInstalledHost(work);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.cpSync(path.join(consumer, 'dist'), outDir, { recursive: true });
-    const playbackSha256 = sha256(path.join(outDir, 'playback-view', 'playback.html'));
+    const playbackSha256 = sha256(
+      path.join(outDir, 'playback-view', 'playback.html'),
+    );
     return {
-      sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
-      sourceDirty: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: repoRoot, encoding: 'utf8' }).trim() !== '',
+      sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+      sourceDirty:
+        execFileSync(
+          'git',
+          ['status', '--porcelain=v1', '--untracked-files=no'],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ).trim() !== '',
       node: process.version,
       npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
       packedTarballSha256: sdk.tarballSha256,
-      builtFilesSha256: Object.fromEntries(filesUnder(outDir).map((file) => [path.relative(outDir, file).split(path.sep).join('/'), sha256(file)])),
+      builtFilesSha256: Object.fromEntries(
+        filesUnder(outDir).map((file) => [
+          path.relative(outDir, file).split(path.sep).join('/'),
+          sha256(file),
+        ]),
+      ),
       pages,
-      server: { sha256: server.sha256, provenance: server.provenance, externalImports: server.externalImports },
-      playbackView: { sha256: playbackSha256, cardTwoSha256: CARD2_PLAYBACK_SHA256, matchesCardTwo: playbackSha256 === CARD2_PLAYBACK_SHA256 },
+      server: {
+        sha256: server.sha256,
+        provenance: server.provenance,
+        externalImports: server.externalImports,
+      },
+      playbackView: {
+        sha256: playbackSha256,
+        cardTwoSha256: CARD2_PLAYBACK_SHA256,
+        matchesCardTwo: playbackSha256 === CARD2_PLAYBACK_SHA256,
+      },
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   const identity = await buildInstalledLitHost(installedLitHostDist);
-  fs.writeFileSync(path.join(installedLitHostDist, 'identity.json'), `${JSON.stringify(identity, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(installedLitHostDist, 'identity.json'),
+    `${JSON.stringify(identity, null, 2)}\n`,
+  );
   console.log(JSON.stringify(identity, null, 2));
 }

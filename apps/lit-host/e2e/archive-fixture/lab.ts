@@ -1,5 +1,9 @@
 import type { CallToolResult } from '@modelcontextprotocol/client';
-import type { ServerRequest, ServerRequestOptions, ServerTransport } from '@saga-a2ui/core/actions';
+import type {
+  ServerRequest,
+  ServerRequestOptions,
+  ServerTransport,
+} from '@saga-a2ui/core/actions';
 import type { ArchiveEnvironment, ArchiveMessage } from './archive.js';
 
 // A test-controlled application environment for the browser pages. The page owns it; the Playwright
@@ -21,17 +25,28 @@ export interface ArchiveLab {
   /** Protected-operation requests that reached the transport, in order. */
   readonly requests: PendingRequest[];
   /** The prerequisites’ own requests, counted apart from the protected operation. */
-  readonly counts: { sessions: number; confirms: number; audits: number; records: number };
+  readonly counts: {
+    sessions: number;
+    confirms: number;
+    audits: number;
+    records: number;
+  };
   /** When true the session check waits for `releaseSession` instead of answering. */
   holdSession: boolean;
   signedIn: boolean;
   readonly heldSessions: (() => void)[];
   failRecord: boolean;
   releaseSession(): void;
-  readonly shown: { noteId: string | undefined; kind: ArchiveMessage['kind']; retry: boolean | undefined }[];
+  readonly shown: {
+    noteId: string | undefined;
+    kind: ArchiveMessage['kind'];
+    retry: boolean | undefined;
+  }[];
 }
 
-export function createArchiveLab(show: (noteId: string | undefined, message: ArchiveMessage) => void): {
+export function createArchiveLab(
+  show: (noteId: string | undefined, message: ArchiveMessage) => void,
+): {
   readonly lab: ArchiveLab;
   readonly environment: ArchiveEnvironment;
 } {
@@ -49,7 +64,10 @@ export function createArchiveLab(show: (noteId: string | undefined, message: Arc
   };
 
   const transport: ServerTransport<CallToolResult> = {
-    callServerTool(request: ServerRequest, options?: ServerRequestOptions): Promise<CallToolResult> {
+    callServerTool(
+      request: ServerRequest,
+      options?: ServerRequestOptions,
+    ): Promise<CallToolResult> {
       return new Promise((resolve, reject) => {
         const signal = options?.signal;
         requests.push({
@@ -61,7 +79,9 @@ export function createArchiveLab(show: (noteId: string | undefined, message: Arc
           reject: (message) => reject(new Error(message)),
         });
         // A client that aborts stops waiting. It does not recall what it sent.
-        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+          once: true,
+        });
       });
     },
   };
@@ -70,7 +90,8 @@ export function createArchiveLab(show: (noteId: string | undefined, message: Arc
     transport,
     async session() {
       lab.counts.sessions += 1;
-      if (lab.holdSession) await new Promise<void>((resolve) => heldSessions.push(resolve));
+      if (lab.holdSession)
+        await new Promise<void>((resolve) => heldSessions.push(resolve));
       return lab.signedIn ? { userKey: 'u-1' } : undefined;
     },
     async confirm() {
@@ -89,7 +110,11 @@ export function createArchiveLab(show: (noteId: string | undefined, message: Arc
       return undefined;
     },
     show(noteId, message) {
-      lab.shown.push({ noteId, kind: message.kind, retry: 'retry' in message ? message.retry : undefined });
+      lab.shown.push({
+        noteId,
+        kind: message.kind,
+        retry: 'retry' in message ? message.retry : undefined,
+      });
       show(noteId, message);
     },
   };

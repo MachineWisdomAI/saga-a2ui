@@ -66,7 +66,10 @@ export interface FaithfulCardReader {
 
 const SettingsSchema = z
   .object({
-    dialect: z.enum(['commonmark', 'commonmark-tables-strikethrough'] satisfies MarkdownDialect[]),
+    dialect: z.enum([
+      'commonmark',
+      'commonmark-tables-strikethrough',
+    ] satisfies MarkdownDialect[]),
     maxLength: z.number().int().positive().safe(),
   })
   .strict();
@@ -76,13 +79,21 @@ function failureFor(error: z.ZodError): ReaderFailure {
   if (settings.includes('dialect')) {
     return {
       kind: 'invalid-dialect',
-      message: 'The Markdown dialect must be "commonmark" or "commonmark-tables-strikethrough".',
+      message:
+        'The Markdown dialect must be "commonmark" or "commonmark-tables-strikethrough".',
     };
   }
   if (settings.includes('maxLength')) {
-    return { kind: 'invalid-limit', message: 'The content bound must be a finite positive whole number of UTF-16 code units.' };
+    return {
+      kind: 'invalid-limit',
+      message:
+        'The content bound must be a finite positive whole number of UTF-16 code units.',
+    };
   }
-  return { kind: 'invalid-config', message: 'The FaithfulCard settings are not valid.' };
+  return {
+    kind: 'invalid-config',
+    message: 'The FaithfulCard settings are not valid.',
+  };
 }
 
 /**
@@ -91,26 +102,38 @@ function failureFor(error: z.ZodError): ReaderFailure {
  * is a failure; the caller must not mount a card on guessed settings. There are no defaults:
  * the application decides what its content may be.
  */
-export function createFaithfulCardReader(settings: unknown): CreateReaderResult {
+export function createFaithfulCardReader(
+  settings: unknown,
+): CreateReaderResult {
   const parsed = SettingsSchema.safeParse(settings);
   if (!parsed.success) return { ok: false, failure: failureFor(parsed.error) };
-  const trusted: FaithfulCardSettings = Object.freeze({ dialect: parsed.data.dialect, maxLength: parsed.data.maxLength });
+  const trusted: FaithfulCardSettings = Object.freeze({
+    dialect: parsed.data.dialect,
+    maxLength: parsed.data.maxLength,
+  });
   return {
     ok: true,
     reader: Object.freeze({
       settings: trusted,
       read(input: unknown): ReadResult {
-        if (typeof input !== 'object' || input === null || Array.isArray(input)) return { ok: false, failure: { kind: 'invalid' } };
+        if (typeof input !== 'object' || input === null || Array.isArray(input))
+          return { ok: false, failure: { kind: 'invalid' } };
         const fields = input as Readonly<Record<string, unknown>>;
         // The version decides whether the rest of the shape means anything, so it is checked first.
-        if (fields.contractVersion !== FAITHFUL_CARD_CONTRACT_VERSION) return { ok: false, failure: { kind: 'unsupported-version' } };
+        if (fields.contractVersion !== FAITHFUL_CARD_CONTRACT_VERSION)
+          return { ok: false, failure: { kind: 'unsupported-version' } };
         const names = Object.keys(fields);
-        if (typeof fields.markdown !== 'string' || names.length !== 2) return { ok: false, failure: { kind: 'invalid' } };
+        if (typeof fields.markdown !== 'string' || names.length !== 2)
+          return { ok: false, failure: { kind: 'invalid' } };
         const result = parseMarkdown(fields.markdown, trusted);
         if (!result.ok) return result;
         return {
           ok: true,
-          card: Object.freeze({ source: result.parsed.source, blocks: result.parsed.blocks, fragments: fragmentsOf(result.parsed) }),
+          card: Object.freeze({
+            source: result.parsed.source,
+            blocks: result.parsed.blocks,
+            fragments: fragmentsOf(result.parsed),
+          }),
         };
       },
     }),

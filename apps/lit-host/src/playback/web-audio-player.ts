@@ -78,7 +78,8 @@ export function createWebAudioPlayer(): AudioPlayer {
 
     async start(bytes) {
       const ctx = context;
-      if (!ctx) throw new Error('prepare() was not called inside a user activation');
+      if (!ctx)
+        throw new Error('prepare() was not called inside a user activation');
       const buffer = await ctx.decodeAudioData(bytes);
       if (context !== ctx) throw new Error('stopped');
       const node = ctx.createBufferSource();
@@ -98,7 +99,8 @@ export function createWebAudioPlayer(): AudioPlayer {
     async pause() {
       const ctx = context;
       if (!ctx) throw new Error('stopped');
-      if ((await within(ctx.suspend())) === LATE) throw new Error('the audio did not suspend');
+      if ((await within(ctx.suspend())) === LATE)
+        throw new Error('the audio did not suspend');
       if (context !== ctx) throw new Error('stopped');
     },
 
@@ -111,7 +113,8 @@ export function createWebAudioPlayer(): AudioPlayer {
         if ((await within(ctx.resume())) === LATE) return 'blocked';
       } catch (error) {
         if (context !== ctx) throw new Error('stopped');
-        if (error instanceof DOMException && error.name === 'NotAllowedError') return 'blocked';
+        if (error instanceof DOMException && error.name === 'NotAllowedError')
+          return 'blocked';
         throw error;
       }
       if (context !== ctx) throw new Error('stopped');

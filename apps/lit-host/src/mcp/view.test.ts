@@ -1,9 +1,17 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
-import { Catalog, type ComponentApi, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import {
+  Catalog,
+  type ComponentApi,
+  type SurfaceModel,
+} from '@a2ui/web_core/v0_9';
 import { afterEach, describe, expect, it } from 'vitest';
-import { a2uiV0_9Decoder, createMessageSession, type MessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type MessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
 import { panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
 import { connectEpisodeView, type EpisodeViewConnection } from './view.js';
@@ -12,7 +20,9 @@ import { connectEpisodeView, type EpisodeViewConnection } from './view.js';
 // transport, and a real A2UI session. Only rendering is absent (no DOM in these tests): the
 // observable result is the surface the session holds and the problem text shown.
 
-const catalog = new Catalog<ComponentApi>(SAGA_CATALOG_ID, 'v0.9', [SagaPanelApi]);
+const catalog = new Catalog<ComponentApi>(SAGA_CATALOG_ID, 'v0.9', [
+  SagaPanelApi,
+]);
 
 const episode = (id: string, title: string) => ({
   content: [{ type: 'text' as const, text: title }],
@@ -30,21 +40,38 @@ interface Harness {
   surface(): SurfaceModel<ComponentApi> | undefined;
   title(): unknown;
   /** Connects a view. Pass `onInitialized` to act while the handshake is still in flight. */
-  connect(onInitialized?: (bridge: AppBridge) => void): Promise<EpisodeViewConnection>;
+  connect(
+    onInitialized?: (bridge: AppBridge) => void,
+  ): Promise<EpisodeViewConnection>;
 }
 
-const toClean: { session?: MessageSession<ComponentApi>; app?: App; bridge?: AppBridge }[] = [];
+const toClean: {
+  session?: MessageSession<ComponentApi>;
+  app?: App;
+  bridge?: AppBridge;
+}[] = [];
 
 function harness(): Harness {
-  const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
+  const session = createMessageSession({
+    catalogs: [catalog],
+    decoder: a2uiV0_9Decoder,
+  });
   let current: SurfaceModel<ComponentApi> | undefined;
   session.onSurfaceCreated((surface) => (current = surface));
   session.onSurfaceDeleted(() => (current = undefined));
   // The session the Lit `saga-app` would own: it starts with the panel surface.
   session.ingest(panelSurface);
 
-  const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+  const app = new App(
+    { name: 'test-view', version: '0.0.0' },
+    {},
+    { autoResize: false },
+  );
+  const bridge = new AppBridge(
+    null,
+    { name: 'test-host', version: '0.0.0' },
+    {},
+  );
   toClean.push({ session, app, bridge });
   const problems: (string | undefined)[] = [];
   const deliveries: unknown[] = [];
@@ -106,21 +133,42 @@ describe('episode view result handling', () => {
   });
 
   it.each([
-    ['an error result', { isError: true, content: [{ type: 'text' as const, text: 'nope' }] }],
-    ['a result that is not a public episode', { content: [], structuredContent: { surprise: true } }],
-    ['a result with extra private fields', { content: [], structuredContent: { ...episode('x', 'T').structuredContent, secret: 1 } }],
-    ['a result without structured content', { content: [{ type: 'text' as const, text: 'plain' }] }],
-  ])('clears the prior surface and shows a fallback for %s', async (_name, bad) => {
-    const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'First'));
-    await expect.poll(() => h.title()).toBe('First');
+    [
+      'an error result',
+      { isError: true, content: [{ type: 'text' as const, text: 'nope' }] },
+    ],
+    [
+      'a result that is not a public episode',
+      { content: [], structuredContent: { surprise: true } },
+    ],
+    [
+      'a result with extra private fields',
+      {
+        content: [],
+        structuredContent: {
+          ...episode('x', 'T').structuredContent,
+          secret: 1,
+        },
+      },
+    ],
+    [
+      'a result without structured content',
+      { content: [{ type: 'text' as const, text: 'plain' }] },
+    ],
+  ])(
+    'clears the prior surface and shows a fallback for %s',
+    async (_name, bad) => {
+      const h = harness();
+      await h.connect();
+      await h.bridge.sendToolResult(episode('ep-001', 'First'));
+      await expect.poll(() => h.title()).toBe('First');
 
-    await h.bridge.sendToolResult(bad);
-    await expect.poll(() => h.surface()).toBeUndefined();
-    expect(h.problems.at(-1)).toEqual(expect.any(String));
-    expect(h.problems.at(-1)).not.toBe('');
-  });
+      await h.bridge.sendToolResult(bad);
+      await expect.poll(() => h.surface()).toBeUndefined();
+      expect(h.problems.at(-1)).toEqual(expect.any(String));
+      expect(h.problems.at(-1)).not.toBe('');
+    },
+  );
 
   it('shows the next valid result after a failure and clears the fallback', async () => {
     const h = harness();
@@ -148,8 +196,12 @@ describe('episode view result handling', () => {
     await expect.poll(() => h.title()).toBe('Before');
 
     view.dispose();
-    await h.bridge.sendToolResult(episode('ep-002', 'After')).catch(() => undefined);
-    await h.bridge.sendToolResult({ isError: true, content: [] }).catch(() => undefined);
+    await h.bridge
+      .sendToolResult(episode('ep-002', 'After'))
+      .catch(() => undefined);
+    await h.bridge
+      .sendToolResult({ isError: true, content: [] })
+      .catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.title()).toBe('Before');
     expect(h.deliveries).toHaveLength(1);
@@ -162,7 +214,9 @@ describe('episode view result handling', () => {
     await expect.poll(() => h.title()).toBe('Before');
 
     await h.bridge.teardownResource({});
-    await h.bridge.sendToolResult(episode('ep-002', 'After')).catch(() => undefined);
+    await h.bridge
+      .sendToolResult(episode('ep-002', 'After'))
+      .catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.title()).toBe('Before');
   });
@@ -170,14 +224,19 @@ describe('episode view result handling', () => {
   it.each([
     ['a valid result', episode('ep-001', 'First')],
     ['an error result', { isError: true, content: [] }],
-    ['a result that is not a public episode', { content: [], structuredContent: { surprise: true } }],
+    [
+      'a result that is not a public episode',
+      { content: [], structuredContent: { surprise: true } },
+    ],
   ])('revokes image consent before it applies %s', async (_name, result) => {
     const h = harness();
     await h.connect();
     await h.bridge.sendToolResult(result);
     await expect.poll(() => h.events.length).toBeGreaterThan(0);
     expect(h.events[0]).toBe('revoke');
-    expect(h.events.indexOf('revoke')).toBeLessThan(h.events.indexOf('deliver'));
+    expect(h.events.indexOf('revoke')).toBeLessThan(
+      h.events.indexOf('deliver'),
+    );
   });
 
   it('starts a new consent period for every result, even a repeat of the one shown', async () => {
@@ -186,7 +245,9 @@ describe('episode view result handling', () => {
     await h.bridge.sendToolResult(episode('ep-001', 'Same'));
     await expect.poll(() => h.title()).toBe('Same');
     await h.bridge.sendToolResult(episode('ep-001', 'Same'));
-    await expect.poll(() => h.events.filter((event) => event === 'revoke').length).toBe(2);
+    await expect
+      .poll(() => h.events.filter((event) => event === 'revoke').length)
+      .toBe(2);
   });
 
   it('retires image consent for good when the host asks the view to tear down, and on dispose', async () => {
@@ -203,7 +264,9 @@ describe('episode view result handling', () => {
     const view = await h.connect();
     view.dispose();
     h.events.length = 0;
-    await h.bridge.sendToolResult(episode('ep-002', 'After')).catch(() => undefined);
+    await h.bridge
+      .sendToolResult(episode('ep-002', 'After'))
+      .catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(h.events).toEqual([]);
   });
@@ -211,8 +274,16 @@ describe('episode view result handling', () => {
   it('clears the prior surface when the session rejects a later result', async () => {
     const h = harness();
     let reject = false;
-    const app = new App({ name: 'reject-view', version: '0.0.0' }, {}, { autoResize: false });
-    const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+    const app = new App(
+      { name: 'reject-view', version: '0.0.0' },
+      {},
+      { autoResize: false },
+    );
+    const bridge = new AppBridge(
+      null,
+      { name: 'test-host', version: '0.0.0' },
+      {},
+    );
     toClean.push({ app, bridge });
     const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
     await bridge.connect(hostSide);
@@ -221,8 +292,17 @@ describe('episode view result handling', () => {
       transport: viewSide,
       // Rejects episode data only; the panel-removal message still reaches the real session.
       deliver: (input) =>
-        reject && (input as { updateDataModel?: unknown }[]).some((m) => m.updateDataModel)
-          ? { ok: false, failure: { kind: 'rejected', message: 'Controlled ingestion rejection' } }
+        reject &&
+        (input as { updateDataModel?: unknown }[]).some(
+          (m) => m.updateDataModel,
+        )
+          ? {
+              ok: false,
+              failure: {
+                kind: 'rejected',
+                message: 'Controlled ingestion rejection',
+              },
+            }
           : h.session.ingest(input),
       showProblem: (message) => h.problems.push(message),
       revokeImageConsent: () => undefined,

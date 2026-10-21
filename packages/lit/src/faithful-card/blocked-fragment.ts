@@ -26,14 +26,32 @@ export interface BlockedFragment {
 
 /** An inline or block placeholder, or the revealed source, in the fragment's original position. */
 export function blockedFragment(fragment: BlockedFragment): TemplateResult {
-  const { kind, testId, reason, revealed, placeholder, source, label, block } = fragment;
+  const { kind, testId, reason, revealed, placeholder, source, label, block } =
+    fragment;
   const presentation = revealed ? 'source' : 'placeholder';
   // The placeholder is the card's own wording, so it is marked as an annotation; the supplied label
   // beside it, and revealed source, are the author's text and are never marked.
-  const annotation = html`<span data-annotation=${`${kind}-blocked`}>${placeholder}</span>`;
-  const standIn = label === undefined ? annotation : html`${label} ${annotation}`;
+  const annotation = html`<span data-annotation=${`${kind}-blocked`}
+    >${placeholder}</span
+  >`;
+  const standIn =
+    label === undefined ? annotation : html`${label} ${annotation}`;
   const content = revealed ? source(label) : standIn;
   return block === true
-    ? html`<p class="source-block" data-testid=${testId} data-kind=${kind} data-reason=${reason} data-presentation=${presentation}>${content}</p>`
-    : html`<span data-testid=${testId} data-kind=${kind} data-reason=${reason} data-presentation=${presentation}>${content}</span>`;
+    ? html`<p
+        class="source-block"
+        data-testid=${testId}
+        data-kind=${kind}
+        data-reason=${reason}
+        data-presentation=${presentation}
+      >
+        ${content}
+      </p>`
+    : html`<span
+        data-testid=${testId}
+        data-kind=${kind}
+        data-reason=${reason}
+        data-presentation=${presentation}
+        >${content}</span
+      >`;
 }

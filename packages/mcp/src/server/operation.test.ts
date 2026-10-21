@@ -33,10 +33,19 @@ const FAILURES = {
   invalidOutput: 'The note could not be shown.',
 } as const;
 
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 const NoteInput = z.object({ noteId: z.string().min(1).max(16) });
-const NoteOutput = z.strictObject({ noteId: z.string().min(1).max(16), text: z.string().max(40), owner: z.string().optional() });
+const NoteOutput = z.strictObject({
+  noteId: z.string().min(1).max(16),
+  text: z.string().max(40),
+  owner: z.string().optional(),
+});
 
 interface NoteRecord {
   readonly id: string;
@@ -56,8 +65,17 @@ interface Calls {
   readonly signals: AbortSignal[];
 }
 
-function publicNotes(overrides: Partial<PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>> = {}, calls?: Calls) {
-  const operation: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord> = {
+function publicNotes(
+  overrides: Partial<
+    PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>
+  > = {},
+  calls?: Calls,
+) {
+  const operation: PublicOperation<
+    typeof NoteInput,
+    typeof NoteOutput,
+    NoteRecord
+  > = {
     name: 'get_note',
     title: 'Get note',
     description: 'Returns one public note.',
@@ -72,7 +90,10 @@ function publicNotes(overrides: Partial<PublicOperation<typeof NoteInput, typeof
       const record = notes.find((note) => note.id === input.noteId);
       return record ? { kind: 'record', record } : { kind: 'absent' };
     },
-    project: (record) => ({ text: `${record.id}: ${record.text}`, data: { noteId: record.id, text: record.text } }),
+    project: (record) => ({
+      text: `${record.id}: ${record.text}`,
+      data: { noteId: record.id, text: record.text },
+    }),
     ...overrides,
   };
   return (): McpServer => {
@@ -87,18 +108,52 @@ interface Principal {
 }
 
 const principals: Readonly<Record<string, AuthInfo>> = {
-  alice: { token: 't-alice', clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId: 'acct-alice' } },
-  bob: { token: 't-bob', clientId: 'c', scopes: [], expiresAt: 9_999_999_999, extra: { accountId: 'acct-bob' } },
-  service: { token: 't-svc', clientId: 'c', scopes: [], expiresAt: 9_999_999_999 },
+  alice: {
+    token: 't-alice',
+    clientId: 'c',
+    scopes: [],
+    expiresAt: 9_999_999_999,
+    extra: { accountId: 'acct-alice' },
+  },
+  bob: {
+    token: 't-bob',
+    clientId: 'c',
+    scopes: [],
+    expiresAt: 9_999_999_999,
+    extra: { accountId: 'acct-bob' },
+  },
+  service: {
+    token: 't-svc',
+    clientId: 'c',
+    scopes: [],
+    expiresAt: 9_999_999_999,
+  },
 };
 
 function identityOf(authInfo: AuthInfo | undefined): Principal | undefined {
   const accountId = authInfo?.extra?.accountId;
-  return typeof accountId === 'string' ? Object.freeze({ accountId }) : undefined;
+  return typeof accountId === 'string'
+    ? Object.freeze({ accountId })
+    : undefined;
 }
 
-function protectedNotes(overrides: Partial<ProtectedOperation<typeof NoteInput, typeof NoteOutput, NoteRecord, Principal>> = {}, calls?: Calls) {
-  const operation: ProtectedOperation<typeof NoteInput, typeof NoteOutput, NoteRecord, Principal> = {
+function protectedNotes(
+  overrides: Partial<
+    ProtectedOperation<
+      typeof NoteInput,
+      typeof NoteOutput,
+      NoteRecord,
+      Principal
+    >
+  > = {},
+  calls?: Calls,
+) {
+  const operation: ProtectedOperation<
+    typeof NoteInput,
+    typeof NoteOutput,
+    NoteRecord,
+    Principal
+  > = {
     name: 'get_my_note',
     title: 'Get my note',
     description: 'Returns one note for the signed-in user.',
@@ -130,11 +185,15 @@ function protectedNotes(overrides: Partial<ProtectedOperation<typeof NoteInput, 
 
 const open: { host?: TestHost } = {};
 
-async function host(buildServer: () => McpServer, jsonResponse = true): Promise<TestHost> {
+async function host(
+  buildServer: () => McpServer,
+  jsonResponse = true,
+): Promise<TestHost> {
   const started = await startTestHost({
     buildServer,
     jsonResponse,
-    authenticate: (credential) => (credential === undefined ? undefined : principals[credential]),
+    authenticate: (credential) =>
+      credential === undefined ? undefined : principals[credential],
   });
   open.host = started;
   return started;
@@ -151,9 +210,15 @@ describe('public operation', () => {
   it('returns the explicit projection and nothing else from the record', async () => {
     const calls = newCalls();
     const client = await (await host(publicNotes({}, calls))).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+    });
     expect(result.content).toEqual([{ type: 'text', text: 'n1: first note' }]);
     expect(JSON.stringify(result)).not.toContain('canary-internal');
     expect(calls.inputs).toEqual([{ noteId: 'n1' }]);
@@ -163,7 +228,10 @@ describe('public operation', () => {
     const calls = newCalls();
     // A credential the test host would accept is simply not consulted by a public operation.
     const client = await (await host(publicNotes({}, calls))).connect('alice');
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n2', accountId: 'acct-bob' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n2', accountId: 'acct-bob' },
+    });
     expect(result.isError).toBeFalsy();
     expect(calls.inputs).toEqual([{ noteId: 'n2' }]); // the undeclared field never reaches the handler
     expect(calls.identities).toEqual([]);
@@ -176,7 +244,11 @@ describe('public operation', () => {
     expect(tools[0]?.annotations).toMatchObject(READ_ONLY);
     expect(tools[0]?._meta).toMatchObject({ ui: { resourceUri: VIEW.uri } });
     const { contents } = await client.readResource({ uri: VIEW.uri });
-    expect(contents[0]).toMatchObject({ uri: VIEW.uri, mimeType: RESOURCE_MIME_TYPE, text: VIEW.html });
+    expect(contents[0]).toMatchObject({
+      uri: VIEW.uri,
+      mimeType: RESOURCE_MIME_TYPE,
+      text: VIEW.html,
+    });
     expect(contents[0]?._meta).toEqual({ ui: { csp: CLOSED_VIEW_CSP } });
   });
 
@@ -187,49 +259,82 @@ describe('public operation', () => {
   ])('refuses %s before its handler runs', async (_name, args) => {
     const calls = newCalls();
     const client = await (await host(publicNotes({}, calls))).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: args }).catch((error: unknown) => error);
-    const failed = result instanceof Error || (result as { isError?: boolean }).isError === true;
+    const result = await client
+      .callTool({ name: 'get_note', arguments: args })
+      .catch((error: unknown) => error);
+    const failed =
+      result instanceof Error ||
+      (result as { isError?: boolean }).isError === true;
     expect(failed).toBe(true);
     expect(calls.inputs).toEqual([]);
   });
 
   it('answers an absent record with the declared text and no data', async () => {
     const client = await (await host(publicNotes())).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'nope' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'nope' },
+    });
     expect(result.isError).toBe(true);
     expect(result.content).toEqual([{ type: 'text', text: FAILURES.absent }]);
     expect(result.structuredContent).toBeUndefined();
   });
 
   it.each([
-    ['rejects', async () => Promise.reject(new Error('backend exploded: canary-secret'))],
+    [
+      'rejects',
+      async () => Promise.reject(new Error('backend exploded: canary-secret')),
+    ],
     [
       'throws',
       () => {
         throw new Error('backend exploded: canary-secret');
       },
     ],
-  ])('turns a handler that %s into the declared unavailable text without its message', async (_name, handle) => {
-    const client = await (await host(publicNotes({ handle }))).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
-    expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
-    expect(JSON.stringify(result)).not.toContain('canary-secret');
-  });
+  ])(
+    'turns a handler that %s into the declared unavailable text without its message',
+    async (_name, handle) => {
+      const client = await (await host(publicNotes({ handle }))).connect();
+      const result = await client.callTool({
+        name: 'get_note',
+        arguments: { noteId: 'n1' },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: 'text', text: FAILURES.unavailable },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('canary-secret');
+    },
+  );
 
   it('does not publish a projection that breaks the output contract, nor the validator message', async () => {
-    const project: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>['project'] = (record) => ({
+    const project: PublicOperation<
+      typeof NoteInput,
+      typeof NoteOutput,
+      NoteRecord
+    >['project'] = (record) => ({
       text: record.text,
       // Over the declared 40-character bound, plus a field the strict contract does not declare.
-      data: { noteId: record.id, text: 'z'.repeat(41), extra: record.internalNotes } as never,
+      data: {
+        noteId: record.id,
+        text: 'z'.repeat(41),
+        extra: record.internalNotes,
+      } as never,
     });
     const client = await (await host(publicNotes({ project }))).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.invalidOutput }]);
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.invalidOutput },
+    ]);
     expect(result.structuredContent).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('canary-internal');
-    expect(JSON.stringify(result)).not.toMatch(/too_big|Unrecognized|expected/i);
+    expect(JSON.stringify(result)).not.toMatch(
+      /too_big|Unrecognized|expected/i,
+    );
   });
 });
 
@@ -245,25 +350,52 @@ describe.each([
 ])('result metadata over %s', (_encoding, jsonResponse) => {
   it('links a successful public result to the declared view without changing its content', async () => {
     const client = await (await host(publicNotes(), jsonResponse)).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result.isError).toBeFalsy();
     expect(result._meta).toEqual(LINKED);
     expect(result.content).toEqual([{ type: 'text', text: 'n1: first note' }]);
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+    });
   });
 
   it('links a successful protected result to the declared view', async () => {
-    const client = await (await host(protectedNotes(), jsonResponse)).connect('alice');
-    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    const client = await (
+      await host(protectedNotes(), jsonResponse)
+    ).connect('alice');
+    const result = await client.callTool({
+      name: 'get_my_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result._meta).toEqual(LINKED);
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note', owner: 'acct-alice' });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+      owner: 'acct-alice',
+    });
   });
 
   it.each([
-    ['an absent record', publicNotes(), 'get_note', { noteId: 'nope' }, undefined, FAILURES.absent],
+    [
+      'an absent record',
+      publicNotes(),
+      'get_note',
+      { noteId: 'nope' },
+      undefined,
+      FAILURES.absent,
+    ],
     [
       'a refused input',
-      publicNotes({ handle: async () => ({ kind: 'refused', text: 'That note is private.' }) }),
+      publicNotes({
+        handle: async () => ({
+          kind: 'refused',
+          text: 'That note is private.',
+        }),
+      }),
       'get_note',
       { noteId: 'n1' },
       undefined,
@@ -283,67 +415,123 @@ describe.each([
     ],
     [
       'a projection that breaks the output contract',
-      publicNotes({ project: (record) => ({ text: record.text, data: { noteId: record.id, text: 'z'.repeat(41) } }) }),
+      publicNotes({
+        project: (record) => ({
+          text: record.text,
+          data: { noteId: record.id, text: 'z'.repeat(41) },
+        }),
+      }),
       'get_note',
       { noteId: 'n1' },
       undefined,
       FAILURES.invalidOutput,
     ],
-    ['a missing sign-in', protectedNotes(), 'get_my_note', { noteId: 'n1' }, undefined, 'Sign in to see your notes.'],
-  ])('links the safe failure for %s to the same view and keeps its fixed text', async (_name, build, tool, args, credential, text) => {
-    const client = await (await host(build, jsonResponse)).connect(credential);
-    const result = await client.callTool({ name: tool, arguments: args });
-    expect(result.isError).toBe(true);
-    expect(result._meta).toEqual(LINKED);
-    expect(result.content).toEqual([{ type: 'text', text }]);
-    expect(result.structuredContent).toBeUndefined();
-    expect(JSON.stringify(result)).not.toContain('canary-secret');
-  });
+    [
+      'a missing sign-in',
+      protectedNotes(),
+      'get_my_note',
+      { noteId: 'n1' },
+      undefined,
+      'Sign in to see your notes.',
+    ],
+  ])(
+    'links the safe failure for %s to the same view and keeps its fixed text',
+    async (_name, build, tool, args, credential, text) => {
+      const client = await (
+        await host(build, jsonResponse)
+      ).connect(credential);
+      const result = await client.callTool({ name: tool, arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result._meta).toEqual(LINKED);
+      expect(result.content).toEqual([{ type: 'text', text }]);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('canary-secret');
+    },
+  );
 
   it('takes the view from the declaration alone, whatever the caller, the answer or the projection supply', async () => {
     const LooseOutput = z.object({ noteId: z.string(), text: z.string() });
     const hostile = publicNotes({
       output: LooseOutput as never,
-      handle: async () => ({ kind: 'record', record: { id: 'n1', text: HOSTILE_URI, internalNotes: '' } }),
+      handle: async () => ({
+        kind: 'record',
+        record: { id: 'n1', text: HOSTILE_URI, internalNotes: '' },
+      }),
       project: (record) => ({
         text: `see ${HOSTILE_URI}`,
-        data: { noteId: record.id, text: record.text, _meta: { ui: { resourceUri: HOSTILE_URI } }, resourceUri: HOSTILE_URI },
+        data: {
+          noteId: record.id,
+          text: record.text,
+          _meta: { ui: { resourceUri: HOSTILE_URI } },
+          resourceUri: HOSTILE_URI,
+        },
       }),
     });
     const client = await (await host(hostile, jsonResponse)).connect();
     const result = await client.callTool({
       name: 'get_note',
-      arguments: { noteId: 'n1', resourceUri: HOSTILE_URI, _meta: { ui: { resourceUri: HOSTILE_URI } } },
+      arguments: {
+        noteId: 'n1',
+        resourceUri: HOSTILE_URI,
+        _meta: { ui: { resourceUri: HOSTILE_URI } },
+      },
       _meta: { ui: { resourceUri: HOSTILE_URI } },
     });
     expect(result._meta).toEqual(LINKED);
     // The hostile answer text is ordinary content: delivered verbatim, never acted on.
-    expect(result.content).toEqual([{ type: 'text', text: `see ${HOSTILE_URI}` }]);
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: HOSTILE_URI });
+    expect(result.content).toEqual([
+      { type: 'text', text: `see ${HOSTILE_URI}` },
+    ]);
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: HOSTILE_URI,
+    });
   });
 
   it('agrees with discovery and with the resource the host then reads', async () => {
     const client = await (await host(publicNotes(), jsonResponse)).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
     const { tools } = await client.listTools();
     const { resources } = await client.listResources();
-    const linked = (result._meta as { ui?: { resourceUri?: string } }).ui?.resourceUri;
-    expect(linked).toBe((tools[0]?._meta as { ui?: { resourceUri?: string } }).ui?.resourceUri);
+    const linked = (result._meta as { ui?: { resourceUri?: string } }).ui
+      ?.resourceUri;
+    expect(linked).toBe(
+      (tools[0]?._meta as { ui?: { resourceUri?: string } }).ui?.resourceUri,
+    );
     expect(resources.map((resource) => resource.uri)).toEqual([linked]);
     const { contents } = await client.readResource({ uri: linked as string });
-    expect(contents[0]).toMatchObject({ uri: VIEW.uri, mimeType: RESOURCE_MIME_TYPE, text: VIEW.html });
+    expect(contents[0]).toMatchObject({
+      uri: VIEW.uri,
+      mimeType: RESOURCE_MIME_TYPE,
+      text: VIEW.html,
+    });
     expect(contents[0]?._meta).toEqual({ ui: { csp: CLOSED_VIEW_CSP } });
   });
 });
 
 describe('waiting for a handler', () => {
   it('returns the unavailable text when the handler outlasts its bound, and a late record is not returned', async () => {
-    let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
-    const late = new Promise<{ kind: 'record'; record: NoteRecord }>((resolve) => (release = resolve));
-    const client = await (await host(publicNotes({ boundMs: 40, handle: () => late }))).connect();
-    const result = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+    let release: (outcome: {
+      kind: 'record';
+      record: NoteRecord;
+    }) => void = () => undefined;
+    const late = new Promise<{ kind: 'record'; record: NoteRecord }>(
+      (resolve) => (release = resolve),
+    );
+    const client = await (
+      await host(publicNotes({ boundMs: 40, handle: () => late }))
+    ).connect();
+    const result = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
     release({ kind: 'record', record: notes[0] as NoteRecord }); // resolves after the answer was sent
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(result.structuredContent).toBeUndefined();
@@ -351,8 +539,13 @@ describe('waiting for a handler', () => {
 
   it('aborts the handler’s signal when the caller disconnects, and its late record has nowhere to go', async () => {
     const signals: AbortSignal[] = [];
-    let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
-    const pending = new Promise<{ kind: 'record'; record: NoteRecord }>((resolve) => (release = resolve));
+    let release: (outcome: {
+      kind: 'record';
+      record: NoteRecord;
+    }) => void = () => undefined;
+    const pending = new Promise<{ kind: 'record'; record: NoteRecord }>(
+      (resolve) => (release = resolve),
+    );
     const started = await host(
       publicNotes({
         handle: (_input, request) => {
@@ -365,8 +558,16 @@ describe('waiting for a handler', () => {
     const call = fetch(started.url, {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_note', arguments: { noteId: 'n1' } } }),
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_note', arguments: { noteId: 'n1' } },
+      }),
     }).catch((error: unknown) => error);
     await expect.poll(() => signals.length).toBe(1);
     controller.abort();
@@ -377,14 +578,24 @@ describe('waiting for a handler', () => {
     // The handler ran once; a fresh call is served normally by a fresh handler invocation.
     const client = await started.connect();
     release({ kind: 'record', record: notes[0] as NoteRecord });
-    const next = await client.callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
-    expect(next.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+    const next = await client.callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
+    expect(next.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+    });
     expect(signals).toHaveLength(2);
   });
 });
 
 describe('progress and delayed completion', () => {
-  const slowHandle: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>['handle'] = async (_input, request) => {
+  const slowHandle: PublicOperation<
+    typeof NoteInput,
+    typeof NoteOutput,
+    NoteRecord
+  >['handle'] = async (_input, request) => {
     await request.reportProgress({ progress: 1, total: 2, message: 'looking' });
     await new Promise((resolve) => setTimeout(resolve, 30));
     await request.reportProgress({ progress: 2, total: 2, message: 'found' });
@@ -392,29 +603,54 @@ describe('progress and delayed completion', () => {
   };
 
   it('streams progress before the result when the host answers with server-sent events', async () => {
-    const client = await (await host(publicNotes({ handle: slowHandle }), false)).connect();
+    const client = await (
+      await host(publicNotes({ handle: slowHandle }), false)
+    ).connect();
     const seen: string[] = [];
     const result = await client.callTool(
       { name: 'get_note', arguments: { noteId: 'n1' } },
-      { onprogress: (progress) => void seen.push(`${progress.progress}/${progress.total}:${progress.message}`) },
+      {
+        onprogress: (progress) =>
+          void seen.push(
+            `${progress.progress}/${progress.total}:${progress.message}`,
+          ),
+      },
     );
     expect(seen).toEqual(['1/2:looking', '2/2:found']);
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+    });
   });
 
   it('completes the delayed result over a single JSON body without failing the call', async () => {
-    const client = await (await host(publicNotes({ handle: slowHandle }), true)).connect();
+    const client = await (
+      await host(publicNotes({ handle: slowHandle }), true)
+    ).connect();
     const result = await client.callTool(
       { name: 'get_note', arguments: { noteId: 'n1' } },
       { onprogress: () => undefined },
     );
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note' });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+    });
   });
 
   it('drops progress reported after the operation has finished', async () => {
     const lateReports: Promise<void>[] = [];
-    const handle: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>['handle'] = async (_input, request) => {
-      setTimeout(() => lateReports.push(request.reportProgress({ progress: 9, total: 9, message: 'late' })), 50);
+    const handle: PublicOperation<
+      typeof NoteInput,
+      typeof NoteOutput,
+      NoteRecord
+    >['handle'] = async (_input, request) => {
+      setTimeout(
+        () =>
+          lateReports.push(
+            request.reportProgress({ progress: 9, total: 9, message: 'late' }),
+          ),
+        50,
+      );
       return { kind: 'record', record: notes[0] as NoteRecord };
     };
     const client = await (await host(publicNotes({ handle }), false)).connect();
@@ -432,30 +668,49 @@ describe('progress and delayed completion', () => {
 describe('protected operation', () => {
   it('gives the handler only the identity the transport verified for that request', async () => {
     const calls = newCalls();
-    const client = await (await host(protectedNotes({}, calls))).connect('alice');
-    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
-    expect(result.structuredContent).toEqual({ noteId: 'n1', text: 'first note', owner: 'acct-alice' });
+    const client = await (
+      await host(protectedNotes({}, calls))
+    ).connect('alice');
+    const result = await client.callTool({
+      name: 'get_my_note',
+      arguments: { noteId: 'n1' },
+    });
+    expect(result.structuredContent).toEqual({
+      noteId: 'n1',
+      text: 'first note',
+      owner: 'acct-alice',
+    });
     expect(calls.identities).toEqual([{ accountId: 'acct-alice' }]);
   });
 
   it('keeps concurrent principals apart', async () => {
     const calls = newCalls();
     const started = await host(protectedNotes({}, calls));
-    const [alice, bob] = await Promise.all([started.connect('alice'), started.connect('bob')]);
+    const [alice, bob] = await Promise.all([
+      started.connect('alice'),
+      started.connect('bob'),
+    ]);
     const results = await Promise.all(
       Array.from({ length: 24 }, (_unused, index) =>
-        (index % 2 === 0 ? alice : bob).callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } }),
+        (index % 2 === 0 ? alice : bob).callTool({
+          name: 'get_my_note',
+          arguments: { noteId: 'n1' },
+        }),
       ),
     );
     results.forEach((result, index) => {
-      expect(result.structuredContent).toMatchObject({ owner: index % 2 === 0 ? 'acct-alice' : 'acct-bob' });
+      expect(result.structuredContent).toMatchObject({
+        owner: index % 2 === 0 ? 'acct-alice' : 'acct-bob',
+      });
     });
     expect(calls.identities).toHaveLength(24);
   });
 
   it('ignores an account forged in the arguments', async () => {
     const calls = newCalls();
-    const client = await (await host(protectedNotes({}, calls))).connect('alice');
+    const client = await (
+      await host(protectedNotes({}, calls))
+    ).connect('alice');
     const result = await client.callTool({
       name: 'get_my_note',
       arguments: { noteId: 'n1', accountId: 'acct-bob', owner: 'acct-bob' },
@@ -468,37 +723,60 @@ describe('protected operation', () => {
   it.each([
     ['no credential', undefined],
     ['a credential naming no account', 'service'],
-  ])('refuses %s with the declared sign-in text and never runs the handler', async (_name, credential) => {
-    const calls = newCalls();
-    const client = await (await host(protectedNotes({}, calls))).connect(credential);
-    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
-    expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: 'Sign in to see your notes.' }]);
-    expect(calls.inputs).toEqual([]);
-  });
+  ])(
+    'refuses %s with the declared sign-in text and never runs the handler',
+    async (_name, credential) => {
+      const calls = newCalls();
+      const client = await (
+        await host(protectedNotes({}, calls))
+      ).connect(credential);
+      const result = await client.callTool({
+        name: 'get_my_note',
+        arguments: { noteId: 'n1' },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: 'text', text: 'Sign in to see your notes.' },
+      ]);
+      expect(calls.inputs).toEqual([]);
+    },
+  );
 
   it('says only the declared unavailable text when the identity resolver throws, and never runs the handler', async () => {
     const calls = newCalls();
     const identity = () => {
       throw new Error('canary-private-identity-diagnostic');
     };
-    const client = await (await host(protectedNotes({ identity }, calls))).connect('alice');
-    const result = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    const client = await (
+      await host(protectedNotes({ identity }, calls))
+    ).connect('alice');
+    const result = await client.callTool({
+      name: 'get_my_note',
+      arguments: { noteId: 'n1' },
+    });
     expect(result.isError).toBe(true);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
-    expect(JSON.stringify(result)).not.toContain('canary-private-identity-diagnostic');
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(
+      'canary-private-identity-diagnostic',
+    );
     expect(calls.inputs).toEqual([]);
   });
 
   it('applies the same output validation and absent text as a public operation', async () => {
     const client = await (await host(protectedNotes())).connect('bob');
-    const absent = await client.callTool({ name: 'get_my_note', arguments: { noteId: 'nope' } });
+    const absent = await client.callTool({
+      name: 'get_my_note',
+      arguments: { noteId: 'nope' },
+    });
     expect(absent.content).toEqual([{ type: 'text', text: FAILURES.absent }]);
   });
 });
 
 describe('registration', () => {
-  const server = () => new McpServer({ name: 'connector-test', version: '0.0.0' });
+  const server = () =>
+    new McpServer({ name: 'connector-test', version: '0.0.0' });
 
   it.each([
     ['an identity resolver', { identity: undefined }, /identity/],
@@ -506,28 +784,45 @@ describe('registration', () => {
     ['a projection', { project: undefined }, /project/],
     ['a view', { view: undefined }, /view/],
     ['an output contract', { output: undefined }, /output/],
-  ])('refuses a protected operation without %s, before registering anything', (_name, change, missing) => {
-    const target = server();
-    const complete = {
-      name: 'get_my_note',
-      title: 'Get my note',
-      description: 'Returns one note for the signed-in user.',
-      annotations: READ_ONLY,
-      input: NoteInput,
-      output: NoteOutput,
-      view: VIEW,
-      failures: { ...FAILURES, signInRequired: 'Sign in.' },
-      identity: identityOf,
-      handle: async () => ({ kind: 'absent' as const }),
-      project: () => ({ text: '', data: { noteId: 'n1', text: '' } }),
-    };
-    const incomplete = { ...complete, ...change } as unknown as ProtectedOperation<typeof NoteInput, typeof NoteOutput, NoteRecord, Principal>;
-    expect(() => registerProtectedOperation(target, incomplete)).toThrow(OperationConfigurationError);
-    expect(() => registerProtectedOperation(target, incomplete)).toThrow(missing);
-    expect(() => registerProtectedOperation(target, incomplete)).not.toThrow(/Bearer|token|secret/i);
-    // Nothing was served: the same name registers cleanly afterwards.
-    expect(() => registerProtectedOperation(target, complete)).not.toThrow();
-  });
+  ])(
+    'refuses a protected operation without %s, before registering anything',
+    (_name, change, missing) => {
+      const target = server();
+      const complete = {
+        name: 'get_my_note',
+        title: 'Get my note',
+        description: 'Returns one note for the signed-in user.',
+        annotations: READ_ONLY,
+        input: NoteInput,
+        output: NoteOutput,
+        view: VIEW,
+        failures: { ...FAILURES, signInRequired: 'Sign in.' },
+        identity: identityOf,
+        handle: async () => ({ kind: 'absent' as const }),
+        project: () => ({ text: '', data: { noteId: 'n1', text: '' } }),
+      };
+      const incomplete = {
+        ...complete,
+        ...change,
+      } as unknown as ProtectedOperation<
+        typeof NoteInput,
+        typeof NoteOutput,
+        NoteRecord,
+        Principal
+      >;
+      expect(() => registerProtectedOperation(target, incomplete)).toThrow(
+        OperationConfigurationError,
+      );
+      expect(() => registerProtectedOperation(target, incomplete)).toThrow(
+        missing,
+      );
+      expect(() => registerProtectedOperation(target, incomplete)).not.toThrow(
+        /Bearer|token|secret/i,
+      );
+      // Nothing was served: the same name registers cleanly afterwards.
+      expect(() => registerProtectedOperation(target, complete)).not.toThrow();
+    },
+  );
 
   it('refuses a public operation without a handler', () => {
     const incomplete = {
@@ -540,8 +835,14 @@ describe('registration', () => {
       view: VIEW,
       failures: FAILURES,
       project: () => ({ text: '', data: { noteId: 'n1', text: '' } }),
-    } as unknown as PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>;
-    expect(() => registerPublicOperation(server(), incomplete)).toThrow(/handle/);
+    } as unknown as PublicOperation<
+      typeof NoteInput,
+      typeof NoteOutput,
+      NoteRecord
+    >;
+    expect(() => registerPublicOperation(server(), incomplete)).toThrow(
+      /handle/,
+    );
   });
 
   it('refuses a bound that is not finite and positive', () => {
@@ -552,20 +853,36 @@ describe('registration', () => {
 
 describe('server budgets', () => {
   /** The listener's part: one lifetime per request, handed to the per-request server factory. */
-  function budgeted(budgets: RequestBudgets, overrides: Partial<PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>> = {}) {
+  function budgeted(
+    budgets: RequestBudgets,
+    overrides: Partial<
+      PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>
+    > = {},
+  ) {
     const lifetimes: RequestLifetime[] = [];
     const build = (): McpServer => {
       const lifetime = budgets.startRequest();
       lifetimes.push(lifetime);
-      const server = new McpServer({ name: 'connector-test', version: '0.0.0' });
+      const server = new McpServer({
+        name: 'connector-test',
+        version: '0.0.0',
+      });
       registerPublicOperation(server, publicOperation(overrides), { lifetime });
       return server;
     };
     return { build, lifetimes };
   }
 
-  function publicOperation(overrides: Partial<PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>>) {
-    const operation: PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord> = {
+  function publicOperation(
+    overrides: Partial<
+      PublicOperation<typeof NoteInput, typeof NoteOutput, NoteRecord>
+    >,
+  ) {
+    const operation: PublicOperation<
+      typeof NoteInput,
+      typeof NoteOutput,
+      NoteRecord
+    > = {
       name: 'get_note',
       title: 'Get note',
       description: 'Returns one public note.',
@@ -575,7 +892,10 @@ describe('server budgets', () => {
       view: VIEW,
       failures: FAILURES,
       handle: async () => ({ kind: 'record', record: notes[0] as NoteRecord }),
-      project: (record) => ({ text: record.text, data: { noteId: record.id, text: record.text } }),
+      project: (record) => ({
+        text: record.text,
+        data: { noteId: record.id, text: record.text },
+      }),
       ...overrides,
     };
     return operation;
@@ -583,65 +903,115 @@ describe('server budgets', () => {
 
   const never = () => new Promise<never>(() => undefined);
   /** Every cause the requests recorded; the client's handshake requests record none. */
-  const causedBy = (lifetimes: readonly RequestLifetime[]) => lifetimes.flatMap((lifetime) => lifetime.causes);
-  const call = async (build: () => McpServer) => (await (await host(build)).connect()).callTool({ name: 'get_note', arguments: { noteId: 'n1' } });
+  const causedBy = (lifetimes: readonly RequestLifetime[]) =>
+    lifetimes.flatMap((lifetime) => lifetime.causes);
+  const call = async (build: () => McpServer) =>
+    (await (await host(build)).connect()).callTool({
+      name: 'get_note',
+      arguments: { noteId: 'n1' },
+    });
 
   it('uses the SDK instance operation limit when the operation states none', async () => {
-    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 40 }), { handle: never });
+    const { build, lifetimes } = budgeted(
+      createServerBudgets({ operationMs: 40 }),
+      { handle: never },
+    );
     const started = Date.now();
     const result = await call(build);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
     expect(Date.now() - started).toBeLessThan(1_000);
-    expect(causedBy(lifetimes)).toMatchObject([{ kind: 'operation-timeout', stage: 'handler', limitMs: 40, effect: 'unknown' }]);
+    expect(causedBy(lifetimes)).toMatchObject([
+      {
+        kind: 'operation-timeout',
+        stage: 'handler',
+        limitMs: 40,
+        effect: 'unknown',
+      },
+    ]);
   });
 
   it('lets the operation’s own boundMs override the instance limit, without a second timer', async () => {
-    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 5_000 }), { handle: never, boundMs: 30 });
+    const { build, lifetimes } = budgeted(
+      createServerBudgets({ operationMs: 5_000 }),
+      { handle: never, boundMs: 30 },
+    );
     const result = await call(build);
     expect(result.isError).toBe(true);
-    expect(causedBy(lifetimes)).toMatchObject([{ kind: 'operation-timeout', limitMs: 30 }]);
+    expect(causedBy(lifetimes)).toMatchObject([
+      { kind: 'operation-timeout', limitMs: 30 },
+    ]);
   });
 
   it('never lets an operation limit above the request limit extend the request', async () => {
-    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 60_000, requestMs: 60 }), { handle: never });
+    const { build, lifetimes } = budgeted(
+      createServerBudgets({ operationMs: 60_000, requestMs: 60 }),
+      { handle: never },
+    );
     const started = Date.now();
     const result = await call(build);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(causedBy(lifetimes)[0]).toMatchObject({ kind: 'request-timeout' });
   });
 
   it('shares one aggregate budget across nested lookups and retries', async () => {
     const attempts: number[] = [];
-    const { build, lifetimes } = budgeted(createServerBudgets({ operationMs: 120 }), {
-      async handle(_input, request) {
-        for (let attempt = 1; ; attempt += 1) {
-          attempts.push(attempt);
-          // Every attempt would be allowed 100 ms on its own; together they must fit in 120 ms.
-          await request.within('storage', () => new Promise((resolve) => setTimeout(resolve, 100)).then(() => Promise.reject(new Error('transient')))).catch(() => undefined);
-          if (request.signal.aborted) throw new Error('aborted');
-        }
+    const { build, lifetimes } = budgeted(
+      createServerBudgets({ operationMs: 120 }),
+      {
+        async handle(_input, request) {
+          for (let attempt = 1; ; attempt += 1) {
+            attempts.push(attempt);
+            // Every attempt would be allowed 100 ms on its own; together they must fit in 120 ms.
+            await request
+              .within('storage', () =>
+                new Promise((resolve) => setTimeout(resolve, 100)).then(() =>
+                  Promise.reject(new Error('transient')),
+                ),
+              )
+              .catch(() => undefined);
+            if (request.signal.aborted) throw new Error('aborted');
+          }
+        },
       },
-    });
+    );
     const result = await call(build);
     expect(result.isError).toBe(true);
     expect(attempts.length).toBeLessThanOrEqual(2);
-    expect(causedBy(lifetimes).at(-1)).toMatchObject({ kind: 'operation-timeout', stage: 'handler', limitMs: 120 });
+    expect(causedBy(lifetimes).at(-1)).toMatchObject({
+      kind: 'operation-timeout',
+      stage: 'handler',
+      limitMs: 120,
+    });
   });
 
   it('does not project a record an uncooperative handler returns after the operation was retired', async () => {
-    let release: (outcome: { kind: 'record'; record: NoteRecord }) => void = () => undefined;
-    const late = new Promise<{ kind: 'record'; record: NoteRecord }>((resolve) => (release = resolve));
+    let release: (outcome: {
+      kind: 'record';
+      record: NoteRecord;
+    }) => void = () => undefined;
+    const late = new Promise<{ kind: 'record'; record: NoteRecord }>(
+      (resolve) => (release = resolve),
+    );
     const projected: string[] = [];
     const { build } = budgeted(createServerBudgets({ operationMs: 40 }), {
       handle: () => late,
       project: (record) => {
         projected.push(record.id);
-        return { text: record.text, data: { noteId: record.id, text: record.text } };
+        return {
+          text: record.text,
+          data: { noteId: record.id, text: record.text },
+        };
       },
     });
     const result = await call(build);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]); // the caller was answered first
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]); // the caller was answered first
     release({ kind: 'record', record: notes[0] as NoteRecord }); // the handler ignored its signal and answers now
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(projected).toEqual([]); // no owned effect after the gate closed
@@ -659,7 +1029,9 @@ describe('server budgets', () => {
     });
     const started = Date.now();
     const result = await call(build);
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
     expect(Date.now() - started).toBeLessThan(1_500);
   });
 
@@ -669,24 +1041,43 @@ describe('server budgets', () => {
     });
     const result = await call(build);
     expect(JSON.stringify(result)).not.toContain('hunter2');
-    expect(causedBy(lifetimes)[0]).toMatchObject({ kind: 'dependency-failure', stage: 'handler', effect: 'unknown' });
+    expect(causedBy(lifetimes)[0]).toMatchObject({
+      kind: 'dependency-failure',
+      stage: 'handler',
+      effect: 'unknown',
+    });
   });
 
   it('does not let a handler that ignores its signal hold unrelated requests open', async () => {
     const { build } = budgeted(createServerBudgets({ operationMs: 50 }), {
-      handle: (input) => (input.noteId === 'n1' ? never() : Promise.resolve({ kind: 'record', record: notes[1] as NoteRecord })),
+      handle: (input) =>
+        input.noteId === 'n1'
+          ? never()
+          : Promise.resolve({ kind: 'record', record: notes[1] as NoteRecord }),
     });
     const started = await host(build);
     const [stuck, fine] = await Promise.all([
-      (await started.connect()).callTool({ name: 'get_note', arguments: { noteId: 'n1' } }),
-      (await started.connect()).callTool({ name: 'get_note', arguments: { noteId: 'n2' } }),
+      (await started.connect()).callTool({
+        name: 'get_note',
+        arguments: { noteId: 'n1' },
+      }),
+      (await started.connect()).callTool({
+        name: 'get_note',
+        arguments: { noteId: 'n2' },
+      }),
     ]);
     expect(stuck.isError).toBe(true);
     expect(fine.isError).toBeUndefined();
   });
 
   it('rejects an invalid operation limit at registration, before any call', () => {
-    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, '40' as unknown as number]) {
+    for (const bad of [
+      0,
+      -5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '40' as unknown as number,
+    ]) {
       const { build } = budgeted(createServerBudgets(), { boundMs: bad });
       expect(() => build()).toThrow(OperationConfigurationError);
     }
@@ -697,7 +1088,10 @@ describe('server budgets', () => {
     const build = (): McpServer => {
       const lifetime = createServerBudgets().startRequest();
       lifetime.disconnect();
-      const target = new McpServer({ name: 'connector-test', version: '0.0.0' });
+      const target = new McpServer({
+        name: 'connector-test',
+        version: '0.0.0',
+      });
       registerProtectedOperation(
         target,
         {
@@ -721,8 +1115,12 @@ describe('server budgets', () => {
       return target;
     };
     const started = await host(build);
-    const result = await (await started.connect('alice')).callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
-    expect(result.content).toEqual([{ type: 'text', text: FAILURES.unavailable }]);
+    const result = await (
+      await started.connect('alice')
+    ).callTool({ name: 'get_my_note', arguments: { noteId: 'n1' } });
+    expect(result.content).toEqual([
+      { type: 'text', text: FAILURES.unavailable },
+    ]);
     expect(handled).toEqual([]);
   });
 });

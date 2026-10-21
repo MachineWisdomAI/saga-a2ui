@@ -1,4 +1,7 @@
-import type { AccountSubscriptions, SubscriptionBackend } from './subscriptions-server.js';
+import type {
+  AccountSubscriptions,
+  SubscriptionBackend,
+} from './subscriptions-server.js';
 
 /**
  * Synthetic failure cases for the browse pipeline. Nothing here is a credential or a real
@@ -16,14 +19,26 @@ export const emptyAccount = {
 
 export const invalidOutputAccount = {
   displayName: 'Alice',
-  subscriptions: [{ subscriptionId: 's', creator: 'C', tier: 'T', status: FAILURE_CANARY }],
+  subscriptions: [
+    { subscriptionId: 's', creator: 'C', tier: 'T', status: FAILURE_CANARY },
+  ],
 } satisfies AccountSubscriptions;
 
 export const listedAccount = {
   displayName: 'Alice',
   subscriptions: [
-    { subscriptionId: 'sub-a1', creator: 'Creator One', tier: 'Gold', status: 'active' },
-    { subscriptionId: 'sub-a2', creator: 'Creator Two', tier: 'Basic', status: 'paused' },
+    {
+      subscriptionId: 'sub-a1',
+      creator: 'Creator One',
+      tier: 'Gold',
+      status: 'active',
+    },
+    {
+      subscriptionId: 'sub-a2',
+      creator: 'Creator Two',
+      tier: 'Basic',
+      status: 'paused',
+    },
   ],
 } satisfies AccountSubscriptions;
 
@@ -34,7 +49,10 @@ export const unknownToolRequest = {
   jsonrpc: '2.0' as const,
   id: 'req-unknown-tool',
   method: 'tools/call',
-  params: { name: 'list_subscriptions_admin', arguments: { note: FAILURE_CANARY } },
+  params: {
+    name: 'list_subscriptions_admin',
+    arguments: { note: FAILURE_CANARY },
+  },
 };
 
 /** Valid JSON-RPC framing is missing, but an id is still present to correlate. */

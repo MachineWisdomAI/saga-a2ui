@@ -7,5 +7,10 @@ import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
 export const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString, kind: z.enum(['title', 'body', 'status']) }).strict(),
+  schema: z
+    .object({
+      text: CommonSchemas.DynamicString,
+      kind: z.enum(['title', 'body', 'status']),
+    })
+    .strict(),
 };

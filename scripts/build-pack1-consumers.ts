@@ -36,7 +36,13 @@ import {
 // The packed copies are a local qualification artifact. Producing them is not publishing anything.
 
 export const pack1Source = path.join(repoRoot, 'examples', 'pack1-consumer');
-export const pack1Dist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'pack1');
+export const pack1Dist = path.join(
+  repoRoot,
+  'apps',
+  'lit-host',
+  'dist',
+  'pack1',
+);
 
 /** The two Lit consumers: the combinations a release candidate records and rehearses. */
 export type Pack1Consumer = 'own' | 'card';
@@ -56,14 +62,48 @@ interface ConsumerRecipe {
 // The files only one renderer's consumers use. Everything else in the source (the contract, server,
 // actions, controller, surface messages and the `Line` contract) is shared by all of them.
 const LIT_FILES = ['src/notes-view.ts', 'src/notes-catalog.ts'];
-const REACT_FILES = ['react.html', 'src/main-react.tsx', 'src/notes-react-view.tsx', 'src/notes-react-catalog.tsx'];
+const REACT_FILES = [
+  'react.html',
+  'src/main-react.tsx',
+  'src/notes-react-view.tsx',
+  'src/notes-react-catalog.tsx',
+];
 
-const LIT_DEPENDENCIES = ['@a2ui/lit', '@a2ui/web_core', '@modelcontextprotocol/client', '@modelcontextprotocol/ext-apps', '@modelcontextprotocol/server', 'lit', 'zod'];
-const REACT_DEPENDENCIES = ['@a2ui/react', '@a2ui/web_core', '@modelcontextprotocol/client', '@modelcontextprotocol/ext-apps', '@modelcontextprotocol/server', 'react', 'react-dom', 'zod'];
+const LIT_DEPENDENCIES = [
+  '@a2ui/lit',
+  '@a2ui/web_core',
+  '@modelcontextprotocol/client',
+  '@modelcontextprotocol/ext-apps',
+  '@modelcontextprotocol/server',
+  'lit',
+  'zod',
+];
+const REACT_DEPENDENCIES = [
+  '@a2ui/react',
+  '@a2ui/web_core',
+  '@modelcontextprotocol/client',
+  '@modelcontextprotocol/ext-apps',
+  '@modelcontextprotocol/server',
+  'react',
+  'react-dom',
+  'zod',
+];
 
 export const PACK1_CONSUMERS: Record<Pack1Consumer, ConsumerRecipe> = {
-  own: { packages: ['core', 'lit', 'mcp'], page: 'own.html', entry: 'src/main-own.ts', leaveOut: ['card.html', 'src/main-card.ts', ...REACT_FILES], ownDependencies: LIT_DEPENDENCIES },
-  card: { packages: ['core', 'lit', 'components', 'mcp'], page: 'card.html', entry: 'src/main-card.ts', leaveOut: ['own.html', 'src/main-own.ts', ...REACT_FILES], ownDependencies: LIT_DEPENDENCIES },
+  own: {
+    packages: ['core', 'lit', 'mcp'],
+    page: 'own.html',
+    entry: 'src/main-own.ts',
+    leaveOut: ['card.html', 'src/main-card.ts', ...REACT_FILES],
+    ownDependencies: LIT_DEPENDENCIES,
+  },
+  card: {
+    packages: ['core', 'lit', 'components', 'mcp'],
+    page: 'card.html',
+    entry: 'src/main-card.ts',
+    leaveOut: ['own.html', 'src/main-own.ts', ...REACT_FILES],
+    ownDependencies: LIT_DEPENDENCIES,
+  },
 };
 
 /**
@@ -77,7 +117,13 @@ export const NOTES_CONSUMERS: Record<NotesConsumer, ConsumerRecipe> = {
     packages: ['core', 'react', 'mcp'],
     page: 'react.html',
     entry: 'src/main-react.tsx',
-    leaveOut: ['own.html', 'card.html', 'src/main-own.ts', 'src/main-card.ts', ...LIT_FILES],
+    leaveOut: [
+      'own.html',
+      'card.html',
+      'src/main-own.ts',
+      'src/main-card.ts',
+      ...LIT_FILES,
+    ],
     ownDependencies: REACT_DEPENDENCIES,
   },
 };
@@ -89,11 +135,20 @@ export interface PreparedPack1 {
 }
 
 /** Copies the source for one consumer into `work` and installs exactly that consumer's packed SDK packages beside it. */
-export function preparePack1Consumer(work: string, name: NotesConsumer, candidate?: readonly PackedPackage[]): PreparedPack1 {
+export function preparePack1Consumer(
+  work: string,
+  name: NotesConsumer,
+  candidate?: readonly PackedPackage[],
+): PreparedPack1 {
   const recipe = NOTES_CONSUMERS[name];
   const consumer = path.join(work, 'consumer');
-  const skipped = new Set(recipe.leaveOut.map((file) => path.join(pack1Source, file)));
-  fs.cpSync(pack1Source, consumer, { recursive: true, filter: (from) => !from.includes('node_modules') && !skipped.has(from) });
+  const skipped = new Set(
+    recipe.leaveOut.map((file) => path.join(pack1Source, file)),
+  );
+  fs.cpSync(pack1Source, consumer, {
+    recursive: true,
+    filter: (from) => !from.includes('node_modules') && !skipped.has(from),
+  });
   // Without a chosen candidate the packages are packed from this tree; with one (an update or a
   // rollback), exactly that candidate's tarballs for this consumer are installed.
   const sdk =
@@ -103,7 +158,10 @@ export function preparePack1Consumer(work: string, name: NotesConsumer, candidat
           consumer,
           recipe.packages.map((package_) => {
             const one = candidate.find((packed) => packed.name === package_);
-            if (one === undefined) throw new Error(`The candidate has no @saga-a2ui/${package_}, which the ${name} consumer installs.`);
+            if (one === undefined)
+              throw new Error(
+                `The candidate has no @saga-a2ui/${package_}, which the ${name} consumer installs.`,
+              );
             return one;
           }),
         );
@@ -112,11 +170,27 @@ export function preparePack1Consumer(work: string, name: NotesConsumer, candidat
 }
 
 /** The installed version of each named package, read from the consumer's own `node_modules`. */
-export function installedVersionsOf(consumer: string, names: readonly string[]): Record<string, string> {
-  return Object.fromEntries(names.map((name) => [name, (JSON.parse(fs.readFileSync(path.join(consumer, 'node_modules', name, 'package.json'), 'utf8')) as { version: string }).version]));
+export function installedVersionsOf(
+  consumer: string,
+  names: readonly string[],
+): Record<string, string> {
+  return Object.fromEntries(
+    names.map((name) => [
+      name,
+      (
+        JSON.parse(
+          fs.readFileSync(
+            path.join(consumer, 'node_modules', name, 'package.json'),
+            'utf8',
+          ),
+        ) as { version: string }
+      ).version,
+    ]),
+  );
 }
 
-const sha256 = (file: string): string => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const sha256 = (file: string): string =>
+  createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 export interface Pack1ConsumerIdentity {
   readonly installedPackages: readonly string[];
@@ -135,14 +209,20 @@ export interface BuildPack1Options {
 }
 
 /** Builds one consumer into `outDir`: its page and its server. Each consumer gets a work directory of its own. */
-export async function buildPack1Consumer(name: NotesConsumer, outDir: string, options: BuildPack1Options = {}): Promise<Pack1ConsumerIdentity> {
+export async function buildPack1Consumer(
+  name: NotesConsumer,
+  outDir: string,
+  options: BuildPack1Options = {},
+): Promise<Pack1ConsumerIdentity> {
   const work = createWorkDirectory(`saga-pack1-${name}-`);
   try {
     const prepared = preparePack1Consumer(work, name, options.candidate);
     options.beforeBuild?.(prepared);
     const { consumer, sdk, recipe } = prepared;
     fs.rmSync(outDir, { recursive: true, force: true });
-    await buildConsumerApplication(consumer, outDir, [viteSingleFile()], { page: recipe.page });
+    await buildConsumerApplication(consumer, outDir, [viteSingleFile()], {
+      page: recipe.page,
+    });
     const server = await bundleConsumerServer(consumer, 'server/index.ts');
     fs.copyFileSync(server.file, path.join(outDir, 'server.mjs'));
     const page = path.join(outDir, recipe.page);
@@ -151,7 +231,10 @@ export async function buildPack1Consumer(name: NotesConsumer, outDir: string, op
       packedTarballSha256: sdk.tarballSha256,
       installedVersions: installedVersionsOf(consumer, recipe.ownDependencies),
       builtPage: { path: path.relative(repoRoot, page), sha256: sha256(page) },
-      builtServer: { path: path.relative(repoRoot, path.join(outDir, 'server.mjs')), sha256: sha256(path.join(outDir, 'server.mjs')) },
+      builtServer: {
+        path: path.relative(repoRoot, path.join(outDir, 'server.mjs')),
+        sha256: sha256(path.join(outDir, 'server.mjs')),
+      },
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -159,12 +242,23 @@ export async function buildPack1Consumer(name: NotesConsumer, outDir: string, op
 }
 
 /** Builds every consumer, each from its own install, and returns the identities a review needs. */
-export async function buildPack1Consumers(outDir: string): Promise<Record<string, unknown>> {
+export async function buildPack1Consumers(
+  outDir: string,
+): Promise<Record<string, unknown>> {
   const consumers: Record<string, Pack1ConsumerIdentity> = {};
-  for (const name of Object.keys(NOTES_CONSUMERS) as NotesConsumer[]) consumers[name] = await buildPack1Consumer(name, path.join(outDir, name));
+  for (const name of Object.keys(NOTES_CONSUMERS) as NotesConsumer[])
+    consumers[name] = await buildPack1Consumer(name, path.join(outDir, name));
   return {
-    sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
-    sourceDirty: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: repoRoot, encoding: 'utf8' }).trim() !== '',
+    sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim(),
+    sourceDirty:
+      execFileSync(
+        'git',
+        ['status', '--porcelain=v1', '--untracked-files=no'],
+        { cwd: repoRoot, encoding: 'utf8' },
+      ).trim() !== '',
     platform: `${process.platform}-${process.arch}`,
     node: process.version,
     npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
@@ -172,8 +266,14 @@ export async function buildPack1Consumers(outDir: string): Promise<Record<string
   };
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   const identity = await buildPack1Consumers(pack1Dist);
-  fs.writeFileSync(path.join(pack1Dist, 'identity.json'), `${JSON.stringify(identity, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(pack1Dist, 'identity.json'),
+    `${JSON.stringify(identity, null, 2)}\n`,
+  );
   console.log(JSON.stringify(identity, null, 2));
 }

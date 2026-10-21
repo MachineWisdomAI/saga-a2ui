@@ -1,5 +1,10 @@
 import { basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog, createFunctionImplementation, type Subscription, type SurfaceModel } from '@a2ui/web_core/v0_9';
+import {
+  Catalog,
+  createFunctionImplementation,
+  type Subscription,
+  type SurfaceModel,
+} from '@a2ui/web_core/v0_9';
 import {
   Action,
   prerequisite,
@@ -11,9 +16,17 @@ import {
   type InstanceView,
   type PrerequisiteContext,
 } from '@saga-a2ui/core/actions';
-import { a2uiV0_9Decoder, createMessageSession, type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type IngestResult,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
-import { createA2uiAppElement, defineElements, type A2uiSession } from '@saga-a2ui/lit';
+import {
+  createA2uiAppElement,
+  defineElements,
+  type A2uiSession,
+} from '@saga-a2ui/lit';
 import {
   ActionButton,
   actionButtonEntry,
@@ -22,7 +35,11 @@ import {
   type ActionButtonEvents,
 } from '@saga-a2ui/lit/actions';
 import { archiveNoteWith, requireNoteId } from '../archive-fixture/archive.js';
-import { createArchiveLab, wording, type ArchiveLab } from '../archive-fixture/lab.js';
+import {
+  createArchiveLab,
+  wording,
+  type ArchiveLab,
+} from '../archive-fixture/lab.js';
 
 // Test-only page: a synthetic application with its own catalog (upstream Column, Row, List, Text
 // and Button, plus the opt-in ActionButton), two app elements so that two mounts can be compared,
@@ -53,7 +70,10 @@ const components: LitComponentApi[] = [
   upstream('Button'),
   actionButtonEntry,
 ];
-const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', components, [...basicCatalog.functions.values(), spy]);
+const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', components, [
+  ...basicCatalog.functions.values(),
+  spy,
+]);
 
 export interface TracedBinding {
   readonly app: string;
@@ -84,7 +104,10 @@ export interface ActionConsumer {
    * What each app element did with the sessions it created: how many, how many were disposed, and
    * how many of the element's own listeners on the current session are still attached.
    */
-  readonly sessions: Record<string, { created: number; disposed: number; listeners: number }>;
+  readonly sessions: Record<
+    string,
+    { created: number; disposed: number; listeners: number }
+  >;
   /** Every session an app element created, oldest first, kept so a test can deliver late input to a retired one. */
   readonly sessionHistory: Record<string, A2uiSession[]>;
   stopDiscovery(app: string): void;
@@ -146,11 +169,17 @@ export class PlayerOwner {
 
   start(lease: Lease): Promise<'started' | 'blocked'> {
     this.calls.push(`start:${lease.id}`);
-    if (this.current !== lease) return Promise.reject(new Error(`lease ${lease.id} was superseded`));
+    if (this.current !== lease)
+      return Promise.reject(new Error(`lease ${lease.id} was superseded`));
     return new Promise((resolve) => {
       this.pendingStarts.push((answer) => {
         // A lease that ended meanwhile never starts: the owner tests the exact acquisition.
-        if (answer === 'started' && this.current === lease && !this.ended.has(lease.id)) this.audible.add(lease.id);
+        if (
+          answer === 'started' &&
+          this.current === lease &&
+          !this.ended.has(lease.id)
+        )
+          this.audible.add(lease.id);
         resolve(answer);
       });
     });
@@ -184,7 +213,11 @@ export class PlayerOwner {
   }
 
   snapshot(): { calls: string[]; audible: number[]; kept: number[] } {
-    return { calls: [...this.calls], audible: [...this.audible], kept: [...this.kept] };
+    return {
+      calls: [...this.calls],
+      audible: [...this.audible],
+      kept: [...this.kept],
+    };
   }
 }
 
@@ -215,7 +248,9 @@ const consumer: ActionConsumer = {
   archive: {},
   stopDiscovery: (app) => (stoppers[app] ?? []).forEach((stop) => stop()),
   send: (app, input) => {
-    const element = document.querySelector<HTMLElement & { ingest(input: unknown): IngestResult }>(`[data-app="${app}"]`);
+    const element = document.querySelector<
+      HTMLElement & { ingest(input: unknown): IngestResult }
+    >(`[data-app="${app}"]`);
     if (!element) throw new Error(`${app} is not mounted`);
     return element.ingest(input);
   },
@@ -235,7 +270,14 @@ consumer.bindAgain = (index) => {
   if (!entry) return 'no such traced binding';
   try {
     const probe = Action.local<ActionButtonActivation>('probe')
-      .run(() => void consumer.log.push({ app: entry.app, action: 'probe', componentId: entry.componentId }))
+      .run(
+        () =>
+          void consumer.log.push({
+            app: entry.app,
+            action: 'probe',
+            componentId: entry.componentId,
+          }),
+      )
       .build();
     trace(entry.app, entry.handle, entry.handle.bindAction('activate', probe));
     return 'ok';
@@ -255,13 +297,27 @@ const makeToggle = (app: string): ActionDefinition<ActionButtonActivation> =>
 const makeMark = (app: string): ActionDefinition<ActionButtonActivation> =>
   Action.local<ActionButtonActivation>('mark')
     .input((event) => event.componentId)
-    .run(({ params }) => void consumer.log.push({ app, action: 'mark', componentId: params }))
+    .run(
+      ({ params }) =>
+        void consumer.log.push({ app, action: 'mark', componentId: params }),
+    )
     .build();
 
 const makeArchive = (app: string): ActionDefinition<ActionButtonActivation> =>
   Action.local<ActionButtonActivation>('archive-note')
-    .input((event) => ({ noteId: requireNoteId(event.read('id')), at: event.dataPath }))
-    .run(({ params }) => void consumer.log.push({ app, action: 'archive-note', noteId: params.noteId, at: params.at }))
+    .input((event) => ({
+      noteId: requireNoteId(event.read('id')),
+      at: event.dataPath,
+    }))
+    .run(
+      ({ params }) =>
+        void consumer.log.push({
+          app,
+          action: 'archive-note',
+          noteId: params.noteId,
+          at: params.at,
+        }),
+    )
     .build();
 
 const makeSave = (app: string): ActionDefinition<ActionButtonActivation> =>
@@ -269,10 +325,22 @@ const makeSave = (app: string): ActionDefinition<ActionButtonActivation> =>
     .run(() => void consumer.log.push({ app, action: 'save' }))
     .build();
 
-function trace(app: string, handle: InstanceHandle<ActionButtonEvents>, binding: ActionBinding): void {
-  consumer.bindings.push({ app, componentId: handle.id, dataPath: handle.dataPath, handle, binding });
+function trace(
+  app: string,
+  handle: InstanceHandle<ActionButtonEvents>,
+  binding: ActionBinding,
+): void {
+  consumer.bindings.push({
+    app,
+    componentId: handle.id,
+    dataPath: handle.dataPath,
+    handle,
+    binding,
+  });
   binding.subscribe(() =>
-    consumer.phases.push(`${app}|${handle.id}|${handle.dataPath}|${binding.id}|${binding.state.phase}`),
+    consumer.phases.push(
+      `${app}|${handle.id}|${handle.dataPath}|${binding.id}|${binding.state.phase}`,
+    ),
   );
 }
 
@@ -286,14 +354,20 @@ function attachFor(app: string) {
     consumer.attachCalls[app] = (consumer.attachCalls[app] ?? 0) + 1;
     if (consumer.failSetupFor === app) {
       consumer.failSetupFor = undefined;
-      view.watchById('save', ActionButton, (handle) => trace(app, handle, handle.bindAction('activate', save)));
+      view.watchById('save', ActionButton, (handle) =>
+        trace(app, handle, handle.bindAction('activate', save)),
+      );
       throw new Error('setup failed on purpose');
     }
     consumer.views[app] = view;
-    const bind = (id: string, action: ActionDefinition<ActionButtonActivation>) =>
+    const bind = (
+      id: string,
+      action: ActionDefinition<ActionButtonActivation>,
+    ) =>
       view.watchById(id, ActionButton, (handle) => {
         trace(app, handle, handle.bindAction('activate', action));
-        if (consumer.throwOnDiscoveryAt === handle.dataPath) throw new Error(`discovery failed at ${handle.dataPath}`);
+        if (consumer.throwOnDiscoveryAt === handle.dataPath)
+          throw new Error(`discovery failed at ${handle.dataPath}`);
       });
     // 'orphan' is deliberately not watched: a control with no attached action must stay inert.
     stoppers[app] = [
@@ -316,9 +390,21 @@ const layout = (surfaceId: string) => [
         {
           id: 'root',
           component: 'Column',
-          children: ['details-toggle', 'mark-a', 'mark-b', 'save', 'orphan', 'upstream-button', 'rows'],
+          children: [
+            'details-toggle',
+            'mark-a',
+            'mark-b',
+            'save',
+            'orphan',
+            'upstream-button',
+            'rows',
+          ],
         },
-        { id: 'details-toggle', component: 'ActionButton', child: 'details-label' },
+        {
+          id: 'details-toggle',
+          component: 'ActionButton',
+          child: 'details-label',
+        },
         { id: 'details-label', component: 'Text', text: 'Toggle details' },
         { id: 'mark-a', component: 'ActionButton', child: 'mark-a-label' },
         { id: 'mark-a-label', component: 'Text', text: 'Mark A' },
@@ -335,10 +421,18 @@ const layout = (surfaceId: string) => [
           action: { event: { name: 'upstream-press' } },
         },
         { id: 'upstream-label', component: 'Text', text: 'Upstream' },
-        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        {
+          id: 'rows',
+          component: 'List',
+          children: { componentId: 'row', path: '/rows' },
+        },
         { id: 'row', component: 'Row', children: ['row-title', 'row-archive'] },
         { id: 'row-title', component: 'Text', text: { path: 'title' } },
-        { id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
+        {
+          id: 'row-archive',
+          component: 'ActionButton',
+          child: 'row-archive-label',
+        },
         { id: 'row-archive-label', component: 'Text', text: 'Archive' },
       ],
     },
@@ -379,12 +473,24 @@ const asyncLayout = (surfaceId: string) => [
       surfaceId,
       components: [
         { id: 'root', component: 'Column', children: ['save-draft', 'rows'] },
-        { id: 'save-draft', component: 'ActionButton', child: 'save-draft-label' },
+        {
+          id: 'save-draft',
+          component: 'ActionButton',
+          child: 'save-draft-label',
+        },
         { id: 'save-draft-label', component: 'Text', text: 'Save draft' },
-        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        {
+          id: 'rows',
+          component: 'List',
+          children: { componentId: 'row', path: '/rows' },
+        },
         { id: 'row', component: 'Row', children: ['row-title', 'row-stage'] },
         { id: 'row-title', component: 'Text', text: { path: 'title' } },
-        { id: 'row-stage', component: 'ActionButton', child: 'row-stage-label' },
+        {
+          id: 'row-stage',
+          component: 'ActionButton',
+          child: 'row-stage-label',
+        },
         { id: 'row-stage-label', component: 'Text', text: 'Stage' },
       ],
     },
@@ -408,14 +514,27 @@ const asyncLayout = (surfaceId: string) => [
 const requireSession = prerequisite(
   'session',
   () =>
-    new Promise<ReturnType<typeof proceed<{ readonly user: string }>> | ReturnType<typeof refuse>>((resolve) => {
-      consumer.pendingSessions.push((answer) => resolve(answer === 'signed-in' ? proceed({ user: 'u-1' }) : refuse('sign-in-required')));
+    new Promise<
+      | ReturnType<typeof proceed<{ readonly user: string }>>
+      | ReturnType<typeof refuse>
+    >((resolve) => {
+      consumer.pendingSessions.push((answer) =>
+        resolve(
+          answer === 'signed-in'
+            ? proceed({ user: 'u-1' })
+            : refuse('sign-in-required'),
+        ),
+      );
     }),
 );
 
 /** Needs the extracted text, so it can only be declared after `input`. */
-const requireText = prerequisite('text', ({ params }: PrerequisiteContext<unknown, { readonly text: string }>) =>
-  params.text === '' ? refuse('empty-draft') : proceed({ length: params.text.length }),
+const requireText = prerequisite(
+  'text',
+  ({ params }: PrerequisiteContext<unknown, { readonly text: string }>) =>
+    params.text === ''
+      ? refuse('empty-draft')
+      : proceed({ length: params.text.length }),
 );
 
 const makeSaveDraft = (app: string) =>
@@ -424,17 +543,37 @@ const makeSaveDraft = (app: string) =>
     .before(requireSession)
     .before(requireText)
     .run(({ provided }) => {
-      consumer.log.push({ app, action: 'save-draft', user: provided.user, length: provided.length });
+      consumer.log.push({
+        app,
+        action: 'save-draft',
+        user: provided.user,
+        length: provided.length,
+      });
       return { user: provided.user, length: provided.length };
     })
     .onSuccess(({ result, current }) => {
-      if (current()) present(app, 'message', `saved by ${result.user} (${result.length})`);
+      if (current())
+        present(app, 'message', `saved by ${result.user} (${result.length})`);
     })
     .onFailure((context) => {
       if (!context.current()) return;
-      present(app, 'message', context.failure.kind === 'refused' ? `refused: ${context.failure.reason}` : `failed: ${context.failure.kind}`);
+      present(
+        app,
+        'message',
+        context.failure.kind === 'refused'
+          ? `refused: ${context.failure.reason}`
+          : `failed: ${context.failure.kind}`,
+      );
     })
-    .onCanceled(({ cause, stage }) => void consumer.log.push({ app, action: 'save-draft-canceled', cause, stage }))
+    .onCanceled(
+      ({ cause, stage }) =>
+        void consumer.log.push({
+          app,
+          action: 'save-draft-canceled',
+          cause,
+          stage,
+        }),
+    )
     .build();
 
 /** Work on one row that waits for the test; the subject is the row's own item. */
@@ -444,14 +583,24 @@ const makeStage = (app: string) =>
     .run(
       ({ params }) =>
         new Promise<void>((resolve) => {
-          consumer.log.push({ app, action: 'stage-started', noteId: params.noteId });
-          consumer.pendingRows.push({ app, noteId: params.noteId, release: resolve });
+          consumer.log.push({
+            app,
+            action: 'stage-started',
+            noteId: params.noteId,
+          });
+          consumer.pendingRows.push({
+            app,
+            noteId: params.noteId,
+            release: resolve,
+          });
         }),
     )
     .onSuccess(({ params, current }) => {
       if (current()) present(app, 'message', `staged ${params.noteId}`);
     })
-    .onCanceled(({ params, cause }) => present(app, 'message', `canceled ${params.noteId}: ${cause}`))
+    .onCanceled(({ params, cause }) =>
+      present(app, 'message', `canceled ${params.noteId}: ${cause}`),
+    )
     .build();
 
 function asyncAttachFor(app: string) {
@@ -466,7 +615,13 @@ function asyncAttachFor(app: string) {
       trace(app, handle, binding);
     });
     view.watchById('row-stage', ActionButton, (handle) => {
-      trace(app, handle, handle.bindAction('activate', stage, { subject: () => handle.read('id') }));
+      trace(
+        app,
+        handle,
+        handle.bindAction('activate', stage, {
+          subject: () => handle.read('id'),
+        }),
+      );
     });
   };
 }
@@ -498,15 +653,20 @@ const resourceLayout = (surfaceId: string) => [
 const makePlay = (app: string) => {
   const { player } = consumer;
   return Action.local<ActionButtonActivation>('play')
-    .atActivation(({ scope }) => scope.own(player.begin(), (lease) => player.end(lease)))
+    .atActivation(({ scope }) =>
+      scope.own(player.begin(), (lease) => player.end(lease)),
+    )
     .run(async ({ activation }) => {
       const started = await player.start(activation.token);
       // Not started: the scope still owns the lease and gives it back. Started: hand it to the owner, no await between.
       if (started === 'blocked') return { state: 'gesture-needed' } as const;
-      if (!activation.transfer((lease) => player.keep(lease))) return { state: 'gesture-needed' } as const;
+      if (!activation.transfer((lease) => player.keep(lease)))
+        return { state: 'gesture-needed' } as const;
       if (player.holdAfterTransfer) {
         player.holdAfterTransfer = false;
-        await new Promise<void>((resolve) => player.pendingAnswers.push(resolve));
+        await new Promise<void>((resolve) =>
+          player.pendingAnswers.push(resolve),
+        );
       }
       return { state: 'playing', lease: activation.token } as const;
     })
@@ -515,19 +675,32 @@ const makePlay = (app: string) => {
         player.failNextPresentation = false;
         throw new Error('the view update failed');
       }
-      present(app, 'message', result.state === 'playing' ? 'playing' : 'gesture needed');
+      present(
+        app,
+        'message',
+        result.state === 'playing' ? 'playing' : 'gesture needed',
+      );
     })
     .onCanceled(({ activation, stage }) => {
       // Every stage carries the token: end exactly this lease, whether or not it was transferred.
       player.end(activation.token);
-      consumer.log.push({ app, action: 'play-canceled', stage, lease: activation.token.id });
+      consumer.log.push({
+        app,
+        action: 'play-canceled',
+        stage,
+        lease: activation.token.id,
+      });
     })
     .onFailure((context) => {
       if (context.stage === 'running') {
         const { failure } = context;
-        if (failure.kind === 'success-hook-error' || failure.kind === 'success-hook-timeout') {
+        if (
+          failure.kind === 'success-hook-error' ||
+          failure.kind === 'success-hook-timeout'
+        ) {
           // Chosen policy: only a result that records a started, transferred lease stays owner-held.
-          if (failure.result.state === 'playing') return present(app, 'message', 'playing, but the view failed');
+          if (failure.result.state === 'playing')
+            return present(app, 'message', 'playing, but the view failed');
         }
         player.end(context.activation.token);
       } else if (context.stage === 'prerequisites') {
@@ -544,13 +717,18 @@ const makeLookup = (app: string) => {
     .run(async ({ scope }) => {
       // The event turn is over: the lease arrives whenever the test lets it.
       const held = await scope.acquire(
-        () => new Promise<Lease>((resolve) => player.pendingAcquires.push(() => resolve(player.begin()))),
+        () =>
+          new Promise<Lease>((resolve) =>
+            player.pendingAcquires.push(() => resolve(player.begin())),
+          ),
         (lease) => player.end(lease),
       );
       consumer.log.push({ app, action: 'lookup-held', lease: held.token.id });
       return held.token.id;
     })
-    .onSuccess(({ result }) => present(app, 'message', `looked up with lease ${result}`))
+    .onSuccess(({ result }) =>
+      present(app, 'message', `looked up with lease ${result}`),
+    )
     .build();
 };
 
@@ -565,7 +743,9 @@ function resourceAttachFor(app: string) {
       binding.subscribe(() => present(app, 'phase', binding.state.phase));
       trace(app, handle, binding);
     });
-    view.watchById('lookup', ActionButton, (handle) => trace(app, handle, handle.bindAction('activate', lookup)));
+    view.watchById('lookup', ActionButton, (handle) =>
+      trace(app, handle, handle.bindAction('activate', lookup)),
+    );
   };
 }
 
@@ -582,13 +762,30 @@ const serverLayout = (surfaceId: string) => [
     updateComponents: {
       surfaceId,
       components: [
-        { id: 'root', component: 'Column', children: ['upstream-button', 'rows'] },
-        { id: 'upstream-button', component: 'Button', child: 'upstream-label', action: { event: { name: 'upstream-press' } } },
+        {
+          id: 'root',
+          component: 'Column',
+          children: ['upstream-button', 'rows'],
+        },
+        {
+          id: 'upstream-button',
+          component: 'Button',
+          child: 'upstream-label',
+          action: { event: { name: 'upstream-press' } },
+        },
         { id: 'upstream-label', component: 'Text', text: 'Upstream' },
-        { id: 'rows', component: 'List', children: { componentId: 'row', path: '/rows' } },
+        {
+          id: 'rows',
+          component: 'List',
+          children: { componentId: 'row', path: '/rows' },
+        },
         { id: 'row', component: 'Row', children: ['row-title', 'row-archive'] },
         { id: 'row-title', component: 'Text', text: { path: 'title' } },
-        { id: 'row-archive', component: 'ActionButton', child: 'row-archive-label' },
+        {
+          id: 'row-archive',
+          component: 'ActionButton',
+          child: 'row-archive-label',
+        },
         { id: 'row-archive-label', component: 'Text', text: 'Archive' },
       ],
     },
@@ -617,15 +814,25 @@ function serverAttachFor(app: string) {
       document.querySelector(`#${app}`)?.append(line);
     }
     line.textContent = wording(message);
-    consumer.log.push({ app, action: 'archive-shown', noteId: key, kind: message.kind });
+    consumer.log.push({
+      app,
+      action: 'archive-shown',
+      noteId: key,
+      kind: message.kind,
+    });
   });
   consumer.archive[app] = lab;
-  const archive = archiveNoteWith((event: ActionButtonActivation) => requireNoteId(event.read('id')), environment);
+  const archive = archiveNoteWith(
+    (event: ActionButtonActivation) => requireNoteId(event.read('id')),
+    environment,
+  );
   return (view: InstanceView): void => {
     consumer.attachCalls[app] = (consumer.attachCalls[app] ?? 0) + 1;
     consumer.views[app] = view;
     view.watchById('row-archive', ActionButton, (handle) => {
-      const binding = handle.bindAction('activate', archive, { subject: () => handle.read('id') });
+      const binding = handle.bindAction('activate', archive, {
+        subject: () => handle.read('id'),
+      });
       trace(app, handle, binding);
     });
   };
@@ -653,7 +860,10 @@ function defineApp(app: string): void {
     `${app}-app`,
     createA2uiAppElement({
       createSession: () => {
-        const session = createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder });
+        const session = createMessageSession({
+          catalogs: [catalog],
+          decoder: a2uiV0_9Decoder,
+        });
         session.onSurfaceCreated((surface) => {
           consumer.surfaces[app] = surface;
           surface.onAction.subscribe((action) => {
@@ -662,11 +872,17 @@ function defineApp(app: string): void {
         });
         // Observation only, added after the fixture's own subscription above so that it counts just
         // the element's listeners: wrapping changes nothing the element can see.
-        const record = (consumer.sessions[app] ??= { created: 0, disposed: 0, listeners: 0 });
+        const record = (consumer.sessions[app] ??= {
+          created: 0,
+          disposed: 0,
+          listeners: 0,
+        });
         record.created += 1;
         record.listeners = 0;
         (consumer.sessionHistory[app] ??= []).push(session);
-        const counted = <T extends (listener: never) => Subscription>(subscribe: T): T =>
+        const counted = <T extends (listener: never) => Subscription>(
+          subscribe: T,
+        ): T =>
           ((listener: never) => {
             record.listeners += 1;
             const subscription = subscribe(listener);
@@ -678,8 +894,12 @@ function defineApp(app: string): void {
               },
             };
           }) as T;
-        session.onSurfaceCreated = counted(session.onSurfaceCreated.bind(session));
-        session.onSurfaceDeleted = counted(session.onSurfaceDeleted.bind(session));
+        session.onSurfaceCreated = counted(
+          session.onSurfaceCreated.bind(session),
+        );
+        session.onSurfaceDeleted = counted(
+          session.onSurfaceDeleted.bind(session),
+        );
         const dispose = session.dispose.bind(session);
         session.dispose = () => {
           record.disposed += 1;

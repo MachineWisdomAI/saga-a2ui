@@ -1,4 +1,8 @@
-import { A2uiLitElement, basicCatalog, type LitComponentApi } from '@a2ui/lit/v0_9';
+import {
+  A2uiLitElement,
+  basicCatalog,
+  type LitComponentApi,
+} from '@a2ui/lit/v0_9';
 import { CommonSchemas } from '@a2ui/web_core/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { actionButtonEntry } from '@saga-a2ui/lit/actions';
@@ -11,7 +15,12 @@ import { html, nothing } from 'lit';
 
 const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString, kind: z.enum(['title', 'body']) }).strict(),
+  schema: z
+    .object({
+      text: CommonSchemas.DynamicString,
+      kind: z.enum(['title', 'body']),
+    })
+    .strict(),
 };
 
 class LineElement extends A2uiLitElement<typeof LineApi> {
@@ -20,11 +29,17 @@ class LineElement extends A2uiLitElement<typeof LineApi> {
     const props = this.controller?.props;
     if (props === undefined) return nothing;
     const text = String(props.text ?? '');
-    return props.kind === 'title' ? html`<h3>${text}</h3>` : html`<span>${text}</span>`;
+    return props.kind === 'title'
+      ? html`<h3>${text}</h3>`
+      : html`<span>${text}</span>`;
   }
 }
 
-export const Line: LitComponentApi = { ...LineApi, tagName: 'starter-line', element: LineElement };
+export const Line: LitComponentApi = {
+  ...LineApi,
+  tagName: 'starter-line',
+  element: LineElement,
+};
 
 const upstream = (name: string): LitComponentApi => {
   const component = basicCatalog.components.get(name);
@@ -32,4 +47,8 @@ const upstream = (name: string): LitComponentApi => {
   return component;
 };
 
-export const starterEntries: readonly LitComponentApi[] = [upstream('Column'), Line, actionButtonEntry];
+export const starterEntries: readonly LitComponentApi[] = [
+  upstream('Column'),
+  Line,
+  actionButtonEntry,
+];

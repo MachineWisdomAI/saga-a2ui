@@ -10,32 +10,78 @@ import { notesLayout, ordersLayout } from '../../e2e/messages.js';
 const controls: ReadonlySet<string> = new Set(['ActionButton']);
 const surface = 's';
 const update = (...components: Array<Record<string, unknown>>) =>
-  ({ version: 'v0.9', updateComponents: { surfaceId: surface, components } }) as never;
+  ({
+    version: 'v0.9',
+    updateComponents: { surfaceId: surface, components },
+  }) as never;
 
 describe('admission of a message for a bound control', () => {
   it('rejects the whole message when a bound control carries a protocol action of either shape', () => {
-    for (const action of [{ event: { name: 'x' } }, { functionCall: { call: 'f', args: {} } }]) {
-      const result = admit(update({ id: 'a', component: 'Text', text: 'ok' }, { id: 'b', component: 'ActionButton', child: 'c', action }), controls);
-      expect(result).toEqual({ kind: 'rejected', rejection: { surfaceId: surface, componentId: 'b', reason: 'action-on-bound-control' } });
+    for (const action of [
+      { event: { name: 'x' } },
+      { functionCall: { call: 'f', args: {} } },
+    ]) {
+      const result = admit(
+        update(
+          { id: 'a', component: 'Text', text: 'ok' },
+          { id: 'b', component: 'ActionButton', child: 'c', action },
+        ),
+        controls,
+      );
+      expect(result).toEqual({
+        kind: 'rejected',
+        rejection: {
+          surfaceId: surface,
+          componentId: 'b',
+          reason: 'action-on-bound-control',
+        },
+      });
     }
   });
 
   it('keeps an upstream Button action and any other component untouched', () => {
-    const message = update({ id: 'help', component: 'Button', child: 'l', action: { event: { name: 'open_help' } } });
+    const message = update({
+      id: 'help',
+      component: 'Button',
+      child: 'l',
+      action: { event: { name: 'open_help' } },
+    });
     expect(admit(message, controls)).toEqual({ kind: 'admitted', message });
   });
 
   it('sets the source ID over any value the agent supplied, without mutating the input', () => {
-    const original = update({ id: 'row', component: 'ActionButton', child: 'c', sagaSourceId: 'spoofed' });
+    const original = update({
+      id: 'row',
+      component: 'ActionButton',
+      child: 'c',
+      sagaSourceId: 'spoofed',
+    });
     const result = admit(original, controls);
     expect(result.kind).toBe('admitted');
-    const admitted = (result as { message: { updateComponents: { components: Array<Record<string, unknown>> } } }).message;
-    expect(admitted.updateComponents.components[0]?.['sagaSourceId']).toBe('row');
-    expect((original as unknown as { updateComponents: { components: Array<Record<string, unknown>> } }).updateComponents.components[0]?.['sagaSourceId']).toBe('spoofed');
+    const admitted = (
+      result as {
+        message: {
+          updateComponents: { components: Array<Record<string, unknown>> };
+        };
+      }
+    ).message;
+    expect(admitted.updateComponents.components[0]?.['sagaSourceId']).toBe(
+      'row',
+    );
+    expect(
+      (
+        original as unknown as {
+          updateComponents: { components: Array<Record<string, unknown>> };
+        }
+      ).updateComponents.components[0]?.['sagaSourceId'],
+    ).toBe('spoofed');
   });
 
   it('passes messages that are not component updates through', () => {
-    const message = { version: 'v0.9', updateDataModel: { surfaceId: surface, path: '/', value: {} } } as never;
+    const message = {
+      version: 'v0.9',
+      updateDataModel: { surfaceId: surface, path: '/', value: {} },
+    } as never;
     expect(admit(message, controls)).toEqual({ kind: 'admitted', message });
   });
 });
@@ -43,10 +89,28 @@ describe('admission of a message for a bound control', () => {
 describe('the admitting message store', () => {
   it('appends admitted messages in order, drops a rejected one and reports it once', () => {
     const rejected: unknown[] = [];
-    const store = createAdmittingMessageStore({ controls, onRejected: (rejection) => rejected.push(rejection) });
-    store.push([update({ id: 'ok', component: 'Text', text: 'a' }), update({ id: 'bad', component: 'ActionButton', child: 'c', action: { event: { name: 'x' } } }), update({ id: 'ok2', component: 'Text', text: 'b' })]);
+    const store = createAdmittingMessageStore({
+      controls,
+      onRejected: (rejection) => rejected.push(rejection),
+    });
+    store.push([
+      update({ id: 'ok', component: 'Text', text: 'a' }),
+      update({
+        id: 'bad',
+        component: 'ActionButton',
+        child: 'c',
+        action: { event: { name: 'x' } },
+      }),
+      update({ id: 'ok2', component: 'Text', text: 'b' }),
+    ]);
     expect(store.getSnapshot()).toHaveLength(2);
-    expect(rejected).toEqual([{ surfaceId: surface, componentId: 'bad', reason: 'action-on-bound-control' }]);
+    expect(rejected).toEqual([
+      {
+        surfaceId: surface,
+        componentId: 'bad',
+        reason: 'action-on-bound-control',
+      },
+    ]);
   });
 });
 
@@ -57,7 +121,10 @@ describe('the admitting message store', () => {
 // Lynx adapter binds is refused only by the admission rule above, on the GenUI path.
 describe('the fixture layouts under the SAGA core decoder (0.13.0)', () => {
   it('accepts every message the Lynx runtime is driven with, one validated message each', () => {
-    for (const layout of [ordersLayout, notesLayout([{ id: 'n1', title: 'One' }])]) {
+    for (const layout of [
+      ordersLayout,
+      notesLayout([{ id: 'n1', title: 'One' }]),
+    ]) {
       const result = a2uiV0_9Decoder.decode(layout);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.messages).toHaveLength(layout.length);
@@ -65,7 +132,12 @@ describe('the fixture layouts under the SAGA core decoder (0.13.0)', () => {
   });
 
   it('does not itself refuse a protocol action on the bound control: that refusal is the admission rule', () => {
-    const withAction = update({ id: 'b', component: 'ActionButton', child: 'c', action: { event: { name: 'x' } } });
+    const withAction = update({
+      id: 'b',
+      component: 'ActionButton',
+      child: 'c',
+      action: { event: { name: 'x' } },
+    });
     expect(a2uiV0_9Decoder.decode(withAction).ok).toBe(true);
     expect(admit(withAction, controls).kind).toBe('rejected');
   });

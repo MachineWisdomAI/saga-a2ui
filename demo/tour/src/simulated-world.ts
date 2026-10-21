@@ -1,5 +1,8 @@
 import type { CallToolResult } from '@modelcontextprotocol/client';
-import { createFixtureBackend, type FixtureBackend } from '../../../examples/pack1-consumer/server/fixture-backend.js';
+import {
+  createFixtureBackend,
+  type FixtureBackend,
+} from '../../../examples/pack1-consumer/server/fixture-backend.js';
 import {
   ARCHIVE_TOOL,
   ArchiveInputSchema,
@@ -27,10 +30,28 @@ import { syntheticNotes } from '../../lit-node/fixtures/notes.js';
 /** The simulated person chosen on the page. Choosing one authenticates nobody. */
 export type Person = 'alice' | 'bob' | 'nobody';
 
-export const PEOPLE: readonly { readonly id: Person; readonly label: string; readonly effect: string }[] = [
-  { id: 'alice', label: 'Alice (simulated)', effect: 'A synthetic subscriber with three notes.' },
-  { id: 'bob', label: 'Bob (simulated)', effect: 'A synthetic subscriber with one note. He never sees Alice’s notes.' },
-  { id: 'nobody', label: 'No credential (simulated)', effect: 'A request that names nobody. The simulated server refuses it before asking its backend.' },
+export const PEOPLE: readonly {
+  readonly id: Person;
+  readonly label: string;
+  readonly effect: string;
+}[] = [
+  {
+    id: 'alice',
+    label: 'Alice (simulated)',
+    effect: 'A synthetic subscriber with three notes.',
+  },
+  {
+    id: 'bob',
+    label: 'Bob (simulated)',
+    effect:
+      'A synthetic subscriber with one note. He never sees Alice’s notes.',
+  },
+  {
+    id: 'nobody',
+    label: 'No credential (simulated)',
+    effect:
+      'A request that names nobody. The simulated server refuses it before asking its backend.',
+  },
 ];
 
 /** Changes a person makes to the synthetic business while a view is open. Each name is one button of the page. */
@@ -48,7 +69,9 @@ export const CONTROL_NAMES = [
 ] as const;
 export type ControlName = (typeof CONTROL_NAMES)[number];
 
-export const isControlName = (value: unknown): value is ControlName => typeof value === 'string' && (CONTROL_NAMES as readonly string[]).includes(value);
+export const isControlName = (value: unknown): value is ControlName =>
+  typeof value === 'string' &&
+  (CONTROL_NAMES as readonly string[]).includes(value);
 
 export interface TourState {
   readonly person: Person;
@@ -61,7 +84,10 @@ export interface TourState {
   /** Archives that were actually applied, in order, whoever's they were. */
   readonly archived: readonly string[];
   /** Requests that reached the simulated backend; the session check is counted apart from the protected archive. */
-  readonly backendCalls: { readonly sessionChecks: number; readonly archives: number };
+  readonly backendCalls: {
+    readonly sessionChecks: number;
+    readonly archives: number;
+  };
   /** Archive requests the backend is holding open right now. */
   readonly waiting: number;
 }
@@ -70,17 +96,29 @@ export interface TourWorld {
   /** Chooses who the simulated requests name from now on. A view that is already open keeps running; its next call names this person. */
   choose(person: Person): void;
   /** One tool call as the simulated server answers it for the chosen person. */
-  callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult>;
+  callTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult>;
   /** Applies one named change and returns the state afterwards. */
   control(name: ControlName): TourState;
   state(): TourState;
 }
 
-const ACCOUNTS = { alice: 'tour-account-alice', bob: 'tour-account-bob' } as const;
+const ACCOUNTS = {
+  alice: 'tour-account-alice',
+  bob: 'tour-account-bob',
+} as const;
 
-const failure = (text: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text }] });
+const failure = (text: string): CallToolResult => ({
+  isError: true,
+  content: [{ type: 'text', text }],
+});
 /** A failure the simulated server knows changed nothing, as the real notes server marks it. */
-const refusal = (text: string): CallToolResult => ({ ...failure(text), _meta: { [NO_EFFECT_META]: true } });
+const refusal = (text: string): CallToolResult => ({
+  ...failure(text),
+  _meta: { [NO_EFFECT_META]: true },
+});
 
 export function createTourWorld(): TourWorld {
   let person: Person = 'alice';
@@ -91,26 +129,38 @@ export function createTourWorld(): TourWorld {
   const backend: FixtureBackend = createFixtureBackend(
     {
       before: async (call) => {
-        if (call === 'archive' && held) await new Promise<void>((resolve) => release.push(resolve));
+        if (call === 'archive' && held)
+          await new Promise<void>((resolve) => release.push(resolve));
       },
       afterArchive: () => {
-        if (failsAfterWrite) throw new Error('the simulated backend failed after applying the archive');
+        if (failsAfterWrite)
+          throw new Error(
+            'the simulated backend failed after applying the archive',
+          );
       },
     },
     syntheticNotes(ACCOUNTS),
   );
   const signal = new AbortController().signal; // the simulated backend never abandons a call: ending the client's wait stops nothing here either
-  const accountOf = (): string | undefined => (person === 'nobody' ? undefined : ACCOUNTS[person]);
+  const accountOf = (): string | undefined =>
+    person === 'nobody' ? undefined : ACCOUNTS[person];
 
   const state = (): TourState => ({
     person,
-    notesSession: backend.signedOut.has(ACCOUNTS.alice) ? 'signed-out' : 'signed-in',
-    archivePermission: backend.revoked.has(ACCOUNTS.alice) ? 'revoked' : 'granted',
+    notesSession: backend.signedOut.has(ACCOUNTS.alice)
+      ? 'signed-out'
+      : 'signed-in',
+    archivePermission: backend.revoked.has(ACCOUNTS.alice)
+      ? 'revoked'
+      : 'granted',
     archives: held ? 'held' : 'immediate',
     afterWrite: failsAfterWrite ? 'fails' : 'answers',
     listOrder: reversed ? 'reversed' : 'as-stored',
     archived: [...backend.archived],
-    backendCalls: { sessionChecks: backend.calls.isSignedIn, archives: backend.calls.archive },
+    backendCalls: {
+      sessionChecks: backend.calls.isSignedIn,
+      archives: backend.calls.archive,
+    },
     waiting: release.length,
   });
 
@@ -118,18 +168,34 @@ export function createTourWorld(): TourWorld {
     if (accountId === undefined) return failure(TEXT.signInRequired);
     const records = await backend.notesFor(accountId, signal);
     // Each public field is copied by name: a record's other fields stay on the "server".
-    const notes = records.map((note) => ({ id: note.id, title: note.title, body: note.body }));
+    const notes = records.map((note) => ({
+      id: note.id,
+      title: note.title,
+      body: note.body,
+    }));
     if (reversed) notes.reverse();
-    return { content: [{ type: 'text', text: `${notes.length} notes` }], structuredContent: NotesOutputSchema.parse({ notes }) };
+    return {
+      content: [{ type: 'text', text: `${notes.length} notes` }],
+      structuredContent: NotesOutputSchema.parse({ notes }),
+    };
   }
 
-  async function session(accountId: string | undefined): Promise<CallToolResult> {
+  async function session(
+    accountId: string | undefined,
+  ): Promise<CallToolResult> {
     if (accountId === undefined) return failure(TEXT.signInRequired);
-    if (!(await backend.isSignedIn(accountId, signal))) return failure(TEXT.signInRequired);
-    return { content: [{ type: 'text', text: 'signed in' }], structuredContent: { signedIn: true } };
+    if (!(await backend.isSignedIn(accountId, signal)))
+      return failure(TEXT.signInRequired);
+    return {
+      content: [{ type: 'text', text: 'signed in' }],
+      structuredContent: { signedIn: true },
+    };
   }
 
-  async function archive(accountId: string | undefined, args: Record<string, unknown>): Promise<CallToolResult> {
+  async function archive(
+    accountId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> {
     const { noteId } = ArchiveInputSchema.parse(args); // a strict input: a forged account or a wrong type never reaches the backend
     // Decided for this request, from who is asking alone: a session check that said yes authorizes nothing.
     if (accountId === undefined) return refusal(TEXT.signInRequired);
@@ -137,7 +203,13 @@ export function createTourWorld(): TourWorld {
       const archived = await backend.archive(accountId, noteId, signal);
       // One sentence for an absent note, someone else's note and an archived one: nothing is disclosed.
       if (archived === undefined) return refusal(TEXT.cannotArchive);
-      return { content: [{ type: 'text', text: 'archived' }], structuredContent: ArchiveOutputSchema.parse({ noteId, archivedAt: archived.archivedAt }) };
+      return {
+        content: [{ type: 'text', text: 'archived' }],
+        structuredContent: ArchiveOutputSchema.parse({
+          noteId,
+          archivedAt: archived.archivedAt,
+        }),
+      };
     } catch {
       // A failure after the write: the archive was applied, and this answer does not claim otherwise.
       return failure(TEXT.unavailable);

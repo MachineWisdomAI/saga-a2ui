@@ -1,6 +1,10 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { Client, InMemoryTransport, type CallToolResult } from '@modelcontextprotocol/client';
+import {
+  Client,
+  InMemoryTransport,
+  type CallToolResult,
+} from '@modelcontextprotocol/client';
 import { McpServer } from '@modelcontextprotocol/server';
 import {
   Action,
@@ -15,7 +19,12 @@ import {
 } from '@saga-a2ui/core/actions';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { archiveNoteWith, requireNoteId, type ArchiveEnvironment, type ArchiveMessage } from './archive.js';
+import {
+  archiveNoteWith,
+  requireNoteId,
+  type ArchiveEnvironment,
+  type ArchiveMessage,
+} from './archive.js';
 
 // ACT6 against the real local stack, with no stand-in for the transport: the MCP Apps `App` is the
 // action's transport, a real `AppBridge` plays the host over an in-memory pair, and the host
@@ -41,13 +50,24 @@ interface ServerSide {
 function archiveServer(): { server: McpServer; side: ServerSide } {
   const side: ServerSide = { archived: [], handled: [] };
   const server = new McpServer({ name: 'notes', version: '0.0.0' });
-  server.registerTool('archive_note', { inputSchema: z.object({ noteId: z.string() }) }, async ({ noteId }) => {
-    side.handled.push(noteId);
-    // The server authorizes on its own: a client-side session check changes nothing here.
-    if (noteId === 'n-locked') return { content: [{ type: 'text', text: 'not yours' }], isError: true };
-    side.archived.push(noteId);
-    return { content: [{ type: 'text', text: 'archived' }], structuredContent: { archivedAt: 7 } };
-  });
+  server.registerTool(
+    'archive_note',
+    { inputSchema: z.object({ noteId: z.string() }) },
+    async ({ noteId }) => {
+      side.handled.push(noteId);
+      // The server authorizes on its own: a client-side session check changes nothing here.
+      if (noteId === 'n-locked')
+        return {
+          content: [{ type: 'text', text: 'not yours' }],
+          isError: true,
+        };
+      side.archived.push(noteId);
+      return {
+        content: [{ type: 'text', text: 'archived' }],
+        structuredContent: { archivedAt: 7 },
+      };
+    },
+  );
   return { server, side };
 }
 
@@ -70,18 +90,31 @@ async function stack(): Promise<Stack> {
 
   const forwarded: Stack['forwarded'] = [];
   let hold: { gate: Promise<void>; honorAbort: boolean } | undefined;
-  const app = new App({ name: 'view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'host', version: '0.0.0' }, { serverTools: {} });
+  const app = new App(
+    { name: 'view', version: '0.0.0' },
+    {},
+    { autoResize: false },
+  );
+  const bridge = new AppBridge(
+    null,
+    { name: 'host', version: '0.0.0' },
+    { serverTools: {} },
+  );
   bridge.oncalltool = async (params, extra) => {
     const entry = { name: params.name, aborted: false };
     forwarded.push(entry);
-    extra.mcpReq.signal.addEventListener('abort', () => (entry.aborted = true), { once: true });
+    extra.mcpReq.signal.addEventListener(
+      'abort',
+      () => (entry.aborted = true),
+      { once: true },
+    );
     if (hold !== undefined) {
       const waiting = hold;
       hold = undefined;
       // A host that does not honor the abort keeps going: it forwards the call when released.
       await waiting.gate;
-      if (waiting.honorAbort && extra.mcpReq.signal.aborted) throw new Error('the host stopped');
+      if (waiting.honorAbort && extra.mcpReq.signal.aborted)
+        throw new Error('the host stopped');
     }
     return client.callTool(params);
   };
@@ -102,7 +135,10 @@ async function stack(): Promise<Stack> {
     forwarded,
     holdNext(options) {
       let release!: () => void;
-      hold = { gate: new Promise<void>((resolve) => void (release = resolve)), honorAbort: options?.honorAbort ?? false };
+      hold = {
+        gate: new Promise<void>((resolve) => void (release = resolve)),
+        honorAbort: options?.honorAbort ?? false,
+      };
       return { release };
     },
   };
@@ -114,11 +150,22 @@ afterEach(async () => {
 
 interface Screen {
   readonly shown: { noteId: string | undefined; message: ArchiveMessage }[];
-  readonly checks: { sessions: number; confirms: number; audits: number; records: string[] };
+  readonly checks: {
+    sessions: number;
+    confirms: number;
+    audits: number;
+    records: string[];
+  };
 }
 
-function environmentFor(transport: ServerTransport<CallToolResult>, overrides: Partial<ArchiveEnvironment> = {}): { environment: ArchiveEnvironment; screen: Screen } {
-  const screen: Screen = { shown: [], checks: { sessions: 0, confirms: 0, audits: 0, records: [] } };
+function environmentFor(
+  transport: ServerTransport<CallToolResult>,
+  overrides: Partial<ArchiveEnvironment> = {},
+): { environment: ArchiveEnvironment; screen: Screen } {
+  const screen: Screen = {
+    shown: [],
+    checks: { sessions: 0, confirms: 0, audits: 0, records: [] },
+  };
   const environment: ArchiveEnvironment = {
     transport,
     session: async () => {
@@ -146,8 +193,18 @@ function renderRow(
   definition: ReturnType<typeof archiveNoteWith<Press>>,
   noteId: string,
   options: { subject?: () => unknown; limits?: Limits } = {},
-): { press(): void; binding: ActionBinding; retire(): void; showNote(next: string): void } {
-  const host = createInstanceHost({ onSetupError: (error) => { throw error; }, ...(options.limits === undefined ? {} : { limits: options.limits }) });
+): {
+  press(): void;
+  binding: ActionBinding;
+  retire(): void;
+  showNote(next: string): void;
+} {
+  const host = createInstanceHost({
+    onSetupError: (error) => {
+      throw error;
+    },
+    ...(options.limits === undefined ? {} : { limits: options.limits }),
+  });
   let shows = noteId;
   let live = true;
   const instance = host.open({
@@ -161,7 +218,13 @@ function renderRow(
   let binding: ActionBinding | undefined;
   host.register((view) => {
     view.watchById('row-archive', Row, (handle) => {
-      binding = handle.bindAction('activate', definition, options.subject === undefined ? { subject: () => handle.read('id') } : { subject: options.subject });
+      binding = handle.bindAction(
+        'activate',
+        definition,
+        options.subject === undefined
+          ? { subject: () => handle.read('id') }
+          : { subject: options.subject },
+      );
     });
   });
   if (binding === undefined) throw new Error('nothing was bound');
@@ -177,7 +240,8 @@ function renderRow(
 }
 
 const noteOf = (event: Press): string => requireNoteId(event.read('id'));
-const settleLong = (ms = 25) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const settleLong = (ms = 25) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe('Archive through the real App, AppBridge and MCP server', () => {
   it('archives the note each of two repeated rows shows, once each, and the server agrees', async () => {
@@ -192,14 +256,23 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     first.press();
     await expect.poll(() => screen.shown.length).toBe(2);
 
-    expect(screen.shown.map((entry) => [entry.noteId, entry.message.kind])).toEqual([
+    expect(
+      screen.shown.map((entry) => [entry.noteId, entry.message.kind]),
+    ).toEqual([
       ['n-2', 'archived'],
       ['n-1', 'archived'],
     ]);
     expect(side.archived).toEqual(['n-2', 'n-1']);
-    expect(forwarded.map((entry) => entry.name)).toEqual(['archive_note', 'archive_note']);
+    expect(forwarded.map((entry) => entry.name)).toEqual([
+      'archive_note',
+      'archive_note',
+    ]);
     // Each activation ran each prerequisite once: they are accounted for apart from the archive request.
-    expect(screen.checks).toMatchObject({ sessions: 2, confirms: 2, audits: 2 });
+    expect(screen.checks).toMatchObject({
+      sessions: 2,
+      confirms: 2,
+      audits: 2,
+    });
     expect(screen.checks.records.sort()).toEqual(['n-1', 'n-2']);
   });
 
@@ -209,19 +282,32 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     renderRow(archiveNoteWith(noteOf, environment), 'n-locked').press();
 
     await expect.poll(() => screen.shown.length).toBe(1);
-    expect(screen.shown[0]).toEqual({ noteId: 'n-locked', message: { kind: 'declined', retry: true } });
-    expect(screen.checks).toMatchObject({ sessions: 1, confirms: 1, audits: 1 });
+    expect(screen.shown[0]).toEqual({
+      noteId: 'n-locked',
+      message: { kind: 'declined', retry: true },
+    });
+    expect(screen.checks).toMatchObject({
+      sessions: 1,
+      confirms: 1,
+      audits: 1,
+    });
     expect(side.handled).toEqual(['n-locked']); // the server was asked and decided on its own
     expect(side.archived).toEqual([]);
   });
 
   it('sends no archive request when the session prerequisite refuses, and the host sees nothing', async () => {
     const { app, side, forwarded } = await stack();
-    const { environment, screen } = environmentFor(app, { session: async () => undefined });
+    const { environment, screen } = environmentFor(app, {
+      session: async () => undefined,
+    });
     renderRow(archiveNoteWith(noteOf, environment), 'n-1').press();
 
     await expect.poll(() => screen.shown.length).toBe(1);
-    expect(screen.shown[0]?.message).toEqual({ kind: 'not-sent', why: 'session: sign-in-required', retry: true });
+    expect(screen.shown[0]?.message).toEqual({
+      kind: 'not-sent',
+      why: 'session: sign-in-required',
+      retry: true,
+    });
     expect(forwarded).toEqual([]);
     expect(side.handled).toEqual([]);
   });
@@ -229,12 +315,16 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
   it('keeps the effect unknown, and offers no retry, when the host rejects the forwarded call', async () => {
     const { app, side } = await stack();
     const rejecting = {
-      callServerTool: () => Promise.reject(new Error('the host refused the call')),
+      callServerTool: () =>
+        Promise.reject(new Error('the host refused the call')),
     } satisfies ServerTransport<CallToolResult>;
     const { environment, screen } = environmentFor(rejecting);
     renderRow(archiveNoteWith(noteOf, environment), 'n-1').press();
     await expect.poll(() => screen.shown.length).toBe(1);
-    expect(screen.shown[0]?.message).toEqual({ kind: 'status-unknown', retry: false });
+    expect(screen.shown[0]?.message).toEqual({
+      kind: 'status-unknown',
+      retry: false,
+    });
     expect(side.handled).toEqual([]);
     void app;
   });
@@ -249,7 +339,10 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     renderRow(archiveNoteWith(noteOf, environment), 'n-1').press();
 
     await expect.poll(() => screen.shown.length).toBe(1);
-    expect(screen.shown[0]?.message).toEqual({ kind: 'archived-view-failed', archivedAt: 7 });
+    expect(screen.shown[0]?.message).toEqual({
+      kind: 'archived-view-failed',
+      archivedAt: 7,
+    });
     expect(side.archived).toEqual(['n-1']);
     expect(forwarded).toHaveLength(1);
   });
@@ -259,11 +352,16 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     const { environment, screen } = environmentFor(app);
     const stalled = holdNext({ honorAbort: false });
     // The application's SDK-instance configuration, not the action: the definition declares no limits.
-    const row = renderRow(archiveNoteWith(noteOf, environment), 'n-1', { limits: { deadlineMs: 60, hookMs: 40 } });
+    const row = renderRow(archiveNoteWith(noteOf, environment), 'n-1', {
+      limits: { deadlineMs: 60, hookMs: 40 },
+    });
 
     row.press();
     await expect.poll(() => screen.shown.length).toBe(1);
-    expect(screen.shown[0]?.message).toEqual({ kind: 'status-unknown', retry: false });
+    expect(screen.shown[0]?.message).toEqual({
+      kind: 'status-unknown',
+      retry: false,
+    });
     // Local only: this AppBridge was told to stop. Whether an actual host would be is unobserved.
     expect(forwarded[0]?.aborted).toBe(true);
     expect(side.archived).toEqual([]);
@@ -291,7 +389,9 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     await expect.poll(() => side.archived).toEqual(['n-1']); // the server applied it all the same
     await settleLong();
     // The retired instance presents nothing: its hooks are obsolete, so the user is told nothing false.
-    expect(screen.shown.filter((entry) => entry.message.kind === 'archived')).toEqual([]);
+    expect(
+      screen.shown.filter((entry) => entry.message.kind === 'archived'),
+    ).toEqual([]);
     expect(row.binding.state.phase).toBe('disposed');
     void app;
   });
@@ -302,12 +402,33 @@ describe('Archive through the real App, AppBridge and MCP server', () => {
     const stalled = holdNext({ honorAbort: true });
     const short = Action.server<Press, CallToolResult>('short', app)
       .before(prerequisite('session', () => proceed()))
-      .run(({ call }) => call('archive_note', { noteId: 'n-1' }, { timeoutMs: 40 }))
-      .onFailure(({ stage, failure }) => void outcomes.push(`${stage}:${failure.kind}`))
+      .run(({ call }) =>
+        call('archive_note', { noteId: 'n-1' }, { timeoutMs: 40 }),
+      )
+      .onFailure(
+        ({ stage, failure }) => void outcomes.push(`${stage}:${failure.kind}`),
+      )
       .build();
-    const host = createInstanceHost({ onSetupError: (error) => { throw error; } });
-    const instance = host.open({ kind: Row, componentId: 'r', dataPath: '/', events: ['activate'], isLive: () => true, read: () => undefined });
-    host.register((view) => view.watchById('r', Row, (handle) => void handle.bindAction('activate', short)));
+    const host = createInstanceHost({
+      onSetupError: (error) => {
+        throw error;
+      },
+    });
+    const instance = host.open({
+      kind: Row,
+      componentId: 'r',
+      dataPath: '/',
+      events: ['activate'],
+      isLive: () => true,
+      read: () => undefined,
+    });
+    host.register((view) =>
+      view.watchById(
+        'r',
+        Row,
+        (handle) => void handle.bindAction('activate', short),
+      ),
+    );
 
     instance.activate('activate', 'click');
     await expect.poll(() => outcomes).toEqual(['running:handler-error']);

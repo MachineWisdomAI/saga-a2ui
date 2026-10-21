@@ -2,14 +2,22 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { connectToolResultView, type ToolInput, type ToolResult, type ToolResultViewConnection } from './index.js';
+import {
+  connectToolResultView,
+  type ToolInput,
+  type ToolResult,
+  type ToolResultViewConnection,
+} from './index.js';
 
 // The view connection's lifetime, exercised with a real `App` and `AppBridge` joined by an
 // in-memory transport. No DOM and no renderer: the observable result is what the caller's
 // callbacks receive and when.
 
-const result = (text: string) => ({ content: [{ type: 'text' as const, text }] });
-const textOf = (delivered: ToolResult) => (delivered.content?.[0] as { text: string } | undefined)?.text;
+const result = (text: string) => ({
+  content: [{ type: 'text' as const, text }],
+});
+const textOf = (delivered: ToolResult) =>
+  (delivered.content?.[0] as { text: string } | undefined)?.text;
 
 interface Harness {
   readonly app: App;
@@ -17,14 +25,24 @@ interface Harness {
   readonly results: string[];
   readonly inputs: ToolInput[];
   readonly events: string[];
-  connect(onInitialized?: (bridge: AppBridge) => void): Promise<ToolResultViewConnection>;
+  connect(
+    onInitialized?: (bridge: AppBridge) => void,
+  ): Promise<ToolResultViewConnection>;
 }
 
 const toClean: { app?: App; bridge?: AppBridge }[] = [];
 
 function harness(): Harness {
-  const app = new App({ name: 'test-view', version: '0.0.0' }, {}, { autoResize: false });
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+  const app = new App(
+    { name: 'test-view', version: '0.0.0' },
+    {},
+    { autoResize: false },
+  );
+  const bridge = new AppBridge(
+    null,
+    { name: 'test-host', version: '0.0.0' },
+    {},
+  );
   toClean.push({ app, bridge });
   const results: string[] = [];
   const inputs: ToolInput[] = [];
@@ -51,12 +69,23 @@ function harness(): Harness {
 }
 
 /** A second host for the same view `App`, as when a view is mounted again. */
-async function reconnect(h: Harness, deliver: (text: string) => void): Promise<AppBridge> {
-  const bridge = new AppBridge(null, { name: 'test-host', version: '0.0.0' }, {});
+async function reconnect(
+  h: Harness,
+  deliver: (text: string) => void,
+): Promise<AppBridge> {
+  const bridge = new AppBridge(
+    null,
+    { name: 'test-host', version: '0.0.0' },
+    {},
+  );
   toClean.push({ bridge });
   const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
   await bridge.connect(hostSide);
-  await connectToolResultView({ app: h.app, transport: viewSide, onToolResult: (delivered) => deliver(textOf(delivered) ?? '') });
+  await connectToolResultView({
+    app: h.app,
+    transport: viewSide,
+    onToolResult: (delivered) => deliver(textOf(delivered) ?? ''),
+  });
   return bridge;
 }
 
@@ -89,7 +118,9 @@ describe('tool result delivery', () => {
     await expect.poll(() => h.inputs).toHaveLength(1);
     expect(h.inputs[0]?.arguments).toEqual({ question: 'why?' });
     view.dispose();
-    await h.bridge.sendToolInput({ arguments: { question: 'ignored' } }).catch(() => undefined);
+    await h.bridge
+      .sendToolInput({ arguments: { question: 'ignored' } })
+      .catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(h.inputs).toHaveLength(1);
   });
@@ -162,7 +193,11 @@ describe('ending the connection', () => {
     const h = harness();
     const [viewSide] = InMemoryTransport.createLinkedPair();
     // No host is listening: initialize never completes, so close the pipe to make it fail.
-    const pending = connectToolResultView({ app: h.app, transport: viewSide, onToolResult: (d) => h.results.push(textOf(d) ?? '') });
+    const pending = connectToolResultView({
+      app: h.app,
+      transport: viewSide,
+      onToolResult: (d) => h.results.push(textOf(d) ?? ''),
+    });
     await viewSide.close();
     await expect(pending).rejects.toBeDefined();
 

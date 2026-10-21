@@ -40,7 +40,12 @@ export interface FakeInstance {
 export function renderInstance(
   host: InstanceHost,
   componentId: string,
-  options: { dataPath?: string; data?: Record<string, unknown>; kind?: typeof Control; observable?: boolean } = {},
+  options: {
+    dataPath?: string;
+    data?: Record<string, unknown>;
+    kind?: typeof Control;
+    observable?: boolean;
+  } = {},
 ): FakeInstance {
   let live = true;
   let data = options.data ?? {};
@@ -86,8 +91,14 @@ export function renderInstance(
   };
 }
 
-export function newHost(onSetupError: (error: unknown) => void = () => undefined, limits?: Limits): InstanceHost {
-  return createInstanceHost({ onSetupError, ...(limits === undefined ? {} : { limits }) });
+export function newHost(
+  onSetupError: (error: unknown) => void = () => undefined,
+  limits?: Limits,
+): InstanceHost {
+  return createInstanceHost({
+    onSetupError,
+    ...(limits === undefined ? {} : { limits }),
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -112,7 +123,8 @@ export function gate<T = void>(): Gate<T> {
 
 /** Lets promise callbacks run without moving the clock. */
 export const settle = (): Promise<unknown> => vi.advanceTimersByTimeAsync(0);
-export const elapse = (ms: number): Promise<unknown> => vi.advanceTimersByTimeAsync(ms);
+export const elapse = (ms: number): Promise<unknown> =>
+  vi.advanceTimersByTimeAsync(ms);
 
 export interface Rig {
   readonly control: FakeInstance;
@@ -123,17 +135,29 @@ export interface Rig {
 /** One control bound to `definition` through the public handle, with the binding's phases recorded. */
 export function rig(
   definition: unknown,
-  options: { id?: string; data?: Record<string, unknown>; bind?: BindOptions; observable?: boolean; limits?: Limits } = {},
+  options: {
+    id?: string;
+    data?: Record<string, unknown>;
+    bind?: BindOptions;
+    observable?: boolean;
+    limits?: Limits;
+  } = {},
 ): Rig {
   const host = newHost(undefined, options.limits);
   const control = renderInstance(host, options.id ?? 'c', {
     ...(options.data === undefined ? {} : { data: options.data }),
-    ...(options.observable === undefined ? {} : { observable: options.observable }),
+    ...(options.observable === undefined
+      ? {}
+      : { observable: options.observable }),
   });
   let binding: ActionBinding | undefined;
   host.register((view) => {
     view.watchById(options.id ?? 'c', Control, (handle) => {
-      binding = handle.bindAction('activate', definition as never, options.bind);
+      binding = handle.bindAction(
+        'activate',
+        definition as never,
+        options.bind,
+      );
     });
   });
   if (binding === undefined) throw new Error('nothing was bound');

@@ -2,14 +2,23 @@ import type { LitComponentApi } from '@a2ui/lit/v0_9';
 import { Catalog } from '@a2ui/web_core/v0_9';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { ActionBinding } from '@saga-a2ui/core/actions';
-import { a2uiV0_9Decoder, createMessageSession } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
 import { ActionButton, createLitActions } from '@saga-a2ui/lit/actions';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import { createStarterActions } from './actions.js';
 import { starterEntries } from './catalog.js';
 import { AccountOutputSchema, StatusOutputSchema } from './contract.js';
-import { CATALOG_ID, CLEAR_ID, SURFACE_ID, headlineData, starterSurface } from './surface.js';
+import {
+  CATALOG_ID,
+  CLEAR_ID,
+  SURFACE_ID,
+  headlineData,
+  starterSurface,
+} from './surface.js';
 
 // The composition root of the view. It uses public package exports only, and the page it builds is
 // served by server/operations.ts as the MCP App view of both operations. The application decides
@@ -17,7 +26,8 @@ import { CATALOG_ID, CLEAR_ID, SURFACE_ID, headlineData, starterSurface } from '
 
 export const PROBLEM_TEXT = 'This could not be shown.';
 /** A successful result this view's contract does not accept comes from a server of another build. */
-export const MISMATCH_TEXT = 'This could not be shown: the view and its server are from different builds. Reopen it; if this continues, update the server and the view together.';
+export const MISMATCH_TEXT =
+  'This could not be shown: the view and its server are from different builds. Reopen it; if this continues, update the server and the view together.';
 export const CLOSED_TEXT = 'This view was closed.';
 
 function requireElement<T extends Element>(selector: string): T {
@@ -28,13 +38,19 @@ function requireElement<T extends Element>(selector: string): T {
 
 export async function startView(): Promise<void> {
   const app = new App({ name: 'saga-starter-view', version: '0.0.0' });
-  const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [...starterEntries]);
+  const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
+    ...starterEntries,
+  ]);
   defineElements(starterEntries);
 
   const status = requireElement('[data-testid="view-status"]');
   const say = (text: string): void => void (status.textContent = text);
-  const actions = createStarterActions({ noteInput: requireElement<HTMLInputElement>('[data-testid="note"]') });
-  const element = (): (HTMLElement & { ingest(input: unknown): unknown }) | null => document.querySelector('starter-app');
+  const actions = createStarterActions({
+    noteInput: requireElement<HTMLInputElement>('[data-testid="note"]'),
+  });
+  const element = ():
+    (HTMLElement & { ingest(input: unknown): unknown }) | null =>
+    document.querySelector('starter-app');
 
   // What the application must end itself. The binding is the attachment of one definition to one
   // rendered control; the discovery subscription finds that control. Ending a binding stops the
@@ -46,7 +62,8 @@ export async function startView(): Promise<void> {
   customElements.define(
     'starter-app',
     createA2uiAppElement({
-      createSession: () => createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
+      createSession: () =>
+        createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
       initialInput: starterSurface,
       surfaceId: SURFACE_ID,
       actions: createLitActions({
@@ -66,12 +83,31 @@ export async function startView(): Promise<void> {
     }),
   );
 
-  const show = (result: { readonly isError?: boolean; readonly structuredContent?: unknown }): void => {
-    const account = result.isError === true ? undefined : AccountOutputSchema.safeParse(result.structuredContent);
-    const running = result.isError === true || account?.success ? undefined : StatusOutputSchema.safeParse(result.structuredContent);
-    const headline = account?.success ? `Signed in as ${account.data.accountId}` : running?.success ? 'The service is running' : '';
+  const show = (result: {
+    readonly isError?: boolean;
+    readonly structuredContent?: unknown;
+  }): void => {
+    const account =
+      result.isError === true
+        ? undefined
+        : AccountOutputSchema.safeParse(result.structuredContent);
+    const running =
+      result.isError === true || account?.success
+        ? undefined
+        : StatusOutputSchema.safeParse(result.structuredContent);
+    const headline = account?.success
+      ? `Signed in as ${account.data.accountId}`
+      : running?.success
+        ? 'The service is running'
+        : '';
     element()?.ingest(headlineData(headline));
-    say(result.isError === true ? PROBLEM_TEXT : headline === '' ? MISMATCH_TEXT : 'Ready');
+    say(
+      result.isError === true
+        ? PROBLEM_TEXT
+        : headline === ''
+          ? MISMATCH_TEXT
+          : 'Ready',
+    );
   };
 
   // The application's one way to end its view, for a host teardown and for the page going away

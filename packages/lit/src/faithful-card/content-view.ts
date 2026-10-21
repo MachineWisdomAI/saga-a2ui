@@ -52,7 +52,10 @@ export class ContentViewRequest extends Event {
  * the function that ends it. The host's own element decides when to call each; nothing is
  * registered anywhere else.
  */
-export function provideContentView(host: EventTarget, view: ContentView): () => void {
+export function provideContentView(
+  host: EventTarget,
+  view: ContentView,
+): () => void {
   const answer = (event: Event) => {
     if (event instanceof ContentViewRequest) event.provide(view);
   };
@@ -73,5 +76,8 @@ export function requestContentView(from: EventTarget): ContentView | undefined {
  * carries exactly the restrictions that policy derives.
  */
 export function documentContentSecurityPolicies(doc: Document): string[] {
-  return Array.from(doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'), (meta) => meta.getAttribute('content') ?? '');
+  return Array.from(
+    doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'),
+    (meta) => meta.getAttribute('content') ?? '',
+  );
 }

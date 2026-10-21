@@ -36,10 +36,14 @@ export class ListenerConfigurationError extends Error {
 }
 
 /** Resolves a streaming policy, selecting the documented default when none is supplied. */
-export function resolveStreamingPolicy(policy: StreamingPolicy | undefined): StreamingPolicy {
+export function resolveStreamingPolicy(
+  policy: StreamingPolicy | undefined,
+): StreamingPolicy {
   const idleMs: unknown = policy?.idleMs ?? DEFAULT_STREAM_IDLE_MS;
   if (typeof idleMs !== 'number' || !Number.isFinite(idleMs) || idleMs <= 0) {
-    throw new ListenerConfigurationError('streaming.idleMs must be a finite positive number');
+    throw new ListenerConfigurationError(
+      'streaming.idleMs must be a finite positive number',
+    );
   }
   return Object.freeze({ idleMs });
 }
@@ -48,7 +52,10 @@ export function resolveStreamingPolicy(policy: StreamingPolicy | undefined): Str
  * Whether a safe failure may still be written: the response is uncommitted and open, and the caller
  * has not gone. An expired request may still answer once (it gets no extra time to deliver it).
  */
-export function mayAnswer(lifetime: RequestLifetime, res: ServerResponse): boolean {
+export function mayAnswer(
+  lifetime: RequestLifetime,
+  res: ServerResponse,
+): boolean {
   if (res.headersSent || res.destroyed) return false;
   const cause = lifetime.cause;
   return cause === undefined || cause.kind === 'request-timeout';
@@ -58,9 +65,19 @@ export function mayAnswer(lifetime: RequestLifetime, res: ServerResponse): boole
 function declaresEventStream(args: readonly unknown[]): boolean {
   const headers = args.find((arg) => typeof arg === 'object' && arg !== null);
   const pairs: [unknown, unknown][] = Array.isArray(headers)
-    ? headers.map((entry, index): [unknown, unknown] => (Array.isArray(entry) ? [entry[0], entry[1]] : [entry, headers[index + 1]]))
+    ? headers.map((entry, index): [unknown, unknown] =>
+        Array.isArray(entry)
+          ? [entry[0], entry[1]]
+          : [entry, headers[index + 1]],
+      )
     : Object.entries((headers ?? {}) as Record<string, unknown>);
-  return pairs.some(([name, value]) => typeof name === 'string' && name.toLowerCase() === 'content-type' && typeof value === 'string' && value.toLowerCase().startsWith('text/event-stream'));
+  return pairs.some(
+    ([name, value]) =>
+      typeof name === 'string' &&
+      name.toLowerCase() === 'content-type' &&
+      typeof value === 'string' &&
+      value.toLowerCase().startsWith('text/event-stream'),
+  );
 }
 
 /**
@@ -115,7 +132,11 @@ export function bindResponseToLifetime(
  * Once a text/event-stream response is established the request deadline stops and the idle policy
  * takes over: every write the transport actually flushes restarts the idle clock.
  */
-function watchStream(res: ServerResponse, lifetime: RequestLifetime, policy: StreamingPolicy): void {
+function watchStream(
+  res: ServerResponse,
+  lifetime: RequestLifetime,
+  policy: StreamingPolicy,
+): void {
   let idle: (() => void) | undefined;
   const stop = () => {
     idle?.();
@@ -127,14 +148,21 @@ function watchStream(res: ServerResponse, lifetime: RequestLifetime, policy: Str
     // Segmented: an accepted idle limit above the native timer's maximum must not expire at once.
     idle = startBoundedTimer(policy.idleMs, () => {
       idle = undefined;
-      lifetime.record({ kind: 'operation-timeout', stage: 'delivery', limitMs: policy.idleMs, effect: 'unknown' });
+      lifetime.record({
+        kind: 'operation-timeout',
+        stage: 'delivery',
+        limitMs: policy.idleMs,
+        effect: 'unknown',
+      });
       res.destroy();
     });
   };
   res.once('close', stop);
   res.once('finish', stop);
 
-  const writeHead = res.writeHead.bind(res) as (...args: unknown[]) => ServerResponse;
+  const writeHead = res.writeHead.bind(res) as (
+    ...args: unknown[]
+  ) => ServerResponse;
   res.writeHead = ((...args: unknown[]) => {
     const written = writeHead(...args);
     if (declaresEventStream(args)) {
@@ -144,10 +172,16 @@ function watchStream(res: ServerResponse, lifetime: RequestLifetime, policy: Str
     return written;
   }) as typeof res.writeHead;
 
-  const write = res.write.bind(res) as (chunk: unknown, ...rest: unknown[]) => boolean;
+  const write = res.write.bind(res) as (
+    chunk: unknown,
+    ...rest: unknown[]
+  ) => boolean;
   res.write = ((chunk: unknown, ...rest: unknown[]) => {
     const callback = rest.at(-1);
-    const done = typeof callback === 'function' ? (callback as (error?: Error | null) => void) : undefined;
+    const done =
+      typeof callback === 'function'
+        ? (callback as (error?: Error | null) => void)
+        : undefined;
     const front = done ? rest.slice(0, -1) : rest;
     // Activity is the transport accepting the bytes, not the application asking for them to be sent.
     return write(chunk, ...front, (error?: Error | null) => {

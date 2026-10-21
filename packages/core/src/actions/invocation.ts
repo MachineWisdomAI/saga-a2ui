@@ -1,4 +1,8 @@
-import type { ActionPlan, CanceledContext, FailureContext } from './definition.js';
+import type {
+  ActionPlan,
+  CanceledContext,
+  FailureContext,
+} from './definition.js';
 import type {
   ActionObserver,
   CancelCause,
@@ -13,7 +17,12 @@ import { categorize } from './category.js';
 import { startTimer, type LimitTimer, type ResolvedLimits } from './limits.js';
 import { readAnswer, type Prerequisite } from './prerequisite.js';
 import { InvocationResources } from './scope.js';
-import { requestMeta, requestTimeout, type ServerCalls, type ServerTransport } from './server.js';
+import {
+  requestMeta,
+  requestTimeout,
+  type ServerCalls,
+  type ServerTransport,
+} from './server.js';
 import { discardOutcome, isThenable } from './thenable.js';
 
 // One activation that was admitted, from the user's event to its settlement. The runtime owns every
@@ -48,9 +57,18 @@ export interface InvocationOwner<Event> {
 
 let invocationCount = 0;
 
-type Settled = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: unknown };
+type Settled =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: unknown };
 type WorkStage = 'prerequisites' | 'running' | 'completing';
-type StepKind = 'prerequisite' | 'handler' | 'onSuccess' | 'onFailure' | 'onCanceled' | 'release' | 'onFinally';
+type StepKind =
+  | 'prerequisite'
+  | 'handler'
+  | 'onSuccess'
+  | 'onFailure'
+  | 'onCanceled'
+  | 'release'
+  | 'onFinally';
 
 /** What telemetry needs to know about a definition. */
 export interface Observable {
@@ -68,7 +86,12 @@ export function emitObservation(
   const { observer } = plan;
   if (observer === undefined) return;
   try {
-    const returned: unknown = observer({ label: plan.label, bindingId, elapsedMs: Date.now() - startedAt, ...event });
+    const returned: unknown = observer({
+      label: plan.label,
+      bindingId,
+      elapsedMs: Date.now() - startedAt,
+      ...event,
+    });
     if (isThenable(returned)) discardOutcome(returned);
   } catch {
     // An observer cannot affect the action.
@@ -136,7 +159,10 @@ export class Invocation<Event> {
   /** What `atActivation` returned; `undefined` for an action without it. */
   private activation: unknown;
   private readonly resources: InvocationResources;
-  private provided: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  private provided: Record<string, unknown> = Object.create(null) as Record<
+    string,
+    unknown
+  >;
   private result: unknown;
   private stage: WorkStage = 'prerequisites';
   private outcome: Outcome<unknown> | undefined;
@@ -166,7 +192,8 @@ export class Invocation<Event> {
     this.resources = new InvocationResources({
       label: plan.label,
       // The scope is active until the outcome is decided: that is work activity, not freshness.
-      isActive: () => this.outcome === undefined && this.pendingCancel === undefined,
+      isActive: () =>
+        this.outcome === undefined && this.pendingCancel === undefined,
       hookMs: () => this.limits.hookMs,
       report: (step) => this.emit('cleanup-error', { cleanupStep: step }),
     });
@@ -218,7 +245,8 @@ export class Invocation<Event> {
     if (this.replacedFlag) return 'replaced';
     if (this.owner.isDisposed()) return 'disposed';
     if (!this.live()) return 'not-live';
-    if (this.seam.subject !== undefined && this.subjectChanged()) return 'subject-changed';
+    if (this.seam.subject !== undefined && this.subjectChanged())
+      return 'subject-changed';
     return undefined;
   }
 
@@ -246,7 +274,9 @@ export class Invocation<Event> {
     this.expireIfOverdue();
     if (!step.eligible) return false;
     this.recheck();
-    return step.eligible && !this.obsoleteFlag && this.staleCause() === undefined;
+    return (
+      step.eligible && !this.obsoleteFlag && this.staleCause() === undefined
+    );
   }
 
   // -------------------------------------------------------------------------------------------
@@ -280,8 +310,10 @@ export class Invocation<Event> {
     const stage = this.stage;
     this.controller.abort();
     this.abandonStep();
-    if (stage === 'completing') this.decide({ status: 'canceled', cause, stage, result: this.result });
-    else if (stage === 'running') this.decide({ status: 'canceled', cause, stage });
+    if (stage === 'completing')
+      this.decide({ status: 'canceled', cause, stage, result: this.result });
+    else if (stage === 'running')
+      this.decide({ status: 'canceled', cause, stage });
     else this.decide({ status: 'canceled', cause, stage });
   }
 
@@ -318,7 +350,11 @@ export class Invocation<Event> {
       this.decide({
         status: 'failed',
         stage: 'input',
-        failure: { kind: 'invalid-input', error, category: categorize(error, 'validation') },
+        failure: {
+          kind: 'invalid-input',
+          error,
+          category: categorize(error, 'validation'),
+        },
       });
       return false;
     }
@@ -364,7 +400,11 @@ export class Invocation<Event> {
       this.decide({
         status: 'failed',
         stage: 'input',
-        failure: { kind: 'activation-error', error: threw.error, category: categorize(threw.error) },
+        failure: {
+          kind: 'activation-error',
+          error: threw.error,
+          category: categorize(threw.error),
+        },
       });
     } else {
       this.activation = returned;
@@ -373,7 +413,8 @@ export class Invocation<Event> {
     // If the callback threw, its failure is already the outcome and its cleanup may have started:
     // the cancellation had already made the invocation obsolete, and it must not abort or abandon
     // the step that belongs to that outcome.
-    if (pending !== undefined && this.outcome === undefined) this.cancel(pending);
+    if (pending !== undefined && this.outcome === undefined)
+      this.cancel(pending);
     this.drain();
     return this.outcome === undefined;
   }
@@ -429,7 +470,11 @@ export class Invocation<Event> {
     );
   }
 
-  private afterPrerequisite(current: Prerequisite<object, unknown, unknown>, index: number, settled: Settled): void {
+  private afterPrerequisite(
+    current: Prerequisite<object, unknown, unknown>,
+    index: number,
+    settled: Settled,
+  ): void {
     // A deadline that passed unnoticed ends the wait before this answer counts, and so does a change
     // nobody saw until now.
     this.expireIfOverdue();
@@ -437,32 +482,64 @@ export class Invocation<Event> {
     this.recheck();
     if (this.outcome !== undefined) return;
     const failure = (failed: PrerequisiteFailure): void => {
-      this.decide({ status: 'failed', stage: 'prerequisites', failure: failed });
+      this.decide({
+        status: 'failed',
+        stage: 'prerequisites',
+        failure: failed,
+      });
     };
     const broken = (error: unknown): void =>
-      failure({ kind: 'prerequisite-error', prerequisite: current.label, error, category: categorize(error) });
+      failure({
+        kind: 'prerequisite-error',
+        prerequisite: current.label,
+        error,
+        category: categorize(error),
+      });
     if (!settled.ok) return broken(settled.error);
     const answer = readAnswer(settled.value);
     // A refusal is the application's own answer. Its reason text is not evidence of why.
     if (answer.kind === 'refuse') {
-      return failure({ kind: 'refused', prerequisite: current.label, reason: answer.reason, category: 'application' });
+      return failure({
+        kind: 'refused',
+        prerequisite: current.label,
+        reason: answer.reason,
+        category: 'application',
+      });
     }
     if (answer.kind === 'malformed') {
-      return broken(new TypeError(`Prerequisite '${current.label}' must answer with proceed(...) or refuse(...).`));
+      return broken(
+        new TypeError(
+          `Prerequisite '${current.label}' must answer with proceed(...) or refuse(...).`,
+        ),
+      );
     }
     for (const key of Object.keys(answer.provides)) {
       if (key in this.provided) {
-        return broken(new TypeError(`Prerequisite '${current.label}' provides '${key}', which an earlier prerequisite already provided.`));
+        return broken(
+          new TypeError(
+            `Prerequisite '${current.label}' provides '${key}', which an earlier prerequisite already provided.`,
+          ),
+        );
       }
     }
     for (const [key, value] of Object.entries(answer.provides)) {
-      Object.defineProperty(this.provided, key, { value, enumerable: true, writable: false, configurable: false });
+      Object.defineProperty(this.provided, key, {
+        value,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
     }
     this.nextPrerequisite(index + 1);
   }
 
   private providedSnapshot(): Record<string, unknown> {
-    return Object.freeze(Object.assign(Object.create(null) as Record<string, unknown>, this.provided));
+    return Object.freeze(
+      Object.assign(
+        Object.create(null) as Record<string, unknown>,
+        this.provided,
+      ),
+    );
   }
 
   private startHandler(): void {
@@ -482,7 +559,11 @@ export class Invocation<Event> {
             this.decide({
               status: 'failed',
               stage: 'running',
-              failure: { kind: 'handler-error', error: settled.error, category: categorize(settled.error) },
+              failure: {
+                kind: 'handler-error',
+                error: settled.error,
+                category: categorize(settled.error),
+              },
             });
             return;
           }
@@ -500,7 +581,9 @@ export class Invocation<Event> {
           signal: this.controller.signal,
           scope: this.resources.invocation,
           current: () => this.currentFor(step),
-          ...(this.plan.transport === undefined ? {} : { call: this.serverCall(step, this.plan.transport) }),
+          ...(this.plan.transport === undefined
+            ? {}
+            : { call: this.serverCall(step, this.plan.transport) }),
         }),
     );
   }
@@ -512,21 +595,41 @@ export class Invocation<Event> {
    * A rejection of the transport is the handler's to see, and arrives as `handler-error` unless
    * the deadline or a cancellation decided first.
    */
-  private serverCall(step: Step, transport: ServerTransport): ServerCalls['call'] {
+  private serverCall(
+    step: Step,
+    transport: ServerTransport,
+  ): ServerCalls['call'] {
     const { label } = this.plan;
     return async (name, args, options) => {
       // Reading the options first makes a malformed request fail the same way at any time.
-      const { timeoutMs: asked, meta: suppliedMeta } = (options ?? {}) as { timeoutMs?: unknown; meta?: unknown };
-      if (typeof name !== 'string' || name === '') throw new TypeError(`Action '${label}': a server call needs a tool name.`);
+      const { timeoutMs: asked, meta: suppliedMeta } = (options ?? {}) as {
+        timeoutMs?: unknown;
+        meta?: unknown;
+      };
+      if (typeof name !== 'string' || name === '')
+        throw new TypeError(
+          `Action '${label}': a server call needs a tool name.`,
+        );
       this.recheck();
-      const remainingMs = this.limits.deadlineMs - (Date.now() - this.workStartedAt);
-      if (!step.eligible || this.controller.signal.aborted || remainingMs <= 0) {
-        throw new Error(`Action '${label}': the invocation stopped waiting for this handler, so the request was not sent.`);
+      const remainingMs =
+        this.limits.deadlineMs - (Date.now() - this.workStartedAt);
+      if (
+        !step.eligible ||
+        this.controller.signal.aborted ||
+        remainingMs <= 0
+      ) {
+        throw new Error(
+          `Action '${label}': the invocation stopped waiting for this handler, so the request was not sent.`,
+        );
       }
       const timeout = requestTimeout(label, remainingMs, asked);
       const meta = requestMeta(label, suppliedMeta);
       return transport.callServerTool(
-        { name, arguments: args, ...(meta === undefined ? {} : { _meta: meta }) },
+        {
+          name,
+          arguments: args,
+          ...(meta === undefined ? {} : { _meta: meta }),
+        },
         { signal: this.controller.signal, timeout },
       );
     };
@@ -535,7 +638,10 @@ export class Invocation<Event> {
   private armDeadline(): void {
     if (this.deadlineTimer !== undefined || this.outcome !== undefined) return;
     // Counted from the end of the activation prefix, so progress and a later wait never extend it.
-    const remaining = Math.max(0, this.limits.deadlineMs - (Date.now() - this.workStartedAt));
+    const remaining = Math.max(
+      0,
+      this.limits.deadlineMs - (Date.now() - this.workStartedAt),
+    );
     this.deadlineTimer = startTimer(remaining, () => this.onDeadline());
   }
 
@@ -552,7 +658,8 @@ export class Invocation<Event> {
    */
   private expireIfOverdue(): void {
     if (this.deadlineTimer === undefined || this.outcome !== undefined) return;
-    if (Date.now() - this.workStartedAt >= this.limits.deadlineMs) this.onDeadline();
+    if (Date.now() - this.workStartedAt >= this.limits.deadlineMs)
+      this.onDeadline();
   }
 
   private onDeadline(): void {
@@ -565,8 +672,16 @@ export class Invocation<Event> {
     this.controller.abort();
     this.decide(
       stage === 'prerequisites'
-        ? { status: 'failed', stage, failure: { kind: 'timeout', category: 'timeout' } }
-        : { status: 'failed', stage, failure: { kind: 'timeout', category: 'timeout' } },
+        ? {
+            status: 'failed',
+            stage,
+            failure: { kind: 'timeout', category: 'timeout' },
+          }
+        : {
+            status: 'failed',
+            stage,
+            failure: { kind: 'timeout', category: 'timeout' },
+          },
     );
   }
 
@@ -602,11 +717,24 @@ export class Invocation<Event> {
             this.decide({
               status: 'failed',
               stage: 'running',
-              failure: { kind: 'success-hook-error', error: settled.error, result, category: categorize(settled.error) },
+              failure: {
+                kind: 'success-hook-error',
+                error: settled.error,
+                result,
+                category: categorize(settled.error),
+              },
             });
         },
         expire: () =>
-          this.decide({ status: 'failed', stage: 'running', failure: { kind: 'success-hook-timeout', result, category: 'timeout' } }),
+          this.decide({
+            status: 'failed',
+            stage: 'running',
+            failure: {
+              kind: 'success-hook-timeout',
+              result,
+              category: 'timeout',
+            },
+          }),
       },
     );
   }
@@ -620,13 +748,19 @@ export class Invocation<Event> {
     this.abandonStep();
     this.clearDeadline();
     this.outcome = outcome;
-    if (this.activating && outcome.status === 'failed' && this.plan.hooks.onFailure === undefined) {
+    if (
+      this.activating &&
+      outcome.status === 'failed' &&
+      this.plan.hooks.onFailure === undefined
+    ) {
       const { failure } = outcome;
       if ('error' in failure) this.rethrow = { error: failure.error };
     }
     this.emit('outcome-decided', {
       status: outcome.status,
-      ...(outcome.status === 'failed' ? { failureKind: outcome.failure.kind } : {}),
+      ...(outcome.status === 'failed'
+        ? { failureKind: outcome.failure.kind }
+        : {}),
     });
     this.owner.decided(this);
     this.later(() => this.runOutcomeHook());
@@ -634,14 +768,19 @@ export class Invocation<Event> {
 
   private runOutcomeHook(): void {
     const outcome = this.outcome;
-    if (outcome === undefined || outcome.status === 'succeeded') return this.releaseHeld();
+    if (outcome === undefined || outcome.status === 'succeeded')
+      return this.releaseHeld();
     if (outcome.status === 'canceled') {
       const hook = this.plan.hooks.onCanceled;
       if (hook === undefined) return this.releaseHeld();
-      this.runHook('onCanceled', (step) => hook(this.canceledContext(step, outcome)), {
-        onResult: (settled) => this.afterCleanup('onCanceled', settled),
-        expire: () => this.cleanupOverran('onCanceled'),
-      });
+      this.runHook(
+        'onCanceled',
+        (step) => hook(this.canceledContext(step, outcome)),
+        {
+          onResult: (settled) => this.afterCleanup('onCanceled', settled),
+          expire: () => this.cleanupOverran('onCanceled'),
+        },
+      );
       return;
     }
     const hook = this.plan.hooks.onFailure;
@@ -652,18 +791,23 @@ export class Invocation<Event> {
       this.recordCleanup({ step: 'onFailure', reason: 'obsolete' });
       return this.releaseHeld();
     }
-    this.runHook('onFailure', (step) => hook(this.failureContext(step, outcome)), {
-      onResult: (settled) => this.afterCleanup('onFailure', settled),
-      expire: () => this.cleanupOverran('onFailure'),
-      onObsolete: () => {
-        this.recordCleanup({ step: 'onFailure', reason: 'obsolete' });
-        this.later(() => this.releaseHeld());
+    this.runHook(
+      'onFailure',
+      (step) => hook(this.failureContext(step, outcome)),
+      {
+        onResult: (settled) => this.afterCleanup('onFailure', settled),
+        expire: () => this.cleanupOverran('onFailure'),
+        onObsolete: () => {
+          this.recordCleanup({ step: 'onFailure', reason: 'obsolete' });
+          this.later(() => this.releaseHeld());
+        },
       },
-    });
+    );
   }
 
   private afterCleanup(step: CleanupStep, settled: Settled): void {
-    if (!settled.ok) this.recordCleanup({ step, reason: 'threw', error: settled.error });
+    if (!settled.ok)
+      this.recordCleanup({ step, reason: 'threw', error: settled.error });
     this.releaseHeld();
   }
 
@@ -692,7 +836,12 @@ export class Invocation<Event> {
           },
         },
         onResult: (settled) => {
-          if (!settled.ok) this.recordCleanup({ step: 'release', reason: 'threw', error: settled.error });
+          if (!settled.ok)
+            this.recordCleanup({
+              step: 'release',
+              reason: 'threw',
+              error: settled.error,
+            });
           this.releaseHeld();
         },
       },
@@ -705,16 +854,27 @@ export class Invocation<Event> {
     const hook = this.plan.hooks.onFinally;
     const outcome = this.outcome;
     if (hook === undefined || outcome === undefined) return this.settle();
-    this.runHook('onFinally', (step) => hook({ ...this.hookBase(step), outcome, cleanupErrors: [...this.cleanupErrors], obsolete: this.obsoleteFlag }), {
-      onResult: (settled) => {
-        if (!settled.ok) this.emit('cleanup-error', { cleanupStep: 'onFinally' });
-        this.settle();
+    this.runHook(
+      'onFinally',
+      (step) =>
+        hook({
+          ...this.hookBase(step),
+          outcome,
+          cleanupErrors: [...this.cleanupErrors],
+          obsolete: this.obsoleteFlag,
+        }),
+      {
+        onResult: (settled) => {
+          if (!settled.ok)
+            this.emit('cleanup-error', { cleanupStep: 'onFinally' });
+          this.settle();
+        },
+        expire: () => {
+          this.emit('cleanup-error', { cleanupStep: 'onFinally' });
+          this.settle();
+        },
       },
-      expire: () => {
-        this.emit('cleanup-error', { cleanupStep: 'onFinally' });
-        this.settle();
-      },
-    });
+    );
   }
 
   private settle(): void {
@@ -722,7 +882,10 @@ export class Invocation<Event> {
     this.settledFlag = true;
     this.clearDeadline();
     this.stopWatching();
-    this.emit('finished', this.outcome === undefined ? {} : { status: this.outcome.status });
+    this.emit(
+      'finished',
+      this.outcome === undefined ? {} : { status: this.outcome.status },
+    );
     this.owner.settled(this);
   }
 
@@ -735,7 +898,10 @@ export class Invocation<Event> {
   // Hook contexts
   // -------------------------------------------------------------------------------------------
 
-  private hookBase(step: Step): { readonly signal: AbortSignal; readonly current: () => boolean } {
+  private hookBase(step: Step): {
+    readonly signal: AbortSignal;
+    readonly current: () => boolean;
+  } {
     return { signal: step.signal, current: () => this.currentFor(step) };
   }
 
@@ -745,11 +911,25 @@ export class Invocation<Event> {
   ): FailureContext<unknown, unknown, unknown, unknown> {
     const base = this.hookBase(step);
     const { params, activation } = this;
-    if (outcome.stage === 'input') return { ...base, stage: outcome.stage, failure: outcome.failure };
+    if (outcome.stage === 'input')
+      return { ...base, stage: outcome.stage, failure: outcome.failure };
     if (outcome.stage === 'prerequisites') {
-      return { ...base, stage: outcome.stage, failure: outcome.failure, params, activation };
+      return {
+        ...base,
+        stage: outcome.stage,
+        failure: outcome.failure,
+        params,
+        activation,
+      };
     }
-    return { ...base, stage: outcome.stage, failure: outcome.failure, params, activation, provided: this.providedSnapshot() };
+    return {
+      ...base,
+      stage: outcome.stage,
+      failure: outcome.failure,
+      params,
+      activation,
+      provided: this.providedSnapshot(),
+    };
   }
 
   private canceledContext(
@@ -759,11 +939,27 @@ export class Invocation<Event> {
     const base = this.hookBase(step);
     const { cause } = outcome;
     const { params, activation } = this;
-    if (outcome.stage === 'prerequisites') return { ...base, stage: outcome.stage, cause, params, activation };
+    if (outcome.stage === 'prerequisites')
+      return { ...base, stage: outcome.stage, cause, params, activation };
     if (outcome.stage === 'running') {
-      return { ...base, stage: outcome.stage, cause, params, activation, provided: this.providedSnapshot() };
+      return {
+        ...base,
+        stage: outcome.stage,
+        cause,
+        params,
+        activation,
+        provided: this.providedSnapshot(),
+      };
     }
-    return { ...base, stage: outcome.stage, cause, params, activation, provided: this.providedSnapshot(), result: outcome.result };
+    return {
+      ...base,
+      stage: outcome.stage,
+      cause,
+      params,
+      activation,
+      provided: this.providedSnapshot(),
+      result: outcome.result,
+    };
   }
 
   // -------------------------------------------------------------------------------------------
@@ -771,15 +967,24 @@ export class Invocation<Event> {
   // -------------------------------------------------------------------------------------------
 
   private runHook(
-    kind: Extract<StepKind, 'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally'>,
+    kind: Extract<
+      StepKind,
+      'onSuccess' | 'onFailure' | 'onCanceled' | 'onFinally'
+    >,
     invoke: (step: Step) => unknown,
-    handling: { readonly onResult: (settled: Settled) => void; readonly expire: () => void; readonly onObsolete?: () => void },
+    handling: {
+      readonly onResult: (settled: Settled) => void;
+      readonly expire: () => void;
+      readonly onObsolete?: () => void;
+    },
   ): void {
     this.runStep(
       {
         kind,
         budget: { ms: this.limits.hookMs, expire: handling.expire },
-        ...(handling.onObsolete === undefined ? {} : { onObsolete: handling.onObsolete }),
+        ...(handling.onObsolete === undefined
+          ? {}
+          : { onObsolete: handling.onObsolete }),
         onResult: handling.onResult,
       },
       invoke,
@@ -794,7 +999,12 @@ export class Invocation<Event> {
    */
   private runStep(spec: StepSpec, invoke: (step: Step) => unknown): void {
     const own = spec.budget === undefined ? undefined : new AbortController();
-    const step = new Step(spec.kind, own === undefined ? this.controller.signal : own.signal, own, spec.onObsolete);
+    const step = new Step(
+      spec.kind,
+      own === undefined ? this.controller.signal : own.signal,
+      own,
+      spec.onObsolete,
+    );
     this.step = step;
     let arrived = false;
     const arrive = (settled: Settled): void => {
@@ -868,7 +1078,16 @@ export class Invocation<Event> {
     }
   }
 
-  private emit(phase: ObservedPhase, extra: Partial<Pick<ObservedEvent, 'status' | 'failureKind' | 'cleanupStep'>> = {}): void {
-    emitObservation(this.plan, this.owner.bindingId, this.startedAt, { invocationId: this.id, phase, ...extra });
+  private emit(
+    phase: ObservedPhase,
+    extra: Partial<
+      Pick<ObservedEvent, 'status' | 'failureKind' | 'cleanupStep'>
+    > = {},
+  ): void {
+    emitObservation(this.plan, this.owner.bindingId, this.startedAt, {
+      invocationId: this.id,
+      phase,
+      ...extra,
+    });
   }
 }

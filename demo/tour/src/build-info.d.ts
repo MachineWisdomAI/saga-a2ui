@@ -10,7 +10,9 @@ declare module 'virtual:tour-build' {
     readonly candidateVersion: string;
     readonly sources: readonly import('./source-map.js').LocatedSource[];
     /** The built MCP App view of each offered renderer, as the one document a host mounts. */
-    readonly views: Readonly<Record<import('./scenarios.js').RendererId, string>>;
+    readonly views: Readonly<
+      Record<import('./scenarios.js').RendererId, string>
+    >;
   };
   export default build;
 }
