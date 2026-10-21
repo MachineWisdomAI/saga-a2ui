@@ -63,7 +63,7 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
 
 ### Formatting and hooks
 
-Use the Node version in `.nvmrc` (22.12.0) or a compatible later release.
+Use the Node version in `.nvmrc` (22.23.3) or a compatible later release.
 Developers and Hermes/Codex/Claude agents use the same explicit setup in each
 fresh clone or linked worktree:
 
@@ -91,7 +91,7 @@ inspection rather than replacement. If another installer replaces the wrapper,
 `hooks:check` reports that drift. Preserve the backup when repairing it.
 
 Prettier 3.9.10 and lint-staged 16.2.7 are pinned development tools; the latter
-supports Node 20.17+ and therefore the repository's Node 22.12 baseline. Its newer
+supports Node 20.17+ and therefore the repository's earlier Node 22.12 baseline. Its newer
 17.6.0 release requires Node 22.22.1+. One small wrapper composes the existing
 hook; a second hook manager would add another owner for the same file.
 
@@ -117,6 +117,77 @@ the root installation command above. Resolve formatting failures with the pinned
 local formatter and retry the commit; inspect the index and worktree after any
 lint-staged restoration conflict. There is no automatic network download in the
 hook.
+
+### Advisory correctness lint
+
+`npm run lint` checks tracked JS/TS and workflow files. Pass explicit paths to
+limit it (`npm run lint -- scripts/saga.ts`), or use
+`npm run lint -- --base BASE HEAD --merge-base` for a PR. A dependency or analyzer
+configuration change rechecks all tracked inputs. Deleted files are ignored;
+Markdown/artwork-only changes start no analyzer. The separate Advisory lint
+workflow is path-filtered and installs only root tooling and actionlint. It runs
+no SDK build, browser, fixture service or release rehearsal.
+
+The development baseline is Node 22.23.3, the current Node 22 patch checked on
+2026-10-21. ESLint 10.13.0 needs Node 22.13+ (or supported newer majors); ESLint
+9.39.5 is marked unsupported, so the root tools use maintained ESLint 10 and
+pinned typescript-eslint 8.72.0/TypeScript 6.0.3. SDK package consumer engine
+requirements are unchanged. To install the workflow analyzer locally with Go:
+
+```sh
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+```
+
+Put Go's binary directory on PATH, or set `ACTIONLINT` to that executable.
+`npm run lint:workflows -- .github/workflows/ci.yml` runs only that analyzer.
+Shellcheck and pyflakes integrations are explicitly disabled to keep the selected
+workflow rules reproducible without additional tools. actionlint itself still
+checks workflow keys, expressions, job references, matrices and action syntax.
+A missing analyzer is reported as an execution failure, never as a clean scan.
+
+The seven ESLint rules are warnings, without a warning-count threshold:
+
+| Rule | Useful correctness signal |
+| --- | --- |
+| `no-async-promise-executor` | Rejections from an async Promise executor can escape the created promise |
+| `no-unsafe-finally` | A return/throw in finally can replace an earlier result or error |
+| `no-unreachable` | Statements after an unconditional transfer never execute |
+| `no-sparse-arrays` | Array holes are skipped by common iteration methods |
+| `use-isnan` | Comparing directly with NaN never tests for NaN |
+| `valid-typeof` | Misspelled typeof strings make conditions ineffective |
+| `@typescript-eslint/no-non-null-asserted-optional-chain` | A non-null assertion hides the undefined case introduced by optional chaining |
+
+No recommended preset, type-aware project build, formatting, naming, complexity
+or unused-variable policy is added. Existing unrelated suppression directives
+are left alone; unused-disable reporting is off. Warnings are evidence to assess,
+not instructions for an automatic repair loop. Do not clean up unrelated code to
+make the advisory report quiet.
+
+The workflow uses job-level and analyzer-step `continue-on-error`, retains
+ordinary file/rule/line/column diagnostics and summarizes analyzer outcomes even
+when installation or execution fails. Local exit 0 means warning-only/clean
+analysis, actionlint findings return 1, and execution failures return 2. Syntax
+errors can also produce analyzer diagnostics. No hook invokes lint, and no
+required check, review setting or branch protection is added or changed.
+Existing TypeScript, behavior, source-quote, version, artifact and Git safety
+checks retain their current authority. A supported defect found independently
+still belongs in ordinary review.
+
+ESLint, typescript-eslint and actionlint are maintained open-source tools with
+no per-seat/service fee; the licenses are MIT, MIT and MIT respectively. Adoption
+adds pinned root dependencies, one workflow and analyzer-version maintenance;
+it sends no code to a new hosted analyzer. A hosted alternative would add
+account/access and plan maintenance without simplifying this small rule set,
+so none is selected or purchased. GitHub standard hosted runners are free for
+public repositories; private repositories use their plan's included minutes and
+can incur overage charges. The account's remaining allowance is not inferred.
+See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+The implementation PR records observed local/CI runtime rather than a speculative
+performance target or an invented monthly bill.
+
+References: [ESLint severities](https://eslint.org/docs/latest/use/configure/rules),
+[typescript-eslint setup](https://typescript-eslint.io/getting-started/), and
+[actionlint usage and exit codes](https://github.com/rhysd/actionlint/blob/v1.7.12/docs/usage.md).
 
 ### CI checks and release qualification
 
