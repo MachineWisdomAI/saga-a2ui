@@ -32,7 +32,9 @@ Each design's Status section separates its approved scope, implemented slices an
 
 ## Authoring
 
-Write a self-contained design for human readers: the problem, current behavior, responsibilities, interfaces, representative flow, rationale, failures, verification outcomes and open decisions. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`. Keep internal delivery tickets and detailed worker instructions in private maintainer records. Distinguish existing behavior from a proposal and preserve uncertainties that affect the design.
+Write for a human deciding whether the design makes sense. Lead with a short before/after example, then explain responsibilities, interfaces, rationale, material failures, verification outcomes and open decisions. Distinguish existing behavior from the proposal. Finish when the reader can explain the change and assess its tradeoffs; detailed worker instructions belong in private implementation tickets. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`.
+
+For a bounded feature, aim for 500–800 words. Above 1,000, review scope and repetition; retain necessary contract and safety details, and justify a larger design by its complexity. CI warns on changed feature/module Blueprints above 1,000 whitespace-separated words, excluding front matter and HTML comments. The warning is advisory. Run it locally with `python3 scripts/check-blueprint-length.py --base origin/main` after staging new files.
 
 Make verification outcomes concrete: state the input or condition, expected observable result and boundary being exercised. For example, an image-policy contract could require empty input to produce `img-src 'none'`, populated input to preserve permitted origins, and a mounted frame to load a permitted image while blocking an unlisted origin. The directive and browser behavior are separate claims requiring different evidence.
 
