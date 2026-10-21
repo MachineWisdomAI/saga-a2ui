@@ -15,6 +15,7 @@ import {
   type PackedSdk,
 } from './packed-consumer.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
+import { DOWNLOAD_SCRIPTS } from '../demo/lit-node/download-scripts.js';
 import { exportTemplate, readTemplateMetadata, templateDirectory, type OutputFile } from './starter-template.js';
 
 // DEMO1: builds the standalone synthetic demonstration (`demo/lit-node`) the way a download of it is
@@ -190,7 +191,7 @@ export function writeDownload(built: BuiltDemo, outDir: string): Record<string, 
         description: 'A synthetic, local-only demonstration of a SAGA A2UI application: browse, descriptions at both content levels, protected Play, notes actions, expiry and recovery.',
         license: 'Apache-2.0',
         type: 'module',
-        scripts: { start: 'node server.mjs' },
+        scripts: DOWNLOAD_SCRIPTS,
         engines: { node: '>=22.12.0' },
         dependencies,
         overrides: { '@a2ui/markdown-it': '0.2.1' },
