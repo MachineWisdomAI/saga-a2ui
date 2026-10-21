@@ -81,7 +81,7 @@ The first block writes `apps/lit-host/dist/demo`; run the second inside it. Open
 
 ```sh repository
 npx tsx scripts/saga.ts --help
-npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app
+npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hono ./my-app
 ```
 
 `--a2ui-stack` names a renderer plus MCP delivery (`lit-mcp`), never a combined word, and `--server` names the server target. The command prints the next steps; run them inside the new directory, with the candidate tarballs named in the install step as described above:
@@ -93,7 +93,36 @@ npm run build
 npm start
 ```
 
-`npm run typecheck` checks the view and the server. `npm start` prints two endpoint addresses: `/status/mcp` is public and reads no credential; `/account/mcp` is protected. **The protected endpoint refuses every credential until you replace `server/verifier.ts`.** The starter ships no identity provider and no account, sample data or test verifier. The [template README](../templates/lit-node/README.md) lists the files that are yours.
+`npm run typecheck` checks the view and the server. `npm start` prints two endpoint addresses: `/status/mcp` is public and reads no credential; `/account/mcp` is protected. **The protected endpoint refuses every credential until you replace `server/verifier.ts`.** The starter ships no identity provider and no account, sample data or test verifier. The [template README](../templates/lit-hono/README.md) lists the files that are yours.
+
+### HTTP defaults
+
+For a new HTTP application, use **stateless MCP** and **prepare the built view once at startup**. A tool invocation does not need a server-side conversation session. Keep conversation history in your application when the product needs it; keep request timeouts, cancellation and verified identity scoped to each request.
+
+The Hono target above supplies routing and middleware through the official `@modelcontextprotocol/hono` adapter. Its Node adapter runs Hono on Node.js: choosing Hono replaces hand-written HTTP plumbing, not the JavaScript runtime. Express and Fastify remain supported choices for an existing backend.
+
+For a modern MCP endpoint, the upstream `createMcpHandler` export from `@modelcontextprotocol/server` accepts a server factory and owns per-request transport creation and cleanup. Its default compatibility path also serves older HTTP clients statelessly. Do not add `Mcp-Session-Id`, a session map, an idle-session sweeper or an SSE replay store to a simple request/answer app. The maintained starter transports likewise use `sessionIdGenerator: undefined`; they do not retain MCP sessions.
+
+Keep deployment work outside that factory:
+
+```text
+startup
+  read the built HTML
+  apply any deployment revision stamp
+  validate the view and compute viewUriForHtml(finalHtml)
+  retain one immutable OperationView
+  open the HTTP listener
+
+HTTP request
+  create a server and transport for this request
+  register operations with the prepared OperationView
+  handle the request with its own identity and lifetime
+  release request resources when the response finishes or disconnects
+```
+
+Hash the exact UTF-8 HTML bytes that the resource serves, after all stamping. Reuse those bytes and their URI for discovery, tool results and resource reads. Reading, stamping and fingerprinting unchanged HTML on every request adds work and risks inconsistent resource identity. Restart after rebuilding the view. Answer-specific data and answer fingerprints still belong to the individual tool call.
+
+The CLI creates a new directory; it does not migrate an existing application. To move an existing server to Hono, generate a separate Hono starter as a reference or print its snippets, then adapt its HTTP layer while preserving your application's operations, renderer and policy. A Lit starter does not require an existing React application to change renderer.
 
 ### Unqualified pairs are refused
 
