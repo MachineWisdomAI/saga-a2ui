@@ -13,13 +13,19 @@ generated from the qualified templates by `npm run guide:recipes`; adding a temp
 | [`lit-express`](lit-express/) | `lit-mcp` (Lit view, MCP delivery) | `express` (`@modelcontextprotocol/express` 2.0.2, `express` 5.3.0) | Qualified in CI: [`scripts/starter-express.test.ts`](../scripts/starter-express.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-fastify`](lit-fastify/) | `lit-mcp` (Lit view, MCP delivery) | `fastify` (`@modelcontextprotocol/fastify` 2.0.1, `fastify` 5.12.7) | Qualified in CI: [`scripts/starter-fastify.test.ts`](../scripts/starter-fastify.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-hono`](lit-hono/) | `lit-mcp` (Lit view, MCP delivery) | `hono` (`@modelcontextprotocol/hono` 2.0.2 with `hono` 4.13.13 and `@hono/node-server` 1.19.17) | Qualified in CI: [`scripts/starter-hono.test.ts`](../scripts/starter-hono.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
+| [`lit-hapi`](lit-hapi/README.md) | `lit-mcp` (Lit view, MCP delivery) | `hapi` (SAGA-maintained [bridge](lit-hapi/server/bridge.ts) over `@modelcontextprotocol/node` 2.1.1, Hapi 21.4.10) | Qualified in CI: [`scripts/starter-hapi.test.ts`](../scripts/starter-hapi.test.ts), [`scripts/starter-hapi-identity.test.ts`](../scripts/starter-hapi-identity.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 
 The synthetic demonstration of the `lit-node` pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
 
 `lit-hono` is `lit-node` with only the server adapter files replaced (`server/listener.ts`, `server/authenticate.ts`, `package.json` and its README); a test fails if any other file differs.
 
-The `hapi` server target is a separate required slice
-([#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65)). A pair is offered only while CI qualifies it:
+[`lit-hapi`](lit-hapi/README.md#reuse-the-bridge-in-your-hapi-app) is maintained here too: it reuses the bridge over the official Node/server SDK,
+with Hapi route authentication and request-local immutable identity. [The bridge](lit-hapi/server/bridge.ts) owns
+Hapi/raw-response integration and the transport protections; [the listener](lit-hapi/server/listener.ts) owns the
+application's verifier, budgets and body handling. No external repository or adapter package is
+required. Its view, operations, domain identity and policy seams reuse `lit-node` unchanged.
+
+A pair is offered only while CI qualifies it:
 [`scripts/qualified-starters.ts`](../scripts/qualified-starters.ts) lists the qualified templates, the
 shared headless suite is [`scripts/starter-qualification.ts`](../scripts/starter-qualification.ts) and
 a template directory that is not listed fails `scripts/starter-template.test.ts`. A template is a
@@ -57,8 +63,8 @@ yields to the event loop between files, which a synchronous copy cannot do.
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
 ```
 
-`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all four
-templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`) are offered, each with `--a2ui-stack lit-mcp` and its
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all five
+templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`, `lit-hapi`) are offered, each with `--a2ui-stack lit-mcp` and its
 own `--server`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
 
 `saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the

@@ -972,7 +972,7 @@ export function qualifyStarter(
       // The only way identity enters is the application's verifier: a file that refuses every credential.
       expect(
         exported.find((one) => one.file === 'server/verifier.ts')?.text,
-      ).toContain('throw new OAuthError(OAuthErrorCode.InvalidToken');
+      ).toMatch(/throw\s+new\s+OAuthError\(\s*OAuthErrorCode\.InvalidToken/);
       // SDK behavior is imported, not reimplemented: no copy of the runtime's modules in the starter's own source.
       const own = exported
         .filter((one) => one.file.endsWith('.ts'))

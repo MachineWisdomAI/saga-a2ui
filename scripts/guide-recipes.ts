@@ -34,9 +34,7 @@ export const REQUIRED_SERVERS = [
   'hapi',
 ] as const;
 
-const OPEN_WORK: Readonly<Record<string, string>> = {
-  hapi: 'The Hapi bridge and its identity handoff are [#65](https://github.com/MachineWisdomAI/saga-a2ui/issues/65). Hapi has no official adapter, and route authentication does not yet reach the bridge callback, so the identity handoff is work that issue owns.',
-};
+const OPEN_WORK: Readonly<Record<string, string>> = {};
 
 const SNIPPET_TITLES: Readonly<Record<string, string>> = {
   'prepare-view': 'Prepare the view and endpoint handlers once',
