@@ -7,8 +7,8 @@ describe('the host link request contract', () => {
     expect(Object.isFrozen(NO_HOST_LINKS)).toBe(true);
   });
 
-  it('tells the reader that an opened link was requested, without repeating the destination', () => {
-    expect(describeLinkOutcome('opened', 'https://docs.example.com/guide')).toBe('The host was asked to open this link.');
+  it('keeps successful link requests silent', () => {
+    expect(describeLinkOutcome('opened', 'https://docs.example.com/guide')).toBe('');
   });
 
   it('keeps the destination readable as plain text whenever a link was not opened', () => {

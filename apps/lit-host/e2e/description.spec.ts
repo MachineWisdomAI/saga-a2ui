@@ -89,7 +89,7 @@ test.describe('Standard links go only through the host callback', () => {
     expect(openLinkCalls).toEqual([]); // nothing is requested before activation
 
     await button.click();
-    await expect(view.getByTestId('md-link-status')).toHaveText('The host was asked to open this link.');
+    await expect(view.getByTestId('md-link-status')).toHaveText('');
     expect(openLinkCalls).toEqual(['https://docs.example.com/guide?a=1']);
     expect(navigations).toEqual([]);
   });
@@ -98,7 +98,8 @@ test.describe('Standard links go only through the host callback', () => {
     const { view, openLinkCalls } = await open(page, { description, hostLinks: 'allow' });
     await view.getByRole('button', { name: /guide/ }).focus();
     await page.keyboard.press('Enter');
-    await expect(view.getByTestId('md-link-status')).not.toBeEmpty();
+    await expect(view.getByTestId('md-link-status')).toHaveAttribute('data-outcome', 'opened');
+    await expect(view.getByTestId('md-link-status')).toBeEmpty();
     expect(openLinkCalls).toHaveLength(1);
   });
 

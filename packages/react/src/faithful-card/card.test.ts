@@ -165,7 +165,7 @@ describe('Standard links', () => {
     click(view, one(view, 'md-link'));
     await view.settle();
     expect(host.requests).toEqual(['https://docs.example.com:8443/guide?a=1#top']);
-    expect(one(view, 'md-link-status').textContent).toBe('The host was asked to open this link.');
+    expect(one(view, 'md-link-status').textContent).toBe('');
     expect(one(view, 'md-link-status').getAttribute('data-outcome')).toBe('opened');
   });
 
@@ -428,7 +428,7 @@ describe('the lifecycle of a card and its controls', () => {
     mounted.render(under(host.view, card('[a](https://docs.example.com/a)')));
     click(mounted, one(mounted, 'md-link'));
     await act(async () => host.pending[0]!('opened'));
-    expect(one(mounted, 'md-link-status').textContent).toBe('The host was asked to open this link.');
+    expect(one(mounted, 'md-link-status').textContent).toBe('');
   });
 
   it('forgets earlier outcomes when new content arrives', async () => {
