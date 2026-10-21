@@ -141,13 +141,13 @@ The CLI creates a separate reference project; it does not migrate an existing ap
 
 ### Unqualified pairs are refused
 
-`saga init` offers only the pairs CI qualifies and that its own list names: `lit-mcp` on `node`, `express`, `fastify` and `hono`. Asking for another pair exits with status 1 before anything is written, and the message lists the four supported ones:
+`saga init` offers only the pairs CI qualifies and that its own list names: `lit-mcp` on `node`, `express`, `fastify`, `hono` and `hapi`. Asking for another pair exits with status 1 before anything is written, and the message lists the five supported ones:
 
 ```sh repository
 npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server node ./my-app
 ```
 
-A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today (all four). `hapi` has no qualified template, and React has no starter, template or `saga init` pair.
+A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today (all five). Hapi uses the SAGA-maintained bridge over the official Node/server SDK; React has no starter, template or `saga init` pair.
 
 ## Attach to an existing backend
 
@@ -158,7 +158,7 @@ npx tsx scripts/starter-snippets.ts
 npx tsx scripts/starter-snippets.ts --template lit-express
 ```
 
-Additional server slices add their own recipe by joining the qualified inventory and regenerating the recipes (`npm run guide:recipes`); `scripts/guide.test.ts` fails until they do. Hapi is the required slice that has no recipe yet. For Hapi in particular, route authentication does not yet reach the identity hook, so no Hapi identity handoff is described here.
+Additional server slices add their own recipe by joining the qualified inventory and regenerating the recipes (`npm run guide:recipes`); `scripts/guide.test.ts` fails until they do. The Hapi recipe traces its route authentication through the request factory and transport to the verified-identity hook. Each application supplies its verifier and authorization policy.
 
 ## Content policy
 
@@ -214,7 +214,7 @@ Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 secon
 | Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
 | Lit | The full renderer, installed from packed tarballs; the starter, demonstration and notes example | Windows |
 | React | **Direct action attachment** (`@saga-a2ui/react/actions`, ACT2) and the optional FaithfulCard text and image-consent slices, from the same tarballs; the notes browse and Play run through React in a local fixture host | **Installed parity** (E15): no React starter, template, CLI pair, demonstration or authenticated-recipe is claimed |
-| Server targets | `node`, `express`, `hono`, `fastify` qualified with `lit-mcp` | `hapi`; no full matrix; `saga init` offers `node`, `express`, `fastify` and `hono`; the standalone demonstration is the Node application only |
+| Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp` | No full matrix; `saga init` offers those five servers; the standalone demonstration is the Node application only |
 | Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |
 
 A renderer is qualified by running its own lifecycle, not by declaring that it could: a type declaration that compiles is not a working setup claim, and no renderer is forced through a Lit-specific lifecycle (custom elements and `createA2uiAppElement`). React attaches through its own provider and hook; the shared contract is renderer-neutral.
@@ -236,7 +236,7 @@ import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react
 These are recorded, not hidden, and none is a gate. No developer other than the author has followed this guide yet; non-author availability is not a new acceptance requirement.
 
 - `saga init` prints a plain `npm install`, but the candidate pins it writes cannot be resolved from a registry, so the reader has to name the tarballs. Building the matching candidate takes a full `npm run build`.
-- Four server templates qualify, and `saga init` offers all four. The standalone demonstration is still the Node application only, so `saga demo` refuses `express`, `hono` and `fastify`.
+- Five server templates qualify, and `saga init` offers all five. The standalone demonstration is still the Node application only, so `saga demo` refuses `express`, `hono`, `fastify` and `hapi`.
 - The existing-backend snippets call starter files that are not shown inline (`server/authenticate.ts`, `server/identity.ts`, `server/verifier.ts`, `server/authorization.ts`). The reader must read them in the template.
 - The Lit starter and demonstration are built from a checkout. The four public packages include their own READMEs; their React integration recipe is in [Installing the React renderer with MCP](react-consumers.md).
 - Checking the demo commands needs the built download (`npm run build:demo`) to exist first.

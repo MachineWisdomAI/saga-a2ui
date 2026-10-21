@@ -16,7 +16,7 @@
     "build:react-card-consumer": "tsx scripts/build-react-card-consumer.ts",
     "build:installed-lit-host": "tsx scripts/build-installed-lit-host.ts",
     "serve:mcp": "npm run serve:mcp -w @saga-a2ui/lit-host-app",
-    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/components && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/react && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-host-app && tsc -p examples/answer-consumer/tsconfig.json && tsc -p examples/answer-consumer/tsconfig.server.json && tsc -p examples/pack1-consumer/tsconfig.json && tsc -p examples/pack1-consumer/tsconfig.server.json && tsc -p examples/react-card-consumer/tsconfig.json && tsc -p examples/react-card-consumer/tsconfig.server.json && tsc -p templates/lit-node/tsconfig.json && tsc -p templates/lit-node/tsconfig.server.json && tsc -p templates/lit-express/tsconfig.json && tsc -p templates/lit-express/tsconfig.server.json && tsc -p templates/lit-fastify/tsconfig.json && tsc -p templates/lit-fastify/tsconfig.server.json && tsc -p templates/lit-hono/tsconfig.json && tsc -p templates/lit-hono/tsconfig.server.json && tsc -p demo/lit-node/tsconfig.json && tsc -p demo/lit-node/tsconfig.server.json && tsc -p demo/tour/tsconfig.json && npm run typecheck --prefix apps/lynx-fixture",
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/components && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/react && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-host-app && tsc -p examples/answer-consumer/tsconfig.json && tsc -p examples/answer-consumer/tsconfig.server.json && tsc -p examples/pack1-consumer/tsconfig.json && tsc -p examples/pack1-consumer/tsconfig.server.json && tsc -p examples/react-card-consumer/tsconfig.json && tsc -p examples/react-card-consumer/tsconfig.server.json && tsc -p templates/lit-node/tsconfig.json && tsc -p templates/lit-node/tsconfig.server.json && tsc -p templates/lit-express/tsconfig.json && tsc -p templates/lit-express/tsconfig.server.json && tsc -p templates/lit-fastify/tsconfig.json && tsc -p templates/lit-fastify/tsconfig.server.json && tsc -p templates/lit-hono/tsconfig.json && tsc -p templates/lit-hono/tsconfig.server.json && tsc -p templates/lit-hapi/tsconfig.json && tsc -p templates/lit-hapi/tsconfig.server.json && tsc -p demo/lit-node/tsconfig.json && tsc -p demo/lit-node/tsconfig.server.json && tsc -p demo/tour/tsconfig.json && npm run typecheck --prefix apps/lynx-fixture",
     "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app && npm run test:browser --prefix apps/lynx-fixture",
     "test:headless": "vitest run",
     "candidate:identity": "tsx scripts/candidate-identity.ts",
@@ -41,6 +41,8 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@hapi/boom": "10.0.1",
+    "@hapi/hapi": "21.4.10",
     "eslint": "10.13.0",
     "jsdom": "28.1.0",
     "lint-staged": "16.2.7",
