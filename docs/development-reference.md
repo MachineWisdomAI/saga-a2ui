@@ -59,11 +59,50 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
     npm run test:browser                # serves the built page and checks the visible title
     npm run verify                      # guards, typecheck, build, tests, LFS, and version enrollment
 
-`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. CI (`.github/workflows/ci.yml`) installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+`test:browser` expects `npm run build` to have run first; it loads the built page in Chromium and asserts that the heading "SAGA A2UI" is visible. The full CI route installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+
+### CI checks and release qualification
+
+CI (`.github/workflows/ci.yml`) runs on pull requests, pushes to main and manual
+runs. **Documentation artifacts, policy tests and CI routing** always checks Git
+LFS pointers, version enrollment, Python version-policy integration and CI path
+routing. It installs no npm workspace, Lynx fixture, browser or pnpm dependency.
+The separate **Version policy** PR check still validates the intended versions
+against the current base.
+
+| Changes | Application types, builds, tests and release qualification |
+| --- | --- |
+| Root Markdown; Markdown in `docs/`, `blueprints/` or `diagrams/`; README/CHANGELOG files elsewhere; PNG/JPEG/GIF/WebP/AVIF/SVG/ICO under `assets/brand/`, `docs/` or `diagrams/` | Skipped; lightweight checks run |
+| Only those documents and the exact version-policy paths listed in `scripts/ci-scope.py` | Skipped; focused policy checks run |
+| All other paths, including source/fixture Markdown, runtime images, executable files in `docs/`, retained evidence/deliverables, dependencies and CI routing/workflow changes | Full qualification |
+| Manual CI run, unavailable Git history or an empty/unknown change set | Full qualification |
+
+Markdown/image extensions are case-insensitive. Renames check both paths;
+moving a runtime image into documentation still runs full qualification. A PR
+uses its merge-base diff; a main push checks its complete before/after diff.
+This CI decision is deliberately more conservative than the version-bump
+documentation exemption. It does not exempt an entire documentation directory.
+Run its real-Git routing cases locally with `python3 scripts/test-ci-scope.py`.
+
+The full check retains the entire existing route: packed React pnpm consumer,
+`npm run verify`, `candidate:pack`, `candidate:rehearse`, and the SHA-named
+candidate artifact retained for 14 days. Named steps identify each operation.
+The rehearsal rebuilds A and B from the same implementation at different
+versions; it proves that install/update/rollback procedure, not compatibility
+between different implementations.
+
+Before any separately authorized release, run **CI → Run workflow** on the
+exact release ref (or `gh workflow run ci.yml --ref YOUR_RELEASE_REF`) and require
+the full check to pass for that revision. Manual runs always bypass path
+exemptions; the artifact upload follows successful packing and rehearsal in
+the same job. PR and main code changes also run it automatically. A skipped
+docs-only check is not release qualification. This workflow publishes and
+deploys nothing and holds no registry credential. It does not establish npm
+installation or assistant-host acceptance.
 
 ### Repository verification
 
-`npm run verify` is the one local and CI route. It runs the static guard, headless and browser discovery checks, typecheck, build, headless tests, browser tests, Git LFS pointer check, and version-enrollment check, in that order. It stops at the first failing command and uses that command's exit code. Git LFS must already be installed; the pointer check calls `git lfs`.
+`npm run verify` is the complete local and full-CI application route. It runs the static guard, headless and browser discovery checks, typecheck, build, headless tests, browser tests, Git LFS pointer check, and version-enrollment check, in that order. It stops at the first failing command and uses that command's exit code. Git LFS must already be installed; the pointer check calls `git lfs`.
 
 Browser installation is an explicit prerequisite. Install the Playwright browser this repository already depends on before verify. Verify does not download a browser and does not substitute a different one:
 
