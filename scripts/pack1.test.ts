@@ -269,7 +269,7 @@ describe('the five owned packages, packed', () => {
     expect(range('mcp', 'dependencies', '@modelcontextprotocol/ext-apps')).toBe(
       '2.0.3',
     );
-    expect(range('components', 'dependencies', 'markdown-it')).toBe('15.0.2');
+    expect(range('components', 'dependencies', 'markdown-it')).toBe('15.0.3');
     // The optional component package is reachable from a renderer package only as an optional peer.
     for (const name of ['lit', 'react'] as const) {
       expect(
