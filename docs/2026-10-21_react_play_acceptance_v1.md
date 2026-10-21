@@ -27,9 +27,10 @@ optional React card, Lit adapter or A2UI catalog.
 [Independent source review](https://github.com/MachineWisdomAI/saga-a2ui/pull/172#pullrequestreview-5584872164)
 covered candidate `58199872cb25c3b8378fb679b6f33198e6f8d7b6`.
 [Final integration approval](https://github.com/MachineWisdomAI/saga-a2ui/pull/172#pullrequestreview-5585471304)
-covered `2bab6b8884af2ab42e4a40f5e782709079de1db2`; the intervening current-main
-resolutions changed only the additive repository instructions, preserving the
-reviewed executable/test paths. [Required CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39427987289)
+covered `2bab6b8884af2ab42e4a40f5e782709079de1db2`. Its manual conflict
+resolutions affected only the additive repository instructions. Other changes
+arrived automatically from main; the reviewed React player executable/test paths
+were preserved. [Required CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39427987289)
 passed on that final candidate. The retained installed React HTML has SHA256
 `8ae57507b484ee05c000b64ab8977dd6e76a8e1d657c4fbaf237b607794336c5`.
 
