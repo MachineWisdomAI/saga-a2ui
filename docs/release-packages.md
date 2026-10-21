@@ -1,8 +1,13 @@
-# Preparing the first four-package prerelease
+# Preparing a four-package release
 
-The prepared version is `0.5.1-rc.1` for `@saga-a2ui/core`, `@saga-a2ui/components`,
-`@saga-a2ui/mcp` and `@saga-a2ui/react`, with the proposed npm tag `next`. This
-document does not announce registry availability or authorize publication.
+`@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp` and
+`@saga-a2ui/react` have a public npm release at `0.1.0-rc.1`. See
+[public installation](public-install.md) for the verified recipe. Subsequent
+release candidates use the `next` tag; pin exact versions in applications.
+
+For a subsequent release, the reviewed source manifests and generated
+`release.json` determine the prepared versions. Source versions can advance ahead
+of npm. This procedure does not authorize publication.
 Lit, the CLI, the workspace and the example application are outside this
 publication set.
 

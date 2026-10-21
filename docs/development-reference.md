@@ -2,7 +2,7 @@
 
 Build, test and implementation notes accumulated as the SDK evolved. Dated slices describe their own evidence and limitations; use [Getting started](getting-started.md) for the current setup path and the [project overview](../README.md) for current scope.
 
-New here: [Getting started](../docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. There is no public release yet; the packages are private candidate builds. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](actions.md).
+New here: [Getting started](../docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. Core, components, MCP and React are [published on npm at `0.1.0-rc.1`](public-install.md); local qualification and Lit starters use separately built candidate packages. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](actions.md).
 
 React applications: follow [the React consumer dependency guide](../docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
 
@@ -12,7 +12,7 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 ## Status
 
-Core, components, MCP and React have enrolled versions prepared for publication; Lit remains private and unversioned. Local development still uses private candidate artifacts. See [release preparation](release-packages.md) for the current package metadata; later dated slices preserve their original qualification state.
+Core, components, MCP and React are published on npm at `0.1.0-rc.1`; Lit remains private and unversioned. Local development still uses private candidate artifacts. See [public installation](public-install.md) for the verified registry recipe and [release preparation](release-packages.md) for subsequent releases; later dated slices preserve their original qualification state.
 
 Five unreleased SDK packages exist: `packages/core`, `packages/lit`, `packages/mcp`, `packages/components` (the passive FaithfulCard preparation slice), and `packages/react` (a qualification slice of direct action attachment, and the optional FaithfulCard text and image-consent slices). A minimal private Lit application (`apps/lit-host`) builds and renders locally, and a retained Lynx Web qualification fixture (`apps/lynx-fixture`, see ACT3; not an adapter, and the owner retired the Lynx delivery chain on 2026-10-19, so it is history and not a requirement) runs ACT1's action runtime on ReactLynx. The shared action contract (`@saga-a2ui/core/actions`, with the opt-in Lit and React controls) is implemented as local and server actions, and the Lit application's Play runs on it; "The action contract across the current codebase (ACT7)" below says what it supports, what retained owners keep and what is unqualified. This repository starts private and is intended to become public after a separate publication decision.
 
