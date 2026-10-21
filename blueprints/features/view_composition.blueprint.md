@@ -1,6 +1,6 @@
 ---
 feature_name: view_composition
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_lit_adapter, reusable_mcp_connector, content_safety_levels, application_setup]
 date_added: 2026-10-21
@@ -11,7 +11,7 @@ date_added: 2026-10-21
 ## Status
 
 - Design baseline: **approved** by the human owner on 2026-10-21 at reviewed revision [`db83e84a7d8d6d9527c5ab350472e82809afd609`](https://github.com/MachineWisdomAI/saga-a2ui/blob/db83e84a7d8d6d9527c5ab350472e82809afd609/blueprints/features/view_composition.blueprint.md). The approval covers the stack-package layout, the five layers for both renderers, the shared major.minor rule, the integration-branch delivery and the partial amendments named below to the Lit adapter, MCP connector and application setup designs and to the package layout document. No diagram exists for this design. Approval provenance is kept in the private delivery records.
-- Revision: **draft**, awaiting human approval. It answers the [design review of 2026-10-21](https://github.com/MachineWisdomAI/saga-a2ui/pull/218#issuecomment-6328203759) at `35b7db29c065a076e2eb14f7b5b3f475aa2a9283` (findings VC1–VC8 and one recommendation, all accepted). Changed scope: data updates versus selection (layers B and C), the startup contract, install recipes and result parsing (E), the policy-transport outcome and document lookup (D), the scan's scope, the integration-version mechanics and the release sequence. The baseline stays approved for its unchanged scope.
+- Revision: **approved** by the human owner on 2026-10-21 at reviewed revision [`4b1215a4d588f537e93e8a4099cdfc5268a26ab3`](https://github.com/MachineWisdomAI/saga-a2ui/blob/4b1215a4d588f537e93e8a4099cdfc5268a26ab3/blueprints/features/view_composition.blueprint.md). It answers the [design review of 2026-10-21](https://github.com/MachineWisdomAI/saga-a2ui/pull/218#issuecomment-6328203759) at `35b7db29c065a076e2eb14f7b5b3f475aa2a9283` (findings VC1–VC8 and one recommendation, all accepted). Changed scope: data updates versus selection (layers B and C), the startup contract, install recipes and result parsing (E), the policy-transport outcome and document lookup (D), the scan's scope, the integration-version mechanics and the release sequence. The baseline stays approved for its unchanged scope. Approval provenance is kept in the private delivery records.
 - Implementation: not started. Target release `0.7.0`, developed on the integration branch `feat/v0.7-composition`.
 - Length: above the 1,000-word guide because one design fixes the package layout, five layers for two renderers, the startup and transport contracts, and partial amendments to three approved Blueprints.
 
