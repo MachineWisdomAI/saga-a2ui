@@ -27,7 +27,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.6.4-rc.1",
+  "version": "0.7.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },
