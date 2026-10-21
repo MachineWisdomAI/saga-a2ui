@@ -2,6 +2,10 @@
 
 SAGA code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning. Keep each interface small and coherent enough for a human to understand its concepts and obligations together.
 
+## Blueprint review
+
+Apply the [authoring guidance](blueprints/README.md#authoring). Each section should contribute a decision, rationale or consequential behavior. Check that a cold reader can explain the change and distinguish existing behavior from proposed interfaces. Judge comprehension; word count is advisory.
+
 ## Keep interfaces manageable and remove obsolete contracts and code
 
 Do not accumulate backward compatibility debt for internally written code that has never had a stable release. CORE1 and CORE3 are implementation slices, not releases. Change interfaces and migrate all owned callers and tests together. Do not add shims, legacy overloads, aliases, or a second implementation merely to preserve signatures from an earlier slice.
