@@ -52,7 +52,10 @@ The updater needs Python 3.11 or newer and no third-party libraries. Select that
 interpreter explicitly if the system `python3` is older (for example,
 `python3.13 scripts/mw-version.py ...` on macOS).
 
-Every change PR updates affected versions before merge. Run the repository-local
+Changes to code, dependencies and tooling update affected versions before merge.
+Markdown (`.md`, case-insensitive) and documentation images under `assets/brand/`,
+`docs/` and `diagrams/` do not trigger version bumps. Images in application or
+package source still count. Mixed documentation/code PRs follow the code change. Run the repository-local
 updater after your implementation and again after updating the branch from main:
 
 ```bash
@@ -64,7 +67,7 @@ python3 scripts/mw-version.py check --base origin/main --title 'chore(deps): upd
 Use the actual PR title. Supply `--body-file PATH` for its body, or `--event-file`
 with a GitHub pull-request event containing title/body. The updater also reads
 the PR branch's commits. One PR gets the largest applicable increment: features
-are minor; fixes and every other change (including chores, docs, tests, CI, and
+are minor; fixes and every other change (including chores, tests, CI, and
 direct/transitive dependencies) are patch. `!`, `BREAKING CHANGE:`, or
 `BREAKING-CHANGE:` is major from 1.0 onward and minor before 1.0. A dependency's
 own major number does not establish a breaking change in this project.
@@ -325,6 +328,15 @@ def substantive_changes(root: Path, base: str, paths: set[str], by_path: dict) -
     return changes
 
 
+def documentation_only_path(name: str) -> bool:
+    path = Path(name)
+    if path.suffix.lower() == ".md":
+        return True
+    return name.startswith(("assets/brand/", "docs/", "diagrams/")) and path.suffix.lower() in {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico"
+    }
+
+
 def evaluate(root: Path, args) -> list[tuple[Path, str]]:
     config = json.loads(safe_path(root, args.config).read_text())
     if config.get("schema_version") != 1 or not isinstance(config.get("units"), list):
@@ -369,7 +381,8 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
     changes = substantive_changes(root, base, raw_changes, by_path)
     if promote and changes:
         raise PolicyError("release promotion may change configured version values only")
-    changes = {p for p in changes if not any(fnmatch.fnmatchcase(p, pat) for pat in config.get("exclude_paths", []))}
+    changes = {p for p in changes if not documentation_only_path(p)
+               and not any(fnmatch.fnmatchcase(p, pat) for pat in config.get("exclude_paths", []))}
     all_patterns = [p for u in units for p in u["paths"]]
     shared = any(not any(fnmatch.fnmatchcase(p, pat) for pat in all_patterns) for p in changes)
     today = dt.datetime.now(ZoneInfo("America/Toronto")).date()

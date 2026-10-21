@@ -4,7 +4,10 @@ The updater needs Python 3.11 or newer and no third-party libraries. Select that
 interpreter explicitly if the system `python3` is older (for example,
 `python3.13 scripts/mw-version.py ...` on macOS).
 
-Every change PR updates affected versions before merge. Run the repository-local
+Changes to code, dependencies and tooling update affected versions before merge.
+Markdown (`.md`, case-insensitive) and documentation images under `assets/brand/`,
+`docs/` and `diagrams/` do not trigger version bumps. Images in application or
+package source still count. Mixed documentation/code PRs follow the code change. Run the repository-local
 updater after your implementation and again after updating the branch from main:
 
 ```bash
@@ -16,7 +19,7 @@ python3 scripts/mw-version.py check --base origin/main --title 'chore(deps): upd
 Use the actual PR title. Supply `--body-file PATH` for its body, or `--event-file`
 with a GitHub pull-request event containing title/body. The updater also reads
 the PR branch's commits. One PR gets the largest applicable increment: features
-are minor; fixes and every other change (including chores, docs, tests, CI, and
+are minor; fixes and every other change (including chores, tests, CI, and
 direct/transitive dependencies) are patch. `!`, `BREAKING CHANGE:`, or
 `BREAKING-CHANGE:` is major from 1.0 onward and minor before 1.0. A dependency's
 own major number does not establish a breaking change in this project.
