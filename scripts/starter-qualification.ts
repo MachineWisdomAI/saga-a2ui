@@ -142,7 +142,7 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
         },
       };
     const listener = await entry.startListener({
-      html: options.html ?? html,
+      get html() { return options.html ?? html; },
       verifier,
       authorize: async (identity) => {
         calls.authorize += 1;
@@ -443,6 +443,19 @@ export function qualifyStarter(template: QualifiedStarter, framework?: (harness:
   });
 
   describe('the built view is required', () => {
+    it('prepares the view before listening and reuses it across requests', async () => {
+      let reads = 0;
+      const { listener } = await start({ get html() { reads += 1; return html; } });
+      expect(reads).toBe(1);
+      const client = await connect(listener.statusUrl);
+      const listed = await client.listResources();
+      const resource = await client.readResource({ uri: listed.resources[0]!.uri });
+      const result = await client.callTool({ name: 'get_status', arguments: {} });
+      expect(result.structuredContent).toEqual({ status: 'running' });
+      expect((resource.contents[0] as { text: string }).text).toBe(html);
+      expect(reads).toBe(1);
+    });
+
     it('will not start without the built page', async () => {
       await expect(start({ html: '<!doctype html><title>not the view</title>' })).rejects.toBeInstanceOf(entry.ViewArtifactMissing);
     });

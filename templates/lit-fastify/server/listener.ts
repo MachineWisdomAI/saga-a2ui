@@ -6,7 +6,7 @@ import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { authenticate } from './authenticate.js';
-import { createAccountServer, createStatusServer, type AccountServerOptions } from './operations.js';
+import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers, on Fastify: loopback only, stateless
 // Streamable HTTP (a fresh server and transport per POST, JSON responses). The official
@@ -186,15 +186,10 @@ function bindResponseToLifetime(req: IncomingMessage, res: ServerResponse, lifet
 }
 
 export async function startListener(options: ListenerOptions): Promise<Listener> {
-  // Resolved and validated before the port opens. Building the servers once up front also makes a
-  // missing view stop the process here, not at the first request.
+  // Prepare and validate deployment inputs once, before opening the port. Each request
+  // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const probe = budgets.startRequest();
-  try {
-    createStatusServer({ html: options.html, lifetime: probe });
-  } finally {
-    probe.finish();
-  }
+  const view = prepareStarterView(options.html);
 
   const app = createMcpFastifyApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
 
@@ -261,9 +256,9 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     }
   }
 
-  app.all(STATUS_PATH, (request, reply) => serve((lifetime) => createStatusServer({ html: options.html, lifetime }), request, reply));
+  app.all(STATUS_PATH, (request, reply) => serve((lifetime) => createStatusServer({ view, lifetime }), request, reply));
   app.all(ACCOUNT_PATH, { onRequest: identityHandoff }, (request, reply) =>
-    serve((lifetime) => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), request, reply),
+    serve((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), request, reply),
   );
 
   await app.listen({ port: options.port, host: HOST });

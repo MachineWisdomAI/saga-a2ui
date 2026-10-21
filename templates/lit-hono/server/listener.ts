@@ -6,7 +6,7 @@ import { WebStandardStreamableHTTPServerTransport, readRequestBody, type AuthInf
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import { Hono, type Context } from 'hono';
 import { authenticate } from './authenticate.js';
-import { createAccountServer, createStatusServer, type AccountServerOptions } from './operations.js';
+import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers: a Hono application on a loopback Node listener,
 // stateless Streamable HTTP (a fresh server and transport per POST, JSON responses) and DNS-rebinding
@@ -63,15 +63,10 @@ interface Environment {
 type RequestContext = Context<Environment>;
 
 export async function startListener(options: ListenerOptions): Promise<Listener> {
-  // Resolved and validated before the port opens. Building the servers once up front also makes a
-  // missing view stop the process here, not at the first request.
+  // Prepare and validate deployment inputs once, before opening the port. Each request
+  // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const probe = budgets.startRequest();
-  try {
-    createStatusServer({ html: options.html, lifetime: probe });
-  } finally {
-    probe.finish();
-  }
+  const view = prepareStarterView(options.html);
 
   const app = new Hono<Environment>();
 
@@ -149,7 +144,7 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
 
   app.all(STATUS_PATH, (c) => {
     const lifetime = c.get('lifetime');
-    return serve(c, () => createStatusServer({ html: options.html, lifetime }));
+    return serve(c, () => createStatusServer({ view, lifetime }));
   });
 
   app.all(ACCOUNT_PATH, async (c) => {
@@ -159,7 +154,7 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
     // only as the transport's per-request auth; no tool argument can name an account.
     const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
     if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
-    return serve(c, () => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), decision.authInfo);
+    return serve(c, () => createAccountServer({ view, lifetime, authorize: options.authorize }), decision.authInfo);
     // #endregion saga-snippet:identity-handoff
   });
 

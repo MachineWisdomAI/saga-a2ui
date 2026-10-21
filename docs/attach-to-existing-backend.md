@@ -68,7 +68,7 @@ From `templates/lit-node/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
   registerProtectedOperation(
     server,
@@ -79,7 +79,7 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
       identity: identityOf,
       async handle(_input, identity, request) {
@@ -148,7 +148,7 @@ From `templates/lit-express/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
   registerProtectedOperation(
     server,
@@ -159,7 +159,7 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
       identity: identityOf,
       async handle(_input, identity, request) {
@@ -227,7 +227,7 @@ From `templates/lit-fastify/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
   registerProtectedOperation(
     server,
@@ -238,7 +238,7 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
       identity: identityOf,
       async handle(_input, identity, request) {
@@ -287,7 +287,7 @@ From `templates/lit-hono/server/listener.ts`:
 // only as the transport's per-request auth; no tool argument can name an account.
 const decision = await authenticate(c.req.header('authorization'), options.verifier, lifetime);
 if (!decision.ok) return new Response(null, { status: decision.status, headers: decision.challenge === undefined ? {} : { 'WWW-Authenticate': decision.challenge } });
-return serve(c, () => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), decision.authInfo);
+return serve(c, () => createAccountServer({ view, lifetime, authorize: options.authorize }), decision.authInfo);
 ```
 
 ### Register a protected operation
@@ -301,7 +301,7 @@ From `templates/lit-hono/server/operations.ts`:
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
   registerProtectedOperation(
     server,
@@ -312,7 +312,7 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
       identity: identityOf,
       async handle(_input, identity, request) {

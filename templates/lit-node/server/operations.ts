@@ -17,20 +17,21 @@ export class ViewArtifactMissing extends Error {
   }
 }
 
-function viewFor(html: unknown): OperationView {
+/** Validate and fingerprint the deployment document once, before listening. */
+export function prepareStarterView(html: unknown): OperationView {
   if (typeof html !== 'string' || !html.includes('<starter-app')) throw new ViewArtifactMissing();
-  return { uri: viewUriForHtml(html), title: 'Starter view', html, csp: CLOSED_VIEW_CSP };
+  return Object.freeze({ uri: viewUriForHtml(html), title: 'Starter view', html, csp: CLOSED_VIEW_CSP });
 }
 
 export interface StatusServerOptions {
-  /** The built page. Its bytes name its resource. */
-  readonly html: string;
+  /** The immutable view prepared before the listener opened. */
+  readonly view: OperationView;
   /** The request this server was built for, started by the listener at admission. */
   readonly lifetime: RequestLifetime;
 }
 
 /** An explicitly public operation: it reads no credential and has no identity. */
-export function createStatusServer({ html, lifetime }: StatusServerOptions): McpServer {
+export function createStatusServer({ view, lifetime }: StatusServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-status', version: '0.0.0' });
   registerPublicOperation(
     server,
@@ -41,7 +42,7 @@ export function createStatusServer({ html, lifetime }: StatusServerOptions): Mcp
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: StatusOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noStatus, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput },
       handle: () => ({ kind: 'record', record: { status: 'running' as const } }),
       project: (record) => ({ text: 'The service is running.', data: { status: record.status } }),
@@ -63,7 +64,7 @@ export interface AccountServerOptions extends StatusServerOptions {
  * authorization decision for this request's identity, then returns a record, and `project` copies
  * the public fields out of it by name.
  */
-export function createAccountServer({ html, lifetime, authorize }: AccountServerOptions): McpServer {
+export function createAccountServer({ view, lifetime, authorize }: AccountServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-starter-account', version: '0.0.0' });
   registerProtectedOperation(
     server,
@@ -74,7 +75,7 @@ export function createAccountServer({ html, lifetime, authorize }: AccountServer
       annotations: READ_ONLY,
       input: z.strictObject({}),
       output: AccountOutputSchema,
-      view: viewFor(html),
+      view,
       failures: { absent: TEXT.noAccount, unavailable: TEXT.unavailable, invalidOutput: TEXT.invalidOutput, signInRequired: TEXT.signInRequired },
       identity: identityOf,
       async handle(_input, identity, request) {

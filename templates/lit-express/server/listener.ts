@@ -6,7 +6,7 @@ import type { McpServer, OAuthTokenVerifier } from '@modelcontextprotocol/server
 import { createServerBudgets, type BudgetSettings, type LifetimeCause, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import express, { type ErrorRequestHandler, type Request, type RequestHandler, type Response } from 'express';
 import { authenticate } from './authenticate.js';
-import { createAccountServer, createStatusServer, type AccountServerOptions } from './operations.js';
+import { createAccountServer, createStatusServer, prepareStarterView, type AccountServerOptions } from './operations.js';
 
 // APPLICATION-OWNED HTTP hosting for the MCP servers, on Express: loopback only, stateless Streamable
 // HTTP (a fresh server and transport per POST, JSON responses) and DNS-rebinding and origin
@@ -190,15 +190,10 @@ function bindResponseToLifetime(req: IncomingMessage, res: ServerResponse, lifet
 }
 
 export async function startListener(options: ListenerOptions): Promise<Listener> {
-  // Resolved and validated before the port opens. Building the servers once up front also makes a
-  // missing view stop the process here, not at the first request.
+  // Prepare and validate deployment inputs once, before opening the port. Each request
+  // reuses the same HTML and URI while owning its server, identity and lifetime.
   const budgets = createServerBudgets(options.budgets);
-  const probe = budgets.startRequest();
-  try {
-    createStatusServer({ html: options.html, lifetime: probe });
-  } finally {
-    probe.finish();
-  }
+  const view = prepareStarterView(options.html);
 
   /** The first middleware: the request's clock starts here, before any credential or body wait. */
   const admit: RequestHandler = (req, res, next) => {
@@ -250,9 +245,9 @@ export async function startListener(options: ListenerOptions): Promise<Listener>
   app.set('strict routing', true);
   app.use(admit);
   app.use(localhostHostValidation(), localhostOriginValidation());
-  app.all(STATUS_PATH, (req, res) => serve((lifetime) => createStatusServer({ html: options.html, lifetime }), req, res));
+  app.all(STATUS_PATH, (req, res) => serve((lifetime) => createStatusServer({ view, lifetime }), req, res));
   app.all(ACCOUNT_PATH, identify, (req, res) =>
-    serve((lifetime) => createAccountServer({ html: options.html, lifetime, authorize: options.authorize }), req, res),
+    serve((lifetime) => createAccountServer({ view, lifetime, authorize: options.authorize }), req, res),
   );
   app.use((_req, res) => {
     res.writeHead(404).end();
