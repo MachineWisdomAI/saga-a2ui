@@ -63,9 +63,14 @@ Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No globa
 
 ### Formatting and hooks
 
-Use the Node version in `.nvmrc` (22.23.3) or a compatible later release.
-Developers and Hermes/Codex/Claude agents use the same explicit setup in each
-fresh clone or linked worktree:
+Automatic formatting hooks are intentionally deferred until the operator enables
+them after the codebase is stable. Agents must leave them disabled, including in
+fresh clones and linked worktrees; a missing formatter hook is expected, not a
+setup defect. Preserve existing Git safety guards and source formatting.
+
+Use the Node version in `.nvmrc` (22.23.3) or a compatible later release. The
+following hook installation procedure is for an explicit operator request only;
+installing the root tools alone does not enable hooks:
 
 ```sh
 npm ci --workspaces=false --ignore-scripts
