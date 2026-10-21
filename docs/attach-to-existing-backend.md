@@ -552,14 +552,14 @@ From `templates/lit-hapi/server/listener.ts`:
 // Hapi's authentication strategy snapshots the verified credential before the body wait.
 // The bridge carries that request's auth to this factory and the Node transport; SAGA's
 // identityOf hook reads only that auth. No argument or previous request names an account.
-createServer: ({ request, authInfo }) => {
+createServer: ({ lifetime, authInfo }) => {
   if (authInfo === undefined)
     throw new Error(
       'The protected route did not establish request identity.',
     );
   return createAccountServer({
     view,
-    lifetime: request.app.lifetime,
+    lifetime,
     authorize: options.authorize,
   });
 },
