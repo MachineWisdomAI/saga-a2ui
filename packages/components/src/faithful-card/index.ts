@@ -67,10 +67,14 @@ export {
 } from './card-layout.js';
 export {
   FaithfulCardApp,
+  readCardResult,
   type CardAppIdentity,
   type CardAppPolicySource,
   type CardAppReaderOptions,
   type CardAppTexts,
+  type CardResultClassifier,
+  type CardResultOutcome,
+  type CardResultSource,
   type CardResultParser,
   type FaithfulCardAppBuilder,
   type FaithfulCardAppDefinition,

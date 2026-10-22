@@ -36,6 +36,35 @@ export type CardResultParser = (
   structuredContent: unknown,
 ) => CardContent | undefined;
 
+/**
+ * What an application decides about one whole tool result: content to present, or a rejection.
+ * A rejection may carry the words the application shows for it; without them the definition's
+ * `texts.problem` is shown. The wording is the application's, never this package's.
+ */
+export type CardResultOutcome =
+  | { readonly kind: 'content'; readonly content: CardContent }
+  | { readonly kind: 'rejected'; readonly text?: string };
+
+/**
+ * The part of a delivered tool result that a card application's reading depends on. A delivery's
+ * own result type (for example MCP's `CallToolResult`) satisfies it structurally, so this package
+ * names no delivery.
+ */
+export interface CardResultSource {
+  readonly isError?: boolean | undefined;
+  readonly structuredContent?: unknown;
+}
+
+/**
+ * The application's reading of one whole delivered result, in place of the definition's
+ * `structuredContent`-only parse. It receives the result as delivered, `isError` included, and
+ * decides what an error result means; the stack intercepts nothing. A throw is reported and the
+ * result is rejected without wording.
+ */
+export type CardResultClassifier<
+  Result extends CardResultSource = CardResultSource,
+> = (result: Result) => CardResultOutcome;
+
 /** Every sentence the application shows around the card. The card never decides what they say. */
 export interface CardAppTexts {
   /** Before the first answer. */
@@ -174,3 +203,56 @@ export const FaithfulCardApp = {
     });
   },
 } as const;
+
+/**
+ * Reads one delivered result into what the stack presents: the one decision both stacks make for
+ * every result, so neither renders its own copy of the rule.
+ *
+ * With a `classify` operation the application decides, from the whole result. Without one, the
+ * definition's `parse` reads `structuredContent`, and an error result is rejected unread. In
+ * either case a throw from the application is handed to `reportError` (which must not throw) and
+ * the result is rejected without wording, so the stack clears the answer and shows the
+ * definition's `texts.problem`. A classifier that returns anything but a content or rejection
+ * outcome is rejected the same way, since its result is unchecked application input.
+ */
+export function readCardResult<Result extends CardResultSource>(
+  definition: FaithfulCardAppDefinition,
+  result: Result,
+  options: {
+    readonly classify?: CardResultClassifier<Result> | undefined;
+    readonly reportError: (error: unknown) => void;
+  },
+): CardResultOutcome {
+  const rejected: CardResultOutcome = { kind: 'rejected' };
+  try {
+    if (options.classify !== undefined) {
+      return checkedOutcome(options.classify(result));
+    }
+    if (result.isError === true) return rejected;
+    const content = definition.parse(result.structuredContent);
+    return content === undefined ? rejected : { kind: 'content', content };
+  } catch (error) {
+    options.reportError(error);
+    return rejected;
+  }
+}
+
+/**
+ * A classifier's return is unchecked application input. Wording that is not a non-empty string
+ * is dropped, so a caller only ever sees wording to show or none.
+ */
+function checkedOutcome(value: unknown): CardResultOutcome {
+  const rejected: CardResultOutcome = { kind: 'rejected' };
+  if (typeof value !== 'object' || value === null) return rejected;
+  const { kind, content, text } = value as Record<string, unknown>;
+  if (kind === 'content') {
+    return typeof content === 'object' &&
+      content !== null &&
+      typeof (content as { markdown?: unknown }).markdown === 'string'
+      ? { kind, content: content as CardContent }
+      : rejected;
+  }
+  return kind === 'rejected' && typeof text === 'string' && text !== ''
+    ? { kind, text }
+    : rejected;
+}

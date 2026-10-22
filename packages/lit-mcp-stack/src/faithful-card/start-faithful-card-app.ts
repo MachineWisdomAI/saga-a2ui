@@ -1,6 +1,8 @@
-import type {
-  CardContent,
-  FaithfulCardAppDefinition,
+import {
+  readCardResult,
+  type CardResultClassifier,
+  type CardResultOutcome,
+  type FaithfulCardAppDefinition,
 } from '@saga-a2ui/components/faithful-card';
 import {
   createFaithfulCardView,
@@ -60,6 +62,14 @@ export interface StartFaithfulCardOptions {
     context: HostContext | undefined,
     hostName: string | undefined,
   ) => void;
+  /**
+   * Optional. The application’s reading of each whole delivered result, in place of the
+   * definition’s `structuredContent`-only parse. It receives the result as delivered, `isError`
+   * included, and returns the content to present or a rejection that may carry the words to show
+   * (otherwise `texts.problem` shows). A throw is reported (phase `result`) and rejects the result.
+   * The stack still owns clearing, presenting, consent and link state, and error reporting.
+   */
+  readonly classifyResult?: CardResultClassifier<ToolResult>;
   /** Optional. The application’s chrome around the card. By default the status text, then the card. */
   readonly chrome?: CardChrome;
   /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
@@ -157,24 +167,22 @@ export function startFaithfulCardAppOn(
     const report =
       options.onError ?? ((error: unknown) => console.error(error));
     let presentation = 0;
-    const problem = (): void => {
+    const problem = (text: string): void => {
       opened.clear();
-      show({ kind: 'problem', text: texts.problem });
+      show({ kind: 'problem', text });
     };
-    /** The definition’s parse; a throw is the application’s, reported, and the result is unsupported. */
-    const read = (result: ToolResult): CardContent | undefined => {
-      if (result.isError === true) return undefined;
-      try {
-        return definition.parse(result.structuredContent);
-      } catch (error) {
-        try {
-          report(error, 'result');
-        } catch {
-          // A reporter that throws must not stop the answer from clearing.
-        }
-        return undefined;
-      }
-    };
+    /** The application’s reading of the result; a throw is reported, and the result is rejected. */
+    const read = (result: ToolResult): CardResultOutcome =>
+      readCardResult(definition, result, {
+        classify: options.classifyResult,
+        reportError(error) {
+          try {
+            report(error, 'result');
+          } catch {
+            // A reporter that throws must not stop the answer from clearing.
+          }
+        },
+      });
 
     return runView({
       connection,
@@ -190,13 +198,22 @@ export function startFaithfulCardAppOn(
       // Every result is a new selection: `present` ends the earlier presentation, image consent
       // included, even when the Markdown equals the previous one.
       onToolResult(result) {
-        const content = read(result);
-        if (content === undefined || !opened.present(content).ok) {
-          problem();
+        const outcome = read(result);
+        if (outcome.kind === 'rejected') {
+          // The application's wording for this rejection, else the definition's.
+          problem(outcome.text ?? texts.problem);
+          return;
+        }
+        if (!opened.present(outcome.content).ok) {
+          problem(texts.problem);
           return;
         }
         presentation += 1;
-        show({ kind: 'answer', heading: content.heading, presentation });
+        show({
+          kind: 'answer',
+          heading: outcome.content.heading,
+          presentation,
+        });
       },
       ...(options.onError === undefined ? {} : { onError: options.onError }),
       retire() {
