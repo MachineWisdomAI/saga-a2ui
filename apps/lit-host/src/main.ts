@@ -1,4 +1,4 @@
-import { NO_HOST_LINKS } from '@saga-a2ui/components/faithful-card';
+import { NO_HOST_LINKS } from '@saga-a2ui/core/host-links';
 import {
   a2uiV0_9Decoder,
   createMessageSession,

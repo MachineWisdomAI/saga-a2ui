@@ -3,9 +3,8 @@ import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import {
   CONTENT_POLICY_ELEMENT_ID,
   contentPolicyFromEmbedded,
-  type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import { hostLinksFromApp, runToolResultView } from '@saga-a2ui/mcp/view';
 import {
   FaithfulCardProvider,
   type FaithfulCardView,
@@ -108,22 +107,9 @@ export async function mountCardView(brand: Brand): Promise<void> {
   }
 
   const app = new App({ name: 'react-card-consumer-view', version: '0.0.0' });
-  const hostLinks: HostLinks = {
-    async open(url) {
-      if (app.getHostCapabilities()?.openLinks === undefined)
-        return 'unavailable';
-      try {
-        return (await app.openLink({ url })).isError === true
-          ? 'denied'
-          : 'opened';
-      } catch {
-        return 'failed';
-      }
-    },
-  };
   const view = createContentView({
     policy: policy.policy,
-    hostLinks,
+    hostLinks: hostLinksFromApp(app),
     document,
   });
   const answer = openAnswerSurface();
@@ -152,16 +138,14 @@ export async function mountCardView(brand: Brand): Promise<void> {
     status.set(markdown !== undefined && shown.ok ? 'answer' : 'problem');
   };
 
-  const connection = await connectToolResultView({
+  // The runner retires the consent once, before the connection ends, on a host teardown request and
+  // on `pagehide` alike; unmounting the React root stays this page's own step.
+  const lifetime = runToolResultView({
     app,
     transport: new PostMessageTransport(window.parent, window.parent),
     onToolResult: show,
-    // The host ends the connection after it answers the teardown request: nothing else tells this view it is going away.
     onTeardown: () => view.consent.retire(),
   });
-  addEventListener('pagehide', () => {
-    connection.dispose();
-    view.consent.retire();
-    root.unmount();
-  });
+  addEventListener('pagehide', () => root.unmount());
+  await lifetime.ready;
 }

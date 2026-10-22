@@ -7,7 +7,7 @@ import {
 } from '@saga-a2ui/lit/faithful-card';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { PlayControlElement } from './lit/play-control.js';
-import { createAppHostLinks } from './mcp/host-links.js';
+import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
 import {
   connectPlaybackView,
   type PlaybackViewState,
@@ -44,7 +44,7 @@ const app = new App({ name: 'saga-a2ui-playback-view', version: '0.0.0' });
 // media origin, so it embeds no policy (an embedded one forbids every connection). The card
 // therefore runs the default Standard policy with no image host: it loads no image, and a link
 // opens only through the host.
-const content = contentViewFromDocument(document, createAppHostLinks(app));
+const content = contentViewFromDocument(document, hostLinksFromApp(app));
 if (content.ok) provideContentView(descriptionHost, content.view);
 
 // The view is over (host teardown, disposal or a lost sign-in label): no card may be shown again.
@@ -124,8 +124,5 @@ const actions = createInstanceHost({
 actions.register(connection.attach);
 control.host = actions;
 
-// Release the player even if the host never sends a teardown request.
-window.addEventListener('pagehide', () => {
-  connection.dispose();
-  actions.close();
-});
+// The view ends itself, and releases the player, on `pagehide`; the action host is this page's own.
+window.addEventListener('pagehide', () => actions.close());

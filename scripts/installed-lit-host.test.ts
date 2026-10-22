@@ -74,7 +74,7 @@ describe('the application pages built from the packed SDK packages', () => {
     ).toEqual(
       expect.arrayContaining([
         '@saga-a2ui/lit/src/a2ui/app-element.ts',
-        '@saga-a2ui/mcp/src/view/index.ts',
+        '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
       ]),
     );
     // Playback runs through the reusable typed server action of core, and the old controller timer is gone.
@@ -85,7 +85,7 @@ describe('the application pages built from the packed SDK packages', () => {
         '@saga-a2ui/core/src/actions/invocation.ts',
         '@saga-a2ui/core/src/actions/server.ts',
         '@saga-a2ui/core/src/actions/limits.ts',
-        '@saga-a2ui/mcp/src/view/index.ts',
+        '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
       ]),
     );
     expect(playback).not.toContain('@saga-a2ui/mcp/src/policy/timer.ts');
@@ -165,7 +165,7 @@ describe('the application pages built from the packed SDK packages', () => {
         '@saga-a2ui/core/src/actions/invocation.ts',
         '@saga-a2ui/core/src/actions/server.ts',
         '@saga-a2ui/core/src/actions/instance-host.ts',
-        '@saga-a2ui/mcp/src/view/index.ts',
+        '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
       ]),
     );
     expect(sdkPackagesOf(REACT_PLAYER).sort()).toEqual([

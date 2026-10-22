@@ -1,10 +1,10 @@
 import type {
   FaithfulCardReader,
-  HostLinks,
   ImageConsentScope,
   ContentPolicy,
   ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 
 /**
  * Everything a card needs from its view, passed explicitly when the view is created: the trusted

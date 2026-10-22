@@ -3,8 +3,8 @@ import {
   createFaithfulCardReader,
   createImageConsentScope,
   establishImageEnforcement,
-  type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
+import { type HostLinks } from '@saga-a2ui/core/host-links';
 import {
   documentContentSecurityPolicies,
   faithfulCardEntry,

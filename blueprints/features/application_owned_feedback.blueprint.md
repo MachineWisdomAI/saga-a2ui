@@ -38,7 +38,7 @@ return text ? <Toast>{text}</Toast> : null;
 
 ## Responsibilities and interfaces
 
-Expose named string enum values beside their owning contracts, preserving existing strings and typed details:
+Expose named string enum values beside their owning contracts, preserving existing strings and typed details. The link outcome's owner is now `@saga-a2ui/core/host-links` (moved there from the components FaithfulCard export by the view composition delivery slice), so the enum below applies at that module, not in components:
 
 ```ts
 export const LinkOpenOutcome = Object.freeze({

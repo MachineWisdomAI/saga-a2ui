@@ -65,7 +65,13 @@ describe('package subpath exports', () => {
       'valueOrThrow',
       'viewUriForHtml',
     ]);
-    expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
+    expect(Object.keys(view).sort()).toEqual([
+      'ViewStartFailure',
+      'hostLinksFromApp',
+      'readingProfile',
+      'runToolResultView',
+      'startOwnSizing',
+    ]);
     expect(Object.keys(policy).sort()).toEqual([
       'CLOSED_VIEW_CSP',
       'DEFAULT_OPERATION_MS',
@@ -120,6 +126,17 @@ describe('package subpath exports', () => {
       modules.filter((id) => id.includes('/packages/mcp/src/server/')),
     ).toEqual([]);
     expect(code).not.toMatch(/node:[a-z_/]+/);
+  });
+
+  it('keep the view export free of the card and renderer packages: delivery depends on core only', async () => {
+    const { modules } = await bundle('@saga-a2ui/mcp/view', 'browser');
+    expect(
+      modules.filter((id) =>
+        /\/packages\/(components|lit|react|lynx)\//.test(id),
+      ),
+    ).toEqual([]);
+    // The host link contract is a type here; the view supplies an implementation of it.
+    expect(modules.filter((id) => id.includes('/packages/core/'))).toEqual([]);
   });
 
   it('keep the policy export free of every runtime dependency', async () => {

@@ -250,13 +250,20 @@ describe('episode view result handling', () => {
       .toBe(2);
   });
 
-  it('retires image consent for good when the host asks the view to tear down, and on dispose', async () => {
+  it('retires image consent for good once when the host asks the view to tear down, and not again on dispose', async () => {
     const h = harness();
     const view = await h.connect();
     await h.bridge.teardownResource({});
     expect(h.events).toEqual(['retire']);
-    view.dispose();
-    expect(h.events).toEqual(['retire', 'retire']);
+    await view.dispose();
+    expect(h.events).toEqual(['retire']);
+  });
+
+  it('retires image consent for good when the view is disposed', async () => {
+    const h = harness();
+    const view = await h.connect();
+    await view.dispose();
+    expect(h.events).toEqual(['retire']);
   });
 
   it('does not touch consent for results that arrive after disposal', async () => {

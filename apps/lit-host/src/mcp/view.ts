@@ -1,9 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
-import {
-  connectToolResultView,
-  type ToolResultViewConnection,
-} from '@saga-a2ui/mcp/view';
+import { runToolResultView } from '@saga-a2ui/mcp/view';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { emptyPanel, SURFACE_ID } from '../saga-panel/fixture.js';
@@ -30,8 +27,10 @@ export interface EpisodeViewDependencies {
   readonly retireImageConsent: () => void;
 }
 
-/** A connected episode view. */
-export type EpisodeViewConnection = ToolResultViewConnection;
+/** A started episode view. `dispose` settles after the view has ended. */
+export interface EpisodeViewConnection {
+  dispose(): Promise<void>;
+}
 
 const removePanel: readonly A2uiMessage[] = [
   { version: 'v0.9', deleteSurface: { surfaceId: SURFACE_ID } },
@@ -42,7 +41,7 @@ const removePanel: readonly A2uiMessage[] = [
  *
  * Delivery only: the result is checked against the public episode contract and turned into
  * A2UI messages; A2UI decoding stays in the protocol module and presentation in the Lit view.
- * Bridge lifetime is `connectToolResultView`; the session's lifetime stays with the caller.
+ * Bridge lifetime is `runToolResultView`; the session's lifetime stays with the caller.
  *
  * - Each valid result replaces the one shown. The panel surface exists when this is called
  *   (the Lit app creates it); after a failure removed it, the next valid result recreates it
@@ -50,8 +49,8 @@ const removePanel: readonly A2uiMessage[] = [
  * - An error or non-episode result removes the panel and shows a plain-text fallback, so
  *   stale content is never left beside a problem.
  * - A result the session rejects is treated like any other failure: panel removed, reason shown.
- * - Image consent is revoked before any result is applied, and retired for good on host teardown
- *   and on dispose.
+ * - Image consent is revoked before any result is applied, and retired for good however the view
+ *   ends: the runner calls `retireImageConsent` once on host teardown, `dispose()` and `pagehide`.
  */
 export async function connectEpisodeView(
   deps: EpisodeViewDependencies,
@@ -66,7 +65,7 @@ export async function connectEpisodeView(
     deps.showProblem(problem);
   };
 
-  const connection = await connectToolResultView({
+  const view = runToolResultView({
     app: deps.app,
     transport: deps.transport,
     onTeardown: deps.retireImageConsent,
@@ -90,10 +89,6 @@ export async function connectEpisodeView(
       deps.showProblem(undefined);
     },
   });
-  return {
-    dispose() {
-      connection.dispose();
-      deps.retireImageConsent();
-    },
-  };
+  await view.ready;
+  return view;
 }

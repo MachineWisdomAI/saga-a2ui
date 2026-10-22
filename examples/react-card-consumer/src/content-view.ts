@@ -3,8 +3,8 @@ import {
   establishImageEnforcement,
   createImageConsentScope,
   type ContentPolicy,
-  type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
+import { type HostLinks } from '@saga-a2ui/core/host-links';
 import type { FaithfulCardView } from '@saga-a2ui/react/faithful-card';
 
 /** Every Content-Security-Policy value the document carries: the restrictions image loading relies on. */

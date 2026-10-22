@@ -16,11 +16,7 @@ import {
   type InstanceView,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
-import {
-  connectToolResultView,
-  type ToolResult,
-  type ToolResultViewConnection,
-} from '@saga-a2ui/mcp/view';
+import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
   MEDIA_PATH_PREFIX,
@@ -147,7 +143,9 @@ export interface PlaybackViewDependencies {
   readonly contentConsent?: ContentConsentEnding;
 }
 
-export interface PlaybackViewConnection extends ToolResultViewConnection {
+export interface PlaybackViewConnection {
+  /** Ends the view. Idempotent; settles after the view has ended. */
+  dispose(): Promise<void>;
   /**
    * Application setup for the rendered Play control. Pass it to `InstanceHost.register`: it binds
    * the Play, Pause and Resume actions directly to the exact control instance the host delivers.
@@ -254,9 +252,10 @@ const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set([
  * subject, which cancels an undecided invocation at its next checkpoint, and the owner ends the
  * audio at once. Cancellation never claims the server stopped.
  *
- * Teardown: the host's teardown request disposes the bindings and stops the audio, then retires the
- * controller (`tornDown`): every continuation of an earlier press does nothing. It does not dispose
- * the connection; the later `dispose()` still closes it once.
+ * Teardown: however the view ends (the host's teardown request, `dispose()` or `pagehide`) the
+ * lifetime runner calls the controller's teardown once, before it closes the connection. That
+ * disposes the bindings and stops the audio, then retires the controller (`ended`): every
+ * continuation of an earlier press does nothing.
  *
  * Label loss: an opener or a grant under a label other than the pinned one ends this view for good.
  * The selection is cleared, the bindings are disposed, the player stops, and `session-changed`
@@ -274,25 +273,20 @@ export async function connectPlaybackView(
   let selected: OpenedEpisode | undefined;
   let pinnedSession: string | undefined;
   let kind: PlaybackViewState['kind'] = 'no-selection';
-  // The host asked the view to tear down. This retires the view's own work and presentation but is
-  // not `disposed`: that flag makes `dispose()` return before it reaches the bridge, and the host's
-  // teardown does not close the connection, so the later `dispose()` must still close it once.
-  let tornDown = false;
-  let disposed = false;
+  // The view has ended, however the lifetime runner ended it. Set before the bindings end, so a
+  // canceled Play presents nothing while the view is closing.
+  let ended = false;
   // The pinned label was lost through an opener or a grant. Permanent for the view: nothing clears
   // it, so no later result can reactivate the controller.
   let labelLost = false;
   const bindings = new Set<ActionBinding>();
 
-  // `dispose()` has begun. Set before the bindings end so a canceled Play presents nothing while the
-  // view is closing; `disposed` itself stays last because it makes a second `dispose()` return early.
-  let closing = false;
   // The identity of the current selection as a press's subject. A new object on every opener, valid
   // or not, so an opener that retires the presentation also ends an undecided Play for the old
   // selection even when it leaves the selected item itself unchanged (a malformed opener).
   let selection: object = {};
 
-  const retired = () => disposed || closing || tornDown || labelLost;
+  const retired = () => ended || labelLost;
 
   const present = (state: PlaybackViewState) => {
     kind = state.kind;
@@ -330,7 +324,7 @@ export async function connectPlaybackView(
     labelLost = true;
     retireConsent();
     kind = 'session-changed';
-    if (!disposed && !tornDown) deps.show({ kind: 'session-changed' });
+    if (!ended) deps.show({ kind: 'session-changed' });
   };
 
   owner.onEnded((lease) => {
@@ -736,18 +730,19 @@ export async function connectPlaybackView(
     (resumed) => (resumed === 'resumed' ? 'playing' : 'resume-blocked'),
   );
 
-  const connection = await connectToolResultView({
+  const lifetime = runToolResultView({
     app,
     transport: deps.transport,
     onToolResult: onOpened,
-    // The host ends the connection right after it answers teardown, so audio must stop now.
+    // The connection ends right after this, so the bindings, the audio and the consent end now.
     onTeardown() {
-      tornDown = true;
+      ended = true;
       disposeBindings();
       owner.teardown();
       retireConsent();
     },
   });
+  await lifetime.ready;
 
   const attach = (view: InstanceView): void => {
     view.watchById(
@@ -767,14 +762,6 @@ export async function connectPlaybackView(
 
   return {
     attach,
-    dispose() {
-      if (disposed) return;
-      closing = true;
-      disposeBindings();
-      owner.teardown();
-      retireConsent();
-      disposed = true;
-      connection.dispose();
-    },
+    dispose: () => lifetime.dispose(),
   };
 }
