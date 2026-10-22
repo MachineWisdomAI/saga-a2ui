@@ -42,6 +42,28 @@ describe('adopting application styles into the root a card lives in', () => {
     expect(target.adoptedStyleSheets).toEqual([brand]);
   });
 
+  it('never removes a sheet the root already had before the card adopted it', () => {
+    const brand = sheet('brand');
+    const target = root(brand);
+    const first = adoptStyles(target, [brand]);
+    const second = adoptStyles(target, [brand]);
+    first();
+    second();
+    expect(target.adoptedStyleSheets).toEqual([brand]);
+  });
+
+  it('keeps a preexisting sheet even when a card that inserted nothing is the last to let go, and removes one it inserted only after every holder', () => {
+    const owned = sheet('owned');
+    const added = sheet('added');
+    const target = root(owned);
+    const first = adoptStyles(target, [owned, added]);
+    const second = adoptStyles(target, [added]);
+    first();
+    expect(target.adoptedStyleSheets).toEqual([owned, added]);
+    second();
+    expect(target.adoptedStyleSheets).toEqual([owned]);
+  });
+
   it('does nothing for a root that cannot adopt styles', () => {
     const release = adoptStyles({} as never, [sheet('brand')]);
     expect(() => release()).not.toThrow();
