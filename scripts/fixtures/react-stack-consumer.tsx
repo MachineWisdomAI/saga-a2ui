@@ -1,18 +1,25 @@
 import {
-  createComponentImplementation,
-  type ReactCatalogComponent,
-} from '@a2ui/react/v0_9';
-import { Catalog, CommonSchemas } from '@a2ui/web_core/v0_9';
-import {
+  Action,
   ActionButton,
   ActionButtonEntry,
+  Catalog,
+  ColumnApi,
+  CommonSchemas,
+  createComponentImplementation,
   createReactActions,
   defineSurface,
   startA2uiView,
+  StartError,
   StartFailure,
   z,
+  type ActionBinding,
+  type ActionButtonActivation,
+  type ErrorPhase,
+  type ReactCatalogComponent,
   type RunningA2uiView,
   type RunningView,
+  type StartMisuse,
+  type ViewHost,
 } from '@saga-a2ui/react-mcp-stack';
 import {
   FaithfulCardApp,
@@ -204,3 +211,50 @@ export function composeServerSide(html: string): {
 // The remaining server entry names an application's MCP server composes with its own server object.
 export { attachRequestLifetime, registerPublicOperation };
 export type { RequestLifetime };
+
+// The actions, layout components and failures an application writes, all from the stack. An action
+// is defined once from the stack's `Action`, attached to a rendered control through the binding the
+// stack's setup hands back, and reaches its server through the transport the view hands it. The
+// layout component is built over the contract the stack re-exports. Real types, no casts.
+export const Column: ReactCatalogComponent = createComponentImplementation(
+  ColumnApi,
+  ({ props, buildChild }) => (
+    <div>
+      {(Array.isArray(props.children) ? props.children : []).map(
+        (child: unknown) =>
+          typeof child === 'string' ? buildChild(child) : null,
+      )}
+    </div>
+  ),
+);
+export function createActions(transport: ViewHost['server']) {
+  const clear = Action.local<ActionButtonActivation>('clear')
+    .run(() => {})
+    .build();
+  const archive = Action.server<ActionButtonActivation>('archive', transport)
+    .run(async ({ call }) => call('archive_note', {}))
+    .build();
+  return { archive, clear };
+}
+export function startOwnOnce(
+  container: Element,
+  bindings: ActionBinding[],
+  onError: (error: unknown, phase: ErrorPhase) => void,
+): StartMisuse | undefined {
+  try {
+    startA2uiView({
+      container,
+      layout,
+      catalog,
+      onError,
+      onToolResult: () => undefined,
+      onTeardown: () => {
+        for (const binding of bindings.splice(0)) binding.dispose();
+      },
+    });
+  } catch (failure) {
+    if (failure instanceof StartError) return failure.code;
+    throw failure;
+  }
+  return undefined;
+}

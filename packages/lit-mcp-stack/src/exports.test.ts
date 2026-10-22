@@ -48,9 +48,15 @@ const anyOf = (modules: string[], pattern: RegExp): string[] =>
 describe('@saga-a2ui/lit-mcp-stack', () => {
   it('exposes exactly the supported names', () => {
     expect(Object.keys(main).sort()).toEqual([
+      'A2uiLitElement',
+      'Action',
       'ActionButton',
+      'Catalog',
+      'CommonSchemas',
+      'StartError',
       'StartFailure',
       'actionButtonEntry',
+      'basicCatalog',
       'createLitActions',
       'defineSurface',
       'readingProfile',
@@ -59,6 +65,7 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
     ]);
     expect(Object.keys(card).sort()).toEqual([
       'FaithfulCardApp',
+      'StartError',
       'StartFailure',
       'bindHostLink',
       'contentPolicyFromDocument',
@@ -77,6 +84,12 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
       'registerPublicOperation',
       'viewUriForHtml',
     ]);
+  });
+
+  it('serves one start failure and one misuse error to the application from both entries', () => {
+    expect(main.StartFailure).toBe(card.StartFailure);
+    expect(main.StartError).toBe(card.StartError);
+    expect(new main.StartError('container-busy').code).toBe('container-busy');
   });
 
   it('serves one reading profile to the application from both entries', () => {

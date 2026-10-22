@@ -88,13 +88,22 @@ neither stands in for the other:
 - **Lower-level consumer** (availability of the five packages). It names every
   SAGA tarball as a direct dependency and as an override, plus React, React DOM,
   MCP Apps and Zod.
-- **Stack-only consumer** (the documented one-stack recipe). Its direct
-  dependencies are only `@saga-a2ui/react-mcp-stack`, the framework peers
-  (`react`, `react-dom`) and the upstream packages the application's own catalog
-  is written against (`@a2ui/react`, `@a2ui/web_core`, Zod 3.25.76). It names no
-  other SAGA package; the unpublished siblings are supplied by overrides only.
-  Direct declarations of the siblings would mask a dependency the stack failed
-  to declare, so only this consumer shows that the recipe resolves.
+- **Stack-only consumer** (the documented one-stack recipe, for React and for
+  Lit). Its direct dependencies are only the stack and its framework peers
+  (`react`, `react-dom`; `lit`), and its typed fixture imports every stack entry
+  and nothing else: no upstream renderer or schema package, no Zod, no other
+  SAGA package. The unpublished siblings are supplied by overrides only. Direct
+  declarations would mask a dependency or an export the stack failed to
+  provide, so only this consumer shows that the recipe resolves. It also checks
+  the exact sibling resolutions, the stack's full peer requirements and one
+  copy of each framework runtime.
+- **Server-only consumer.** Names `@saga-a2ui/mcp`, the MCP server package and
+  Zod, and compiles `@saga-a2ui/mcp/server` with strict peers and no renderer
+  package or peer anywhere in the tree (`lit` arrives only beneath upstream
+  `@a2ui/web_core`, which core depends on). A renderer-named stack's `/server`
+  entry is compiled separately, under the full application recipe above; it is
+  a convenience for an application that already installs the stack and is not
+  renderer-free.
 
 Then check two different footprints; neither stands in for the other:
 

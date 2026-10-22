@@ -978,7 +978,9 @@ export function qualifyStarter(
         .filter((one) => one.file.endsWith('.ts'))
         .map((one) => one.text)
         .join('\n');
-      expect(own).toMatch(/from '@saga-a2ui\/core\/actions'/);
+      expect(own).toMatch(
+        /import\s*\{[^}]*\bAction\b[^}]*\}\s*from\s*'@saga-a2ui\/lit-mcp-stack'/,
+      );
       expect(own).not.toMatch(
         /function\s+(createBinding|createInstanceHost|registerProtectedOperation|createMessageSession)\b/,
       );

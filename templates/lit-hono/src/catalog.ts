@@ -1,10 +1,12 @@
 import {
   A2uiLitElement,
+  actionButtonEntry,
   basicCatalog,
+  Catalog,
+  CommonSchemas,
+  z,
   type LitComponentApi,
-} from '@a2ui/lit/v0_9'; // saga-boundary: integration-import the application authors its own components against upstream's component API
-import { Catalog, CommonSchemas } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value and schemas
-import { actionButtonEntry, z } from '@saga-a2ui/lit-mcp-stack';
+} from '@saga-a2ui/lit-mcp-stack';
 import { html, nothing } from 'lit';
 import { CATALOG_ID } from './surface.js';
 

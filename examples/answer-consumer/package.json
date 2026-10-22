@@ -5,8 +5,6 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "@a2ui/lit": "0.13.0",
-    "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/server": "2.3.1",
     "@saga-a2ui/components": "*",
     "@saga-a2ui/core": "*",
