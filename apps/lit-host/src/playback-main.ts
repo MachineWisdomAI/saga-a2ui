@@ -1,4 +1,4 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps'; // saga-boundary: integration-import the player page is not an A2UI surface, so neither stack entry starts it; it makes the bridge and the transport the runner connects over
 import { FAITHFUL_CARD_CONTRACT_VERSION } from '@saga-a2ui/components/faithful-card';
 import { createInstanceHost } from '@saga-a2ui/core/actions';
 import {
@@ -7,7 +7,7 @@ import {
 } from '@saga-a2ui/lit/faithful-card';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { PlayControlElement } from './lit/play-control.js';
-import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
+import { hostLinksFromApp } from '@saga-a2ui/mcp/view'; // saga-boundary: integration-import the player page has no stack entry to take the host's link opener from, and its description card needs it
 import {
   connectPlaybackView,
   type PlaybackViewState,

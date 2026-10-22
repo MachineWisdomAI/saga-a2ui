@@ -1,4 +1,4 @@
-import type { App } from '@modelcontextprotocol/ext-apps';
+import type { App } from '@modelcontextprotocol/ext-apps'; // saga-boundary: integration-import this view is not an A2UI surface (a list), so neither stack entry starts it; the lifetime is runToolResultView's and none of its ordering is copied here
 import type { Transport } from '@modelcontextprotocol/client';
 import {
   EMPTY_SUBSCRIPTIONS_TEXT,
@@ -13,7 +13,7 @@ import {
   type DeclaredSubscriptionRead,
   type SubscriptionsResult,
 } from './subscriptions.js';
-import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view';
+import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view'; // saga-boundary: integration-import this view is not an A2UI surface (a list), so neither stack entry starts it; the lifetime is runToolResultView's and none of its ordering is copied here
 
 /** What the view presents. Only `subscriptions` carries private subscription rows. */
 export type SubscriptionsViewState =

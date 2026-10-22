@@ -1,5 +1,3 @@
-import type { LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
 import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
   ActionButton,
@@ -7,14 +5,9 @@ import {
   startA2uiView,
 } from '@saga-a2ui/lit-mcp-stack';
 import { createNotesController } from './notes-controller.js';
-import { ownEntries } from './notes-catalog.js';
+import { notesCatalog, type CatalogEntry } from './notes-catalog.js';
 import { VIEW_TEXT } from './notes-contract.js';
-import {
-  CATALOG_ID,
-  notesLayout,
-  ownBody,
-  type BodyEntry,
-} from './notes-surface.js';
+import { notesLayout, ownBody, type BodyEntry } from './notes-surface.js';
 
 // The Lit composition shared by both Lit consumers. The own-catalog consumer calls it with nothing
 // else; the second consumer adds one optional component through `extension`. Everything here uses
@@ -24,7 +17,7 @@ import {
 
 export interface NotesExtension {
   /** Extra catalog entries (the optional FaithfulCard). The stack defines their elements. */
-  readonly entries: readonly LitComponentApi[];
+  readonly entries: readonly CatalogEntry[];
   readonly body: BodyEntry;
   /** Runs before the view starts, with the element it will render in; the returned function runs when the view ends. */
   connected?(container: HTMLElement): () => void;
@@ -45,17 +38,13 @@ export function startNotesView(
   };
   const container = document.querySelector<HTMLElement>('notes-app');
   if (container === null) throw new Error('The page has no notes-app element.');
-  const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
-    ...ownEntries,
-    ...added.entries,
-  ]);
   const controller = createNotesController();
   const endExtension = added.connected?.(container);
 
   const view = startA2uiView({
     container,
     layout: notesLayout(added.body),
-    catalog,
+    catalog: notesCatalog(added.entries),
     actions: (host) => {
       links = host.links;
       const actions = controller.actions(host.server);

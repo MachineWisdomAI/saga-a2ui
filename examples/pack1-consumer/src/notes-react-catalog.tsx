@@ -1,11 +1,13 @@
 import {
   createComponentImplementation,
   type ReactCatalogComponent,
-} from '@a2ui/react/v0_9';
-import { ColumnApi, ListApi, RowApi } from '@a2ui/web_core/v0_9/basic_catalog';
+} from '@a2ui/react/v0_9'; // saga-boundary: integration-import the application authors its own components against upstream's component API
+import { ColumnApi, ListApi, RowApi } from '@a2ui/web_core/v0_9/basic_catalog'; // saga-boundary: integration-import the layout components are built over upstream's component contracts
+import { Catalog } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value
 import { ActionButtonEntry } from '@saga-a2ui/react/actions';
 import type { ReactNode } from 'react';
 import { LineApi } from './notes-line.js';
+import { CATALOG_ID } from './notes-surface.js';
 
 // The application-owned catalog of the React consumer. `@a2ui/react` 0.13.0 ships no basic
 // catalog, so the layout components are built the way an application builds its own:
@@ -67,3 +69,10 @@ export const notesReactEntries: readonly ReactCatalogComponent[] = [
   Line,
   ActionButtonEntry,
 ];
+
+/** The catalog the React stack presents the layout over. */
+export const notesReactCatalog = new Catalog<ReactCatalogComponent>(
+  CATALOG_ID,
+  'v0.9',
+  [...notesReactEntries],
+);

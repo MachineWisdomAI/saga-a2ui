@@ -2,10 +2,12 @@ import {
   A2uiLitElement,
   basicCatalog,
   type LitComponentApi,
-} from '@a2ui/lit/v0_9';
+} from '@a2ui/lit/v0_9'; // saga-boundary: integration-import the application authors its own components against upstream's component API
+import { Catalog } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value
 import { actionButtonEntry } from '@saga-a2ui/lit/actions';
 import { html, nothing } from 'lit';
 import { LineApi } from './notes-line.js';
+import { CATALOG_ID } from './notes-surface.js';
 
 // The application-owned catalog of the Lit consumers. `Line` is the application's own component:
 // its contract (notes-line.ts) is shared with the React catalog. Layout, rows and lists come from
@@ -51,3 +53,12 @@ export const ownEntries: readonly LitComponentApi[] = [
   Line,
   actionButtonEntry,
 ];
+
+/** One catalog entry: what a consumer may add to the catalog (the second consumer adds the card). */
+export type CatalogEntry = LitComponentApi;
+
+/** The catalog the stack presents the layout over: this application's entries and any a consumer adds. */
+export const notesCatalog = (
+  extra: readonly CatalogEntry[] = [],
+): Catalog<LitComponentApi> =>
+  new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [...ownEntries, ...extra]);
