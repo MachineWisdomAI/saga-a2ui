@@ -4,6 +4,8 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as main from '@saga-a2ui/lit-mcp-stack';
 import * as card from '@saga-a2ui/lit-mcp-stack/faithful-card';
+import * as contentPolicy from '@saga-a2ui/lit-mcp-stack/content-policy';
+import * as server from '@saga-a2ui/lit-mcp-stack/server';
 import {
   checkPackageDirection,
   directionViolations,
@@ -51,16 +53,86 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
       'actionButtonEntry',
       'createLitActions',
       'defineSurface',
+      'readingProfile',
       'startA2uiView',
       'z',
     ]);
     expect(Object.keys(card).sort()).toEqual([
       'FaithfulCardApp',
       'StartFailure',
+      'bindHostLink',
       'contentPolicyFromDocument',
       'documentContentSecurityPolicies',
+      'readingProfile',
       'startFaithfulCardApp',
     ]);
+    expect(Object.keys(contentPolicy).sort()).toEqual([
+      'createContentPolicy',
+      'embedContentPolicy',
+    ]);
+    expect(Object.keys(server).sort()).toEqual([
+      'attachRequestLifetime',
+      'createServerBudgets',
+      'operationViewFromHtml',
+      'registerPublicOperation',
+      'viewUriForHtml',
+    ]);
+  });
+
+  it('serves one reading profile to the application from both entries', () => {
+    expect(main.readingProfile).toBe(card.readingProfile);
+    expect(
+      main.readingProfile({ deviceClass: 'echo_show_15' }, undefined),
+    ).toBe('device');
+    expect(main.readingProfile({ platform: 'web' }, 'Some Host')).toBe(
+      'desktop',
+    );
+  });
+
+  it('keeps the server entry out of the browser graph, and the browser entries out of the server', async () => {
+    const serverModules = await bundledModules(
+      '@saga-a2ui/lit-mcp-stack/server',
+    );
+    // The graph was really walked: the operation registration and the view identity are in it.
+    expect(
+      anyOf(serverModules, /\/packages\/mcp\/src\/server\/operation\.ts$/),
+    ).toHaveLength(1);
+    expect(
+      anyOf(serverModules, /\/packages\/mcp\/src\/server\/view-identity\.ts$/),
+    ).toHaveLength(1);
+    expect(anyOf(serverModules, /\/packages\/components\//)).toEqual([]);
+    expect(anyOf(serverModules, /\/packages\/react\//)).toEqual([]);
+    expect(anyOf(serverModules, /\/packages\/lit\//)).toEqual([]);
+    expect(
+      anyOf(serverModules, /node_modules\/(lit|lit-html|@lit|@a2ui\/lit)\//),
+    ).toEqual([]);
+    for (const entry of ['', '/faithful-card']) {
+      const browser = await bundledModules(`@saga-a2ui/lit-mcp-stack${entry}`);
+      expect(anyOf(browser, /\/packages\/mcp\/src\/server\//)).toEqual([]);
+      expect(
+        anyOf(browser, /node_modules\/@modelcontextprotocol\/(server|node)\//),
+      ).toEqual([]);
+    }
+  });
+
+  it('keeps the content-policy entry free of the renderer, the delivery and the stack', async () => {
+    const modules = await bundledModules(
+      '@saga-a2ui/lit-mcp-stack/content-policy',
+    );
+    expect(
+      anyOf(modules, /\/packages\/components\/src\/faithful-card\/policy\.ts$/),
+    ).toHaveLength(1);
+    expect(
+      anyOf(
+        modules,
+        /\/packages\/components\/src\/faithful-card\/policy-transport\.ts$/,
+      ),
+    ).toHaveLength(1);
+    expect(anyOf(modules, /\/packages\/lit\//)).toEqual([]);
+    expect(anyOf(modules, /\/packages\/mcp\//)).toEqual([]);
+    expect(
+      anyOf(modules, /node_modules\/(lit|lit-html|@lit|@a2ui\/lit)\//),
+    ).toEqual([]);
   });
 
   it('keeps the main entry free of components and Markdown: nothing of the card reaches an own-catalog bundle', async () => {

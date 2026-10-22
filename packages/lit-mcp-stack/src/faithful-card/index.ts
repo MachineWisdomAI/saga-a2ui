@@ -18,3 +18,11 @@ export {
 } from './document-policy.js';
 export { StartFailure, type StartFailureKind } from '../start-failure.js';
 export type { RunningView } from '../running-view.js';
+// A link the card's host can be asked to open, for the application's own chrome.
+export {
+  bindHostLink,
+  type HostLinkBinding,
+  type HostLinkOutcome,
+} from '@saga-a2ui/lit/faithful-card';
+// How the reader meets the host (device or desktop), for an application that maps its own tokens.
+export { readingProfile, type ReadingProfile } from '@saga-a2ui/mcp/view';
