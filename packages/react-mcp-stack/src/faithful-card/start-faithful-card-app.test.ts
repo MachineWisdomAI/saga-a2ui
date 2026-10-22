@@ -392,6 +392,82 @@ describe('startFaithfulCardApp', () => {
     expect(container.childNodes).toHaveLength(0);
   });
 
+  it('an initial chrome that throws returns a running view whose ready rejects as application, after cleanup; no window error, container free again', async () => {
+    const windowErrors: unknown[] = [];
+    const onWindowError = (event: ErrorEvent) => {
+      windowErrors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onWindowError);
+    try {
+      const errors: unknown[] = [];
+      const view = await start({
+        chrome: () => {
+          throw new Error('chrome broke');
+        },
+        onError: (error) => errors.push(error),
+      });
+      await expect(view.ready).rejects.toBeInstanceOf(StartFailure);
+      await expect(view.ready).rejects.toMatchObject({
+        kind: 'application',
+        cause: expect.objectContaining({ message: 'chrome broke' }),
+      });
+      await settle(40);
+      expect(container.childNodes).toHaveLength(0);
+      expect(windowErrors).toEqual([]);
+      // The failure is the startup's own: the later-failure channel did not also hear it.
+      expect(errors).toEqual([]);
+      await view.dispose();
+
+      // The first view never connected, and the container may be started again at once.
+      const again = await start();
+      await again.ready;
+      await vi.waitFor(() => expect(status()).toBe(TEXTS.waiting));
+    } finally {
+      window.removeEventListener('error', onWindowError);
+    }
+  });
+
+  it('a chrome that throws while showing the policy failure also fails startup as application', async () => {
+    embedPolicy('{"not": "a policy"');
+    const view = await start({
+      chrome: () => {
+        throw new Error('chrome broke on the policy text');
+      },
+    });
+    await expect(view.ready).rejects.toMatchObject({
+      kind: 'application',
+      cause: expect.objectContaining({
+        message: 'chrome broke on the policy text',
+      }),
+    });
+    expect(container.childNodes).toHaveLength(0);
+    document.head.replaceChildren();
+    const again = await start();
+    await again.ready;
+  });
+
+  it('a chrome that throws only after the view was ready keeps React’s own reporting: ready stays resolved', async () => {
+    // React reports an uncaught render error to `reportError`, or to the console without one.
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const view = await start({
+      chrome: (props: CardChromeProps) => {
+        if (props.state.kind === 'answer') throw new Error('late chrome');
+        return props.card;
+      },
+    });
+    await view.ready;
+    await host!.bridge.sendToolResult(answer('Shown'));
+    await vi.waitFor(() =>
+      expect(
+        reported.mock.calls.some((call) =>
+          call.some((a) => a instanceof Error && a.message === 'late chrome'),
+        ),
+      ).toBe(true),
+    );
+    await expect(view.ready).resolves.toBeUndefined();
+  });
+
   it('pagehide retires a ready view once and unmounts it', async () => {
     const view = await start();
     await view.ready;

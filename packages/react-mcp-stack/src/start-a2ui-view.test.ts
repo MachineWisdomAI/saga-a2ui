@@ -242,6 +242,55 @@ describe('startA2uiView', () => {
     await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
   });
 
+  it('a catalog component that throws on the initial render fails startup as application, after cleanup', async () => {
+    const BrokenApi = {
+      name: 'Broken',
+      schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+    };
+    const Broken = createComponentImplementation(BrokenApi, () => {
+      throw new Error('component broke');
+    });
+    const brokenCatalog = new Catalog<ReactCatalogComponent>(
+      CATALOG_ID,
+      'v0.9',
+      [Broken],
+    );
+    const brokenLayout = defineSurface({
+      surfaceId: 'own',
+      catalogId: CATALOG_ID,
+      data: z.object({ label: z.string() }),
+      initial: { label: 'Waiting' },
+      root: { component: 'Broken', bind: { text: 'label' } },
+      components: [],
+    });
+    const teardowns: string[] = [];
+    const windowErrors: unknown[] = [];
+    const onWindowError = (event: ErrorEvent) => {
+      windowErrors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onWindowError);
+    try {
+      const view = await start({
+        layout: brokenLayout,
+        catalog: brokenCatalog,
+        onTeardown: () => teardowns.push('teardown'),
+      });
+      await expect(view.ready).rejects.toMatchObject({
+        kind: 'application',
+        cause: expect.objectContaining({ message: 'component broke' }),
+      });
+      expect(container.childNodes).toHaveLength(0);
+      expect(teardowns).toEqual(['teardown']);
+      expect(windowErrors).toEqual([]);
+      const again = await start();
+      await again.ready;
+      await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+    } finally {
+      window.removeEventListener('error', onWindowError);
+    }
+  });
+
   it('still disposes the failed start when onTeardown also throws, and reports that throw', async () => {
     const errors: Array<[unknown, string]> = [];
     const view = await start({

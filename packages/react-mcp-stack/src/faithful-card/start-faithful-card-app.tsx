@@ -19,12 +19,13 @@ import {
   type ComponentType,
   type ReactElement,
 } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { claimContainer } from '../container-claim.js';
 import { connectToHost, type HostConnection } from '../host-connection.js';
+import { openStackRoot } from '../initial-render.js';
 import {
   runView,
   viewFailedBeforeConnecting,
+  viewThatNeverStarted,
   type RunningView,
 } from '../running-view.js';
 import { StartFailure, type ErrorPhase } from '../start-failure.js';
@@ -124,7 +125,10 @@ function CardApp(props: {
  * read from the container’s document, the host is connected with its handlers installed first,
  * and each delivered result is read with the definition’s `parse` and shown in the card: a new
  * presentation each time, even for equal text. Throws `StartError` (`container-missing`,
- * `container-busy`) before connecting to anything.
+ * `container-busy`) before connecting to anything. The first render happens before the host is
+ * connected: a `chrome` that throws in it does not throw out of `start`, it fails startup (`ready`
+ * rejects with `StartFailure` of kind `application`) after the stack took back what it made and
+ * freed the container. A throw in a later render keeps React's own reporting.
  */
 export function startFaithfulCardApp(
   definition: FaithfulCardAppDefinition,
@@ -144,20 +148,29 @@ export function startFaithfulCardAppOn(
   options: StartFaithfulCardOptions,
 ): RunningView {
   const claim = claimContainer(options.container);
-  let root: Root | undefined;
+  let root: ReturnType<typeof openStackRoot> | undefined;
   try {
     const { texts } = definition;
     const Chrome = options.chrome ?? DefaultChrome;
     const store = createStateStore({ kind: 'waiting', text: texts.waiting });
-    const mounted: Root = (root = createRoot(claim.container));
-    const unmount = (): void => mounted.unmount();
-    const render = (view?: FaithfulCardView, card?: CardSurface): void =>
-      mounted.render(createElement(CardApp, { view, card, store, Chrome }));
+    const mounted = (root = openStackRoot(claim.container));
+    const unmount = (): void => mounted.root.unmount();
+    /** The first render, now: the chrome is the application's, and a throw in it fails the start. */
+    const renderInitially = (view?: FaithfulCardView, card?: CardSurface) =>
+      mounted.renderInitially(
+        createElement(CardApp, { view, card, store, Chrome }),
+      );
 
     const policy = contentPolicyFromDocument(claim.container.ownerDocument);
     if (!policy.ok) {
       store.set({ kind: 'problem', text: texts.policyFailure });
-      render();
+      const failed = renderInitially();
+      if (failed !== undefined) {
+        // The chrome threw while showing why the start failed: that is the failure to report.
+        unmount();
+        claim.release();
+        return viewThatNeverStarted(failed.cause);
+      }
       return viewFailedBeforeConnecting({
         failure: new StartFailure('policy', policy.failure),
         unmount,
@@ -177,7 +190,16 @@ export function startFaithfulCardAppOn(
       hostLinks: hostLinksFromApp(connection.app, lifetime.signal),
     });
     const card = openFaithfulCardSurface();
-    render(view, card);
+    const failed = renderInitially(view, card);
+    if (failed !== undefined) {
+      // The chrome threw on its first render. Nothing connected: take back what this start made.
+      lifetime.abort();
+      view.consent.retire();
+      card.dispose();
+      unmount();
+      claim.release();
+      return viewThatNeverStarted(failed.cause);
+    }
 
     const report =
       options.onError ?? ((error: unknown) => console.error(error));
@@ -247,7 +269,7 @@ export function startFaithfulCardAppOn(
     });
   } catch (error) {
     // Nothing connected: take back what this start rendered and free the container.
-    root?.unmount();
+    root?.root.unmount();
     claim.release();
     throw error;
   }

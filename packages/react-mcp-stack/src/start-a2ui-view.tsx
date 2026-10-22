@@ -10,8 +10,11 @@ import type { ServerTransport } from '@saga-a2ui/core/actions';
 import type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
 import { createElement, type ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { applicationFailureOf, callApplication } from './application-call.js';
+import {
+  applicationFailureOf,
+  callApplication,
+  failApplication,
+} from './application-call.js';
 import { claimContainer } from './container-claim.js';
 import {
   connectToHost,
@@ -19,6 +22,7 @@ import {
   type HostIdentity,
   type ServerReply,
 } from './host-connection.js';
+import { openStackRoot, type StackRoot } from './initial-render.js';
 import {
   runView,
   viewThatNeverStarted,
@@ -83,8 +87,9 @@ export interface RunningA2uiView<TData> extends RunningView {
  * catalog and gives each result to `onToolResult` with the bound surface to update. Throws
  * `StartError` (`container-missing`, `container-busy`) before connecting to anything.
  * An application callback that throws while the view is being set up (the `actions` factory) does not
- * throw out of `start`: the stack takes back what it made, frees the container and returns a
- * view whose `ready` rejects with `StartFailure` of kind `application`. Imports
+ * throw out of `start`, nor does a catalog component that throws in the first render: the stack
+ * takes back what it made, frees the container and returns a view whose `ready` rejects with
+ * `StartFailure` of kind `application`. Imports
  * nothing from `@saga-a2ui/components`.
  */
 export function startA2uiView<TData>(
@@ -110,7 +115,7 @@ export function startA2uiViewOn<TData>(
 ): RunningA2uiView<TData> {
   const claim = claimContainer(options.container);
   let surface: BoundSurface<TData> | undefined;
-  let root: Root | undefined;
+  let root: StackRoot | undefined;
   try {
     // The layout is checked against the catalog before anything connects.
     surface = openSurface(options.layout, options.catalog);
@@ -130,13 +135,15 @@ export function startA2uiViewOn<TData>(
           )
         : makeActions;
 
-    const mounted: Root = (root = createRoot(claim.container));
+    const mounted = (root = openStackRoot(claim.container));
     const shown: ReactNode = createElement(Surface, { of: opened.handle });
-    mounted.render(
+    // The first render is part of starting: a component that throws in it fails the start.
+    const failed = mounted.renderInitially(
       actions === undefined
         ? shown
         : createElement(ActionsScope, { actions, children: shown }),
     );
+    if (failed !== undefined) failApplication(failed.cause);
 
     const running = runView({
       connection,
@@ -158,12 +165,12 @@ export function startA2uiViewOn<TData>(
           options.onTeardown?.();
         }
       },
-      unmount: () => mounted.unmount(),
+      unmount: () => mounted.root.unmount(),
     });
     const view: RunningA2uiView<TData> = { ...running, surface: opened };
     return view;
   } catch (error) {
-    root?.unmount();
+    root?.root.unmount();
     surface?.dispose();
     claim.release();
     const failed = applicationFailureOf(error);

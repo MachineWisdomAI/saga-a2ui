@@ -16,6 +16,11 @@ export function callApplication<T>(call: () => T): T {
   }
 }
 
+/** Ends the synchronous part of a start as the application's own failure (it threw, if not here). */
+export function failApplication(cause: unknown): never {
+  throw new ApplicationCallFailure(cause);
+}
+
 /** The application's own throw, when `error` came out of {@link callApplication}. */
 export function applicationFailureOf(
   error: unknown,
