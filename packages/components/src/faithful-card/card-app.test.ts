@@ -205,63 +205,61 @@ describe('FaithfulCardApp', () => {
 });
 
 describe('readCardResult', () => {
-  const definition = complete().build();
+  // The result here is an opaque value: this package knows no delivery, so the delivery's own
+  // default reading arrives as `read`, and the application's as `classify`.
+  type Delivered = { readonly shown?: string; readonly failed?: boolean };
+  const read = (result: Delivered): CardContent | undefined =>
+    result.failed === true || result.shown === undefined
+      ? undefined
+      : { markdown: result.shown };
   const quiet = () => undefined;
 
-  it('reads structuredContent with the definition’s parse when no classifier is supplied', () => {
+  it('uses the delivery’s default reading when no classifier is supplied', () => {
     expect(
-      readCardResult(
-        definition,
-        { structuredContent: { answer: 'Yes.' } },
-        { reportError: quiet },
-      ),
+      readCardResult({ shown: 'Yes.' }, { read, reportError: quiet }),
     ).toEqual({ kind: 'content', content: { markdown: 'Yes.' } });
-    expect(
-      readCardResult(
-        definition,
-        { structuredContent: { other: 1 } },
-        { reportError: quiet },
-      ),
-    ).toEqual({ kind: 'rejected' });
+    expect(readCardResult({}, { read, reportError: quiet })).toEqual({
+      kind: 'rejected',
+    });
   });
 
-  it('rejects an error result unread when no classifier is supplied, and reports a throwing parse', () => {
+  it('reports a default reading that throws and rejects the result without wording', () => {
     const errors: unknown[] = [];
     expect(
       readCardResult(
-        definition,
-        { isError: true, structuredContent: { answer: 'ignored' } },
-        { reportError: (error) => errors.push(error) },
+        {},
+        {
+          read: () => {
+            throw new Error('read broke');
+          },
+          reportError: (error) => errors.push(error),
+        },
       ),
-    ).toEqual({ kind: 'rejected' });
-    expect(errors).toEqual([]);
-
-    const broken = complete()
-      .result(() => {
-        throw new Error('parse broke');
-      })
-      .build();
-    expect(
-      readCardResult(broken, {}, { reportError: (e) => errors.push(e) }),
     ).toEqual({ kind: 'rejected' });
     expect(errors).toHaveLength(1);
   });
 
-  it('gives a classifier the whole result, error flag included, and returns its outcome as it is', () => {
+  it('gives a classifier the result untouched, bypassing the default reading, and returns its outcome as it is', () => {
     const seen: unknown[] = [];
-    const whole = { isError: true, structuredContent: { answer: 'x' } };
-    const outcome = readCardResult(definition, whole, {
+    const whole = { failed: true, shown: 'x' };
+    let defaulted = false;
+    const outcome = readCardResult(whole, {
+      read: (result) => {
+        defaulted = true;
+        return read(result);
+      },
       classify(result) {
         seen.push(result);
         return { kind: 'rejected', text: 'Supplied wording.' };
       },
       reportError: quiet,
     });
-    expect(seen).toEqual([whole]);
     expect(seen[0]).toBe(whole);
+    expect(defaulted).toBe(false);
     expect(outcome).toEqual({ kind: 'rejected', text: 'Supplied wording.' });
     expect(
-      readCardResult(definition, whole, {
+      readCardResult(whole, {
+        read,
         classify: () => ({
           kind: 'content',
           content: { markdown: 'Shown.\n', heading: '' },
@@ -279,9 +277,9 @@ describe('readCardResult', () => {
     const reportError = (error: unknown) => errors.push(error);
     expect(
       readCardResult(
-        definition,
         {},
         {
+          read,
           classify: () => {
             throw new Error('classifier broke');
           },
@@ -302,11 +300,7 @@ describe('readCardResult', () => {
       { kind: 'other' },
     ]) {
       expect(
-        readCardResult(
-          definition,
-          {},
-          { classify: () => bad as never, reportError },
-        ),
+        readCardResult({}, { read, classify: () => bad as never, reportError }),
       ).toEqual({ kind: 'rejected' });
     }
     expect(errors).toHaveLength(1);

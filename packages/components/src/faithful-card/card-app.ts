@@ -46,24 +46,14 @@ export type CardResultOutcome =
   | { readonly kind: 'rejected'; readonly text?: string };
 
 /**
- * The part of a delivered tool result that a card application's reading depends on. A delivery's
- * own result type (for example MCP's `CallToolResult`) satisfies it structurally, so this package
- * names no delivery.
+ * The application's reading of one whole delivered result, in place of the delivery's default
+ * reading. It receives the result exactly as delivered, whatever the delivery calls an error, and
+ * decides what it means; nothing is intercepted. A throw is reported and the result is rejected
+ * without wording. `Result` is the delivery's own type: this package names no delivery.
  */
-export interface CardResultSource {
-  readonly isError?: boolean | undefined;
-  readonly structuredContent?: unknown;
-}
-
-/**
- * The application's reading of one whole delivered result, in place of the definition's
- * `structuredContent`-only parse. It receives the result as delivered, `isError` included, and
- * decides what an error result means; the stack intercepts nothing. A throw is reported and the
- * result is rejected without wording.
- */
-export type CardResultClassifier<
-  Result extends CardResultSource = CardResultSource,
-> = (result: Result) => CardResultOutcome;
+export type CardResultClassifier<Result = unknown> = (
+  result: Result,
+) => CardResultOutcome;
 
 /** Every sentence the application shows around the card. The card never decides what they say. */
 export interface CardAppTexts {
@@ -205,20 +195,22 @@ export const FaithfulCardApp = {
 } as const;
 
 /**
- * Reads one delivered result into what the stack presents: the one decision both stacks make for
- * every result, so neither renders its own copy of the rule.
+ * Reads one delivered result into what a stack presents: the one outcome rule both stacks share,
+ * so neither renders its own copy of it. It is delivery-neutral. It never looks inside `result`;
+ * what a delivery's fields mean (an error flag, a structured payload) is decided by the delivery,
+ * which supplies that default reading as `read`.
  *
- * With a `classify` operation the application decides, from the whole result. Without one, the
- * definition's `parse` reads `structuredContent`, and an error result is rejected unread. In
- * either case a throw from the application is handed to `reportError` (which must not throw) and
- * the result is rejected without wording, so the stack clears the answer and shows the
- * definition's `texts.problem`. A classifier that returns anything but a content or rejection
- * outcome is rejected the same way, since its result is unchecked application input.
+ * With a `classify` operation the application decides, from the whole result, and `read` is not
+ * called. Without one, `read` decides: content to present, or `undefined` for a rejection. In
+ * either case a throw is handed to `reportError` (which must not throw) and the result is rejected
+ * without wording, so the stack clears the answer and shows the definition's `texts.problem`. A
+ * classifier that returns anything but a content or rejection outcome is rejected the same way,
+ * since its return is unchecked application input.
  */
-export function readCardResult<Result extends CardResultSource>(
-  definition: FaithfulCardAppDefinition,
+export function readCardResult<Result>(
   result: Result,
   options: {
+    readonly read: (result: Result) => CardContent | undefined;
     readonly classify?: CardResultClassifier<Result> | undefined;
     readonly reportError: (error: unknown) => void;
   },
@@ -228,8 +220,7 @@ export function readCardResult<Result extends CardResultSource>(
     if (options.classify !== undefined) {
       return checkedOutcome(options.classify(result));
     }
-    if (result.isError === true) return rejected;
-    const content = definition.parse(result.structuredContent);
+    const content = options.read(result);
     return content === undefined ? rejected : { kind: 'content', content };
   } catch (error) {
     options.reportError(error);

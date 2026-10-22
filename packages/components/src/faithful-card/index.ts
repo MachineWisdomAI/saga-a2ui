@@ -74,7 +74,6 @@ export {
   type CardAppTexts,
   type CardResultClassifier,
   type CardResultOutcome,
-  type CardResultSource,
   type CardResultParser,
   type FaithfulCardAppBuilder,
   type FaithfulCardAppDefinition,

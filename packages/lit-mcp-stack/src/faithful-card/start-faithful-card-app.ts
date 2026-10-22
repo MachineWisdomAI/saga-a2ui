@@ -11,7 +11,7 @@ import {
   registerFaithfulCard,
 } from '@saga-a2ui/lit/faithful-card';
 import type { CardSurface, ContentView } from '@saga-a2ui/lit/faithful-card';
-import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
+import { hostLinksFromApp, readStructuredResult } from '@saga-a2ui/mcp/view';
 import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
 import { html, render, type TemplateResult } from 'lit';
 import { applicationFailureOf, callApplication } from '../application-call.js';
@@ -173,7 +173,13 @@ export function startFaithfulCardAppOn(
     };
     /** The application’s reading of the result; a throw is reported, and the result is rejected. */
     const read = (result: ToolResult): CardResultOutcome =>
-      readCardResult(definition, result, {
+      readCardResult(result, {
+        // The delivery's default: MCP's error flag and structured content, decided once in the
+        // MCP package. The application's `classifyResult`, when given, replaces it.
+        read: (delivered) =>
+          readStructuredResult(delivered, (structured) =>
+            definition.parse(structured),
+          ),
         classify: options.classifyResult,
         reportError(error) {
           try {
