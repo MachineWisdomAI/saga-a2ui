@@ -174,6 +174,38 @@ Before, the card stacks read a result through the definition's `structuredConten
 
 Verification outcomes. A synthetic envelope and synthetic wording stand in for the application's protocol; the SDK names none. Through each stack's real start and result interface: valid structured content gives its heading and Markdown; absent or `null` structured content with usable text gives an empty heading and the exact text, terminal newline included; neither, a malformed present envelope even beside usable text (wrong or missing version, a missing, non-string or empty answer, a missing or non-string question, a non-object), or an error result with no usable text shows the supplied wording; an error result reaches the classifier whole and is rejected carrying its own text, with no card and that text told to the chrome as the problem, even beside a valid envelope; the next valid result recovers from each of these, an equal answer presented again ends image consent and the link outcome, and a throwing classifier reports and shows `texts.problem`. A packed strict (pnpm) stack-only consumer type-checks all the new entries and resolves them inside the installed stack. A device host context maps to the application's 1.6 font-size token with no transform and no sideways overflow in Chromium, and the branded stylesheet is checked for strong at 700, right-to-left emphasis, one divider and a strong closing footer. Fixture runs are not evidence of any named host.
 
+## Fourth revision proposal: definition-owned results and the complete E2 amendment
+
+**Status: proposed, awaiting one founder decision on the immutable revision named by its pull request.** This section does not claim approval. It covers the four consumer-driven E2 additions above and the corrected result ownership below as one bounded revision. The three earlier human-approved revisions remain authoritative for their unchanged scope; the earlier E2 scope and implementation records remain historical evidence, not approval of this revision. Once approved, the delivery coordinator records this revision's exact SHA and the founder's decision once; subsequent exports and status records cite that same pair.
+
+### One result contract in the definition
+
+The pure FaithfulCard application definition owns the whole-result reader through its single `result` operation. The input is a delivery-neutral delivered-result value: an error indication, ordered content blocks and an optional unchecked structured value. Absence of the structured value remains distinguishable from presence with `null` or malformed data; text and block order are preserved. The components contract imports no MCP, renderer or DOM type. The MCP view adapter maps `ToolResult` into this neutral value without deciding the application's answer semantics. No A2A delivery is implemented or qualified by this change.
+
+The reader returns content or rejection with optional application-owned text. Both stacks consume the same definition; remove the `classifyResult` startup override and the redundant definition parser it can bypass. There is no second result reader in delivery options. The stack still owns clear/present, consent and link retirement, lifecycle and error reporting. A throwing reader reports phase `result`, clears stale content and consent, shows the definition's problem text and permits recovery; no callback rollback.
+
+The motivating consumer retains its exact rules: inspect the first text block, then require a nonempty string rather than skipping to a later block; absent or null structured data may use the exact text with empty heading; malformed present structured data or an empty answer rejects even beside fallback text. Error results are rejected with zero answer cards even beside a valid structured answer, with the application's existing error wording. The neutral adapter must preserve the information required for those decisions; the SDK names no application-domain envelope or words.
+
+### Complete one-stack E2 surface and the server trade-off
+
+The same revision covers both stacks' `content-policy` convenience entry (policy creation, embedding and types), `server` convenience entry (budgets, public operations, HTML view/resource identity and request-lifetime helpers/types), and the appropriate host-link and reading-profile exports. These re-export the existing owners; they introduce no new package, policy format or runtime framework. Browser imports must not reach server modules; server entry imports must not reach browser code.
+
+Catalog authoring types and values needed by a supported own-catalog consumer come through its renderer stack main entry. A strict application recipe declares only that stack and its required framework peers, with unpublished sibling tarballs supplied through overrides. Components and Markdown are expected installed dependencies; own-catalog emitted browser graphs exclude them separately.
+
+**Server-entry decision:** independently installable server-only SDK consumers retain `@saga-a2ui/mcp/server`. Full one-package applications such as Ansari may use their stack's `server` convenience entry. A renderer-named package retains its renderer dependencies and peer obligations under strict installation even when a process imports only its server subpath. Universally migrating server-only processes to a renderer stack would buy one-package naming at that installation cost; this revision chooses the renderer-independent entry for that use case. The convenience subpath is not a promise of a renderer-free installed tree. Keep both supported paths documented and qualified rather than hiding the trade-off in consumer migration.
+
+### Reading aliases and semantic styling
+
+The same decision includes `readingProfile` recognition of the historical `HTMLFragmentWrapper` host and Echo Show device-class aliases, including `echo_show` and `echo_show_15`, alongside the retained Alexa/mobile cases. These mappings derive from recorded observations and fixtures, not new actual-host acceptance. Applications map the profile and host theme onto their own tokens; the stack owns classification.
+
+It also includes `strong`, `em` and `hr` as public semantic card content elements. The card imposes no special strong/em weight, size or colour; the application's stylesheet controls them, a closing strong footer inherits footer treatment, and one divider remains possible. Private test attributes are not a styling contract. Qualify branding through actual card stack startup in both renderers.
+
+### Verification and release boundary
+
+Verify the neutral mapping and exact consumer result matrix, equivalent renderer failures, strict stack-only and renderer-independent server-only installs, reading aliases and stack-started computed styles through the existing packed-consumer/browser fixtures. Cleanup includes removal of `pagehide` listeners despite throwing callbacks. Record actual code and artifact revisions separately from this design decision.
+
+Acceptance is Ansari working on the latest repaired `0.7.x-rc`, coordinated with its existing adoption and deployment owners. This revision authorizes neither stable promotion nor npm publication, hosting changes or a named-host pass. Stable readiness remains the operator's later explicit decision.
+
 ## Open decisions
 
 - Whether a stateless-handler lifetime helper for Node and Hono (the Hapi precedent) ships in 0.7.
