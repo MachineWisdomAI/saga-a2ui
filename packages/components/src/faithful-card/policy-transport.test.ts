@@ -188,6 +188,13 @@ describe('embedContentPolicy: the structure around the insertion point', () => {
     expect(doc.querySelector('meta[http-equiv]')?.getAttribute('content')).toBe(
       STRICT.resource.contentSecurityPolicy,
     );
+    // The restrictions and the configuration are members of the parsed head, not just in the page.
+    expect(
+      doc.head.querySelector('meta[http-equiv="Content-Security-Policy"]'),
+    ).not.toBeNull();
+    expect(
+      doc.head.querySelector(`#${CONTENT_POLICY_ELEMENT_ID}`),
+    ).not.toBeNull();
     expect(withoutInsertion(embedded)).toBe(html);
     const rebuilt = contentPolicyFromEmbedded(
       doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
@@ -235,6 +242,18 @@ describe('embedContentPolicy: documents it refuses', () => {
       '<meta name="x"><head></head>',
     ],
     ['has text before the head', 'text<head></head>'],
+    [
+      'has text that closes the head before the charset meta',
+      '<html><head>banner<meta charset="utf-8"><script>1</script></head></html>',
+    ],
+    [
+      'has text after a comment that closes the head before the charset meta',
+      '<head><!-- c -->x<meta charset="utf-8"><script>1</script></head>',
+    ],
+    [
+      'closes the head before the charset meta',
+      '<head></head><meta charset="utf-8"><script>1</script>',
+    ],
     ['ends inside the head tag', '<html><head data-x="1'],
     [
       'declares a second charset after the first',

@@ -161,21 +161,27 @@ function* tokens(html: string): Generator<Token> {
  * Throws, and never guesses a position, when the document has no head tag of its own, has anything
  * before it but a doctype, comments and the `html` tag (the HTML parser would then have made a
  * head already, and this one would be ignored), declares its charset anywhere but as head's first
- * element, or ends inside a tag.
+ * element, puts text other than whitespace or an end tag before that charset meta (either closes
+ * the head, so the meta and an insertion after it would be in the body), or ends inside a tag.
  */
 export function headInsertionPoint(html: string): number {
   let head: number | undefined;
   let insertAt = 0;
   let firstElementSeen = false;
+  let headClosed = false;
   let seenHtml = false;
   for (const token of tokens(html)) {
     if (token.kind === 'markup') continue;
     if (token.kind === 'text') {
       const text = html.slice(token.start, token.end);
-      if (head === undefined && !/^\uFEFF?[\t\n\f\r ]*$/.test(text))
-        throw new Error(
-          'The view document has text before its <head>, so the content restrictions could not be placed in it.',
-        );
+      if (!/^\uFEFF?[\t\n\f\r ]*$/.test(text)) {
+        if (head === undefined)
+          throw new Error(
+            'The view document has text before its <head>, so the content restrictions could not be placed in it.',
+          );
+        // Text other than whitespace implicitly closes the head, so what follows is in the body.
+        if (!firstElementSeen) headClosed = true;
+      }
       continue;
     }
     if (head === undefined) {
@@ -195,12 +201,23 @@ export function headInsertionPoint(html: string): number {
       }
       continue;
     }
-    if (token.kind !== 'start') continue;
+    if (token.kind !== 'start') {
+      // `</head>` closes the head; other end tags are at best ignored there. Either way nothing
+      // after one is known to be in the head.
+      if (!firstElementSeen) headClosed = true;
+      continue;
+    }
     const declaresCharset =
       token.name === 'meta' && token.attributes.has('charset');
     if (!firstElementSeen) {
       firstElementSeen = true;
-      if (declaresCharset) insertAt = token.end;
+      if (declaresCharset) {
+        if (headClosed)
+          throw new Error(
+            'The charset declaration follows text or an end tag that closes the view document head, so it is not in the head.',
+          );
+        insertAt = token.end;
+      }
     } else if (declaresCharset) {
       throw new Error(
         'The charset declaration must be the first element of the view document head: it would otherwise follow the content restrictions or a script.',
