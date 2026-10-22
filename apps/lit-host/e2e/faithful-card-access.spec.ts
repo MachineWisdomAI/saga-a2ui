@@ -92,7 +92,7 @@ async function contrastReport(
       return (hi + 0.05) / (lo + 0.05);
     };
     const selector =
-      'p, h3, h4, h5, h6, li, th, td, blockquote, pre code, code, button:not([disabled]), [data-annotation], .link-destination, [role="status"], [role="alert"]';
+      'p, h3, h4, h5, h6, li, th, td, blockquote, pre code, code, button:not([disabled]), [data-annotation], .saga-card-link-destination, [role="status"], [role="alert"]';
     const low: { what: string; ratio: number }[] = [];
     let measured = 0;
     for (const node of Array.from(element.querySelectorAll(selector))) {
@@ -192,11 +192,11 @@ test.describe('light and dark follow the host, not the card', () => {
       const fixed: string[] = [];
       for (const node of Array.from(
         root.querySelectorAll(
-          'p, h3, li, [data-annotation], .link-destination, button',
+          'p, h3, li, [data-annotation], .saga-card-link-destination, button',
         ),
       )) {
         const style = getComputedStyle(node);
-        if (node.matches('button:not(.link-button)')) continue; // native controls keep the browser's own scheme-aware colours
+        if (node.matches('button:not(.saga-card-link)')) continue; // native controls keep the browser's own scheme-aware colours
         if (style.color !== hostText)
           fixed.push(`${node.tagName.toLowerCase()} ${style.color}`);
       }
@@ -430,7 +430,7 @@ test.describe('narrow screens, 200% zoom and long content', () => {
       ) as HTMLElement;
       for (const node of Array.from(
         root.querySelectorAll(
-          'p, h3, h4, h5, h6, li, blockquote, button, .table-scroll, pre, [role="status"]',
+          'p, h3, h4, h5, h6, li, blockquote, button, .saga-card-table-scroll, pre, [role="status"]',
         ),
       )) {
         const rect = node.getBoundingClientRect();
@@ -441,7 +441,7 @@ test.describe('narrow screens, 200% zoom and long content', () => {
             `${name} leaves the viewport: ${Math.round(rect.left)}..${Math.round(rect.right)}`,
           );
         // Wrapping text is never clipped: only a table region or a code block may be wider than itself, and they scroll.
-        const scrolls = node.matches('.table-scroll, pre');
+        const scrolls = node.matches('.saga-card-table-scroll, pre');
         if (!scrolls && node.scrollWidth > node.clientWidth + 1)
           problems.push(
             `${name} clips its text: ${node.scrollWidth} > ${node.clientWidth}`,

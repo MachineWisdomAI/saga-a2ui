@@ -1,12 +1,10 @@
 import {
   CONTENT_POLICY_ELEMENT_ID,
   contentPolicyFromEmbedded,
-  createFaithfulCardReader,
-  createImageConsentScope,
-  establishImageEnforcement,
   type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
 import {
+  createFaithfulCardView,
   documentContentSecurityPolicies,
   type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
@@ -38,19 +36,13 @@ export function contentViewFromDocument(
     doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
   );
   if (!created.ok) return { ok: false, message: created.failure.message };
-  const reader = createFaithfulCardReader(EPISODE_CARD_SETTINGS);
-  if (!reader.ok) return { ok: false, message: reader.failure.message };
   return {
     ok: true,
-    view: {
-      reader: reader.reader,
+    view: createFaithfulCardView({
+      ...EPISODE_CARD_SETTINGS,
       policy: created.policy,
+      contentSecurityPolicies: documentContentSecurityPolicies(doc),
       hostLinks,
-      imageEnforcement: establishImageEnforcement(
-        created.policy,
-        documentContentSecurityPolicies(doc),
-      ),
-      consent: createImageConsentScope(),
-    },
+    }),
   };
 }

@@ -1,4 +1,3 @@
-import { A2uiSurface } from '@saga-a2ui/react/a2ui';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import {
   CONTENT_POLICY_ELEMENT_ID,
@@ -7,16 +6,19 @@ import {
 } from '@saga-a2ui/components/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import {
+  createFaithfulCardView,
   FaithfulCardProvider,
+  FaithfulCardSurface,
+  openFaithfulCardSurface,
+  type CardSurface,
   type FaithfulCardView,
 } from '@saga-a2ui/react/faithful-card';
 import '@saga-a2ui/react/faithful-card.css';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { readAnswerMarkdown } from './answer-result.js';
-import { openAnswerSurface, type AnswerSurface } from './answer-surface.js';
 import './card-view.css';
-import { createContentView } from './content-view.js';
+import { documentContentSecurityPolicies } from './document-csp.js';
 
 // The application: one React root that shows whatever answer the host last delivered, and nothing
 // else. The page is built once. Its policy comes from the document it was served in, its brand from
@@ -59,10 +61,10 @@ type StatusStore = ReturnType<typeof createStatusStore>;
 function CardApp(props: {
   readonly brand: Brand;
   readonly view: FaithfulCardView;
-  readonly answer: AnswerSurface;
+  readonly card: CardSurface;
   readonly status: StatusStore;
 }) {
-  const { brand, view, answer, status } = props;
+  const { brand, view, card, status } = props;
   const current = useSyncExternalStore(status.subscribe, status.get);
   return (
     <FaithfulCardProvider view={view}>
@@ -74,7 +76,7 @@ function CardApp(props: {
         <p className="card-status" role="status" data-testid="answer-status">
           {STATUS_TEXT[current]}
         </p>
-        <A2uiSurface surface={answer.surface} />
+        <FaithfulCardSurface of={card} />
       </main>
     </FaithfulCardProvider>
   );
@@ -121,35 +123,43 @@ export async function mountCardView(brand: Brand): Promise<void> {
       }
     },
   };
-  const view = createContentView({
+  // The trusted settings of the card, created once: the Markdown dialect and a finite bound for its
+  // long answers, the content policy it was served with, how a link leaves the page, and the image
+  // restrictions the document actually carries. Nothing in an answer can change any of them.
+  const view = createFaithfulCardView({
+    dialect: 'commonmark-tables-strikethrough',
+    maxLength: 50_000,
     policy: policy.policy,
+    contentSecurityPolicies: documentContentSecurityPolicies(document),
     hostLinks,
-    document,
   });
-  const answer = openAnswerSurface();
+  const card = openFaithfulCardSurface();
   const status = createStatusStore();
   root.render(
     <StrictMode>
-      <CardApp brand={brand} view={view} answer={answer} status={status} />
+      <CardApp brand={brand} view={view} card={card} status={status} />
     </StrictMode>,
   );
 
   /**
    * Replaces the answer shown. A result that is not the published output, or an error, clears it and says so.
-   * Every result is a new selection, so it first revokes the view's image consent: an answer whose Markdown
-   * equals the previous one would otherwise look unchanged to the card and keep the earlier grant.
+   * Every result is a new selection: `present` ends the earlier presentation, image consent included, even
+   * when the Markdown equals the previous one.
    */
   const show = (result: {
     readonly isError?: boolean;
     readonly structuredContent?: unknown;
   }): void => {
-    view.consent.revokeAll();
     const markdown =
       result.isError === true
         ? undefined
         : readAnswerMarkdown(result.structuredContent);
-    const shown = answer.show(markdown ?? '');
-    status.set(markdown !== undefined && shown.ok ? 'answer' : 'problem');
+    if (markdown === undefined) {
+      card.clear();
+      status.set('problem');
+      return;
+    }
+    status.set(card.present({ markdown }).ok ? 'answer' : 'problem');
   };
 
   const connection = await connectToolResultView({
@@ -163,5 +173,6 @@ export async function mountCardView(brand: Brand): Promise<void> {
     connection.dispose();
     view.consent.retire();
     root.unmount();
+    card.dispose();
   });
 }

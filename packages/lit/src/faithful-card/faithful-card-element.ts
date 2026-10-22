@@ -1,6 +1,9 @@
 import {
+  closesWithParagraph,
   describeContentFailure,
   describeLinkOutcome,
+  FAITHFUL_CARD_STYLING,
+  requestLinkOpen,
   type BlockNode,
   type ImageConsent,
   type ImageContext,
@@ -18,6 +21,7 @@ import {
   type PropertyValues,
   type TemplateResult,
 } from 'lit';
+import { adoptStyles, type StyleRoot } from './adopt-styles.js';
 import { blockedFragment } from './blocked-fragment.js';
 import { requestContentView, type ContentView } from './content-view.js';
 
@@ -31,11 +35,11 @@ import { requestContentView, type ContentView } from './content-view.js';
 // to the element, so a content change, a view-wide revocation, Hide images and disconnection each
 // retire it, and nothing holding the old grant can bring images back.
 //
-// Styling: the element uses the light DOM, so an application styles it with ordinary CSS, and it
-// reads these custom properties (each has a neutral fallback): --saga-card-font-family,
-// --saga-card-line-height, --saga-card-text-color, --saga-card-accent-color (links and the quote
-// rule), --saga-card-muted-color (link hosts), --saga-card-border-color (tables and rules) and
-// --saga-card-code-background.
+// Styling: the element uses the light DOM, so an application styles it with ordinary CSS. It emits
+// the styling surface of `FAITHFUL_CARD_STYLING` (the committed class names, the nine custom
+// properties, each with a neutral fallback, and the closing marker), exactly as the React card
+// does; docs/faithful-card-styling.md is its documentation. Other attributes, such as the
+// `data-testid` and `data-annotation` hooks, are not contract.
 
 /** What one render pass needs; assembled once so the node templates stay small. */
 interface Rendering {
@@ -70,12 +74,18 @@ type Interpretation = {
 const STYLE = html`<style>
   saga-faithful-card-content {
     display: block;
+  }
+  .saga-card {
+    display: block;
+    box-sizing: border-box;
+    max-inline-size: var(--saga-card-reading-width, 70ch);
     font-family: var(--saga-card-font-family, inherit);
+    font-size: var(--saga-card-font-size, inherit);
     line-height: var(--saga-card-line-height, inherit);
     color: var(--saga-card-text-color, inherit);
     overflow-wrap: anywhere;
   }
-  saga-faithful-card-content .link-button {
+  .saga-card .saga-card-link {
     font: inherit;
     color: var(--saga-card-accent-color, inherit);
     background: none;
@@ -84,78 +94,78 @@ const STYLE = html`<style>
     text-decoration: underline;
     cursor: pointer;
   }
-  saga-faithful-card-content .link-host {
+  .saga-card .saga-card-link-host {
     font-size: 0.85em;
     color: var(--saga-card-muted-color, inherit);
   }
-  saga-faithful-card-content img {
-    max-width: 100%;
+  .saga-card img {
+    max-inline-size: 100%;
     height: auto;
   }
   /* A list item pads on the side its own text starts from, so a right-to-left item inside a left-to-right list
      keeps its marker inside the card instead of outside the page edge. */
-  saga-faithful-card-content ul,
-  saga-faithful-card-content ol {
+  .saga-card ul,
+  .saga-card ol {
     padding-inline: 0;
   }
-  saga-faithful-card-content li {
+  .saga-card li {
     margin-inline-start: 2.5em;
   }
-  saga-faithful-card-content blockquote {
+  .saga-card blockquote {
     margin-inline: 1em;
     padding-inline-start: 0.75em;
     border-inline-start: 3px solid
       var(--saga-card-accent-color, var(--saga-card-border-color, #999));
   }
-  saga-faithful-card-content pre {
-    max-width: 100%;
+  .saga-card pre {
+    max-inline-size: 100%;
     overflow-x: auto;
     padding: 0.5em;
     background: var(--saga-card-code-background, rgba(127, 127, 127, 0.15));
   }
-  saga-faithful-card-content code {
+  .saga-card code {
     background: var(--saga-card-code-background, rgba(127, 127, 127, 0.15));
   }
-  saga-faithful-card-content pre code {
+  .saga-card pre code {
     background: none;
   }
-  saga-faithful-card-content hr {
+  .saga-card hr {
     border: 0;
     border-top: 1px solid var(--saga-card-border-color, #999);
   }
-  saga-faithful-card-content .table-scroll {
-    max-width: 100%;
+  .saga-card .saga-card-table-scroll {
+    max-inline-size: 100%;
     overflow-x: auto;
     margin-block: 0.5em;
   }
-  saga-faithful-card-content table {
+  .saga-card table {
     border-collapse: collapse;
     overflow-wrap: normal;
   }
-  saga-faithful-card-content th,
-  saga-faithful-card-content td {
+  .saga-card th,
+  .saga-card td {
     border: 1px solid var(--saga-card-border-color, #999);
     padding: 0.25em 0.5em;
     text-align: start;
   }
-  saga-faithful-card-content [data-align='left'] {
+  .saga-card [data-align='left'] {
     text-align: left;
   }
-  saga-faithful-card-content [data-align='center'] {
+  .saga-card [data-align='center'] {
     text-align: center;
   }
-  saga-faithful-card-content [data-align='right'] {
+  .saga-card [data-align='right'] {
     text-align: right;
   }
-  saga-faithful-card-content .source-block {
+  .saga-card .saga-card-source {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  saga-faithful-card-content
-    [data-annotation]:not([data-annotation='link-host']) {
+  .saga-card [data-annotation]:not([data-annotation='link-host']),
+  .saga-card .saga-card-placeholder {
     font-style: italic;
   }
-  saga-faithful-card-content .content-controls {
+  .saga-card .saga-card-controls {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -208,6 +218,8 @@ export class FaithfulCardContentElement extends LitElement {
   }
 
   private view?: ContentView;
+  /** Gives back the application's styles this card adopted into its root; see `adopt-styles.ts`. */
+  private releaseStyles?: () => void;
   private interpreted?: Interpretation;
   private revocationWatch?: { unsubscribe(): void };
   /** Retires link results that arrive after the content changed or the element was removed. */
@@ -222,6 +234,10 @@ export class FaithfulCardContentElement extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.view = requestContentView(this);
+    this.releaseStyles = adoptStyles(
+      this.getRootNode() as unknown as StyleRoot,
+      this.view?.styles ?? [],
+    );
     this.consentEnded = this.view?.consent.retired === true;
     this.revocationWatch = this.view?.consent.subscribe(() => {
       this.retireImages();
@@ -242,6 +258,8 @@ export class FaithfulCardContentElement extends LitElement {
     this.generation += 1;
     this.revocationWatch?.unsubscribe();
     this.revocationWatch = undefined;
+    this.releaseStyles?.();
+    this.releaseStyles = undefined;
     this.retireImages();
     this.view = undefined;
     this.interpreted = undefined;
@@ -293,13 +311,15 @@ export class FaithfulCardContentElement extends LitElement {
   }
 
   private failure(reason: string, message: TemplateResult): TemplateResult {
-    return html`<p
-      role="alert"
-      data-testid="card-failure"
-      data-reason=${reason}
-    >
-      ${message}
-    </p>`;
+    return html`${STYLE}
+      <p
+        class="saga-card saga-card-failure"
+        role="alert"
+        data-testid="card-failure"
+        data-reason=${reason}
+      >
+        ${message}
+      </p>`;
   }
 
   protected override render(): TemplateResult {
@@ -327,10 +347,17 @@ export class FaithfulCardContentElement extends LitElement {
       revision: this.revisionNow(),
       counters: { link: 0, image: 0, table: 0 },
     };
+    const closing = closesWithParagraph(card.blocks)
+      ? card.blocks.length - 1
+      : -1;
     return html`${STYLE}
-      ${rendering.strict ? this.controls(view, card) : nothing}
-      <div data-testid="card-content">
-        ${card.blocks.map((block) => this.block(block, rendering))}
+      <div class="saga-card" data-testid="card-root">
+        ${rendering.strict ? this.controls(view, card) : nothing}
+        <div class="saga-card-content" data-testid="card-content">
+          ${card.blocks.map((block, index) =>
+            this.block(block, rendering, false, index === closing),
+          )}
+        </div>
       </div>`;
   }
 
@@ -349,7 +376,7 @@ export class FaithfulCardContentElement extends LitElement {
     const ended = !granted && this.consentEnded;
     // The controls belong to the content revision they were rendered for; see `current`.
     const revision = this.revisionNow();
-    return html`<div class="content-controls" data-testid="card-controls">
+    return html`<div class="saga-card-controls" data-testid="card-controls">
       ${
         blockable
           ? html`<button
@@ -449,13 +476,20 @@ export class FaithfulCardContentElement extends LitElement {
     node: BlockNode,
     r: Rendering,
     inContainer = false,
+    closing = false,
   ): TemplateResult {
     // A quote or list item sets the direction its own marker or rule follows from its text, and its
     // paragraphs inherit it: automatic direction ignores any descendant that sets its own.
     const dir = inContainer ? nothing : 'auto';
     switch (node.kind) {
       case 'paragraph':
-        return html`<p dir=${dir}>${this.inlines(node.children, r)}</p>`;
+        // Only the card's final top-level block can be closing; see `FAITHFUL_CARD_STYLING.closing`.
+        return html`<p
+          dir=${dir}
+          data-saga-closing=${closing ? FAITHFUL_CARD_STYLING.closing.value : nothing}
+        >
+          ${this.inlines(node.children, r)}
+        </p>`;
       case 'heading': {
         // The surrounding page owns the top levels; card headings start at h3.
         const content = this.inlines(node.children, r);
@@ -498,7 +532,7 @@ export class FaithfulCardContentElement extends LitElement {
               source: () => html`${node.text}`,
               block: true,
             })
-          : html`<p class="source-block" dir=${dir}>${node.text}</p>`;
+          : html`<p class="saga-card-source" dir=${dir}>${node.text}</p>`;
       case 'rule':
         return html`<hr />`;
     }
@@ -524,7 +558,7 @@ export class FaithfulCardContentElement extends LitElement {
           </td>`;
     };
     return html`<div
-      class="table-scroll"
+      class="saga-card-table-scroll"
       role="region"
       tabindex="0"
       aria-label=${`Table ${ordinal}`}
@@ -611,28 +645,32 @@ export class FaithfulCardContentElement extends LitElement {
       }
       // Not activatable: the text and its destination are shown, and nothing can be invoked.
       return html`<span
+        class="saga-card-link-inert"
         data-testid="md-link-inert"
         data-reason=${decision.reason}
         >${label}
-        <span class="link-destination">(${node.destination})</span></span
+        <span class="saga-card-link-destination"
+          >(${node.destination})</span
+        ></span
       >`;
     }
     const outcome = this.linkOutcomes.get(ordinal);
     // The hostname is inside the button, so it is both visible and part of the accessible name.
     return html`<button
         type="button"
-        class="link-button"
+        class="saga-card-link"
         data-testid="md-link"
         @click=${() => void this.activate(ordinal, r.view, r.revision, decision.url)}
       >
         ${label}
         <span
-          class="link-host"
+          class="saga-card-link-host"
           data-testid="md-link-host"
           data-annotation="link-host"
           >(${decision.hostname})</span
         ></button
       ><span
+        class="saga-card-link-status"
         role="status"
         data-testid="md-link-status"
         data-outcome=${outcome ?? nothing}
@@ -657,7 +695,7 @@ export class FaithfulCardContentElement extends LitElement {
     url: string,
   ): Promise<void> {
     if (!this.current(view, revision)) return;
-    const outcome = await view.hostLinks.open(url);
+    const outcome = await requestLinkOpen(view.hostLinks, url);
     if (!this.current(view, revision)) return;
     this.linkOutcomes = new Map(this.linkOutcomes).set(ordinal, outcome);
   }
@@ -698,6 +736,7 @@ export class FaithfulCardContentElement extends LitElement {
       });
     }
     return html`<span
+      class="saga-card-placeholder"
       data-testid="md-image-blocked"
       data-reason=${reason}
       data-annotation="image-not-loaded"

@@ -1,10 +1,14 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { HostLinks } from '@saga-a2ui/components/faithful-card';
-import { registerFaithfulCard } from '@saga-a2ui/lit/faithful-card';
+import {
+  createFaithfulCardView,
+  documentContentSecurityPolicies,
+  registerFaithfulCard,
+} from '@saga-a2ui/lit/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import { createAnswerViewElement } from './answer-view.js';
 import { brandings } from './branding.js';
-import { createContentView } from './content-view.js';
+import { ANSWER_READER, createAnswerPolicy } from './answer-policy.js';
 
 // Composition root of the page an MCP host mounts (mcp.html, served by server/answer-server.ts).
 // No server code and no answer function: the host's bridge delivers each tool result and this page
@@ -30,7 +34,12 @@ const hostLinks: HostLinks = {
 registerFaithfulCard();
 const AnswerView = createAnswerViewElement({
   branding: brandings.nur,
-  content: createContentView({ level: 'standard', imageHosts: [], hostLinks }),
+  content: createFaithfulCardView({
+    ...ANSWER_READER,
+    policy: createAnswerPolicy({ level: 'standard', imageHosts: [] }),
+    contentSecurityPolicies: documentContentSecurityPolicies(document),
+    hostLinks,
+  }),
 });
 customElements.define('answer-view', AnswerView);
 
