@@ -3,7 +3,9 @@ import { Catalog } from '@a2ui/web_core/v0_9';
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { createA2uiAppElement } from '@saga-a2ui/lit';
 import { faithfulCardEntry } from '@saga-a2ui/lit/faithful-card';
 import { css } from 'lit';
@@ -20,52 +22,28 @@ const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
   faithfulCardEntry,
 ]);
 
-const surface = [
-  {
-    version: 'v0.9',
-    createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID },
+/** The answer surface: the card's two values bound to a data model that starts empty. */
+const answerSurface = defineSurface({
+  surfaceId: SURFACE_ID,
+  catalogId: CATALOG_ID,
+  data: z.object({ contractVersion: z.literal(1), markdown: z.string() }),
+  initial: { contractVersion: 1, markdown: '' },
+  root: {
+    component: 'FaithfulCard',
+    bind: { contractVersion: 'contractVersion', markdown: 'markdown' },
   },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: SURFACE_ID,
-      components: [
-        {
-          id: 'root',
-          component: 'FaithfulCard',
-          contractVersion: { path: '/contractVersion' },
-          markdown: { path: '/markdown' },
-        },
-      ],
-    },
-  },
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: SURFACE_ID,
-      value: { contractVersion: 1, markdown: '' },
-    },
-  },
-];
+});
 
-/** The messages that replace the card's whole content with `markdown` (empty clears it). */
-export const answerData = (markdown: string) => [
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: SURFACE_ID,
-      value: { contractVersion: 1, markdown },
-    },
-  },
-];
+/** The data that replaces the card's whole content with `markdown` (empty clears it). */
+export const answerData = (markdown: string) =>
+  ({ contractVersion: 1, markdown }) as const;
 
 /** An element that presents the answer surface; the page subclasses it to add its own chrome. */
 export function createAnswerSurfaceElement() {
   return createA2uiAppElement({
     createSession: () =>
       createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-    initialInput: surface,
-    surfaceId: SURFACE_ID,
+    layout: answerSurface,
   });
 }
 

@@ -58,6 +58,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       '@modelcontextprotocol/ext-apps',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
+      '@saga-a2ui/core/protocols/a2ui/zod3', // the answer surface's data schema
       '@saga-a2ui/lit',
       '@saga-a2ui/lit/faithful-card',
       '@saga-a2ui/mcp/view',

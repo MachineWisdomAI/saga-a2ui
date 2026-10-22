@@ -8,6 +8,14 @@ export {
 } from './decoder.js';
 export type { A2uiMessageVisitor, ValidatedMessage } from './message.js';
 export {
+  defineSurface,
+  type ComponentDefinition,
+  type SurfaceLayout,
+  type SurfaceSpec,
+  type SurfaceUpdateFailure,
+  type UpdateInput,
+} from './surface-layout.js';
+export {
   createMessageSession,
   type IngestFailure,
   type IngestResult,

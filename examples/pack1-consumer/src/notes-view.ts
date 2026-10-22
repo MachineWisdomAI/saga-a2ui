@@ -12,10 +12,10 @@ import { ownEntries } from './notes-catalog.js';
 import { VIEW_TEXT } from './notes-contract.js';
 import {
   CATALOG_ID,
-  SURFACE_ID,
-  notesSurface,
+  notesLayout,
   ownBody,
   type BodyEntry,
+  type NotesData,
 } from './notes-surface.js';
 
 // The Lit composition shared by both Lit consumers. The own-catalog consumer calls it with nothing
@@ -45,10 +45,14 @@ export async function startNotesView(
   defineElements(entries);
 
   const element = ():
-    (HTMLElement & { ingest(input: unknown): unknown }) | null =>
-    document.querySelector('notes-app');
+    | (HTMLElement & {
+        updateData(data: NotesData): unknown;
+        relay(messages: unknown[]): unknown;
+      })
+    | null => document.querySelector('notes-app');
   const controller = createNotesController(app, {
-    ingest: (messages) => void element()?.ingest(messages),
+    show: (data) => void element()?.updateData(data),
+    ingest: (messages) => void element()?.relay(messages),
     remove: () => element()?.remove(),
   });
   const { actions } = controller;
@@ -56,8 +60,7 @@ export async function startNotesView(
   class NotesApp extends createA2uiAppElement({
     createSession: () =>
       createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-    initialInput: notesSurface(added.body),
-    surfaceId: SURFACE_ID,
+    layout: notesLayout(added.body),
     actions: createLitActions({
       // The same two definitions are bound to every rendered row: directly, through each instance's own handle.
       attach: (view) => {
@@ -79,6 +82,10 @@ export async function startNotesView(
     }),
   }) {
     #end?: () => void;
+    /** Applies the row-status messages the controller writes; a layout's update cannot express them. */
+    relay(messages: unknown[]): void {
+      this.ingest(messages);
+    }
     override connectedCallback() {
       this.#end = added.connected?.(this);
       super.connectedCallback();

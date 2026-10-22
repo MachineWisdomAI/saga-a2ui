@@ -6,7 +6,7 @@ import {
 import { contentViewFromDocument } from './lit/content-view.js';
 import { registerLitElements, sagaCatalog } from './lit/integration.js';
 import { createSagaAppElement } from './lit/saga-app.js';
-import { initialFixture, SURFACE_ID } from './saga-panel/fixture.js';
+import { initialFixture } from './saga-panel/fixture.js';
 
 // Composition root: choose the implementations and connect them explicitly. This page has no
 // host, so links cannot be opened and the default content policy (no image host) applies.
@@ -21,8 +21,7 @@ customElements.define(
         catalogs: [sagaCatalog],
         decoder: a2uiV0_9Decoder,
       }),
-    initialInput: initialFixture,
-    surfaceId: SURFACE_ID,
+    layout: initialFixture,
     content: content.view,
   }),
 );

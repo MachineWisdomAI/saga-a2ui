@@ -8,11 +8,7 @@ import {
   defineElements,
   ElementConflictError,
 } from '@saga-a2ui/lit';
-import {
-  answerCardData,
-  answerSurface,
-  ANSWER_SURFACE_ID,
-} from '../../src/answer-card/presentation.js';
+import { answerLayout } from '../../src/answer-card/presentation.js';
 import { NO_HOST_LINKS } from '@saga-a2ui/components/faithful-card';
 import {
   AnswerCardElement,
@@ -26,7 +22,7 @@ import {
   sagaCatalog,
 } from '../../src/lit/integration.js';
 import { createSagaAppElement } from '../../src/lit/saga-app.js';
-import { initialFixture, SURFACE_ID } from '../../src/saga-panel/fixture.js';
+import { initialFixture } from '../../src/saga-panel/fixture.js';
 
 // Test-only page: the panel application and the answer application, each with its own catalog,
 // session and Lit element, mounted side by side in one document and one custom-element registry.
@@ -60,8 +56,7 @@ customElements.define(
         catalogs: [sagaCatalog],
         decoder: a2uiV0_9Decoder,
       }),
-    initialInput: initialFixture,
-    surfaceId: SURFACE_ID,
+    layout: initialFixture,
     content: content.view,
   }),
 );
@@ -73,8 +68,7 @@ customElements.define(
         catalogs: [answerCatalog],
         decoder: a2uiV0_9Decoder,
       }),
-    initialInput: [...answerSurface, ...answerCardData({ kind: 'waiting' })],
-    surfaceId: ANSWER_SURFACE_ID,
+    layout: answerLayout,
   }),
 );
 

@@ -10,8 +10,10 @@ import {
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
   type IngestResult,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import {
   createA2uiAppElement,
   defineElements,
@@ -166,34 +168,16 @@ const catalogView = viewFor(
 class CardApp extends createA2uiAppElement({
   createSession: () =>
     createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-  initialInput: [
-    {
-      version: 'v0.9',
-      createSurface: { surfaceId: 'card', catalogId: CATALOG_ID },
+  layout: defineSurface({
+    surfaceId: 'card',
+    catalogId: CATALOG_ID,
+    data: z.object({ contractVersion: z.number(), markdown: z.string() }),
+    initial: { contractVersion: 1, markdown: 'Waiting.' },
+    root: {
+      component: 'FaithfulCard',
+      bind: { contractVersion: 'contractVersion', markdown: 'markdown' },
     },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: 'card',
-        components: [
-          {
-            id: 'root',
-            component: 'FaithfulCard',
-            contractVersion: { path: '/contractVersion' },
-            markdown: { path: '/markdown' },
-          },
-        ],
-      },
-    },
-    {
-      version: 'v0.9',
-      updateDataModel: {
-        surfaceId: 'card',
-        value: { contractVersion: 1, markdown: 'Waiting.' },
-      },
-    },
-  ],
-  surfaceId: 'card',
+  }),
 }) {
   #endView?: () => void;
   override connectedCallback() {
