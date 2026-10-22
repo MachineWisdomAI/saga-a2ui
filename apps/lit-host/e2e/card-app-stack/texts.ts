@@ -7,3 +7,6 @@ export const PROBE_TEXTS = {
   readyFailure: 'The embedded fonts did not load.',
   policyFailure: 'The content policy is not valid.',
 } as const;
+
+/** The wording the probe application supplies when it rejects a result under its own reading. */
+export const PROBE_UNSUPPORTED = 'This answer needs a newer version.';
