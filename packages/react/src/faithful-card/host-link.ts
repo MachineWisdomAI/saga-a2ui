@@ -1,8 +1,8 @@
+import { requestLinkOpen } from '@saga-a2ui/components/faithful-card';
 import {
   describeLinkOutcome,
-  requestLinkOpen,
   type LinkOpenOutcome,
-} from '@saga-a2ui/components/faithful-card';
+} from '@saga-a2ui/core/host-links';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { FaithfulCardViewContext, type FaithfulCardView } from './view.js';
 

@@ -39,11 +39,10 @@ createRoot(container).render(
   createElement(
     StrictMode,
     null,
-    createElement(
-      FaithfulCardProvider,
-      { view },
-      createElement(FaithfulCardSurface, { of: surface }),
-    ),
+    createElement(FaithfulCardProvider, {
+      view,
+      children: createElement(FaithfulCardSurface, { of: surface }),
+    }),
   ),
 );
 

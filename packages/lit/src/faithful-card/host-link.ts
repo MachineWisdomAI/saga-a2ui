@@ -1,8 +1,8 @@
+import { requestLinkOpen } from '@saga-a2ui/components/faithful-card';
 import {
   describeLinkOutcome,
-  requestLinkOpen,
   type LinkOpenOutcome,
-} from '@saga-a2ui/components/faithful-card';
+} from '@saga-a2ui/core/host-links';
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
 import { requestContentView, type ContentView } from './content-view.js';
 
