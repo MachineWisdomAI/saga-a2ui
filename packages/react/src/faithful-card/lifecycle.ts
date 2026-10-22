@@ -1,10 +1,9 @@
 import {
   requestLinkOpen,
-  type HostLinks,
   type ImageConsent,
   type ImageContext,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
+import type { HostLinks, LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
   useCallback,
   useLayoutEffect,

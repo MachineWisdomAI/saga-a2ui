@@ -57,6 +57,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       '@a2ui/web_core/v0_9',
       '@modelcontextprotocol/ext-apps',
       '@saga-a2ui/components/faithful-card',
+      '@saga-a2ui/core/host-links',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
       '@saga-a2ui/core/protocols/a2ui/zod3', // the answer surface's data schema
       '@saga-a2ui/lit',
@@ -170,7 +171,9 @@ describe('the answer consumer built from the packed SDK packages', () => {
     const installed = (name: string) =>
       modules.some((id) => id.includes(`/consumer/node_modules/${name}`));
     // The shared connection and the bridge, and the same card and surface the standalone page uses.
-    expect(installed('@saga-a2ui/mcp/src/view/index.ts')).toBe(true);
+    expect(installed('@saga-a2ui/mcp/src/view/run-tool-result-view.ts')).toBe(
+      true,
+    );
     expect(
       modules.some((id) =>
         id.includes('/node_modules/@modelcontextprotocol/ext-apps/'),

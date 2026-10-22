@@ -2,9 +2,8 @@ import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import {
   CONTENT_POLICY_ELEMENT_ID,
   contentPolicyFromEmbedded,
-  type HostLinks,
 } from '@saga-a2ui/components/faithful-card';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import { hostLinksFromApp, runToolResultView } from '@saga-a2ui/mcp/view';
 import {
   createFaithfulCardView,
   FaithfulCardProvider,
@@ -110,19 +109,6 @@ export async function mountCardView(brand: Brand): Promise<void> {
   }
 
   const app = new App({ name: 'react-card-consumer-view', version: '0.0.0' });
-  const hostLinks: HostLinks = {
-    async open(url) {
-      if (app.getHostCapabilities()?.openLinks === undefined)
-        return 'unavailable';
-      try {
-        return (await app.openLink({ url })).isError === true
-          ? 'denied'
-          : 'opened';
-      } catch {
-        return 'failed';
-      }
-    },
-  };
   // The trusted settings of the card, created once: the Markdown dialect and a finite bound for its
   // long answers, the content policy it was served with, how a link leaves the page, and the image
   // restrictions the document actually carries. Nothing in an answer can change any of them.
@@ -131,7 +117,7 @@ export async function mountCardView(brand: Brand): Promise<void> {
     maxLength: 50_000,
     policy: policy.policy,
     contentSecurityPolicies: documentContentSecurityPolicies(document),
-    hostLinks,
+    hostLinks: hostLinksFromApp(app),
   });
   const card = openFaithfulCardSurface();
   const status = createStatusStore();
@@ -162,17 +148,17 @@ export async function mountCardView(brand: Brand): Promise<void> {
     status.set(card.present({ markdown }).ok ? 'answer' : 'problem');
   };
 
-  const connection = await connectToolResultView({
+  // The runner retires the consent once, before the connection ends, on a host teardown request and
+  // on `pagehide` alike; unmounting the React root stays this page's own step.
+  const lifetime = runToolResultView({
     app,
     transport: new PostMessageTransport(window.parent, window.parent),
     onToolResult: show,
-    // The host ends the connection after it answers the teardown request: nothing else tells this view it is going away.
     onTeardown: () => view.consent.retire(),
   });
   addEventListener('pagehide', () => {
-    connection.dispose();
-    view.consent.retire();
     root.unmount();
     card.dispose();
   });
+  await lifetime.ready;
 }

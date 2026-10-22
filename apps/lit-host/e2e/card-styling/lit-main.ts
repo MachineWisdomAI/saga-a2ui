@@ -1,7 +1,5 @@
-import {
-  createContentPolicy,
-  NO_HOST_LINKS,
-} from '@saga-a2ui/components/faithful-card';
+import { NO_HOST_LINKS } from '@saga-a2ui/core/host-links';
+import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import {
   createFaithfulCardView,
   openFaithfulCardSurface,

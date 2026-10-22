@@ -1,10 +1,9 @@
 import {
   createContentPolicy,
-  type HostLinks,
   type ImageConsentScope,
   type ImageEnforcement,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
+import type { HostLinks, LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import { createFaithfulCardView } from './content-view.js';
 import type { ContentView } from './content-view.js';
 

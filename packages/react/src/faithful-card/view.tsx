@@ -3,10 +3,10 @@ import {
   type CardViewSettings,
   type ContentPolicy,
   type FaithfulCardReader,
-  type HostLinks,
   type ImageConsentScope,
   type ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 import { createContext, useMemo, type ReactNode } from 'react';
 
 /**

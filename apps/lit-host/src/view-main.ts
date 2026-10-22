@@ -2,7 +2,7 @@ import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import { contentViewFromDocument } from './lit/content-view.js';
 import { registerLitElements, sagaCatalog } from './lit/integration.js';
 import { createSagaAppElement } from './lit/saga-app.js';
-import { createAppHostLinks } from './mcp/host-links.js';
+import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
 import { connectEpisodeView } from './mcp/view.js';
 import {
   a2uiV0_9Decoder,
@@ -20,7 +20,7 @@ if (!problem) throw new Error('view.html has no problem element');
 const app = new App({ name: 'saga-a2ui-episode-view', version: '0.0.0' });
 // The policy comes from the resource the host mounted, never from content. If it does not
 // validate, nothing is mounted: the view stays empty and says why.
-const content = contentViewFromDocument(document, createAppHostLinks(app));
+const content = contentViewFromDocument(document, hostLinksFromApp(app));
 if (!content.ok) {
   problem.textContent = `This view cannot start: ${content.message}`;
   problem.hidden = false;

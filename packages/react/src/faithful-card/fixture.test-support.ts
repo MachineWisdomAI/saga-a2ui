@@ -11,11 +11,13 @@ import {
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import {
   createContentPolicy,
-  type HostLinks,
   type ImageConsentScope,
   type ImageEnforcement,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
+import {
+  type HostLinks,
+  type LinkOpenOutcome,
+} from '@saga-a2ui/core/host-links';
 import {
   a2uiV0_9Decoder,
   createMessageSession,

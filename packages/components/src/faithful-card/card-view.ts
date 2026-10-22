@@ -1,4 +1,4 @@
-import type { HostLinks } from './host-links.js';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
   createImageConsentScope,
   type ImageConsentScope,

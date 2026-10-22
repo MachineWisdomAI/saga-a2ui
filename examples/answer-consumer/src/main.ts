@@ -1,4 +1,4 @@
-import type { LinkOpenOutcome } from '@saga-a2ui/components/faithful-card';
+import type { LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
   createFaithfulCardView,
   documentContentSecurityPolicies,

@@ -43,6 +43,16 @@
             "dependencies",
             "@saga-a2ui/core"
           ]
+        },
+        {
+          "path": "packages/mcp/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/mcp", "dependencies", "@saga-a2ui/core"]
         }
       ]
     },

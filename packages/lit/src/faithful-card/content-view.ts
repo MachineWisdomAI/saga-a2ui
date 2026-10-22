@@ -2,11 +2,11 @@ import {
   createCardView,
   type CardViewSettings,
   type FaithfulCardReader,
-  type HostLinks,
   type ImageConsentScope,
   type ContentPolicy,
   type ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 
 /**
  * Everything a card needs from its view, passed explicitly when the view is created: the trusted

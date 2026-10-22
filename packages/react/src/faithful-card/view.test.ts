@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-import {
-  createContentPolicy,
-  NO_HOST_LINKS,
-} from '@saga-a2ui/components/faithful-card';
+import { NO_HOST_LINKS } from '@saga-a2ui/core/host-links';
+import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, type Mounted } from '../actions/fixture.test-support.js';

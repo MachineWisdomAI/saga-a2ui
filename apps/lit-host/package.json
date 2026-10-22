@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "vite",
-    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.answer-view.config.ts && vite build --config vite.playback-view.config.ts && vite build --config vite.playback-react-view.config.ts && vite build --config vite.host-fixture.config.ts && vite build --config vite.catalog-isolation.config.ts && vite build --config vite.faithful-card.config.ts && vite build --config vite.card-workflow.config.ts && vite build --config vite.action-consumer.config.ts && vite build --config vite.react-action-consumer.config.ts && vite build --config vite.react-faithful-card.config.ts && vite build --config vite.card-styling.config.ts",
+    "build": "vite build && vite build --config vite.view.config.ts && vite build --config vite.subscriptions-view.config.ts && vite build --config vite.answer-view.config.ts && vite build --config vite.playback-view.config.ts && vite build --config vite.playback-react-view.config.ts && vite build --config vite.host-fixture.config.ts && vite build --config vite.catalog-isolation.config.ts && vite build --config vite.faithful-card.config.ts && vite build --config vite.card-workflow.config.ts && vite build --config vite.action-consumer.config.ts && vite build --config vite.react-action-consumer.config.ts && vite build --config vite.react-faithful-card.config.ts && vite build --config vite.view-lifecycle.config.ts && vite build --config vite.card-styling.config.ts",
     "serve:mcp": "tsx src/mcp/serve.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCardView, type CardViewSettings } from './card-view.js';
-import { NO_HOST_LINKS } from './host-links.js';
+import { NO_HOST_LINKS } from '@saga-a2ui/core/host-links';
 import { createContentPolicy, type ContentPolicy } from './policy.js';
 
 // The trusted parts of a card's view, established from values the caller passes in. Nothing here

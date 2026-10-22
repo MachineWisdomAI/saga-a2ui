@@ -1,4 +1,4 @@
-import type { HostLinks, LinkOpenOutcome } from './host-links.js';
+import type { HostLinks, LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 
 /**
  * Asks the host to open a validated link and always answers with an outcome. An adapter that

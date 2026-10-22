@@ -1,14 +1,16 @@
 import {
   closesWithParagraph,
-  describeLinkOutcome,
   FAITHFUL_CARD_STYLING,
   type BlockNode,
   type ContentPolicy,
   type ImageContext,
   type InlineNode,
-  type LinkOpenOutcome,
   type TableCell,
 } from '@saga-a2ui/components/faithful-card';
+import {
+  describeLinkOutcome,
+  type LinkOpenOutcome,
+} from '@saga-a2ui/core/host-links';
 import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { CommittedImage } from './image.js';
 
