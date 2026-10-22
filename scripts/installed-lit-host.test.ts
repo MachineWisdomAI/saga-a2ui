@@ -4,9 +4,12 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   buildInstalledLitHost,
+  CARD_STACK_CONFIG,
   classifyModules,
+  INSTALLED_CARD_STACKS,
   INSTALLED_PAGE_CONFIGS,
   INSTALLED_SDK_PACKAGES,
+  REACT_CARD_SDK_PACKAGES,
   type BuiltPage,
   type InstalledLitHostIdentity,
 } from './build-installed-lit-host.js';
@@ -18,6 +21,7 @@ import { createWorkDirectory, repoRoot } from './packed-consumer.js';
 // browser by the existing specs, run against this build with SAGA_BUILT_DIR=dist-installed.
 
 const REACT_PLAYER = 'vite.playback-react-view.config.ts';
+const REACT_CARD_PROBE = 'card-app-stack/react.html';
 
 const work = createWorkDirectory('saga-installed-lit-host-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
@@ -25,8 +29,10 @@ afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 describe('the application pages built from the packed SDK packages', () => {
   const out = path.join(work, 'dist-installed');
   let identity: InstalledLitHostIdentity;
-  const page = (config: string): BuiltPage => {
-    const found = identity.pages.find((one) => one.config === config);
+  const page = (config: string, stack?: string): BuiltPage => {
+    const found = identity.pages.find(
+      (one) => one.config === config && one.stack === stack,
+    );
     if (found === undefined) throw new Error(`no build of ${config}`);
     return found;
   };
@@ -45,6 +51,7 @@ describe('the application pages built from the packed SDK packages', () => {
   it("builds every page with the application's own configurations, loading SDK code only from the installed copies", () => {
     expect(identity.pages.map((one) => one.config)).toEqual([
       ...INSTALLED_PAGE_CONFIGS,
+      ...INSTALLED_CARD_STACKS.map(() => CARD_STACK_CONFIG),
     ]);
     for (const { config, provenance } of identity.pages) {
       // Nothing came from a workspace package or application file; every SDK module is a packed `src/` file.
@@ -52,7 +59,9 @@ describe('the application pages built from the packed SDK packages', () => {
       expect(provenance.applicationModules, config).toBeGreaterThan(0);
       for (const file of provenance.installedSdkFiles) {
         expect(file, config).toMatch(
-          new RegExp(`^@saga-a2ui/(${INSTALLED_SDK_PACKAGES.join('|')})/src/`),
+          new RegExp(
+            `^@saga-a2ui/(${[...INSTALLED_SDK_PACKAGES, ...REACT_CARD_SDK_PACKAGES].join('|')})/src/`,
+          ),
         );
       }
     }
@@ -145,9 +154,9 @@ describe('the application pages built from the packed SDK packages', () => {
       '@saga-a2ui/core',
       '@saga-a2ui/lit',
     ]);
-    // Only the React player page carries React (REACT2); it is checked on its own below.
+    // Only the React player page (REACT2) and the React card stack probe carry React; each is checked on its own below.
     for (const { config, provenance } of identity.pages.filter(
-      (one) => one.config !== REACT_PLAYER,
+      (one) => one.config !== REACT_PLAYER && one.stack !== 'react',
     )) {
       expect(
         provenance.thirdPartyPackages.filter((name) => /^react/.test(name)),
@@ -190,6 +199,54 @@ describe('the application pages built from the packed SDK packages', () => {
     );
   });
 
+  it('builds each card application stack probe from the installed stack, its renderer package and the neutral result contract, with no other stack and no workspace module', () => {
+    expect(
+      identity.pages.flatMap((one) => (one.stack ? [one.stack] : [])),
+    ).toEqual([...INSTALLED_CARD_STACKS]);
+    const react = page(CARD_STACK_CONFIG, 'react').provenance;
+    const lit = page(CARD_STACK_CONFIG, 'lit').provenance;
+    for (const provenance of [react, lit]) {
+      expect(provenance.unexpected).toEqual([]);
+      expect(provenance.applicationModules).toBeGreaterThan(0);
+      // The delivered result and the definition that reads it come from installed copies of core and components.
+      expect(provenance.installedSdkFiles).toEqual(
+        expect.arrayContaining([
+          '@saga-a2ui/components/src/faithful-card/index.ts',
+          '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
+        ]),
+      );
+      expect(
+        provenance.installedSdkFiles.filter((file) =>
+          /^@saga-a2ui\/mcp\/src\/server\//.test(file),
+        ),
+      ).toEqual([]);
+    }
+    const packagesOf = (modules: readonly string[]): string[] => [
+      ...new Set(modules.map((file) => file.split('/').slice(0, 2).join('/'))),
+    ];
+    const reactPackages = packagesOf(react.installedSdkFiles);
+    const litPackages = packagesOf(lit.installedSdkFiles);
+    expect(reactPackages).toEqual(
+      expect.arrayContaining([
+        '@saga-a2ui/react-mcp-stack',
+        '@saga-a2ui/react',
+      ]),
+    );
+    expect(reactPackages).not.toContain('@saga-a2ui/lit');
+    expect(reactPackages).not.toContain('@saga-a2ui/lit-mcp-stack');
+    expect(react.thirdPartyPackages).toEqual(
+      expect.arrayContaining(['react', 'react-dom']),
+    );
+    expect(litPackages).toEqual(
+      expect.arrayContaining(['@saga-a2ui/lit-mcp-stack', '@saga-a2ui/lit']),
+    );
+    expect(litPackages).not.toContain('@saga-a2ui/react');
+    expect(litPackages).not.toContain('@saga-a2ui/react-mcp-stack');
+    expect(
+      lit.thirdPartyPackages.filter((name) => /^react/.test(name)),
+    ).toEqual([]);
+  });
+
   it('puts no server module of the delivery package or the MCP server libraries in any browser page', () => {
     for (const { config, provenance } of identity.pages) {
       expect(
@@ -211,7 +268,13 @@ describe('the application pages built from the packed SDK packages', () => {
     expect(Object.keys(identity.packedTarballSha256).sort()).toEqual(
       [...INSTALLED_SDK_PACKAGES].sort(),
     );
-    for (const hash of Object.values(identity.packedTarballSha256))
+    expect(Object.keys(identity.reactCardStackTarballSha256).sort()).toEqual(
+      [...REACT_CARD_SDK_PACKAGES].sort(),
+    );
+    for (const hash of [
+      ...Object.values(identity.packedTarballSha256),
+      ...Object.values(identity.reactCardStackTarballSha256),
+    ])
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     expect(identity.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
     const listed = Object.keys(identity.builtFilesSha256);
@@ -227,6 +290,8 @@ describe('the application pages built from the packed SDK packages', () => {
       'action-consumer/index.html',
       'faithful-card/index.html',
       'card-workflow/index.html',
+      'card-app-stack/react.html',
+      'card-app-stack/lit.html',
     ]) {
       expect(listed, required).toContain(required);
     }
@@ -266,7 +331,26 @@ describe('the application pages built from the packed SDK packages', () => {
           one.provenance.installedSdkFiles,
         ]),
       );
-      expect(linked.builtFilesSha256).toEqual(identity.builtFilesSha256);
+      // The React card probe is a development build: React's development JSX records the file name of
+      // each component, which is under the build's own temporary directory. Its bytes name that
+      // directory and nothing else, so it is compared with the directory name removed.
+      const withoutBuildDirectory = (dist: string): string =>
+        fs
+          .readFileSync(path.join(dist, REACT_CARD_PROBE), 'utf8')
+          .replace(
+            /[^`'"\s]*saga-installed-lit-host-[A-Za-z0-9]+[\\/][a-z-]*consumer/g,
+            '<consumer>',
+          );
+      expect(
+        withoutBuildDirectory(path.join(work, 'dist-installed-linked')),
+      ).toBe(withoutBuildDirectory(out));
+      const withoutProbe = (hashes: Record<string, string>) =>
+        Object.fromEntries(
+          Object.entries(hashes).filter(([file]) => file !== REACT_CARD_PROBE),
+        );
+      expect(withoutProbe(linked.builtFilesSha256)).toEqual(
+        withoutProbe(identity.builtFilesSha256),
+      );
     } finally {
       if (previous === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previous;

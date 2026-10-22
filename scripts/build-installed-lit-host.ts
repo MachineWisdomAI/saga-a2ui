@@ -29,7 +29,7 @@ import {
 export const litHostSource = path.join(repoRoot, 'apps', 'lit-host');
 export const installedLitHostDist = path.join(litHostSource, 'dist-installed');
 
-/** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React; the only page built here that uses it, the React player, needs only the core and MCP packages, so `react` is a third-party dependency of the application, not an installed SDK package). */
+/** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React; the only page built here that uses it, the React player, needs only the core and MCP packages, so `react` is a third-party dependency of the application, not an installed SDK package; the React card stack probe has its own install, see `REACT_CARD_SDK_PACKAGES`). */
 export const INSTALLED_SDK_PACKAGES = [
   'lit-mcp-stack',
   'core',
@@ -55,6 +55,36 @@ export const LIT_HOST_OWN_DEPENDENCIES = [
   'zod',
 ];
 
+/**
+ * The two card application stack probes, built from `vite.card-app-stack.config.ts` once per stack
+ * (`STACK=<name>`, as `npm run build` does) after the other pages; that configuration does not empty
+ * `dist`. `e2e/card-app-stack.spec.ts` runs its result matrix against both documents.
+ */
+export const INSTALLED_CARD_STACKS = ['lit', 'react'] as const;
+export const CARD_STACK_CONFIG = 'vite.card-app-stack.config.ts';
+
+/**
+ * The Lit probe builds in the application's own install above, which already holds `lit-mcp-stack`.
+ * The React probe installs the React stack beside its own packages in a second, separate install:
+ * the React adapter declares `zod` 3.25.76 and the React stack 4.6.7, and the one flat set of
+ * linked third-party packages of an install can hold only one version of each.
+ */
+export const REACT_CARD_SDK_PACKAGES = [
+  'react-mcp-stack',
+  'react',
+  'core',
+  'components',
+  'mcp',
+] as const;
+
+/** The packages the React probe imports itself, besides the SDK packages, plus the build tooling its Vite configuration loads. */
+export const REACT_CARD_OWN_DEPENDENCIES = [
+  'react',
+  'react-dom',
+  'vite',
+  'vite-plugin-singlefile',
+];
+
 /** The application's own Vite configurations that build a browser page, in the order `npm run build` runs them (the first empties `dist`). */
 export const INSTALLED_PAGE_CONFIGS = [
   'vite.config.ts',
@@ -74,12 +104,14 @@ const COPIED_ENTRIES = [
   'src',
   'e2e/action-consumer',
   'e2e/archive-fixture',
+  'e2e/card-app-stack',
   'e2e/card-workflow',
   'e2e/catalog-isolation',
   'e2e/faithful-card',
   'e2e/host-fixture',
   'tsconfig.json',
   ...INSTALLED_PAGE_CONFIGS,
+  CARD_STACK_CONFIG,
 ];
 
 export interface PreparedLitHost {
@@ -87,14 +119,10 @@ export interface PreparedLitHost {
   readonly sdk: PackedSdk;
 }
 
-/** Copies the application's page sources into `work` and installs the packed SDK packages beside them. */
-export function prepareInstalledLitHost(work: string): PreparedLitHost {
-  const consumer = path.join(work, 'consumer');
+/** Copies the named files and directories of the application, without tests, into `consumer`, which becomes an ES module package so its Vite configurations load as such. */
+function copyApplication(consumer: string, entries: readonly string[]): void {
   const isTest = (from: string): boolean => /\.(test|spec)\.ts$/.test(from);
-  for (const entry of [
-    ...COPIED_ENTRIES,
-    ...fs.readdirSync(litHostSource).filter((name) => name.endsWith('.html')),
-  ]) {
+  for (const entry of entries) {
     const target = path.join(consumer, entry);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(path.join(litHostSource, entry), target, {
@@ -107,6 +135,15 @@ export function prepareInstalledLitHost(work: string): PreparedLitHost {
     path.join(consumer, 'package.json'),
     `${JSON.stringify({ private: true, type: 'module' })}\n`,
   );
+}
+
+/** Copies the application's page sources into `work` and installs the packed SDK packages beside them. */
+export function prepareInstalledLitHost(work: string): PreparedLitHost {
+  const consumer = path.join(work, 'consumer');
+  copyApplication(consumer, [
+    ...COPIED_ENTRIES,
+    ...fs.readdirSync(litHostSource).filter((name) => name.endsWith('.html')),
+  ]);
   const sdk = installPackedSdk(work, consumer, INSTALLED_SDK_PACKAGES);
   linkDeclaredDependencies(consumer, sdk, LIT_HOST_OWN_DEPENDENCIES);
   return { consumer, sdk };
@@ -206,6 +243,8 @@ export function classifyModules(
 
 export interface BuiltPage {
   readonly config: string;
+  /** The card stack probe the build selected (`STACK`), for `vite.card-app-stack.config.ts`. */
+  readonly stack?: (typeof INSTALLED_CARD_STACKS)[number];
   readonly provenance: ModuleProvenance;
 }
 
@@ -227,8 +266,11 @@ export interface InstalledLitHostIdentity {
   readonly npm: string;
   /** SHA-256 of each packed SDK tarball the build installed. */
   readonly packedTarballSha256: Record<string, string>;
+  /** SHA-256 of each packed tarball the React card stack probe's separate install used. */
+  readonly reactCardStackTarballSha256: Record<string, string>;
   /** SHA-256 of each file written under the output directory, keyed by its path there. */
   readonly builtFilesSha256: Record<string, string>;
+  /** Every page build: the application's pages, then the Lit and the React card stack probe. */
   readonly pages: readonly BuiltPage[];
   /** The listener built from the same install as the pages. Its bytes are not written under the output directory. */
   readonly server: Omit<BuiltServer, 'file'>;
@@ -265,6 +307,56 @@ export function externalImportsOf(file: string): string[] {
   return [...found].sort();
 }
 
+/** Builds one card stack probe in `consumer`, failing rather than reporting a module from outside the installed packages. */
+async function buildCardStackProbe(
+  consumer: string,
+  stack: (typeof INSTALLED_CARD_STACKS)[number],
+): Promise<BuiltPage> {
+  const previous = process.env.STACK;
+  process.env.STACK = stack; // read by the configuration when the build loads it
+  try {
+    const provenance = classifyModules(
+      consumer,
+      await buildConsumerFromConfig(consumer, CARD_STACK_CONFIG),
+    );
+    if (provenance.unexpected.length > 0)
+      throw new Error(
+        `${CARD_STACK_CONFIG} (${stack}) loaded modules from outside the installed packages: ${provenance.unexpected.join(', ')}`,
+      );
+    return { config: CARD_STACK_CONFIG, stack, provenance };
+  } finally {
+    if (previous === undefined) delete process.env.STACK;
+    else process.env.STACK = previous;
+  }
+}
+
+export interface BuiltReactCardProbe {
+  readonly consumer: string;
+  readonly sdk: PackedSdk;
+  readonly page: BuiltPage;
+}
+
+/**
+ * Builds the React card stack probe in its own install inside `work` (see `REACT_CARD_SDK_PACKAGES`):
+ * the application's probe sources and its own Vite configuration are copied beside the installed
+ * React stack, and the document ends up at `<consumer>/dist/card-app-stack/react.html`.
+ */
+export async function buildInstalledReactCardProbe(
+  work: string,
+): Promise<BuiltReactCardProbe> {
+  const consumer = path.join(work, 'react-card-consumer');
+  copyApplication(consumer, [
+    'e2e/card-app-stack',
+    'tsconfig.json',
+    CARD_STACK_CONFIG,
+  ]);
+  const packed = path.join(work, 'react-card-packed');
+  fs.mkdirSync(packed);
+  const sdk = installPackedSdk(packed, consumer, [...REACT_CARD_SDK_PACKAGES]);
+  linkDeclaredDependencies(consumer, sdk, REACT_CARD_OWN_DEPENDENCIES);
+  return { consumer, sdk, page: await buildCardStackProbe(consumer, 'react') };
+}
+
 export interface BuiltInstalledHost {
   readonly consumer: string;
   readonly sdk: PackedSdk;
@@ -294,6 +386,7 @@ export async function buildInstalledHost(
       );
     pages.push({ config, provenance });
   }
+  pages.push(await buildCardStackProbe(consumer, 'lit'));
   const bundled = await bundleConsumerServer(consumer, INSTALLED_SERVER_ENTRY);
   const provenance = classifyModules(consumer, bundled.modules);
   if (provenance.unexpected.length > 0)
@@ -419,8 +512,13 @@ export async function buildInstalledLitHost(
   const work = createWorkDirectory('saga-installed-lit-host-');
   try {
     const { consumer, sdk, pages, server } = await buildInstalledHost(work);
+    const reactCard = await buildInstalledReactCardProbe(work);
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.cpSync(path.join(consumer, 'dist'), outDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(reactCard.consumer, 'dist', 'card-app-stack', 'react.html'),
+      path.join(outDir, 'card-app-stack', 'react.html'),
+    );
     const playbackSha256 = sha256(
       path.join(outDir, 'playback-view', 'playback.html'),
     );
@@ -438,13 +536,14 @@ export async function buildInstalledLitHost(
       node: process.version,
       npm: execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim(),
       packedTarballSha256: sdk.tarballSha256,
+      reactCardStackTarballSha256: reactCard.sdk.tarballSha256,
       builtFilesSha256: Object.fromEntries(
         filesUnder(outDir).map((file) => [
           path.relative(outDir, file).split(path.sep).join('/'),
           sha256(file),
         ]),
       ),
-      pages,
+      pages: [...pages, reactCard.page],
       server: {
         sha256: server.sha256,
         provenance: server.provenance,
