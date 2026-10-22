@@ -538,7 +538,7 @@ Limits, kept explicit. The built episode view carries no artwork or font of its 
 
 | Export | Holds | Imports |
 | --- | --- | --- |
-| `@saga-a2ui/mcp/server` | `registerPublicOperation`, `registerProtectedOperation`, `viewUriForHtml`, `operationViewFromHtml`, `OperationConfigurationError`, the request-budget seam (`createServerBudgets`, `RequestLifetime`, `LifetimeCause`, `StageFailure`) and the declaration types | MCP server and MCP Apps server helpers, Zod; no renderer, no view code |
+| `@saga-a2ui/mcp/server` | `registerPublicOperation`, `registerProtectedOperation`, `viewUriForHtml`, `operationViewFromHtml`, `OperationConfigurationError`, the request-budget seam (`createServerBudgets`, `RequestLifetime`, `LifetimeCause`, `StageFailure`), `attachRequestLifetime` (with `RequestLifetimeAttachmentError`) and the declaration types | MCP server and MCP Apps server helpers, Zod; no renderer, no view code |
 | `@saga-a2ui/mcp/view` | `runToolResultView` (view lifetime: handlers installed before connect, early results held, host context applied before the first result, teardown before the connection ends, disposal, callback failures reported), `ViewStartFailure`, `hostLinksFromApp`, `startOwnSizing`, `readingProfile` | types only (the host link contract is a type from `@saga-a2ui/core/host-links`); no server module, no Node built-in, no renderer |
 | `@saga-a2ui/mcp/policy` | `ViewCsp`, `CLOSED_VIEW_CSP`, `DEFAULT_OPERATION_MS`, `DEFAULT_REQUEST_MS`, `startBoundedTimer` | nothing |
 
@@ -575,6 +575,15 @@ Implements the server-budget amendment of [Request and view lifetimes](../bluepr
 | Caller disconnects | nothing is written |
 
 Real credential refusals keep their `401`/`403` and challenge. An expired request may attempt one immediate safe answer and gets no extra delivery time; a committed response is never given a replacement status. Causes are typed and inspectable (`operation-timeout`, `request-timeout`, `cancelled`, `disconnected`, `auth-refused`, `dependency-failure`, each with a stage and whether an effect is possible); they may hold the original error, so the listener hands them only to the application's `observe` callback and never to a caller. A timeout proves no rollback: a possibly completed write stays unknown and is never offered a retry.
+
+**Ending the lifetime with a per-request server.** A stateless `createMcpHandler` factory builds one `McpServer` per request, and the request's lifetime has to end when that server does; otherwise its request timer runs on. A server ends in two ways: its transport closes (the server's `onclose` fires), or the handler closes it before any transport was connected, for example when it answers `subscriptions/listen` or rejects a request (no `onclose` fires). `attachRequestLifetime(server, lifetime)` from `@saga-a2ui/mcp/server` covers both, so an application does not subclass `McpServer` to call `lifetime.finish()`:
+
+    const server = new McpServer({ name: 'status', version: '1.0.0' });
+    attachRequestLifetime(server, lifetime);   // before the factory returns it
+    registerPublicOperation(server, operation, { lifetime });
+    return server;
+
+`lifetime.finish()` is called exactly once per server, on transport close, on `close()` with or without a transport, on a repeated `close()`, and when the upstream `close()` throws (the failure still reaches the caller). A close callback already set on `server.server.onclose` keeps running first; attach after installing your own. The upstream handler chains to the attached callback in the same way. Attaching the same lifetime twice changes nothing; a different lifetime throws `RequestLifetimeAttachmentError` and leaves both untouched, because it could never be finished. This binds a lifetime to closure only: the application still starts the lifetime at admission and passes it to the operations. `packages/mcp/src/server/request-closure.test.ts` covers each case, and runs a stateless `createMcpHandler` factory under fake timers to show the request timer released with no transport ever connected. No template or example subclasses `McpServer`, so none needed migrating.
 
 **Finite delivery.** JSON and media responses are bounded through the transport's `finish`, not through the result being ready. A reader that stops reading is closed at the original request deadline; bytes already buffered are not recalled. Destroying a response can itself emit `finish` (with `writableFinished` and `destroyed` both true) before `close`, so only a `finish` on a response nobody destroyed counts as delivery; the listener's `observe` reports `finished: false` for a response the deadline closed. Finish, deadline and disconnect settle once. Media grants keep their own expiry, a spent proof stays spent, an acquisition is a new request with a new deadline, and a denial that arrives after the request ended does not delete the grant (the next acquisition asks the lookup again).
 

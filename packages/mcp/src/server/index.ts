@@ -17,6 +17,10 @@ export {
   type StageResult,
 } from './lifetime.js';
 export {
+  RequestLifetimeAttachmentError,
+  attachRequestLifetime,
+} from './request-closure.js';
+export {
   OperationConfigurationError,
   registerProtectedOperation,
   registerPublicOperation,
