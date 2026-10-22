@@ -1,47 +1,58 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import type { HostLinks } from '@saga-a2ui/components/faithful-card';
-import { registerFaithfulCard } from '@saga-a2ui/lit/faithful-card';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
-import { createAnswerViewElement } from './answer-view.js';
-import { brandings } from './branding.js';
-import { createContentView } from './content-view.js';
+import {
+  FaithfulCardApp,
+  startFaithfulCardApp,
+  type CardChromeParts,
+} from '@saga-a2ui/lit-mcp-stack/faithful-card';
+import { html } from 'lit';
+import { readAnswerMarkdown } from './answer-result.js';
+import { ANSWER_READER } from './answer-policy.js';
+import { applyBranding, brandings } from './branding.js';
 
 // Composition root of the page an MCP host mounts (mcp.html, served by server/answer-server.ts).
 // No server code and no answer function: the host's bridge delivers each tool result and this page
-// shows it in the shared FaithfulCard. The host's Content-Security-Policy governs the page, so it
-// loads no image; a link leaves only as a request the host may refuse.
+// shows it in the shared FaithfulCard. The stack connects to the host, holds early results, reads
+// the policy embedded in the document and ends the view with the page; this file states only what
+// is the application's own: its reader, its words and the frame it puts around the card. The
+// host's Content-Security-Policy governs the page, so it loads no image; a link leaves only as a
+// request the host may refuse.
 
-const app = new App({ name: 'answer-consumer-view', version: '0.0.0' });
+const branding = brandings.nur;
 
-const hostLinks: HostLinks = {
-  async open(url) {
-    if (app.getHostCapabilities()?.openLinks === undefined)
-      return 'unavailable';
-    try {
-      return (await app.openLink({ url })).isError === true
-        ? 'denied'
-        : 'opened';
-    } catch {
-      return 'failed';
-    }
-  },
-};
+const definition = FaithfulCardApp.define({
+  name: 'answer-consumer-view',
+  version: '0.0.0',
+})
+  .reader(ANSWER_READER)
+  .policy('document')
+  .result((structuredContent) => {
+    const markdown = readAnswerMarkdown(structuredContent);
+    return markdown === undefined ? undefined : { markdown };
+  })
+  .texts({
+    waiting: 'Waiting for the answer…',
+    problem: 'The answer could not be shown.',
+    connectFailure: 'This view could not connect to its host.',
+    readyFailure: 'This view could not get ready.',
+    policyFailure:
+      'This view could not start: its content policy is not valid.',
+  })
+  .build();
 
-registerFaithfulCard();
-const AnswerView = createAnswerViewElement({
-  branding: brandings.nur,
-  content: createContentView({ level: 'standard', imageHosts: [], hostLinks }),
+/** The application's own frame: the brand, the status line, then the card. */
+const chrome = ({ card, state }: CardChromeParts) =>
+  html`<h1>${branding.name}</h1>
+    <p role="status" data-testid="answer-status">
+      ${state.kind === 'answer' ? 'Answer' : state.text}
+    </p>
+    ${card}`;
+
+const container = document.querySelector<HTMLElement>('answer-view');
+if (container === null) throw new Error('mcp.html has no answer-view element');
+applyBranding(container, branding);
+
+const view = startFaithfulCardApp(definition, {
+  container,
+  sizing: 'host',
+  chrome,
 });
-customElements.define('answer-view', AnswerView);
-
-const view =
-  document.querySelector<InstanceType<typeof AnswerView>>('answer-view');
-if (!view) throw new Error('mcp.html has no answer-view element');
-
-const connection = await connectToolResultView({
-  app,
-  transport: new PostMessageTransport(window.parent, window.parent),
-  onToolResult: (result) => view.show(result),
-});
-// The page going away ends the connection, so a late delivery reaches nothing.
-addEventListener('pagehide', () => connection.dispose());
+await view.ready;

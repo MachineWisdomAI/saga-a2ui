@@ -1,14 +1,46 @@
 # Installing the React renderer with MCP
 
-Use SAGA's React A2UI entry point for surfaces and catalogs:
+## One stack, plus React
+
+An application installs one stack package, `@saga-a2ui/react-mcp-stack`, plus its framework peers (`react` and `react-dom`, singletons at the version SAGA supports), and imports from the stack only:
 
 ```ts
-import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
+import {startA2uiView, defineSurface, z, ActionButton, createReactActions} from '@saga-a2ui/react-mcp-stack';
+import {FaithfulCardApp, startFaithfulCardApp} from '@saga-a2ui/react-mcp-stack/faithful-card';
+```
+
+The main entry is for an application's own catalog; the `/faithful-card` entry starts a card application from one validated definition. A server composes the same application from the stack's `/content-policy` entry (`createContentPolicy`, `embedContentPolicy`) and its Node-only `/server` entry (`createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`), so one install serves both sides without a browser bundle ever importing a server module. An application whose results carry more than structured content passes `classifyResult` to `startFaithfulCardApp` and supplies its own rejection wording; `readingProfile` tells its `hostContext` callback whether the host is read on a device, and the application maps that onto its own tokens ([details](development-reference.md#reading-the-whole-result-the-consumer-driven-e2-amendment)). The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
+
+Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The package's `exports.test.ts` inspects the bundle; `npm run test:pnpm-react` and `npm run candidate:verify` check the install.
+
+The stack is part of the planned `0.7.0` release set. It has no registry release and no `0.7.0` package is published, so no registry command here installs it; see [public installation](public-install.md) for the published `0.1.0-rc.1` recipe and for what changes at `0.7.0`, and [release preparation](release-packages.md) for the sequence and the exact-artifact checks. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
+
+## The React integration surface
+
+Use SAGA's React A2UI entry point for surfaces and catalogs when you compose below the stack:
+
+```ts
+import {Catalog, Surface, openSurface, type BoundSurface, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
 import {faithfulCardEntry} from '@saga-a2ui/react/faithful-card';
-import {createMessageSession, a2uiV0_9Decoder} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {defineSurface} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 ```
 
 The entry point forwards the supported upstream A2UI v0.9 APIs; it does not implement another renderer or parser. It also exports `SurfaceModel`, `CommonSchemas`, `createComponentImplementation`, `ReactComponentImplementation` and `NodeViewProps` for custom catalogs.
+
+## Open a typed surface
+
+Define the surface once with `defineSurface`, open it with your catalog and mount it:
+
+```tsx
+const bound = openSurface(layout, catalog); // throws, with the session's message, if the layout is not accepted
+<Surface of={bound.handle} />
+bound.update(data); // {ok: true} | {ok: false, message}
+bound.dispose();    // idempotent
+```
+
+`openSurface` owns the message session, the decoder and the order of the opening messages, so application code imports none of them. `update` is typed from the layout, validates against its schema and applies the data in place: the mounted controls keep their DOM nodes, focus, local state and action bindings. A rejected update returns the failure and changes nothing. After `dispose`, `update` fails and `<Surface>` renders nothing. Open the surface once per surface lifetime, outside render (for example in state or a store), and dispose it where you created it: `<Surface>` never disposes the handle, so Strict Mode's replay of effects cannot end it.
+
+`A2uiSurface` and `SurfaceModel` stay exported for custom use over a session of your own.
 
 ## Let SAGA own its A2UI installation
 

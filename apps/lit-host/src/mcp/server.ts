@@ -82,7 +82,7 @@ export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
       },
       input: EpisodeRequestSchema,
       output: PublicEpisodeSchema,
-      view: { ...view, title: 'Episode view' },
+      view,
       failures: {
         absent: 'No public episode has that id.',
         unavailable: 'The episode is unavailable.',

@@ -30,6 +30,39 @@ indicator in the PR or any commit still takes precedence. Pass the same body
 through `--body-file` locally; CI reads it from the pull-request event. This is a
 reviewed version decision, not permission to publish or to hide a breaking change.
 
+Every versioned unit shares one major.minor; patch numbers may differ. A minor or
+major increment (before 1.0, `feat` and `feat!`) therefore applies to every unit,
+while a patch increment applies only to the units the PR touched. Prerelease
+handling is unchanged: `0.6.4-rc.1` becomes `0.7.0-rc.1` on every unit. `check`
+fails, naming the units, when any two differ in major.minor. Sibling pins (a
+package depending on another package of the repository) keep mirroring the exact
+sibling version. Unversioned workspace packages are outside the rule.
+
+An integration branch freezes the version of a release that lands as many PRs. Its
+`.version-policy.json` carries `"integration": {"base": "BRANCH", "version": "X.Y.Z-rc.1"}`.
+The updater takes the PR's base branch from `pull_request.base.ref` in the event
+file, otherwise from `--base` without `refs/remotes/origin/` or `origin/`. For a PR
+into `BRANCH`, every unit must equal the pinned version, `update` changes nothing and
+prints the pin, any bump fails naming the pin, and a head whose `integration` entry
+differs from the base's entry (changed or removed) fails. The ancestry, sibling-mirror,
+enrollment, exclusion and release-path checks still apply. A PR into any other
+branch, including `main`, follows the ordinary rule above.
+
+Integration release procedure:
+
+1. Create the branch from `main`. Its first PR (`feat!:`) into it bumps every unit to
+   the pinned version and adds the `integration` entry; it passes because it
+   introduces the pin at the pinned value. An entry can be introduced only by a PR
+   into its own base.
+2. Child PRs into the branch leave every version alone, whatever they change.
+3. To release, open one `feat!:` PR from the branch into `main` with the
+   `integration` entry removed. Run `update` against `main` after removing the entry:
+   `main`'s ordinary rule advances its baseline (`0.6.4-rc.1` becomes `0.7.0-rc.1`),
+   and the reviewer confirms that this equals the pin. If `main` has moved on, merge
+   `main` into the branch and let `update` write the version that follows `main`'s
+   baseline; `check` fails until the versions match, and the pin is re-decided in that
+   final PR, never by a child.
+
 `.version-policy.json` lists version units, paths, and synchronized files. Changes
 outside all unit paths affect every unit, except configured `exclude_paths`.
 The standard non-release paths cover Markdown/reStructuredText, `docs/`, test

@@ -43,6 +43,31 @@
             "dependencies",
             "@saga-a2ui/core"
           ]
+        },
+        {
+          "path": "packages/mcp/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/mcp", "dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "packages/react-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/core"
+          ]
         }
       ]
     },
@@ -88,6 +113,21 @@
             "devDependencies",
             "@saga-a2ui/components"
           ]
+        },
+        {
+          "path": "packages/react-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/components"
+          ]
         }
       ]
     },
@@ -103,6 +143,21 @@
           "path": "package-lock.json",
           "kind": "json",
           "key": ["packages", "packages/mcp", "version"]
+        },
+        {
+          "path": "packages/react-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/mcp"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/mcp"
+          ]
         }
       ]
     },
@@ -118,6 +173,36 @@
           "path": "package-lock.json",
           "kind": "json",
           "key": ["packages", "packages/react", "version"]
+        },
+        {
+          "path": "packages/react-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/react"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/react"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "packages/react-mcp-stack",
+      "paths": ["packages/react-mcp-stack/**"],
+      "files": [
+        {
+          "path": "packages/react-mcp-stack/package.json",
+          "kind": "json"
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/react-mcp-stack", "version"]
         }
       ]
     }

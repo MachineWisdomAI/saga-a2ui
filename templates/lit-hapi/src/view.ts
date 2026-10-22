@@ -1,28 +1,21 @@
-import type { LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { ActionBinding } from '@saga-a2ui/core/actions';
 import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
-import { ActionButton, createLitActions } from '@saga-a2ui/lit/actions';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+  ActionButton,
+  createLitActions,
+  startA2uiView,
+  type BoundSurface,
+} from '@saga-a2ui/lit-mcp-stack';
 import { createStarterActions } from './actions.js';
-import { starterEntries } from './catalog.js';
+import { starterCatalog } from './catalog.js';
 import { AccountOutputSchema, StatusOutputSchema } from './contract.js';
-import {
-  CATALOG_ID,
-  CLEAR_ID,
-  SURFACE_ID,
-  headlineData,
-  starterSurface,
-} from './surface.js';
+import { CLEAR_ID, starterSurface, type StarterData } from './surface.js';
 
 // The composition root of the view. It uses public package exports only, and the page it builds is
-// served by server/operations.ts as the MCP App view of both operations. The application decides
-// which components exist (catalog.ts), which action each control has (below) and when the view ends.
+// served by server/operations.ts as the MCP App view of both operations. The Lit stack connects to
+// the host, holds a result that arrives early, presents the surface over the catalog and ends the
+// view when the host or the page does. This file states only the application's own decisions:
+// which components exist (catalog.ts), which action each control has (below), what a result means
+// and what ending the view takes with it.
 
 export const PROBLEM_TEXT = 'This could not be shown.';
 /** A successful result this view's contract does not accept comes from a server of another build. */
@@ -37,20 +30,11 @@ function requireElement<T extends Element>(selector: string): T {
 }
 
 export async function startView(): Promise<void> {
-  const app = new App({ name: 'saga-starter-view', version: '0.0.0' });
-  const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
-    ...starterEntries,
-  ]);
-  defineElements(starterEntries);
-
   const status = requireElement('[data-testid="view-status"]');
   const say = (text: string): void => void (status.textContent = text);
   const actions = createStarterActions({
     noteInput: requireElement<HTMLInputElement>('[data-testid="note"]'),
   });
-  const element = ():
-    (HTMLElement & { ingest(input: unknown): unknown }) | null =>
-    document.querySelector('starter-app');
 
   // What the application must end itself. The binding is the attachment of one definition to one
   // rendered control; the discovery subscription finds that control. Ending a binding stops the
@@ -59,34 +43,13 @@ export async function startView(): Promise<void> {
   const bindings: ActionBinding[] = [];
   const stopWatching: Array<() => void> = [];
 
-  customElements.define(
-    'starter-app',
-    createA2uiAppElement({
-      createSession: () =>
-        createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-      initialInput: starterSurface,
-      surfaceId: SURFACE_ID,
-      actions: createLitActions({
-        // #region saga-snippet:bind-action
-        // Runs once for each presented surface. The same definition could be attached to any number
-        // of controls; here it is attached directly to the one rendered Clear control.
-        attach: (view) => {
-          stopWatching.push(
-            view.watchById(CLEAR_ID, ActionButton, (handle) => {
-              bindings.push(handle.bindAction('activate', actions.clearNote));
-            }),
-          );
-        },
-        // #endregion saga-snippet:bind-action
-        onSetupError: () => say(PROBLEM_TEXT),
-      }),
-    }),
-  );
-
-  const show = (result: {
-    readonly isError?: boolean;
-    readonly structuredContent?: unknown;
-  }): void => {
+  const show = (
+    result: {
+      readonly isError?: boolean;
+      readonly structuredContent?: unknown;
+    },
+    surface: BoundSurface<StarterData>,
+  ): void => {
     const account =
       result.isError === true
         ? undefined
@@ -100,7 +63,7 @@ export async function startView(): Promise<void> {
       : running?.success
         ? 'The service is running'
         : '';
-    element()?.ingest(headlineData(headline));
+    surface.update({ headline });
     say(
       result.isError === true
         ? PROBLEM_TEXT
@@ -110,29 +73,38 @@ export async function startView(): Promise<void> {
     );
   };
 
-  // The application's one way to end its view, for a host teardown and for the page going away
-  // alike. Idempotent: the first call ends the discovery, then every binding, then removes the
-  // element, so a retained button no longer does anything.
-  let retired = false;
+  // The application's one way to end what it holds: the discovery ends, then every binding, so a
+  // retained button no longer does anything. The stack calls it once, after the surface has left
+  // the page and before the connection ends, on a host teardown request and on the page going away
+  // alike.
   const retire = (): void => {
-    if (retired) return;
-    retired = true;
     for (const stop of stopWatching.splice(0)) stop();
     for (const binding of bindings.splice(0)) binding.dispose();
-    element()?.remove();
     say(CLOSED_TEXT);
   };
 
-  const connection = await connectToolResultView({
-    app,
-    transport: new PostMessageTransport(window.parent, window.parent),
-    onToolResult: show,
-    // The host is closing this view; it ends the connection itself once it has the answer.
+  // The first result is shown once the view is ready; a later one replaces what is shown.
+  const view = startA2uiView({
+    container: requireElement('starter-app'),
+    layout: starterSurface,
+    catalog: starterCatalog,
+    identity: { name: 'saga-starter-view', version: '0.0.0' },
+    actions: createLitActions({
+      // #region saga-snippet:bind-action
+      // Runs once for each presented surface. The same definition could be attached to any number
+      // of controls; here it is attached directly to the one rendered Clear control.
+      attach: (surfaceView) => {
+        stopWatching.push(
+          surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
+            bindings.push(handle.bindAction('activate', actions.clearNote));
+          }),
+        );
+      },
+      // #endregion saga-snippet:bind-action
+      onSetupError: () => say(PROBLEM_TEXT),
+    }),
+    onToolResult: (result, running) => show(result, running.surface),
     onTeardown: retire,
   });
-  // The page is going away: end the application's bindings first, then the connection.
-  addEventListener('pagehide', () => {
-    retire();
-    connection.dispose();
-  });
+  await view.ready;
 }

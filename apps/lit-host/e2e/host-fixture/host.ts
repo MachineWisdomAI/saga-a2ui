@@ -1,6 +1,7 @@
 import {
   AppBridge,
   PostMessageTransport,
+  type McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import type {
   CallToolRequest,
@@ -36,7 +37,14 @@ declare global {
       options?: {
         resultDuringInitialization?: Parameters<AppBridge['sendToolResult']>[0];
         slot?: string;
+        /** The host context in the initialize response, e.g. the theme the host negotiated. */
+        hostContext?: McpUiHostContext;
       },
+    ) => Promise<void>;
+    /** Sends the view in `slot` a partial host-context change (`ui/notifications/host-context-changed`). */
+    changeHostContext?: (
+      change: McpUiHostContext,
+      slot?: string,
     ) => Promise<void>;
     /** Asks the view in `slot` (default: the default slot) to tear down (`ui/resource-teardown`); its iframe stays in place. */
     teardownView?: (slot?: string) => Promise<void>;
@@ -66,11 +74,17 @@ declare global {
     handleOpenLink?: (params: {
       url: string;
     }) => Promise<{ isError?: boolean }>;
+    /** The sizes the view in `slot` has told the host (`ui/notifications/size-changed`), in order. */
+    sizeChanges?: (slot?: string) => Array<{ width?: number; height?: number }>;
+    /** How many times the view in `slot` has completed its handshake (`ui/notifications/initialized`). */
+    handshakes?: (slot?: string) => number;
   }
 }
 
 const DEFAULT_SLOT = 'main';
 const bridges = new Map<string, AppBridge>();
+const sizes = new Map<string, Array<{ width?: number; height?: number }>>();
+const handshakeCounts = new Map<string, number>();
 
 /** The default slot keeps the title every single-view specification locates its frame by. */
 const titleFor = (slot: string) =>
@@ -99,8 +113,12 @@ window.mountView = async (resource, options) => {
     null,
     { name: 'local-host-fixture', version: '0.0.0' },
     openLink ? { serverTools: {}, openLinks: {} } : { serverTools: {} },
+    options?.hostContext ? { hostContext: options.hostContext } : undefined,
   );
   bridges.set(slot, bridge);
+  sizes.set(slot, []);
+  handshakeCounts.set(slot, 0);
+  bridge.onsizechange = (size) => void sizes.get(slot)?.push(size);
   if (openLink) bridge.onopenlink = ({ url }) => openLink({ url });
   bridge.oncalltool = (params) => {
     if (!window.handleToolCall)
@@ -109,6 +127,7 @@ window.mountView = async (resource, options) => {
   };
   const initialized = new Promise<void>((resolve) => {
     bridge.oninitialized = () => {
+      handshakeCounts.set(slot, (handshakeCounts.get(slot) ?? 0) + 1);
       if (options?.resultDuringInitialization)
         void bridge.sendToolResult(options.resultDuringInitialization);
       resolve();
@@ -127,8 +146,15 @@ window.mountView = async (resource, options) => {
   await initialized;
 };
 
+window.sizeChanges = (slot = DEFAULT_SLOT) => [...(sizes.get(slot) ?? [])];
+window.handshakes = (slot = DEFAULT_SLOT) => handshakeCounts.get(slot) ?? 0;
+
 window.deliverToolResult = async (result, slot = DEFAULT_SLOT) => {
   await bridgeIn(slot).sendToolResult(result);
+};
+
+window.changeHostContext = async (change, slot = DEFAULT_SLOT) => {
+  await bridgeIn(slot).sendHostContextChange(change);
 };
 
 window.deliverToolInput = async (params, slot = DEFAULT_SLOT) => {

@@ -52,15 +52,13 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(own.every((specifier) => /^\.\/[a-z-]+\.js$/.test(specifier))).toBe(
       true,
     ); // siblings only, never ../
+    // The application imports no upstream A2UI package and no protocol module: the card surface
+    // and the stack own those (the consumer boundary scan checks the same rule on the source).
     expect(packages).toEqual([
-      '@a2ui/lit/v0_9',
-      '@a2ui/web_core/v0_9',
-      '@modelcontextprotocol/ext-apps',
       '@saga-a2ui/components/faithful-card',
-      '@saga-a2ui/core/protocols/a2ui/v0_9',
-      '@saga-a2ui/lit',
+      '@saga-a2ui/core/host-links',
+      '@saga-a2ui/lit-mcp-stack/faithful-card',
       '@saga-a2ui/lit/faithful-card',
-      '@saga-a2ui/mcp/view',
       'lit',
     ]);
     expect(fs.existsSync(path.join(answerConsumerSource, 'node_modules'))).toBe(
@@ -73,6 +71,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       'components',
       'core',
       'lit',
+      'lit-mcp-stack',
       'mcp',
     ]);
     for (const [name, packed] of Object.entries(sdk.files)) {
@@ -169,7 +168,9 @@ describe('the answer consumer built from the packed SDK packages', () => {
     const installed = (name: string) =>
       modules.some((id) => id.includes(`/consumer/node_modules/${name}`));
     // The shared connection and the bridge, and the same card and surface the standalone page uses.
-    expect(installed('@saga-a2ui/mcp/src/view/index.ts')).toBe(true);
+    expect(installed('@saga-a2ui/mcp/src/view/run-tool-result-view.ts')).toBe(
+      true,
+    );
     expect(
       modules.some((id) =>
         id.includes('/node_modules/@modelcontextprotocol/ext-apps/'),
@@ -181,12 +182,12 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(installed('@saga-a2ui/components/src/faithful-card/reader.ts')).toBe(
       true,
     );
-    for (const own of [
-      'mcp-main.ts',
-      'answer-view.ts',
-      'answer-surface.ts',
-      'content-view.ts',
-    ]) {
+    expect(
+      installed(
+        '@saga-a2ui/lit-mcp-stack/src/faithful-card/start-faithful-card-app.ts',
+      ),
+    ).toBe(true); // started by the stack, not by the page
+    for (const own of ['mcp-main.ts', 'answer-result.ts', 'answer-policy.ts']) {
       expect(
         modules.some((id) => id.endsWith(`/consumer/src/${own}`)),
         own,

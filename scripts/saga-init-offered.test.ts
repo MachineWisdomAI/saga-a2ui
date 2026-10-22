@@ -31,7 +31,7 @@ beforeAll(() => {
   version = candidateVersion(commit, dirty);
   packed = packSdkPackages(
     work,
-    ['core', 'lit', 'mcp'],
+    ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'],
     path.join(work, 'tarballs'),
     version,
   );

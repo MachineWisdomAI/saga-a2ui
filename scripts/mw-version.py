@@ -92,6 +92,39 @@ indicator in the PR or any commit still takes precedence. Pass the same body
 through `--body-file` locally; CI reads it from the pull-request event. This is a
 reviewed version decision, not permission to publish or to hide a breaking change.
 
+Every versioned unit shares one major.minor; patch numbers may differ. A minor or
+major increment (before 1.0, `feat` and `feat!`) therefore applies to every unit,
+while a patch increment applies only to the units the PR touched. Prerelease
+handling is unchanged: `0.6.4-rc.1` becomes `0.7.0-rc.1` on every unit. `check`
+fails, naming the units, when any two differ in major.minor. Sibling pins (a
+package depending on another package of the repository) keep mirroring the exact
+sibling version. Unversioned workspace packages are outside the rule.
+
+An integration branch freezes the version of a release that lands as many PRs. Its
+`.version-policy.json` carries `"integration": {"base": "BRANCH", "version": "X.Y.Z-rc.1"}`.
+The updater takes the PR's base branch from `pull_request.base.ref` in the event
+file, otherwise from `--base` without `refs/remotes/origin/` or `origin/`. For a PR
+into `BRANCH`, every unit must equal the pinned version, `update` changes nothing and
+prints the pin, any bump fails naming the pin, and a head whose `integration` entry
+differs from the base's entry (changed or removed) fails. The ancestry, sibling-mirror,
+enrollment, exclusion and release-path checks still apply. A PR into any other
+branch, including `main`, follows the ordinary rule above.
+
+Integration release procedure:
+
+1. Create the branch from `main`. Its first PR (`feat!:`) into it bumps every unit to
+   the pinned version and adds the `integration` entry; it passes because it
+   introduces the pin at the pinned value. An entry can be introduced only by a PR
+   into its own base.
+2. Child PRs into the branch leave every version alone, whatever they change.
+3. To release, open one `feat!:` PR from the branch into `main` with the
+   `integration` entry removed. Run `update` against `main` after removing the entry:
+   `main`'s ordinary rule advances its baseline (`0.6.4-rc.1` becomes `0.7.0-rc.1`),
+   and the reviewer confirms that this equals the pin. If `main` has moved on, merge
+   `main` into the branch and let `update` write the version that follows `main`'s
+   baseline; `check` fails until the versions match, and the pin is re-decided in that
+   final PR, never by a child.
+
 `.version-policy.json` lists version units, paths, and synchronized files. Changes
 outside all unit paths affect every unit, except configured `exclude_paths`.
 The standard non-release paths cover Markdown/reStructuredText, `docs/`, test
@@ -380,6 +413,54 @@ def release_changes(paths: set[str], config: dict) -> set[str]:
     }
 
 
+def base_branch(base: str, pull_request: dict) -> str:
+    name = (pull_request.get("base") or {}).get("ref")
+    if name:
+        return name
+    for prefix in ("refs/remotes/origin/", "origin/"):
+        if base.startswith(prefix):
+            return base[len(prefix):]
+    return base
+
+
+def integration_entry(config: dict, label: str) -> dict | None:
+    entry = config.get("integration")
+    if entry is None:
+        return None
+    if (not isinstance(entry, dict) or set(entry) != {"base", "version"}
+            or not all(isinstance(value, str) and value for value in entry.values())):
+        raise PolicyError(f"{label} integration entry must name a base branch and a version")
+    try:
+        parse_version(entry["version"])
+    except PolicyError as e:
+        raise PolicyError(f"{label} integration entry has an {e}") from e
+    return entry
+
+
+def pinned_integration(config: dict, prior: dict, branch: str) -> dict | None:
+    """The integration pin that governs a change into ``branch``, if any."""
+    head_entry = integration_entry(config, "head")
+    base_entry = integration_entry(prior, "base")
+    if base_entry is not None and head_entry != base_entry:
+        raise PolicyError(
+            f"a change PR cannot change or remove the integration entry "
+            f"(integration pin {base_entry['version']} for {base_entry['base']})")
+    if head_entry is None or head_entry["base"] == branch:
+        return head_entry
+    if base_entry is None:
+        raise PolicyError(f"an integration entry can be introduced only by a PR into its own base {head_entry['base']}")
+    return None
+
+
+def require_shared_major_minor(targets: dict[str, tuple]) -> None:
+    groups: dict[tuple, list[str]] = {}
+    for name, target in targets.items():
+        groups.setdefault(target[:2], []).append(f"{name} ({serialize(target)})")
+    if len(groups) > 1:
+        listed = ", ".join(entry for group in groups.values() for entry in group)
+        raise PolicyError(f"versioned units must share one major.minor, but differ: {listed}")
+
+
 def evaluate(root: Path, args) -> list[tuple[Path, str]]:
     config = json.loads(safe_path(root, args.config).read_text())
     if config.get("schema_version") != 1 or not isinstance(config.get("units"), list):
@@ -393,8 +474,11 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
         git(root, "merge-base", "--is-ancestor", base, "HEAD")
     except PolicyError as e:
         raise PolicyError("branch is behind current base; update the branch and rerun the updater") from e
+    event = json.loads(Path(args.event_file).read_text()) if args.event_file else {}
+    pr = event.get("pull_request", {})
     existing = subprocess.run(["git", "-C", str(root), "show", f"{base}:{args.config}"], capture_output=True, text=True)
     prior_names = set()
+    prior = {}
     if existing.returncode == 0:
         prior = json.loads(existing.stdout)
         prior_names = {u["name"] for u in prior["units"]}
@@ -407,8 +491,7 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
             raise PolicyError("a change PR cannot add exclusions that bypass existing version checks")
         if not set(prior.get("release_paths", [])).issubset(config.get("release_paths", [])):
             raise PolicyError("a change PR cannot remove release_paths that protect shipped product files")
-    event = json.loads(Path(args.event_file).read_text()) if args.event_file else {}
-    pr = event.get("pull_request", {})
+    pin = pinned_integration(config, prior, base_branch(base, pr))
     title = args.title if args.title is not None else pr.get("title", "")
     body = Path(args.body_file).read_text() if args.body_file else pr.get("body") or ""
     commits = git(root, "log", "--format=%B%x00", base + "..HEAD").split("\0")
@@ -437,15 +520,30 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
         raise PolicyError("version date cannot be in the future")
     writes = {}
     errors = []
+    targets = {}
     promoted = False
-    for unit in units:
-        affected = shared or any(fnmatch.fnmatchcase(p, pat) for p in changes for pat in unit["paths"])
+    touched = [shared or any(fnmatch.fnmatchcase(p, pat) for p in changes for pat in unit["paths"]) for unit in units]
+    # A minor or major increment moves every unit; a patch increment moves only the touched ones.
+    widen = level >= 2 and any(touched) and not promote
+    pinned = parse_version(pin["version"]) if pin else None
+    pin_note = f"integration pin {pin['version']} for {pin['base']}" if pin else ""
+    for unit, was_touched in zip(units, touched):
+        affected = was_touched or widen
         files = unit["files"]
         contents = []
         for spec in files:
             path = safe_path(root, spec["path"])
             contents.append((path, path.read_text(), spec))
         first = files[0]
+        if pinned:
+            # The integration branch holds every unit at the pin; only the branch itself moves it.
+            for _, content, spec in contents:
+                expected = serialize(pinned, spec.get("format", "semver"))
+                values = read_values(content, spec)
+                if any(v != expected for v in values):
+                    errors.append(f"{spec['path']}: expected {expected} ({pin_note}), found {', '.join(values)}")
+            print(f"{unit['name']}: held at {pin_note}")
+            continue
         result = subprocess.run(["git", "-C", str(root), "show", f"{base}:{first['path']}"], capture_output=True, text=True)
         if result.returncode or unit["name"] not in prior_names:
             # A newly introduced unit has no older version to increment.
@@ -477,6 +575,7 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
                         if not old_date <= bump_date <= today:
                             raise PolicyError("date prerelease must be between its previous date and today")
                     target = advance(baseline, level, bump_date)
+        targets[unit["name"]] = target
         for path, content, spec in contents:
             expected = serialize(target, spec.get("format", "semver"))
             values = read_values(content, spec)
@@ -487,8 +586,13 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
             if buffer != new:
                 writes[path] = new
         print(f"{unit['name']}: {serialize(baseline)} -> {serialize(target)}" + (" (unchanged component)" if not affected else ""))
+    if pinned:
+        if errors:
+            raise PolicyError("\n".join(errors))
+        return []
     if promote and not promoted:
         raise PolicyError("promotion requires an existing affected prerelease")
+    require_shared_major_minor(targets)
     if args.command == "check" and errors:
         raise PolicyError("\n".join(errors))
     return list(writes.items())

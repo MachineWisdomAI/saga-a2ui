@@ -40,6 +40,8 @@ const ALL_PACKAGES: readonly SdkPackage[] = [
   'components',
   'mcp',
   'react',
+  'lit-mcp-stack',
+  'react-mcp-stack',
 ];
 const work = createWorkDirectory('saga-pack1-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
@@ -75,7 +77,7 @@ const isBuiltin = (specifier: string): boolean =>
   specifier.startsWith('node:') ||
   builtinModules.includes(specifier.split('/')[0] as string);
 
-describe('the five owned packages, packed', () => {
+describe('the seven owned packages, packed', () => {
   // One install of every owned package: the same copy `npm pack` produces for each, unpacked beside each other.
   const consumer = path.join(work, 'all');
   fs.mkdirSync(consumer);
@@ -98,7 +100,7 @@ describe('the five owned packages, packed', () => {
         .sort(),
     ).toEqual([...ALL_PACKAGES].sort());
     for (const name of ALL_PACKAGES) {
-      if (name === 'lit') {
+      if (name === 'lit' || name === 'lit-mcp-stack') {
         expect(repoManifest(name).private, name).toBe(true);
         expect(repoManifest(name).version, name).toBeUndefined();
       } else {
@@ -291,11 +293,12 @@ describe('the five owned packages, packed', () => {
     expect(
       Object.keys(sdk.manifests.components?.peerDependencies ?? {}),
     ).toEqual([]);
+    // Delivery names core (the host link contract) and no component, renderer or parser.
     expect(
       Object.keys(sdk.manifests.mcp?.dependencies ?? {}).filter((dependency) =>
         /^@saga-a2ui\/|lit|react|markdown/.test(dependency),
       ),
-    ).toEqual([]);
+    ).toEqual(['@saga-a2ui/core']);
     // The React peers are exact, and the Lit package has none.
     expect(sdk.manifests.react?.peerDependencies).toMatchObject({
       react: '19.3.1',
@@ -521,43 +524,30 @@ describe('the installed consumers', () => {
     return built[name]!;
   }
 
-  it('are installed apart, each from its own tarballs; the first and the React consumer have no optional components installed, and the React consumer no Lit', () => {
-    expect(Object.keys(prepared.own.sdk.manifests).sort()).toEqual([
-      'core',
-      'lit',
-      'mcp',
-    ]);
-    expect(Object.keys(prepared.card.sdk.manifests).sort()).toEqual([
-      'components',
-      'core',
-      'lit',
-      'mcp',
-    ]);
+  it('are installed apart, each from its own tarballs; each stack brings the components package along, and the React consumer has no Lit', () => {
+    const litSet = ['components', 'core', 'lit', 'lit-mcp-stack', 'mcp'];
+    expect(Object.keys(prepared.own.sdk.manifests).sort()).toEqual(litSet);
+    expect(Object.keys(prepared.card.sdk.manifests).sort()).toEqual(litSet);
     expect(Object.keys(prepared.react.sdk.manifests).sort()).toEqual([
+      'components',
       'core',
       'mcp',
       'react',
+      'react-mcp-stack',
     ]);
     expect(prepared.own.consumer).not.toBe(prepared.card.consumer);
     expect(prepared.react.consumer).not.toBe(prepared.own.consumer);
-    expect(
-      fs.existsSync(installedDir(prepared.own.consumer, 'components')),
-    ).toBe(false);
-    expect(
-      fs.existsSync(
-        path.join(prepared.own.consumer, 'node_modules', 'markdown-it'),
-      ),
-    ).toBe(false);
-    expect(
-      fs.existsSync(installedDir(prepared.card.consumer, 'components')),
-    ).toBe(true);
-    expect(
-      fs.existsSync(installedDir(prepared.react.consumer, 'components')),
-    ).toBe(false);
+    // A stack declares the components package so its card entry works after one install; the own
+    // catalog's emitted bundle and runtime graph still exclude it (checked on the built pages below).
+    for (const name of ['own', 'card', 'react'] as const)
+      expect(
+        fs.existsSync(installedDir(prepared[name].consumer, 'components')),
+        name,
+      ).toBe(true);
     expect(fs.existsSync(installedDir(prepared.react.consumer, 'lit'))).toBe(
       false,
     );
-    for (const lit of ['lit', '@lit', '@a2ui/lit', 'markdown-it'])
+    for (const lit of ['lit', '@lit', '@a2ui/lit'])
       expect(
         fs.existsSync(path.join(prepared.react.consumer, 'node_modules', lit)),
         lit,

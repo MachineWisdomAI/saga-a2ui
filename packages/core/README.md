@@ -1,6 +1,6 @@
 # @saga-a2ui/core
 
-Renderer-independent actions and A2UI v0.9 decoding. Entry points: `/actions`, `/actions/action-button-schema`, `/protocols/a2ui/v0_9`, `/protocols/a2ui/zod3`.
+Renderer-independent actions and A2UI v0.9 decoding. Entry points: `/actions`, `/actions/action-button-schema`, `/host-links`, `/protocols/a2ui/v0_9`, `/protocols/a2ui/zod3`.
 
 Requires Node >=22.12.0 and a TypeScript-aware bundler; exports are TypeScript source. Apache-2.0, with dependency licenses retained separately.
 

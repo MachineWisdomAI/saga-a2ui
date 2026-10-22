@@ -1,0 +1,2 @@
+/* The card stylesheet, re-exported so an application imports it from its stack. */
+@import '@saga-a2ui/react/faithful-card.css';

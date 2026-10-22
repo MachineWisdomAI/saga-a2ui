@@ -11,21 +11,34 @@ import {
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import {
   createContentPolicy,
-  createFaithfulCardReader,
-  createImageConsentScope,
-  type HostLinks,
   type ImageConsentScope,
   type ImageEnforcement,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
+import {
+  type HostLinks,
+  type LinkOpenOutcome,
+} from '@saga-a2ui/core/host-links';
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
   type MessageSession,
+  type SurfaceLayout,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { createElement, type ReactElement, type ReactNode } from 'react';
+import {
+  openSurface,
+  Surface,
+  type BoundSurface,
+  type SurfaceHandle,
+} from '../a2ui.js';
 import { faithfulCardEntry } from './catalog.js';
-import { FaithfulCardProvider, type FaithfulCardView } from './view.js';
+import {
+  createFaithfulCardView,
+  FaithfulCardProvider,
+  type FaithfulCardView,
+} from './view.js';
 
 // Test-only. A synthetic application over the published `@a2ui/react` runtime: its own catalog
 // (Column and Text, built from the upstream contracts the way an application builds its own, plus
@@ -78,49 +91,72 @@ export interface CardSpec {
   readonly contractVersion?: unknown;
 }
 
-/** The messages that create a surface whose root column holds the given cards. */
-export function layout(
+/**
+ * The data of a card surface, by field. The fields are `unknown` on purpose: the card, not the
+ * surface's schema, decides what it will show, so a test can hand it content the card refuses.
+ */
+export type CardData = Readonly<Record<string, unknown>>;
+
+/** A surface whose root column holds the given cards, opening with `initial` data. */
+export function cardsLayout(
   cards: readonly CardSpec[],
-  surfaceId = SURFACE_ID,
-): unknown[] {
-  return [
-    { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId,
-        components: [
-          {
-            id: 'root',
-            component: 'Column',
-            children: cards.map((card) => card.id),
-          },
-          ...cards.map((card) => ({
-            id: card.id,
-            component: 'FaithfulCard',
-            contractVersion: card.contractVersion ?? 1,
-            markdown: card.markdown,
-          })),
-        ],
-      },
+  initial: CardData = {},
+): SurfaceLayout<CardData> {
+  return defineSurface({
+    surfaceId: SURFACE_ID,
+    catalogId: CATALOG_ID,
+    data: z.object(
+      Object.fromEntries(
+        Object.keys(initial).map((name) => [name, z.unknown()]),
+      ),
+    ),
+    initial,
+    root: {
+      component: 'Column',
+      bind: {},
+      props: { children: cards.map((card) => card.id) },
     },
-  ];
+    components: cards.map((card) => ({
+      id: card.id,
+      component: 'FaithfulCard',
+      contractVersion: card.contractVersion ?? 1,
+      markdown: card.markdown,
+    })),
+  });
 }
 
-export function dataUpdate(value: unknown, surfaceId = SURFACE_ID): unknown[] {
-  return [{ version: 'v0.9', updateDataModel: { surfaceId, value } }];
+/** The cards bound to `/answer` and `/version`: the way an application shows one answer. */
+export const answerCard: CardSpec = {
+  id: 'card',
+  markdown: { path: '/answer' },
+  contractVersion: { path: '/version' },
+};
+
+/** The data an answer card shows. */
+export const answerData = (
+  markdown: unknown,
+  version: unknown = 1,
+): CardData => ({
+  answer: markdown,
+  version,
+});
+
+/** A bound surface over the application's card catalog. */
+export function openCards(
+  cards: readonly CardSpec[],
+  initial: CardData = {},
+): BoundSurface<CardData> {
+  return openSurface(cardsLayout(cards, initial), catalog);
 }
 
+/** Layer A, for tests of the raw protocol path: the layout's opening applied by a session of its own. */
 export interface Session {
   readonly surface: SurfaceModel<ReactCatalogComponent>;
   ingest(input: unknown): void;
-  /** The result of ingesting, for tests of what the session refuses. */
-  tryIngest(input: unknown): { readonly ok: boolean };
   dispose(): void;
 }
 
-/** A real message session over the application's catalog, with the layout already ingested. */
-export function openSession(messages: unknown[]): Session {
+export function openSession(layout: SurfaceLayout<CardData>): Session {
   const session: MessageSession<ReactCatalogComponent> = createMessageSession({
     catalogs: [catalog],
     decoder: a2uiV0_9Decoder,
@@ -133,14 +169,9 @@ export function openSession(messages: unknown[]): Session {
     const result = session.ingest(input);
     if (!result.ok) throw new Error(`ingest failed: ${result.failure.message}`);
   };
-  ingest(messages);
+  ingest(layout.opening);
   if (!surface) throw new Error('the layout created no surface');
-  return {
-    surface,
-    ingest,
-    tryIngest: (input) => session.ingest(input),
-    dispose: () => session.dispose(),
-  };
+  return { surface, ingest, dispose: () => session.dispose() };
 }
 
 export interface TrustedOptions {
@@ -171,12 +202,6 @@ export interface Trusted {
 
 /** Trusted settings as an application builds them once. */
 export function trusted(options: TrustedOptions = {}): Trusted {
-  const reader = createFaithfulCardReader({
-    dialect: options.dialect ?? 'commonmark-tables-strikethrough',
-    maxLength: options.maxLength ?? 5000,
-  });
-  if (!reader.ok)
-    throw new Error(`unexpected reader failure: ${reader.failure.kind}`);
   const policy = createContentPolicy({
     level: options.level ?? 'standard',
     ...(options.imageHosts === undefined
@@ -204,23 +229,34 @@ export function trusted(options: TrustedOptions = {}): Trusted {
       return Promise.resolve(answer);
     },
   };
-  const consent = createImageConsentScope();
-  return {
-    view: {
-      reader: reader.reader,
-      policy: policy.policy,
-      hostLinks,
-      imageEnforcement: options.enforcement ?? 'established',
-      consent,
-    },
-    consent,
-    requests,
-    pending,
-  };
+  // The views of these suites are made by the public factory, as an application makes its own. The
+  // document's restrictions are modelled by passing the policy's derived value, or nothing.
+  const view = createFaithfulCardView({
+    dialect: options.dialect ?? 'commonmark-tables-strikethrough',
+    maxLength: options.maxLength ?? 5000,
+    policy: policy.policy,
+    contentSecurityPolicies:
+      (options.enforcement ?? 'established') === 'established'
+        ? [policy.policy.resource.contentSecurityPolicy]
+        : [],
+    hostLinks,
+  });
+  return { view, consent: view.consent, requests, pending };
 }
 
-/** A surface under a provider, as an application mounts it. */
+/** A bound surface under a provider, as an application mounts it. */
 export function surfaceUnder(
+  view: FaithfulCardView,
+  handle: SurfaceHandle,
+): ReactElement {
+  return createElement(FaithfulCardProvider, {
+    view,
+    children: createElement(Surface, { of: handle }),
+  });
+}
+
+/** Layer A: the upstream surface of a raw session under a provider. */
+export function rawSurfaceUnder(
   view: FaithfulCardView,
   surface: SurfaceModel<ReactCatalogComponent>,
 ): ReactElement {

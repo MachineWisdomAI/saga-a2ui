@@ -1,95 +1,78 @@
-import type { LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
-import { App } from '@modelcontextprotocol/ext-apps';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
-import { ActionButton, createLitActions } from '@saga-a2ui/lit/actions';
+  ActionButton,
+  createLitActions,
+  startA2uiView,
+} from '@saga-a2ui/lit-mcp-stack';
 import { createNotesController } from './notes-controller.js';
-import { ownEntries } from './notes-catalog.js';
+import { notesCatalog, type CatalogEntry } from './notes-catalog.js';
 import { VIEW_TEXT } from './notes-contract.js';
-import {
-  CATALOG_ID,
-  SURFACE_ID,
-  notesSurface,
-  ownBody,
-  type BodyEntry,
-} from './notes-surface.js';
+import { notesLayout, ownBody, type BodyEntry } from './notes-surface.js';
 
 // The Lit composition shared by both Lit consumers. The own-catalog consumer calls it with nothing
 // else; the second consumer adds one optional component through `extension`. Everything here uses
 // public package exports, and the page it builds is served by server/notes-server.ts as the MCP
-// App view of `list_notes`. What does not depend on the renderer is notes-controller.ts.
+// App view of `list_notes`. The Lit stack connects to the host, holds early results, defines the
+// catalog's elements and ends the view; what does not depend on the renderer is notes-controller.ts.
 
 export interface NotesExtension {
-  /** Extra catalog entries (the optional FaithfulCard), already registered with `defineElements`. */
-  readonly entries: readonly LitComponentApi[];
+  /** Extra catalog entries (the optional FaithfulCard). The stack defines their elements. */
+  readonly entries: readonly CatalogEntry[];
   readonly body: BodyEntry;
-  /** Runs when the notes element connects; the returned function runs when it disconnects. */
-  connected?(element: HTMLElement): () => void;
+  /** Runs before the view starts, with the element it will render in; the returned function runs when the view ends. */
+  connected?(container: HTMLElement): () => void;
 }
 
-/** `extension` is a function of the bridge so an optional component can use the host (for links). */
-export async function startNotesView(
-  extension?: (app: App) => NotesExtension,
+/** `extension` is a function of the host's link opener so an optional component can use the host (for links). */
+export function startNotesView(
+  extension?: (hostLinks: HostLinks) => NotesExtension,
 ): Promise<void> {
-  const app = new App({ name: 'pack1-notes-view', version: '0.0.0' });
-  const added: NotesExtension = extension?.(app) ?? {
+  // The host's link opener exists once the view starts; the card asks for it only when a link is activated.
+  let links: HostLinks | undefined;
+  const hostLinks: HostLinks = {
+    open: (url) => links?.open(url) ?? Promise.resolve('unavailable'),
+  };
+  const added: NotesExtension = extension?.(hostLinks) ?? {
     entries: [],
     body: ownBody,
   };
-  const entries = [...ownEntries, ...added.entries];
-  const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', entries);
-  defineElements(entries);
+  const container = document.querySelector<HTMLElement>('notes-app');
+  if (container === null) throw new Error('The page has no notes-app element.');
+  const controller = createNotesController();
+  const endExtension = added.connected?.(container);
 
-  const element = ():
-    (HTMLElement & { ingest(input: unknown): unknown }) | null =>
-    document.querySelector('notes-app');
-  const controller = createNotesController(app, {
-    ingest: (messages) => void element()?.ingest(messages),
-    remove: () => element()?.remove(),
+  const view = startA2uiView({
+    container,
+    layout: notesLayout(added.body),
+    catalog: notesCatalog(added.entries),
+    actions: (host) => {
+      links = host.links;
+      const actions = controller.actions(host.server);
+      return createLitActions({
+        // The same two definitions are bound to every rendered row: directly, through each instance's own handle.
+        attach: (view) => {
+          view.watchById(
+            'row-archive',
+            ActionButton,
+            (handle) =>
+              void handle.bindAction('activate', actions.archiveNote, {
+                subject: () => handle.read('id'),
+              }),
+          );
+          view.watchById(
+            'row-read',
+            ActionButton,
+            (handle) => void handle.bindAction('activate', actions.markRead),
+          );
+        },
+        onSetupError: () => controller.say(VIEW_TEXT.problem),
+      });
+    },
+    onToolResult: (result, running) => controller.show(result, running.surface),
+    onTeardown: () => {
+      endExtension?.();
+      controller.retire();
+    },
   });
-  const { actions } = controller;
-
-  class NotesApp extends createA2uiAppElement({
-    createSession: () =>
-      createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-    initialInput: notesSurface(added.body),
-    surfaceId: SURFACE_ID,
-    actions: createLitActions({
-      // The same two definitions are bound to every rendered row: directly, through each instance's own handle.
-      attach: (view) => {
-        view.watchById(
-          'row-archive',
-          ActionButton,
-          (handle) =>
-            void handle.bindAction('activate', actions.archiveNote, {
-              subject: () => handle.read('id'),
-            }),
-        );
-        view.watchById(
-          'row-read',
-          ActionButton,
-          (handle) => void handle.bindAction('activate', actions.markRead),
-        );
-      },
-      onSetupError: () => controller.say(VIEW_TEXT.problem),
-    }),
-  }) {
-    #end?: () => void;
-    override connectedCallback() {
-      this.#end = added.connected?.(this);
-      super.connectedCallback();
-    }
-    override disconnectedCallback() {
-      super.disconnectedCallback();
-      this.#end?.();
-      this.#end = undefined;
-    }
-  }
-  customElements.define('notes-app', NotesApp);
-
-  await controller.connect();
+  return view.ready;
 }

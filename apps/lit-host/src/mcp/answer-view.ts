@@ -1,11 +1,4 @@
-import type { App } from '@modelcontextprotocol/ext-apps';
-import type { Transport } from '@modelcontextprotocol/client';
-import {
-  connectToolResultView,
-  type ToolInput,
-  type ToolResult,
-  type ToolResultViewConnection,
-} from '@saga-a2ui/mcp/view';
+import type { ToolInput, ToolResult } from '@saga-a2ui/lit-mcp-stack';
 import {
   AnswerRequestSchema,
   AnswerResultSchema,
@@ -19,13 +12,14 @@ export type AnswerViewState =
   | { readonly kind: 'answer'; readonly result: AnswerResult }
   | { readonly kind: 'problem'; readonly message: string };
 
-export interface AnswerViewDependencies {
-  readonly app: App;
-  readonly transport: Transport;
-  readonly show: (state: AnswerViewState) => void;
+/**
+ * The two notifications the answer view handles. The stack delivers them once the view is ready
+ * and never after it ended (see `startA2uiView`); this module decides only what each means.
+ */
+export interface AnswerView {
+  onToolInput(input: ToolInput): void;
+  onToolResult(result: ToolResult): void;
 }
-
-export type AnswerViewConnection = ToolResultViewConnection;
 
 const PROBLEM_TEXT = 'The answer could not be shown.';
 const INVALID_QUESTION_TEXT = 'That question could not be read.';
@@ -60,52 +54,46 @@ function knownFailureText(result: ToolResult): string | undefined {
  * - An error, a result outside the published contract, or an unreadable input clears the answer
  *   and shows a problem. Failure text is shown only when it is one of the server's known safe
  *   texts. The next valid delivery recovers.
- * - After dispose or host teardown, nothing is delivered (see `connectToolResultView`).
  */
-export function connectAnswerView(
-  deps: AnswerViewDependencies,
-): Promise<AnswerViewConnection> {
+export function createAnswerView(
+  show: (state: AnswerViewState) => void,
+): AnswerView {
   let awaited: string | undefined;
   let shown: AnswerResult | undefined;
 
   const present = (state: AnswerViewState) => {
     shown = state.kind === 'answer' ? state.result : undefined;
-    deps.show(state);
+    show(state);
   };
 
-  const onToolInput = (input: ToolInput) => {
-    const asked = AnswerRequestSchema.safeParse(input.arguments);
-    if (!asked.success) {
-      awaited = undefined;
-      return present({ kind: 'problem', message: INVALID_QUESTION_TEXT });
-    }
-    awaited = asked.data.question;
-    if (shown?.question === awaited) return; // the answer to this very question is already on screen
-    present({ kind: 'waiting', question: awaited });
-  };
+  return {
+    onToolInput(input) {
+      const asked = AnswerRequestSchema.safeParse(input.arguments);
+      if (!asked.success) {
+        awaited = undefined;
+        return present({ kind: 'problem', message: INVALID_QUESTION_TEXT });
+      }
+      awaited = asked.data.question;
+      if (shown?.question === awaited) return; // the answer to this very question is already on screen
+      present({ kind: 'waiting', question: awaited });
+    },
 
-  const onToolResult = (result: ToolResult) => {
-    if (result.isError)
-      return present({
-        kind: 'problem',
-        message: knownFailureText(result) ?? PROBLEM_TEXT,
-      });
-    const answer = AnswerResultSchema.safeParse(result.structuredContent);
-    if (!answer.success)
-      return present({ kind: 'problem', message: PROBLEM_TEXT });
-    if (awaited !== undefined && answer.data.question !== awaited) return;
-    if (
-      shown?.question === answer.data.question &&
-      shown.answer === answer.data.answer
-    )
-      return;
-    present({ kind: 'answer', result: answer.data });
+    onToolResult(result) {
+      if (result.isError)
+        return present({
+          kind: 'problem',
+          message: knownFailureText(result) ?? PROBLEM_TEXT,
+        });
+      const answer = AnswerResultSchema.safeParse(result.structuredContent);
+      if (!answer.success)
+        return present({ kind: 'problem', message: PROBLEM_TEXT });
+      if (awaited !== undefined && answer.data.question !== awaited) return;
+      if (
+        shown?.question === answer.data.question &&
+        shown.answer === answer.data.answer
+      )
+        return;
+      present({ kind: 'answer', result: answer.data });
+    },
   };
-
-  return connectToolResultView({
-    app: deps.app,
-    transport: deps.transport,
-    onToolInput,
-    onToolResult,
-  });
 }

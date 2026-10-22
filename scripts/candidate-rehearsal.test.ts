@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   REHEARSED_TITLES,
+  REHEARSAL_STATEMENT,
   STAGES,
   observedCases,
   rehearsalSummary,
@@ -24,6 +25,9 @@ import {
 // consumers are really installed from them, built and connected to; only the browser run is replaced
 // here by a recorder (the real run is `npm run candidate:rehearse`, in CI), so these cases check what
 // the rehearsal installs, rebuilds, pairs and refuses, and which cases it requires to have run.
+
+/** What the own-catalog Lit consumer installs: the Lit stack brings its declared siblings along. */
+const LIT_STACK_SET = ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'];
 
 const work = createWorkDirectory('saga-rehearsal-test-');
 // The rebuilt server bundles leave third-party packages external, so they must sit inside the repository to resolve them.
@@ -111,16 +115,16 @@ describe('the update and rollback rehearsal', () => {
     expect(
       record.stages.map((stage) => stage.consumers.own!.installedTarballSha256),
     ).toEqual([
-      digests(a, ['core', 'lit', 'mcp']),
-      digests(b, ['core', 'lit', 'mcp']),
-      digests(a, ['core', 'lit', 'mcp']),
+      digests(a, LIT_STACK_SET),
+      digests(b, LIT_STACK_SET),
+      digests(a, LIT_STACK_SET),
     ]);
     expect(
       record.stages.map((stage) => stage.consumers.own!.installedPackages),
     ).toEqual([
-      ['core', 'lit', 'mcp'],
-      ['core', 'lit', 'mcp'],
-      ['core', 'lit', 'mcp'],
+      [...LIT_STACK_SET].sort(),
+      [...LIT_STACK_SET].sort(),
+      [...LIT_STACK_SET].sort(),
     ]);
     // The browser ran once per stage, against that stage's own rebuilt files, with the carried PACK1 cases.
     expect(seen.map((one) => path.basename(one.root))).toEqual([
@@ -149,8 +153,9 @@ describe('the update and rollback rehearsal', () => {
       serverRestoredByRollback: true,
     });
     expect(record.statement).toMatch(
-      /differ only in version.*not a difference between two versions of the code.*no published release/,
+      /differ only in version.*not a difference between two versions of the code.*no registry release was involved/,
     );
+    expect(record.statement).not.toMatch(/no published release exists/i);
     expect(rehearsalSummary(record)).toContain(
       `rollback restored the view exactly`,
     );
@@ -208,6 +213,47 @@ describe('the update and rollback rehearsal', () => {
       /The update install of the own consumer is not candidate B:\n.*version-mismatch.*Reinstall @saga-a2ui\/lit from candidate tarball/s,
     );
   }, 240_000);
+});
+
+describe('the statement a rehearsal records', () => {
+  // `rehearsal.json` stores the statement and the `CANDIDATE.md` section prints it, so both are read
+  // from one record that needs no installs.
+  const record = {
+    format: 1 as const,
+    statement: REHEARSAL_STATEMENT,
+    candidates: {
+      A: '0.0.0-candidate.gaaaaaaaaaaaa',
+      B: '0.0.0-candidate.gbbbbbbbbbbbb',
+    },
+    stages: [],
+    transitions: {},
+  };
+  const texts = (): string[] => [
+    JSON.stringify(record),
+    rehearsalSummary(record),
+  ];
+
+  it('does not claim that no public release exists', () => {
+    for (const text of texts()) {
+      expect(text).not.toMatch(/no published release exists/i);
+      expect(text).not.toMatch(
+        /no (SAGA )?package has (ever )?been published/i,
+      );
+      expect(text).not.toMatch(/first candidate/i);
+      expect(text).not.toMatch(/no earlier release/i);
+    }
+  });
+
+  it('keeps the limit that no registry release was involved or tested', () => {
+    for (const text of texts()) {
+      expect(text).toMatch(
+        /Public npm releases of SAGA packages already exist/,
+      );
+      expect(text).toMatch(/no registry release was involved/i);
+      expect(text).toMatch(/no upgrade from a registry release/i);
+      expect(text).toMatch(/not a difference between two versions of the code/);
+    }
+  });
 });
 
 describe('the browser report', () => {

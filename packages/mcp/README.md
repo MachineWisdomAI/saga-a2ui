@@ -1,6 +1,6 @@
 # @saga-a2ui/mcp
 
-MCP and MCP Apps delivery. Separate `/server`, `/view` and `/policy` exports keep server and browser responsibilities explicit. The application owns HTTP hosting, authentication and backend authorization.
+MCP and MCP Apps delivery. Separate `/server`, `/view` and `/policy` exports keep server and browser responsibilities explicit. The application owns HTTP hosting, authentication and backend authorization. The `/view` export owns the lifetime of a view (`runToolResultView`), the host link request (`hostLinksFromApp`), its own sizing (`startOwnSizing`) the reading profile of the host (`readingProfile`) and the default reading of a result's `isError` and `structuredContent` (`readStructuredResult`); it depends on `@saga-a2ui/core` for the host link contract and on no renderer.
 
 Requires Node >=22.12.0 and a TypeScript-aware bundler; exports are TypeScript source. Apache-2.0, with dependency licenses retained separately.
 

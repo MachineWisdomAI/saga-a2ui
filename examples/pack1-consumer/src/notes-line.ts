@@ -1,4 +1,4 @@
-import { CommonSchemas } from '@a2ui/web_core/v0_9';
+import { CommonSchemas } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application's own components are typed by upstream's schemas
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
 // The contract of the application's own `Line` component, shared by every renderer's catalog.

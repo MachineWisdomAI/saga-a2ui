@@ -14,7 +14,7 @@ The demo now consumes extracted SDK packages. The main A2UI view uses `@saga-a2u
 apps/lit-host/src/playback-main.ts           # composition root of the player iframe
 ├── lit/play-control.ts                     # Play / Pause / Resume and status
 ├── playback/playback-view.ts               # authorization, fetch and player lifecycle
-│   └── @saga-a2ui/mcp/view                  # connectToolResultView: results and teardown
+│   └── @saga-a2ui/mcp/view                  # runToolResultView: results and teardown
 │       └── MCP Apps App + PostMessageTransport → host bridge
 └── playback/web-audio-player.ts             # browser audio context and playback
 

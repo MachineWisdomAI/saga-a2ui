@@ -1,38 +1,43 @@
-import { PostMessageTransport, type App } from '@modelcontextprotocol/ext-apps';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import type { CallToolResult } from '@modelcontextprotocol/client';
+import type { ServerTransport } from '@saga-a2ui/core/actions';
 import { createNotesActions } from './notes-actions.js';
 import { VIEW_TEXT, readNotesResult } from './notes-contract.js';
 import { RowHolds } from './row-holds.js';
-import { notesData, statusAt } from './notes-surface.js';
+import { notesData, type NotesData } from './notes-surface.js';
 
 // The part of the notes view that does not depend on the renderer: the page's status line and
 // logs, the application's actions and their resource owner, the replacement of the notes a result
-// carries, and the one way the view ends. The Lit view (notes-view.ts) and the React view
-// (notes-react-view.tsx) each supply only the rendered surface, so both show, replace, refuse and
-// retire notes by the same code.
+// carries and the status line of each row. The Lit view (notes-view.ts) and the React view
+// (notes-react-view.tsx) each hand it the stack's bound surface, so both show, replace, refuse and
+// retire notes by the same code. The stack connects to the host and runs the view's lifetime.
 
-/** The rendered surface a renderer exposes to the controller. */
+/** The stack's bound surface, as far as the controller needs it. */
 export interface NotesSurface {
-  /** Applies A2UI messages to the surface. Does nothing once the surface is gone. */
-  ingest(messages: unknown[]): void;
-  /** Ends the rendered surface. Disposing the surface disposes its bindings and cancels what is undecided. */
-  remove(): void;
+  /** Replaces the notes shown, in place. Does nothing once the view is gone. */
+  update(data: NotesData): unknown;
 }
 
 export interface NotesController {
-  /** The application's actions, each defined once; the renderer binds them to its rendered rows. */
-  readonly actions: ReturnType<typeof createNotesActions>;
+  /** The application's actions over the host's server transport, each defined once; the renderer binds them to its rendered rows. */
+  actions(
+    server: ServerTransport<CallToolResult>,
+  ): ReturnType<typeof createNotesActions>;
   /** Writes the page's status line. */
   say(text: string): void;
-  /** Connects to the host; results, teardown and the page going away are handled from then on. */
-  connect(): Promise<void>;
+  /** Shows one delivered result on `surface`, replacing the notes shown before it. */
+  show(
+    result: {
+      readonly isError?: boolean;
+      readonly structuredContent?: unknown;
+    },
+    surface: NotesSurface,
+  ): void;
+  /** The view ended: the status line says so. */
+  retire(): void;
 }
 
 /** The page's own elements (`view-status`, `read-log`, `holds-pending`, `holds-confirmed`) are the same in every consumer's HTML. */
-export function createNotesController(
-  app: App,
-  surface: NotesSurface,
-): NotesController {
+export function createNotesController(): NotesController {
   const text = (id: string): Element | null =>
     document.querySelector(`[data-testid="${id}"]`);
   const status = text('view-status');
@@ -48,54 +53,48 @@ export function createNotesController(
     if (holdsPending) holdsPending.textContent = pending.join(',');
     if (holdsConfirmed) holdsConfirmed.textContent = confirmed.join(',');
   });
-  const actions = createNotesActions({
-    holds,
-    transport: app,
-    present: (dataPath, line) => surface.ingest(statusAt(dataPath, line)),
-    recordRead: (noteId) => {
-      read.push(noteId);
-      if (readLog) readLog.textContent = read.join(',');
-    },
-  });
 
-  // Each result replaces the notes shown. An error or a result this contract does not accept shows
-  // none of it (readNotesResult), and the next valid result shows its own notes again.
-  const show = (result: {
-    readonly isError?: boolean;
-    readonly structuredContent?: unknown;
-  }): void => {
-    const shown = readNotesResult(result);
-    surface.ingest(notesData(shown.notes));
-    say(shown.status);
-  };
+  // The notes shown, with each row's status line, and the surface they are shown on.
+  let shown: NotesData['notes'] = [];
+  let surface: NotesSurface | undefined;
 
-  // The application's one way to end its view, for a host teardown and for the page going away
-  // alike. Removing the surface disposes its bindings (local actions, the optional card) and
-  // cancels what is still undecided, so a retained button no longer does anything. Idempotent.
-  let retired = false;
-  const retire = (): void => {
-    if (retired) return;
-    retired = true;
-    surface.remove();
-    say(VIEW_TEXT.closed);
+  /** Writes one row's status line: the row at `dataPath` (`/notes/<index>`) keeps everything else it shows. */
+  const present = (dataPath: string, line: string): void => {
+    const index = /^\/notes\/(\d+)$/.exec(dataPath)?.[1];
+    if (index === undefined || shown[Number(index)] === undefined) return;
+    shown = shown.map((note, at) =>
+      at === Number(index) ? { ...note, status: line } : note,
+    );
+    surface?.update({ notes: shown });
   };
 
   return {
-    actions,
+    actions: (server) =>
+      createNotesActions({
+        holds,
+        transport: server,
+        present,
+        recordRead: (noteId) => {
+          read.push(noteId);
+          if (readLog) readLog.textContent = read.join(',');
+        },
+      }),
     say,
-    async connect() {
-      const connection = await connectToolResultView({
-        app,
-        transport: new PostMessageTransport(window.parent, window.parent),
-        onToolResult: show,
-        // The host is closing this view; it ends the connection itself once it has the answer.
-        onTeardown: retire,
-      });
-      // The page is going away: end the application's bindings first, then the connection.
-      addEventListener('pagehide', () => {
-        retire();
-        connection.dispose();
-      });
+    // Each result replaces the notes shown. An error or a result this contract does not accept shows
+    // none of it (readNotesResult), and the next valid result shows its own notes again.
+    show(result, target) {
+      const delivered = readNotesResult(result);
+      surface = target;
+      shown = notesData(delivered.notes).notes;
+      target.update({ notes: shown });
+      say(delivered.status);
+    },
+    // The stack has retired the rendered surface before this runs, which disposed its bindings (local
+    // actions, the optional card) and cancelled what was still undecided, so a retained button no
+    // longer does anything.
+    retire() {
+      surface = undefined;
+      say(VIEW_TEXT.closed);
     },
   };
 }

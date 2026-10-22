@@ -511,6 +511,83 @@ describe('what the guide must explain', () => {
     );
   });
 
+  describe('the quoted stack composition', () => {
+    const composition = blocks(guide).find((block) =>
+      block.lines.some((line) => line.includes('startA2uiView({')),
+    );
+    const significant = (lines: readonly string[]): string[] =>
+      lines
+        .map((line) => line.trim())
+        .filter((line) => line !== '' && !line.startsWith('//'));
+    const starterLines = significant(
+      read('templates/lit-node/src/view.ts').split('\n'),
+    );
+    const requiredOptions = (): string[] => {
+      const declaration = read('packages/lit/src/actions/lit-actions.ts');
+      const body = /export interface LitActionsOptions \{([\s\S]*?)\n\}/.exec(
+        declaration,
+      )?.[1];
+      expect(body, 'LitActionsOptions is declared').toBeDefined();
+      return [...body!.matchAll(/^ {2}readonly (\w+):/gm)].map(
+        (match) => match[1] as string,
+      );
+    };
+
+    /** The quoted lines that are not lines of the source, each after the one before it. */
+    const notInOrder = (
+      quoted: readonly string[],
+      source: readonly string[],
+    ): string[] => {
+      const missing: string[] = [];
+      let from = 0;
+      for (const line of significant(quoted)) {
+        const at = source.indexOf(line, from);
+        if (at < 0) missing.push(line);
+        else from = at + 1;
+      }
+      return missing;
+    };
+    /** The required options the quoted text does not pass as a property. */
+    const unsupplied = (required: readonly string[], text: string): string[] =>
+      required.filter(
+        (option) => !new RegExp(`^\\s+${option}:`, 'm').test(text),
+      );
+
+    it('is the starter\u2019s own lines, in the starter\u2019s order', () => {
+      expect(composition, 'the guide shows the composition').toBeDefined();
+      expect(notInOrder(composition!.lines, starterLines)).toEqual([]);
+    });
+
+    it('supplies every option createLitActions requires, read from its declared type', () => {
+      const required = requiredOptions();
+      expect(required).toEqual(
+        expect.arrayContaining(['attach', 'onSetupError']),
+      );
+      expect(unsupplied(required, composition!.lines.join('\n'))).toEqual([]);
+    });
+
+    it('would fail if the quoted call dropped a required option or invented a line', () => {
+      const lines = composition!.lines;
+      const dropped = lines
+        .filter((line) => !line.includes('onSetupError'))
+        .join('\n');
+      expect(unsupplied(requiredOptions(), dropped)).toEqual(['onSetupError']);
+      expect(
+        notInOrder(
+          [...lines, '  actions: createLitActions({ attach: bind }),'],
+          starterLines,
+        ),
+      ).toEqual(['actions: createLitActions({ attach: bind }),']);
+      // Lines that exist but are quoted out of the starter's order are caught too.
+      expect(
+        notInOrder(
+          ['await view.ready;', "container: requireElement('starter-app'),"],
+          starterLines,
+        ),
+      ).toEqual(["container: requireElement('starter-app'),"]);
+    });
+  });
+
   it('separates a local candidate install from a public registry release', () => {
     for (const name of ['core', 'components', 'mcp', 'react']) {
       expect(guide).toContain(`@saga-a2ui/${name}`);

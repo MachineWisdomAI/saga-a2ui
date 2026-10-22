@@ -2,6 +2,11 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as faithfulCard from '@saga-a2ui/components/faithful-card';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath export, the way an application does, and
 // the module graph behind that export is bundled to show what a consumer really pulls in.
@@ -47,18 +52,29 @@ async function bundledModules(
 describe('@saga-a2ui/components/faithful-card', () => {
   it('exposes exactly the supported names', () => {
     expect(Object.keys(faithfulCard).sort()).toEqual([
+      'CONTENT_POLICY_ELEMENT_ID',
       'DEFAULT_CONTENT_POLICY',
+      'FAITHFUL_CARD_CATALOG_ID',
       'FAITHFUL_CARD_CONTRACT_VERSION',
+      'FAITHFUL_CARD_STYLING',
       'FaithfulCardApi',
+      'FaithfulCardApp',
       'MAX_IMAGE_HOSTS',
       'MAX_NESTING_LEVEL',
-      'NO_HOST_LINKS',
+      'cardData',
+      'cardLayout',
+      'closesWithParagraph',
+      'contentPolicyFromEmbedded',
+      'createCardView',
       'createContentPolicy',
       'createFaithfulCardReader',
       'createImageConsentScope',
       'describeContentFailure',
-      'describeLinkOutcome',
+      'embedContentPolicy',
       'establishImageEnforcement',
+      'readCardResult',
+      'requestLinkOpen',
+      'resourcePermissionsOf',
     ]);
   });
 
@@ -143,5 +159,73 @@ describe('@saga-a2ui/components/faithful-card', () => {
     ]) {
       expect(ownCode, marker).not.toContain(marker);
     }
+  });
+});
+
+describe('dependency direction', () => {
+  it('imports core only, and no DOM, MCP or renderer', () => {
+    const { files, violations } = checkPackageDirection('components');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    [
+      "import { runToolResultView } from '@saga-a2ui/mcp/view';",
+      'a delivery package',
+    ],
+    ["import { LitElement } from 'lit';", 'a renderer'],
+    ["document.body.append(document.createElement('p'));", 'a browser object'],
+    ['export const style = new CSSStyleSheet();', 'a browser constructor'],
+    [
+      "export const parsed = new DOMParser().parseFromString('', 'text/html');",
+      'a browser parser',
+    ],
+    [
+      'export const watch = (node: HTMLDivElement) => node.focus();',
+      'a browser element type',
+    ],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('components');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('components', manifest, [
+        ...files,
+        mutant,
+      ]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('allows pure code, and prose or names that only look like a browser object', () => {
+    const { manifest } = readPackage('components');
+    const pure = {
+      path: 'src/pure.ts',
+      text: [
+        '// A constructable CSSStyleSheet is the renderer\u2019s, never this package\u2019s.',
+        '/* document.body, window.name and customElements are not used here */',
+        'export const sheetName = (id: string): string => `sheet-${id}`;',
+        "export const event = new CustomEvent('x');",
+        'export const controller = new AbortController();',
+        "export const at = new URL('https://example.test').href;",
+        '',
+      ].join('\n'),
+    };
+    expect(directionViolations('components', manifest, [pure])).toEqual([]);
+  });
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('components');
+    const wrong = 'react';
+    const found = directionViolations(
+      'components',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });
