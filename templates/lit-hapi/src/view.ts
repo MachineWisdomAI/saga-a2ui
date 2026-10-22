@@ -2,7 +2,6 @@ import {
   ActionButton,
   createLitActions,
   startA2uiView,
-  type ActionBinding,
   type BoundSurface,
 } from '@saga-a2ui/lit-mcp-stack';
 import { createStarterActions } from './actions.js';
@@ -36,13 +35,6 @@ export async function startView(): Promise<void> {
     noteInput: requireElement<HTMLInputElement>('[data-testid="note"]'),
   });
 
-  // What the application must end itself. The binding is the attachment of one definition to one
-  // rendered control; the discovery subscription finds that control. Ending a binding stops the
-  // control reacting. It does not prove that work a server action started has stopped: the
-  // application owns whatever such work holds.
-  const bindings: ActionBinding[] = [];
-  const stopWatching: Array<() => void> = [];
-
   const show = (
     result: {
       readonly isError?: boolean;
@@ -73,15 +65,12 @@ export async function startView(): Promise<void> {
     );
   };
 
-  // The application's one way to end what it holds: the discovery ends, then every binding, so a
-  // retained button no longer does anything. The stack calls it once, after the surface has left
-  // the page and before the connection ends, on a host teardown request and on the page going away
-  // alike.
-  const retire = (): void => {
-    for (const stop of stopWatching.splice(0)) stop();
-    for (const binding of bindings.splice(0)) binding.dispose();
-    say(CLOSED_TEXT);
-  };
+  // What ending the view takes with it. The surface owns the discovery and the action bindings of
+  // its presentation: they end when the surface leaves the page, before the stack calls this, on a
+  // host teardown request and on the page going away alike, so a retained button no longer does
+  // anything. This ends only what the application owns itself. A binding does not stop work a
+  // server action started; whatever such work holds is the application's to end.
+  const retire = (): void => say(CLOSED_TEXT);
 
   // The first result is shown once the view is ready; a later one replaces what is shown.
   const view = startA2uiView({
@@ -94,10 +83,10 @@ export async function startView(): Promise<void> {
       // Runs once for each presented surface. The same definition could be attached to any number
       // of controls; here it is attached directly to the one rendered Clear control.
       attach: (surfaceView) => {
-        stopWatching.push(
-          surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-            bindings.push(handle.bindAction('activate', actions.clearNote));
-          }),
+        surfaceView.watchById(
+          CLEAR_ID,
+          ActionButton,
+          (handle) => void handle.bindAction('activate', actions.clearNote),
         );
       },
       // #endregion saga-snippet:bind-action

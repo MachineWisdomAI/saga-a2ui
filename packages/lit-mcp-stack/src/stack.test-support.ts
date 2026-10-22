@@ -6,6 +6,7 @@ import {
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import type { CardResultOutcome } from '@saga-a2ui/components/faithful-card';
 import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
+import { vi } from 'vitest';
 import type { HostConnection } from './host-connection.js';
 
 // Test-only. A real bridge and a real host joined by an in-memory transport: what a stack starts
@@ -152,4 +153,39 @@ export function readEnvelopeOrText(result: DeliveredResult): CardResultOutcome {
         content: { markdown: envelope.answer, heading: envelope.question },
       }
     : unsupported;
+}
+
+/**
+ * Records how many child nodes `container` held when `app` was first asked to close: a view that
+ * outlives its connection shows as a count above zero. Undone by `vi.restoreAllMocks()`.
+ */
+export function watchClose(
+  app: App,
+  container: Element,
+): { readonly held: () => number | undefined } {
+  let held: number | undefined;
+  const close = app.close.bind(app);
+  vi.spyOn(app, 'close').mockImplementation(() => {
+    held ??= container.childNodes.length;
+    return close();
+  });
+  return { held: () => held };
+}
+
+/**
+ * Watches the page's `pagehide` listeners from now on and returns how many were added and not
+ * removed: the registration and removal a view makes on the real event target. Undone by
+ * `vi.restoreAllMocks()`.
+ */
+export function pagehideListeners(): () => number {
+  const added = vi.spyOn(globalThis, 'addEventListener');
+  const removed = vi.spyOn(globalThis, 'removeEventListener');
+  const listeners = (spy: typeof added | typeof removed) =>
+    spy.mock.calls
+      .filter(([type]) => type === 'pagehide')
+      .map(([, listener]) => listener);
+  return () =>
+    listeners(added).filter(
+      (listener) => !listeners(removed).includes(listener),
+    ).length;
 }

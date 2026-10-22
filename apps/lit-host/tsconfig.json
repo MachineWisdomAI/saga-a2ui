@@ -28,6 +28,7 @@
     "vite.react-action-consumer.config.ts",
     "vite.react-faithful-card.config.ts",
     "vite.card-app-stack.config.ts",
+    "vite.view-stack.config.ts",
     "playwright.config.ts"
   ]
 }
