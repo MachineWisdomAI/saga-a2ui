@@ -16,10 +16,27 @@ import {
 } from '@saga-a2ui/react-mcp-stack';
 import {
   FaithfulCardApp,
+  readingProfile,
   startFaithfulCardApp,
+  useHostLink,
   type CardChromeProps,
   type CardContent,
+  type CardResultOutcome,
 } from '@saga-a2ui/react-mcp-stack/faithful-card';
+import {
+  createContentPolicy,
+  embedContentPolicy,
+} from '@saga-a2ui/react-mcp-stack/content-policy';
+import {
+  attachRequestLifetime,
+  createServerBudgets,
+  operationViewFromHtml,
+  registerPublicOperation,
+  viewUriForHtml,
+  type OperationView,
+  type RequestLifetime,
+} from '@saga-a2ui/react-mcp-stack/server';
+import type { ToolResult } from '@saga-a2ui/react-mcp-stack';
 
 // The one-stack install, as an application writes it: this file imports the React stack (both
 // entries) and the application's own catalog authoring, and nothing else from the SDK. The
@@ -114,3 +131,69 @@ export async function startCard(container: Element): Promise<RunningView> {
   }
   return view;
 }
+
+// The composition entries, as an application's chrome and server use them, all from the stack. A
+// card application reads its own whole result and words its own rejection; the reading profile
+// maps the application's tokens without a host name; the application renders a link of its own
+// under the card's rules; the server composes budgets and a content-addressed view around a
+// policy created and embedded through the stack's content-policy entry. Real types, no casts. The
+// MCP server object an application registers operations on is the application's own dependency
+// and is not needed to compose these.
+const classify = (result: ToolResult): CardResultOutcome => {
+  const text = result.content.find((block) => block.type === 'text');
+  return text?.type === 'text' && result.structuredContent == null
+    ? { kind: 'content', content: { markdown: text.text, heading: '' } }
+    : { kind: 'rejected', text: 'Unsupported' };
+};
+const LinkedChrome = ({ card }: CardChromeProps) => {
+  const link = useHostLink('https://docs.example.com/guide');
+  return (
+    <main>
+      {card}
+      <button disabled={!link.allowed} onClick={() => void link.open()}>
+        {link.outcome?.message ?? 'Open the guide'}
+      </button>
+    </main>
+  );
+};
+export async function startClassifiedCard(
+  container: Element,
+): Promise<RunningView> {
+  const view = startFaithfulCardApp(definition, {
+    container,
+    sizing: 'host',
+    classifyResult: classify,
+    chrome: LinkedChrome,
+    hostContext: (context, hostName) => {
+      document.documentElement.dataset.readingProfile = readingProfile(
+        context,
+        hostName,
+      );
+    },
+  });
+  await view.ready.catch(() => undefined);
+  return view;
+}
+export function composeServerSide(html: string): {
+  readonly view: OperationView;
+  readonly operationMs: number;
+  readonly uri: string;
+} {
+  const created = createContentPolicy({ level: 'standard', imageHosts: [] });
+  if (!created.ok) throw new Error(created.failure.message);
+  const served = embedContentPolicy(html, created.policy);
+  return {
+    view: operationViewFromHtml({
+      html: served,
+      filename: 'answer.html',
+      title: 'Answer',
+      csp: { resourceDomains: [...created.policy.resource.resourceDomains] },
+    }),
+    operationMs: createServerBudgets({ operationMs: 2_000 }).forRoute()
+      .operationMs,
+    uri: viewUriForHtml(served, 'answer.html'),
+  };
+}
+// The remaining server entry names an application's MCP server composes with its own server object.
+export { attachRequestLifetime, registerPublicOperation };
+export type { RequestLifetime };

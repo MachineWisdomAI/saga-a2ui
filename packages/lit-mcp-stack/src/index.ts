@@ -13,6 +13,8 @@ export { StartFailure, type StartFailureKind } from './start-failure.js';
 export type { RunningView } from './running-view.js';
 // The shapes of the two notifications an application's handlers receive.
 export type { ToolInput, ToolResult } from '@saga-a2ui/mcp/view';
+// How the reader meets the host (device or desktop), for an application that maps its own tokens.
+export { readingProfile, type ReadingProfile } from '@saga-a2ui/mcp/view';
 // The authoring surface of an own-catalog application: what the qualifying consumer imports.
 export { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 export type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';

@@ -182,6 +182,88 @@ for (const renderer of renderers) {
       await expect(page.locator('[data-saga-closing]')).toHaveText('Three.');
     });
 
+    test('styles CommonMark strong and emphasis through their elements, with right-to-left emphasis set apart', async ({
+      page,
+    }) => {
+      await present(
+        page,
+        renderer,
+        'A **strong** word and an *emphasised* word.\n\nكلمة *مؤكدة* هنا.\n\nBody.',
+      );
+      const paragraphs = page.locator('.saga-card-content > p');
+      expect(
+        await style(paragraphs.nth(0).locator('strong'), 'font-weight'),
+      ).toBe('700');
+      // Latin emphasis keeps the browser's slant at the paragraph's size.
+      const latin = paragraphs.nth(0).locator('em');
+      expect(await style(latin, 'font-style')).toBe('italic');
+      expect(await style(latin, 'font-size')).toBe('18px');
+      // The application's rule for emphasis in a right-to-left paragraph applies to it alone.
+      const arabic = paragraphs.nth(1).locator('em');
+      expect(await style(paragraphs.nth(1), 'direction')).toBe('rtl');
+      expect(await style(arabic, 'font-style')).toBe('normal');
+      expect(await style(arabic, 'font-size')).toBe('20.7px');
+    });
+
+    test('lets a strong closing footer inherit the footer’s treatment, and keeps the weight', async ({
+      page,
+    }) => {
+      await present(page, renderer, `Body.\n\n**${ATTRIBUTION}**`);
+      const footer = page.locator('[data-saga-closing="paragraph"]');
+      await expect(footer).toHaveAttribute('data-app-attribution', '');
+      const strong = footer.locator('strong');
+      await expect(strong).toHaveText(ATTRIBUTION);
+      // Neither the size nor the colour is the card's to set on strong: they come from the footer.
+      expect(await style(strong, 'font-size')).toBe('14px');
+      expect(await style(strong, 'color')).toBe('rgb(85, 98, 117)');
+      expect(await style(strong, 'font-weight')).toBe('700');
+    });
+
+    test('shows one divider where a rule precedes the closing footer', async ({
+      page,
+    }) => {
+      await present(page, renderer, `Body.\n\n---\n\n${ATTRIBUTION}`);
+      const rule = page.locator('.saga-card-content > hr');
+      await expect(rule).toHaveCount(1);
+      const footer = page.locator(
+        '.saga-card-content > hr + p[data-saga-closing]',
+      );
+      await expect(footer).toHaveText(ATTRIBUTION);
+      await expect(footer).toHaveAttribute('data-app-attribution', '');
+      expect(await style(rule, 'border-top-width')).toBe('1px');
+      expect(await style(footer, 'border-top-width')).toBe('0px');
+      // Without a rule the footer draws its own divider, so the card has one either way.
+      await page.evaluate(
+        (text) => window.cardPage?.present(`Body.\n\n${text}`),
+        ATTRIBUTION,
+      );
+      await expect(page.locator('.saga-card-content > hr')).toHaveCount(0);
+      expect(
+        await style(
+          page.locator('[data-saga-closing="paragraph"]'),
+          'border-top-width',
+        ),
+      ).toBe('1px');
+    });
+
+    test('leaves strong, emphasis and a rule to the browser’s defaults when the stylesheet is absent', async ({
+      page,
+    }) => {
+      await present(
+        page,
+        renderer,
+        'A **strong** and an *emphasised* word.\n\n---\n\nEnd.',
+        '?unbranded',
+      );
+      expect(
+        await style(page.locator('.saga-card-content strong'), 'font-weight'),
+      ).toBe('700');
+      expect(
+        await style(page.locator('.saga-card-content em'), 'font-style'),
+      ).toBe('italic');
+      await expect(page.locator('.saga-card-content > hr')).toHaveCount(1);
+    });
+
     test('shows the SDK’s own presentation, not the application’s, when the stylesheet is absent', async ({
       page,
     }) => {

@@ -1,5 +1,6 @@
 import {
   FaithfulCardApp,
+  readingProfile,
   startFaithfulCardApp,
   type CardChromeParts,
 } from '@saga-a2ui/lit-mcp-stack/faithful-card';
@@ -22,6 +23,7 @@ const chrome = ({ card, state }: CardChromeParts) =>
 
 runProbe({
   FaithfulCardApp,
+  readingProfile,
   start: (definition, options) =>
     startFaithfulCardApp(definition, { ...options, chrome }),
 });

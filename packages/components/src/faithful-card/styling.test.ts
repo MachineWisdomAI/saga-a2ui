@@ -94,6 +94,9 @@ describe('the committed styling surface', () => {
       'pre',
       'code',
       'table',
+      'strong',
+      'em',
+      'hr',
     ]);
   });
 });

@@ -31,6 +31,9 @@ export const FAITHFUL_CARD_STYLING = Object.freeze({
     'pre',
     'code',
     'table',
+    'strong',
+    'em',
+    'hr',
   ] as const),
   /** Custom properties the card reads, each with a neutral fallback. */
   tokens: Object.freeze([

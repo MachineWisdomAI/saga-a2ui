@@ -3,10 +3,12 @@ import { FaithfulCardApp } from '@saga-a2ui/components/faithful-card';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  classifyEnvelopeOrText,
   gate,
   settle,
   startTestHost,
   toolResult,
+  UNSUPPORTED_WORDING,
   unreachableHost,
   type TestHost,
 } from '../stack.test-support.js';
@@ -541,5 +543,309 @@ describe('startFaithfulCardApp', () => {
         container.querySelector('[data-testid="frame"] b')?.textContent,
       ).toBe('waiting'),
     );
+  });
+});
+
+// The application's classification of the whole result. The stack owns what happens next: the
+// card is cleared or presented, consent and link state follow the presentation, and a throw is
+// reported. The wording and the envelope below are the fixture's, never the stack's.
+describe('startFaithfulCardApp with an application result classification', () => {
+  const FENCED = '```\nfirst line\n  second line\n```\n';
+  const ERROR_TEXT = 'The service could not answer.';
+  const envelope = (overrides: Record<string, unknown> = {}) => ({
+    version: 1,
+    question: 'Is it so?',
+    answer: 'It is so.',
+    ...overrides,
+  });
+  const text = (value: string) => ({
+    content: [{ type: 'text' as const, text: value }],
+  });
+  const withStructured = (structuredContent: unknown, value = 'ignored') => ({
+    ...text(value),
+    structuredContent: structuredContent as Record<string, unknown>,
+  });
+  const heading = () => container.querySelector('h2')?.textContent;
+
+  const startClassified = async (
+    options: Partial<StartFaithfulCardOptions> = {},
+  ) => {
+    const view = await start({
+      classifyResult: classifyEnvelopeOrText,
+      ...options,
+    });
+    await view.ready;
+    return view;
+  };
+
+  it('shows the heading and Markdown of valid structured content', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+    expect(heading()).toBe('Is it so?');
+  });
+
+  it('shows the exact text of a result without structured content, under an empty heading', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult(text(FENCED));
+    await vi.waitFor(() =>
+      expect(cardText()).toBe('first line\n  second line\n'),
+    );
+    expect(heading()).toBe('');
+  });
+
+  it('treats null structured content like absent: usable text is shown, otherwise the supplied wording', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult({
+      ...text(FENCED),
+      structuredContent: null as never,
+    });
+    await vi.waitFor(() => expect(cardText()).toContain('first line'));
+    expect(heading()).toBe('');
+
+    await host!.bridge.sendToolResult({
+      content: [],
+      structuredContent: null as never,
+    });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(cardText()).toBe('');
+  });
+
+  it('rejects a result with neither structured content nor usable text with the supplied wording', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+
+    await host!.bridge.sendToolResult({ content: [] });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(status()).not.toBe(TEXTS.problem);
+    expect(cardText()).toBe('');
+  });
+
+  it('classifies only the first text block, then checks that string: a later block is not a fallback', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult({
+      content: [
+        { type: 'text' as const, text: '' },
+        { type: 'text' as const, text: 'a later block' },
+      ],
+    });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(cardText()).toBe('');
+
+    // A block of another type before it does not count as the first text block.
+    await host!.bridge.sendToolResult({
+      content: [
+        { type: 'image' as const, data: 'AAAA', mimeType: 'image/png' },
+        { type: 'text' as const, text: 'after an image' },
+      ],
+    });
+    await vi.waitFor(() => expect(cardText()).toContain('after an image'));
+  });
+
+  it('rejects present but malformed structured content even when fallback text exists', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+    for (const malformed of [
+      envelope({ version: 2 }),
+      envelope({ version: '1' }),
+      envelope({ version: undefined }),
+      envelope({ question: undefined }),
+      envelope({ question: 7 }),
+      envelope({ answer: undefined }),
+      envelope({ answer: 7 }),
+      envelope({ answer: '' }),
+      { unexpected: true },
+      {},
+      [],
+      'a string',
+      42,
+    ]) {
+      await host!.bridge.sendToolResult(
+        withStructured(malformed, 'Usable fallback text'),
+      );
+      await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+      expect(cardText()).toBe('');
+      expect(status()).not.toBe(TEXTS.problem);
+      // The next valid result recovers from each of them.
+      await host!.bridge.sendToolResult(withStructured(envelope()));
+      await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+      expect(status()).toBeUndefined();
+    }
+  });
+
+  it('hands an error result to the application whole: its text is the rejection wording, even beside valid structured content', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+
+    await host!.bridge.sendToolResult({
+      ...withStructured(envelope(), ERROR_TEXT),
+      isError: true,
+    });
+    // A rejection carrying the error's exact text: no card, the chrome told it as the problem.
+    await vi.waitFor(() => expect(status()).toBe(ERROR_TEXT));
+    expect(cardText()).toBe('');
+    expect(ERROR_TEXT).not.toBe(UNSUPPORTED_WORDING);
+    expect(ERROR_TEXT).not.toBe(TEXTS.problem);
+
+    // Without usable text the application's unsupported wording is shown instead.
+    await host!.bridge.sendToolResult({
+      ...withStructured(envelope()),
+      content: [],
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(cardText()).toBe('');
+
+    // Only the first text block counts, here empty: a later block is not a fallback.
+    await host!.bridge.sendToolResult({
+      content: [
+        { type: 'text' as const, text: '' },
+        { type: 'text' as const, text: ERROR_TEXT },
+      ],
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(cardText()).toBe('');
+
+    // The error text keeps its whitespace and terminal newline.
+    await host!.bridge.sendToolResult({
+      ...text(`  ${ERROR_TEXT}\n`),
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(`  ${ERROR_TEXT}\n`));
+  });
+
+  it('recovers with a valid result after an error and after an unsupported result', async () => {
+    await startClassified();
+    await host!.bridge.sendToolResult({
+      ...text(ERROR_TEXT),
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(ERROR_TEXT));
+    await host!.bridge.sendToolResult(
+      withStructured(envelope({ answer: 'Back.' })),
+    );
+    await vi.waitFor(() => expect(cardText()).toContain('Back.'));
+    expect(status()).toBeUndefined();
+
+    await host!.bridge.sendToolResult(withStructured({ unexpected: true }));
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    await host!.bridge.sendToolResult(
+      withStructured(envelope({ answer: 'Again.' })),
+    );
+    await vi.waitFor(() => expect(cardText()).toContain('Again.'));
+  });
+
+  it('tells the chrome an error result’s text as the problem, never as an answer', async () => {
+    const seen: CardViewState[] = [];
+    await startClassified({
+      chrome: (props: CardChromeProps) => {
+        seen.push(props.state);
+        return props.card;
+      },
+    });
+    await host!.bridge.sendToolResult({
+      ...withStructured(envelope(), ERROR_TEXT),
+      isError: true,
+    });
+    await vi.waitFor(() =>
+      expect(seen).toContainEqual({ kind: 'problem', text: ERROR_TEXT }),
+    );
+    expect(seen.some((state) => state.kind === 'answer')).toBe(false);
+  });
+
+  it('presents an equal answer again as a new presentation', async () => {
+    const seen: CardViewState[] = [];
+    await startClassified({
+      chrome: (props: CardChromeProps) => {
+        seen.push(props.state);
+        return props.card;
+      },
+    });
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+    const card = container.querySelector('[data-testid="card-root"]');
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="card-root"]')).not.toBe(
+        card,
+      ),
+    );
+    expect([
+      ...new Set(
+        seen.flatMap((state) =>
+          state.kind === 'answer' ? [state.presentation] : [],
+        ),
+      ),
+    ]).toEqual([1, 2]);
+  });
+
+  it('tells the chrome the supplied wording as the problem text', async () => {
+    const seen: CardViewState[] = [];
+    await startClassified({
+      chrome: (props: CardChromeProps) => {
+        seen.push(props.state);
+        return props.card;
+      },
+    });
+    await host!.bridge.sendToolResult({ content: [] });
+    await vi.waitFor(() =>
+      expect(seen).toContainEqual({
+        kind: 'problem',
+        text: UNSUPPORTED_WORDING,
+      }),
+    );
+  });
+
+  it('shows the definition’s problem text for a rejection that supplies none', async () => {
+    await startClassified({ classifyResult: () => ({ kind: 'rejected' }) });
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+  });
+
+  it('reports a classifier that throws (phase result), clears the answer, shows the definition’s problem text and recovers', async () => {
+    const errors: Array<[unknown, string]> = [];
+    await startClassified({
+      classifyResult: (result) => {
+        if (
+          result.content.some(
+            (block) => block.type === 'text' && block.text === 'throw',
+          )
+        )
+          throw new Error('the classifier broke');
+        return classifyEnvelopeOrText(result);
+      },
+      onError: (error, phase) => errors.push([error, phase]),
+    });
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+
+    await host!.bridge.sendToolResult(text('throw'));
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+    expect(cardText()).toBe('');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]![1]).toBe('result');
+    expect((errors[0]![0] as Error).message).toBe('the classifier broke');
+
+    await host!.bridge.sendToolResult(
+      withStructured(envelope({ answer: 'Recovered.' })),
+    );
+    await vi.waitFor(() => expect(cardText()).toContain('Recovered.'));
+  });
+
+  it('keeps the definition’s parser and its texts.problem when no classification is supplied', async () => {
+    const view = await start();
+    await view.ready;
+    await host!.bridge.sendToolResult(text('only text, no structured content'));
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+    await host!.bridge.sendToolResult({
+      ...withStructured({ answer: 'ignored' }),
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+    expect(cardText()).toBe('');
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FaithfulCardApp,
+  readCardResult,
   type CardAppTexts,
   type CardContent,
 } from './card-app.js';
@@ -200,5 +201,108 @@ describe('FaithfulCardApp', () => {
         FaithfulCardApp.define({ name: '', version: '' }).build(),
       ).toThrow(/\bname\b/);
     });
+  });
+});
+
+describe('readCardResult', () => {
+  // The result here is an opaque value: this package knows no delivery, so the delivery's own
+  // default reading arrives as `read`, and the application's as `classify`.
+  type Delivered = { readonly shown?: string; readonly failed?: boolean };
+  const read = (result: Delivered): CardContent | undefined =>
+    result.failed === true || result.shown === undefined
+      ? undefined
+      : { markdown: result.shown };
+  const quiet = () => undefined;
+
+  it('uses the delivery’s default reading when no classifier is supplied', () => {
+    expect(
+      readCardResult({ shown: 'Yes.' }, { read, reportError: quiet }),
+    ).toEqual({ kind: 'content', content: { markdown: 'Yes.' } });
+    expect(readCardResult({}, { read, reportError: quiet })).toEqual({
+      kind: 'rejected',
+    });
+  });
+
+  it('reports a default reading that throws and rejects the result without wording', () => {
+    const errors: unknown[] = [];
+    expect(
+      readCardResult(
+        {},
+        {
+          read: () => {
+            throw new Error('read broke');
+          },
+          reportError: (error) => errors.push(error),
+        },
+      ),
+    ).toEqual({ kind: 'rejected' });
+    expect(errors).toHaveLength(1);
+  });
+
+  it('gives a classifier the result untouched, bypassing the default reading, and returns its outcome as it is', () => {
+    const seen: unknown[] = [];
+    const whole = { failed: true, shown: 'x' };
+    let defaulted = false;
+    const outcome = readCardResult(whole, {
+      read: (result) => {
+        defaulted = true;
+        return read(result);
+      },
+      classify(result) {
+        seen.push(result);
+        return { kind: 'rejected', text: 'Supplied wording.' };
+      },
+      reportError: quiet,
+    });
+    expect(seen[0]).toBe(whole);
+    expect(defaulted).toBe(false);
+    expect(outcome).toEqual({ kind: 'rejected', text: 'Supplied wording.' });
+    expect(
+      readCardResult(whole, {
+        read,
+        classify: () => ({
+          kind: 'content',
+          content: { markdown: 'Shown.\n', heading: '' },
+        }),
+        reportError: quiet,
+      }),
+    ).toEqual({
+      kind: 'content',
+      content: { markdown: 'Shown.\n', heading: '' },
+    });
+  });
+
+  it('rejects, without wording, a classifier that throws or returns something that is not an outcome', () => {
+    const errors: unknown[] = [];
+    const reportError = (error: unknown) => errors.push(error);
+    expect(
+      readCardResult(
+        {},
+        {
+          read,
+          classify: () => {
+            throw new Error('classifier broke');
+          },
+          reportError,
+        },
+      ),
+    ).toEqual({ kind: 'rejected' });
+    expect(errors).toHaveLength(1);
+
+    for (const bad of [
+      undefined,
+      null,
+      'text',
+      { kind: 'content' },
+      { kind: 'content', content: { markdown: 3 } },
+      { kind: 'rejected', text: '' },
+      { kind: 'rejected', text: 7 },
+      { kind: 'other' },
+    ]) {
+      expect(
+        readCardResult({}, { read, classify: () => bad as never, reportError }),
+      ).toEqual({ kind: 'rejected' });
+    }
+    expect(errors).toHaveLength(1);
   });
 });

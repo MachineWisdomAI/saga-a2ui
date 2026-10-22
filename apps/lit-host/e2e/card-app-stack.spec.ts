@@ -6,7 +6,11 @@ import {
 } from '@saga-a2ui/components/faithful-card';
 import { expect, test, type Frame, type Page } from '@playwright/test';
 import { builtUrl } from './built-artifacts.js';
-import { PROBE_TEXTS } from './card-app-stack/texts.js';
+import {
+  PROBE_ERROR_TEXT,
+  PROBE_TEXTS,
+  PROBE_UNSUPPORTED,
+} from './card-app-stack/texts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // The card application stacks in a real browser: `startFaithfulCardApp` of the React stack and of the
@@ -387,6 +391,249 @@ for (const stack of STACKS) {
       ).toHaveCount(0);
     });
 
+    // The application's own reading of the whole result, through the same stack entry: the probe
+    // page asks for it with a marker in its head (a stand-in for an application that passes
+    // `classifyResult`). The wording and the protocol are the probe's, never the stack's.
+    const classified = (html: string): string =>
+      html.replace('</head>', '<meta name="probe-classify" content=""></head>');
+    const envelope = (answer: string, question = 'Is it so?') => ({
+      content: [{ type: 'text' as const, text: 'ignored' }],
+      structuredContent: { version: 1, question, answer },
+    });
+    const FENCED = '```\nfirst line\n  second line\n```\n';
+
+    test('reads the whole result by the application’s protocol, rejects with its wording and recovers', async ({
+      page: browser,
+    }) => {
+      const view = await mount(browser, {}, classified);
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      const deliver = (
+        result: Parameters<NonNullable<Window['deliverToolResult']>>[0],
+      ) => browser.evaluate((one) => window.deliverToolResult?.(one), result);
+      const heading = () =>
+        browser
+          .frameLocator('iframe[title="MCP App view"]')
+          .getByTestId('heading')
+          .textContent({ timeout: 2000 });
+
+      await deliver(envelope('It is so.'));
+      await expect.poll(view.cardText).toContain('It is so.');
+      expect(await heading()).toBe('Is it so?');
+
+      // No structured content: the first text block, exactly, under an empty heading.
+      await deliver({ content: [{ type: 'text', text: FENCED }] });
+      await expect
+        .poll(async () =>
+          view.frame.evaluate(() =>
+            (function find(root: ParentNode): string | null {
+              const found = root.querySelector('[data-testid="card-content"]');
+              if (found) return found.textContent;
+              for (const element of root.querySelectorAll('*')) {
+                const inside = element.shadowRoot && find(element.shadowRoot);
+                if (inside !== null && inside !== undefined) return inside;
+              }
+              return null;
+            })(document),
+          ),
+        )
+        .toContain('first line\n  second line');
+      expect(await heading()).toBe('');
+
+      // Neither structured content nor usable text: the application's wording, not the definition's.
+      await deliver({ content: [] });
+      await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
+      expect(PROBE_UNSUPPORTED).not.toBe(PROBE_TEXTS.problem);
+      expect(await view.cardText()).toBe('');
+
+      // Present but malformed structured content is rejected even with fallback text beside it,
+      // an empty answer included; each is followed by a valid result that recovers.
+      for (const malformed of [
+        { version: 2, question: 'q', answer: 'a' },
+        { version: 1, answer: 'a' },
+        { version: 1, question: 'q' },
+        { version: 1, question: 'q', answer: '' },
+        { version: 1, question: 7, answer: 'a' },
+        { version: 1, question: 'q', answer: 7 },
+        { unexpected: true },
+        {},
+      ]) {
+        await deliver(envelope('Back.'));
+        await expect.poll(view.cardText).toContain('Back.');
+        await deliver({
+          content: [{ type: 'text', text: 'Usable fallback text' }],
+          structuredContent: malformed,
+        });
+        await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
+        expect(await view.cardText()).toBe('');
+      }
+
+      // An error result reaches the application whole, beside valid structured content: it is
+      // rejected carrying its own text, which is the problem shown, with no card. Without usable
+      // text the application's unsupported wording is shown instead.
+      await deliver(envelope('Shown before the error.'));
+      await expect.poll(view.cardText).toContain('Shown before the error.');
+      await deliver({
+        content: [{ type: 'text', text: PROBE_ERROR_TEXT }],
+        structuredContent: { version: 1, question: 'q', answer: 'valid' },
+        isError: true,
+      });
+      await expect.poll(view.status).toBe(PROBE_ERROR_TEXT);
+      expect(PROBE_ERROR_TEXT).not.toBe(PROBE_UNSUPPORTED);
+      expect(PROBE_ERROR_TEXT).not.toBe(PROBE_TEXTS.problem);
+      expect(await view.cardText()).toBe('');
+      await deliver({ content: [], isError: true });
+      await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
+      expect(await view.cardText()).toBe('');
+
+      // The next valid result recovers.
+      await deliver(envelope('Recovered.'));
+      await expect.poll(view.cardText).toContain('Recovered.');
+    });
+
+    test('under the application’s reading, an equal answer delivered again ends image consent', async ({
+      page: browser,
+    }) => {
+      const created = createContentPolicy({
+        level: 'strict',
+        imageHosts: ['images.example.com'],
+      });
+      if (!created.ok) throw new Error(created.failure.message);
+      await browser.route(/^https:\/\//, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"></svg>',
+        }),
+      );
+      const view = await mount(
+        browser,
+        {},
+        (html) => embedContentPolicy(classified(html), created.policy),
+        true,
+        resourcePermissionsOf(created.policy).resourceDomains,
+      );
+      const frame = browser.frameLocator('iframe[title="MCP App view"]');
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+
+      const same = envelope('![chart](https://images.example.com/c.png)');
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await frame.getByRole('button', { name: 'Show images' }).click();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toBeVisible();
+
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await expect(
+        frame.getByRole('button', { name: 'Show images' }),
+      ).toBeVisible();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toHaveCount(0);
+    });
+
+    test('under the application’s reading, an equal answer delivered again retires the previous link outcome', async ({
+      page: browser,
+    }) => {
+      await browser.goto('/host-fixture/index.html');
+      await browser.evaluate(() => {
+        window.handleOpenLink = async () => ({ isError: true });
+      });
+      const resource: HostedResource = {
+        html: classified(page),
+        csp: { connectDomains: [], resourceDomains: [] },
+      };
+      await browser.evaluate((hosted) => window.mountView?.(hosted), resource);
+      const frame = browser.frameLocator('iframe[title="MCP App view"]');
+      await frame.getByTestId('release-ready').click();
+      await expect
+        .poll(() => frame.getByTestId('log').locator('li').allInnerTexts())
+        .toContain('ready');
+
+      const same = envelope(
+        'Read [the guide](https://docs.example.com/guide).',
+      );
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await frame.getByRole('button', { name: /the guide/ }).click();
+      await expect(frame.locator('.saga-card-link-status')).toContainText(
+        'The host did not open this link.',
+      );
+
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await expect(
+        frame.getByRole('button', { name: /the guide/ }),
+      ).toBeVisible();
+      await expect(frame.locator('.saga-card-link-status')).toHaveText('');
+    });
+
+    test('maps the reading profile of a device host onto the application’s tokens without a transform or an overflow', async ({
+      page: browser,
+    }) => {
+      const view = await mount(browser, {
+        hostContext: { deviceClass: 'echo_show_15' } as never,
+      });
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      await browser.evaluate(
+        (result) => window.deliverToolResult?.(result),
+        answer(`${'A line of the answer that wraps. '.repeat(40)}`),
+      );
+      await expect.poll(view.cardText).toContain('A line of the answer');
+      const measured = await view.frame.evaluate(() => {
+        const find = (root: ParentNode): Element | null => {
+          const found = root.querySelector('[data-testid="card-content"]');
+          if (found) return found;
+          for (const element of root.querySelectorAll('*')) {
+            const inside = element.shadowRoot && find(element.shadowRoot);
+            if (inside) return inside;
+          }
+          return null;
+        };
+        const content = find(document);
+        const transforms: string[] = [];
+        for (
+          let node: Element | null = content;
+          node !== null;
+          node =
+            node.parentElement ??
+            (node.getRootNode() as ShadowRoot).host ??
+            null
+        )
+          transforms.push(getComputedStyle(node).transform);
+        return {
+          profile: document.documentElement.dataset.readingProfile,
+          fontSize: content ? getComputedStyle(content).fontSize : '',
+          transforms,
+          overflow:
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        };
+      });
+      expect(measured.profile).toBe('device');
+      expect(measured.fontSize).toBe('25.6px'); // 1.6 × the page's 16px
+      expect(measured.transforms.every((value) => value === 'none')).toBe(true);
+      expect(measured.overflow).toBeLessThanOrEqual(0);
+    });
+
+    test('keeps the ordinary size on a host that reads as a desktop', async ({
+      page: browser,
+    }) => {
+      const view = await mount(browser, { hostContext: { theme: 'light' } });
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      await browser.evaluate(
+        (result) => window.deliverToolResult?.(result),
+        answer('Plain answer'),
+      );
+      await expect.poll(view.cardText).toContain('Plain answer');
+      expect(
+        await view.frame.evaluate(() => [
+          document.documentElement.dataset.readingProfile,
+          getComputedStyle(document.documentElement).fontSize,
+        ]),
+      ).toEqual(['desktop', '16px']);
+    });
     test('refuses a second start on a running container and leaves the first intact; a start after dispose succeeds', async ({
       page: browser,
     }) => {

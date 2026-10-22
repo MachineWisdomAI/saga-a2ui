@@ -72,6 +72,7 @@ describe('@saga-a2ui/components/faithful-card', () => {
       'describeContentFailure',
       'embedContentPolicy',
       'establishImageEnforcement',
+      'readCardResult',
       'requestLinkOpen',
       'resourcePermissionsOf',
     ]);

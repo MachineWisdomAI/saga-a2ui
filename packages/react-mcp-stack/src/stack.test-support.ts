@@ -4,6 +4,8 @@ import {
   type McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
+import type { CardResultOutcome } from '@saga-a2ui/components/faithful-card';
+import type { ToolResult } from '@saga-a2ui/mcp/view';
 import type { HostConnection } from './host-connection.js';
 
 // Test-only. A real bridge and a real host joined by an in-memory transport: what a stack starts
@@ -109,4 +111,49 @@ export const settle = (ms = 30): Promise<void> =>
 declare global {
   // React's flag that says state updates in this environment are wrapped in `act`.
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+// Synthetic whole-result classification, standing in for an application's own protocol. The
+// wording and the envelope belong to this fixture; the stack knows neither.
+
+/** The wording an application supplies when it rejects a result it cannot show. */
+export const UNSUPPORTED_WORDING = 'This answer cannot be shown by this view.';
+
+/** The text a result carries: its first `text` block, when that block's string is not empty. */
+function usableText(result: ToolResult): string | undefined {
+  const first = result.content.find((block) => block.type === 'text');
+  return first?.type === 'text' && first.text !== '' ? first.text : undefined;
+}
+
+/**
+ * Reads `{version: 1, question, answer}` from `structuredContent`, the answer a non-empty string.
+ * A result with absent or `null` structured content shows its text under an empty heading.
+ * Structured content that is present but is not that envelope is rejected, whatever text
+ * accompanies it. An error result is the application's own case: it is rejected with the error's
+ * text when it carries some, however valid its structured content. Every rejection carries
+ * wording: the error's text, else {@link UNSUPPORTED_WORDING}.
+ */
+export function classifyEnvelopeOrText(result: ToolResult): CardResultOutcome {
+  const text = usableText(result);
+  const unsupported = { kind: 'rejected', text: UNSUPPORTED_WORDING } as const;
+  if (result.isError === true) {
+    return text === undefined ? unsupported : { kind: 'rejected', text };
+  }
+  const structured: unknown = result.structuredContent;
+  if (structured === undefined || structured === null) {
+    return text === undefined
+      ? unsupported
+      : { kind: 'content', content: { markdown: text, heading: '' } };
+  }
+  if (typeof structured !== 'object') return unsupported;
+  const envelope = structured as Record<string, unknown>;
+  return envelope.version === 1 &&
+    typeof envelope.question === 'string' &&
+    typeof envelope.answer === 'string' &&
+    envelope.answer !== ''
+    ? {
+        kind: 'content',
+        content: { markdown: envelope.answer, heading: envelope.question },
+      }
+    : unsupported;
 }
