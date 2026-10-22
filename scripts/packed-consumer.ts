@@ -18,7 +18,14 @@ export const repoRoot = path.resolve(
   '..',
 );
 
-export type SdkPackage = 'core' | 'lit' | 'components' | 'mcp' | 'react';
+export type SdkPackage =
+  | 'core'
+  | 'lit'
+  | 'components'
+  | 'mcp'
+  | 'react'
+  | 'react-mcp-stack'
+  | 'lit-mcp-stack';
 
 export interface PackedManifest {
   readonly name?: string;
@@ -213,6 +220,7 @@ export function packReleasePackages(
     'components',
     'mcp',
     'react',
+    'react-mcp-stack',
   ];
   const versions = Object.fromEntries(
     packages.map((name) => {

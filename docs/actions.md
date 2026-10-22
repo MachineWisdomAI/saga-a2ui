@@ -474,13 +474,13 @@ Claim only what the evidence supports. The runnable tutorial stays on the qualif
 | | Shown | Not shown |
 | --- | --- | --- |
 | **Lit** | The full renderer. `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs | A Windows run; an actual assistant host |
-| **React** | Direct action attachment: `ActionButton`, `InstanceHostProvider` and `useActionSetup` from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Installed parity: no React starter, template, CLI pair or authenticated recipe |
+| **React** | Direct action attachment: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Installed parity: no React starter, template, CLI pair or authenticated recipe |
 | **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
 
-On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `useActionSetup` under one provider, and unmounting that root disposes every instance and binding beneath it:
+On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react/actions`. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
 
 ```ts examples/pack1-consumer/src/notes-react-view.tsx
-const setup = (view: InstanceView): void => {
+attach: (view) => {
   view.watchById(
     'row-archive',
     ActionButton,
@@ -494,7 +494,7 @@ const setup = (view: InstanceView): void => {
     ActionButton,
     (handle) => void handle.bindAction('activate', actions.markRead),
   );
-};
+},
 ```
 
 For React surfaces and catalogs use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.

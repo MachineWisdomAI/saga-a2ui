@@ -53,6 +53,14 @@ export interface StartA2uiViewOptions<TData> {
     result: ToolResult,
     view: RunningA2uiView<TData>,
   ) => void;
+  /**
+   * Optional. Called once, whichever way the view ends (host teardown request, `dispose()`,
+   * `pagehide` or a startup failure), after the surface has been retired and before the connection
+   * ends. For an application that holds something outside the page's own rendering. It must
+   * tolerate being called on a view that never showed anything; a throw is reported and never
+   * skips the connection's disposal.
+   */
+  readonly onTeardown?: () => void;
   /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
   readonly onError?: (error: unknown, phase: ErrorPhase) => void;
   /** Optional. Who the host sees. Defaults to the layout’s surface id at version `0.0.0`. */
@@ -132,7 +140,13 @@ export function startA2uiViewOn<TData>(
         : { hostContext: options.hostContext }),
       onToolResult: (result) => options.onToolResult(result, view),
       ...(options.onError === undefined ? {} : { onError: options.onError }),
-      retire: () => opened.dispose(),
+      retire() {
+        try {
+          opened.dispose();
+        } finally {
+          options.onTeardown?.();
+        }
+      },
       unmount: () => mounted.unmount(),
     });
     const view: RunningA2uiView<TData> = { ...running, surface: opened };

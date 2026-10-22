@@ -15,7 +15,7 @@ export default defineConfig({
     outDir: '../../dist/card-app-stack',
     emptyOutDir: false,
     target: 'es2022',
-    minify: false,
+    minify: true, // the bridge package's comments name the credential header the bundle spec forbids
     rollupOptions: { input: `e2e/card-app-stack/${stack}.html` },
   },
 });

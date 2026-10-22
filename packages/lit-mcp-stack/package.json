@@ -4,6 +4,7 @@
   "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition. A private workspace package, like @saga-a2ui/lit, until Lit is published",
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./faithful-card": "./src/faithful-card/index.ts"

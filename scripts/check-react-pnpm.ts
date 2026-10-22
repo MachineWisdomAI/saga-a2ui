@@ -15,7 +15,7 @@ try {
   const revision = sourceRevision();
   const packed = packSdkPackages(
     work,
-    ['core', 'components', 'mcp', 'react'],
+    ['core', 'components', 'mcp', 'react', 'react-mcp-stack'],
     path.join(work, 'tarballs'),
     candidateVersion(revision.commit, revision.dirty),
   );

@@ -12,7 +12,12 @@ import {
   type A2uiActions,
   type A2uiUpdateResult,
 } from '@saga-a2ui/lit';
-import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
+import {
+  hostLinksFromApp,
+  type HostContext,
+  type ToolResult,
+} from '@saga-a2ui/mcp/view';
 import { claimContainer } from './container-claim.js';
 import {
   connectToHost,
@@ -27,6 +32,8 @@ import type { ErrorPhase } from './start-failure.js';
 export interface ViewHost {
   /** The way an action reaches the application’s server, through the host. */
   readonly server: ServerTransport<ServerReply>;
+  /** The one way to ask the host to open a link, for an optional card the application's catalog includes. Ends with the view. */
+  readonly links: HostLinks;
 }
 
 /** The typed way to change what a running view shows. */
@@ -68,6 +75,14 @@ export interface StartA2uiViewOptions<TData> {
     result: ToolResult,
     view: RunningA2uiView<TData>,
   ) => void;
+  /**
+   * Optional. Called once, whichever way the view ends (host teardown request, `dispose()`,
+   * `pagehide` or a startup failure), after the surface has been retired and before the connection
+   * ends. For an application that holds something outside the page's own rendering. It must
+   * tolerate being called on a view that never showed anything; a throw is reported and never
+   * skips the connection's disposal.
+   */
+  readonly onTeardown?: () => void;
   /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
   readonly onError?: (error: unknown, phase: ErrorPhase) => void;
   /** Optional. Who the host sees. Defaults to the layout’s surface id at version `0.0.0`. */
@@ -115,6 +130,7 @@ export function startA2uiViewOn<TData>(
   try {
     const connection = connect();
     const { app } = connection;
+    const lifetime = new AbortController();
     const actions =
       typeof options.actions === 'function'
         ? options.actions({
@@ -122,6 +138,7 @@ export function startA2uiViewOn<TData>(
               callServerTool: (request, requestOptions) =>
                 app.callServerTool(request, requestOptions),
             },
+            links: hostLinksFromApp(app, lifetime.signal),
           })
         : options.actions;
 
@@ -148,7 +165,7 @@ export function startA2uiViewOn<TData>(
 
     const running = runView({
       connection,
-      lifetime: new AbortController(),
+      lifetime,
       releaseContainer: claim.release,
       sizing: options.sizing ?? 'host',
       ...(options.readyWhen === undefined
@@ -159,7 +176,13 @@ export function startA2uiViewOn<TData>(
         : { hostContext: options.hostContext }),
       onToolResult: (result) => options.onToolResult(result, view),
       ...(options.onError === undefined ? {} : { onError: options.onError }),
-      retire: remove,
+      retire() {
+        try {
+          remove();
+        } finally {
+          options.onTeardown?.();
+        }
+      },
       unmount: remove,
     });
     const view: RunningA2uiView<TData> = { ...running, surface };

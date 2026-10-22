@@ -105,3 +105,8 @@ export const toolResult = (structuredContent: unknown, isError = false) => ({
 /** Lets pending promises and a React commit settle. */
 export const settle = (ms = 30): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+declare global {
+  // React's flag that says state updates in this environment are wrapped in `act`.
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}

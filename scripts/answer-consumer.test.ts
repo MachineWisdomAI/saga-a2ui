@@ -55,14 +55,13 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(packages).toEqual([
       '@a2ui/lit/v0_9',
       '@a2ui/web_core/v0_9',
-      '@modelcontextprotocol/ext-apps',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/core/host-links',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
       '@saga-a2ui/core/protocols/a2ui/zod3', // the answer surface's data schema
       '@saga-a2ui/lit',
+      '@saga-a2ui/lit-mcp-stack/faithful-card',
       '@saga-a2ui/lit/faithful-card',
-      '@saga-a2ui/mcp/view',
       'lit',
     ]);
     expect(fs.existsSync(path.join(answerConsumerSource, 'node_modules'))).toBe(
@@ -75,6 +74,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       'components',
       'core',
       'lit',
+      'lit-mcp-stack',
       'mcp',
     ]);
     for (const [name, packed] of Object.entries(sdk.files)) {
@@ -185,12 +185,12 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(installed('@saga-a2ui/components/src/faithful-card/reader.ts')).toBe(
       true,
     );
-    for (const own of [
-      'mcp-main.ts',
-      'answer-view.ts',
-      'answer-surface.ts',
-      'answer-policy.ts',
-    ]) {
+    expect(
+      installed(
+        '@saga-a2ui/lit-mcp-stack/src/faithful-card/start-faithful-card-app.ts',
+      ),
+    ).toBe(true); // started by the stack, not by the page
+    for (const own of ['mcp-main.ts', 'answer-result.ts', 'answer-policy.ts']) {
       expect(
         modules.some((id) => id.endsWith(`/consumer/src/${own}`)),
         own,
@@ -216,7 +216,9 @@ describe('the answer consumer built from the packed SDK packages', () => {
     ).toEqual([]);
     expect(
       modules.filter((id) =>
-        /\/consumer\/src\/(answer-app|answer-function|main)\.ts$/.test(id),
+        /\/consumer\/src\/(answer-app|answer-function|answer-surface|main)\.ts$/.test(
+          id,
+        ),
       ),
     ).toEqual([]);
     for (const marker of [

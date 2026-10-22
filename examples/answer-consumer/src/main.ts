@@ -1,9 +1,9 @@
 import type { LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
   createFaithfulCardView,
-  documentContentSecurityPolicies,
   registerFaithfulCard,
 } from '@saga-a2ui/lit/faithful-card';
+import { documentContentSecurityPolicies } from '@saga-a2ui/lit-mcp-stack/faithful-card';
 import { createAnswerAppElement } from './answer-app.js';
 import { briefAnswers, fixtureAnswers } from './answer-function.js';
 import { brandings, type BrandName } from './branding.js';

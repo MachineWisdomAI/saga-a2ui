@@ -4,6 +4,9 @@
   "description": "The React and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition, so an application installs one stack plus React and writes only its own decisions",
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./faithful-card": "./src/faithful-card/index.ts",

@@ -31,6 +31,7 @@ export const installedLitHostDist = path.join(litHostSource, 'dist-installed');
 
 /** The SDK packages the application and its pages import (`apps/lit-host/package.json` also names React; the only page built here that uses it, the React player, needs only the core and MCP packages, so `react` is a third-party dependency of the application, not an installed SDK package). */
 export const INSTALLED_SDK_PACKAGES = [
+  'lit-mcp-stack',
   'core',
   'lit',
   'components',

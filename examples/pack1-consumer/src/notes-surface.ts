@@ -105,19 +105,3 @@ export function notesLayout(body: BodyEntry) {
     ],
   });
 }
-
-/**
- * Writes one row's status line, in the data scope of the instance that was pressed. A layout's
- * update replaces the whole model, so this one-field write in a row's scope is protocol input the
- * application writes itself (the Lit view relays it; the React view ingests it).
- */
-export const statusAt = (dataPath: string, text: string): unknown[] => [
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: 'notes',
-      path: `${dataPath}/status`,
-      value: text,
-    },
-  },
-];

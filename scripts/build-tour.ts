@@ -33,7 +33,15 @@ export const tourSource = path.join(repoRoot, 'demo', 'tour');
 export const tourDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'tour');
 
 /** The installed SDK packages the two notes views import. */
-export const TOUR_SDK_PACKAGES = ['core', 'lit', 'react', 'mcp'] as const;
+export const TOUR_SDK_PACKAGES = [
+  'core',
+  'lit',
+  'react',
+  'mcp',
+  'components',
+  'lit-mcp-stack',
+  'react-mcp-stack',
+] as const;
 /** What the views and the page import besides the SDK packages, plus the build tooling their builds load. */
 export const TOUR_OWN_DEPENDENCIES = [
   ...new Set([
