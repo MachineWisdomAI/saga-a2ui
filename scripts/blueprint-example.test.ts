@@ -15,7 +15,10 @@ const DESIGN = new URL(
   import.meta.url,
 );
 
-/** The text of the first `defineSurface({...})` call after `marker`, found by bracket matching. */
+/**
+ * The text of the first `defineSurface({...})` call at or after `marker`, found by bracket
+ * matching. The marker is the example's own code, so editorial prose around it may change.
+ */
 function callAfter(text: string, marker: string): string {
   const from = text.indexOf(marker);
   if (from < 0) throw new Error(`The design no longer contains "${marker}".`);
@@ -32,7 +35,7 @@ function callAfter(text: string, marker: string): string {
 describe('the view composition design’s starter example', () => {
   const source = callAfter(
     fs.readFileSync(DESIGN, 'utf8'),
-    'the starter template becomes',
+    'const layout = defineSurface(',
   );
   const CATALOG_ID = 'https://starter.example/catalogs/starter/v1';
   const evaluate = () =>
