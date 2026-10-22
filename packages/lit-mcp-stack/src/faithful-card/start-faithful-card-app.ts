@@ -8,14 +8,17 @@ import {
   provideContentView,
   registerFaithfulCard,
 } from '@saga-a2ui/lit/faithful-card';
+import type { CardSurface, ContentView } from '@saga-a2ui/lit/faithful-card';
 import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
 import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
 import { html, render, type TemplateResult } from 'lit';
+import { applicationFailureOf, callApplication } from '../application-call.js';
 import { claimContainer } from '../container-claim.js';
 import { connectToHost, type HostConnection } from '../host-connection.js';
 import {
   runView,
   viewFailedBeforeConnecting,
+  viewThatNeverStarted,
   type RunningView,
 } from '../running-view.js';
 import { StartFailure, type ErrorPhase } from '../start-failure.js';
@@ -78,6 +81,9 @@ const defaultChrome: CardChrome = ({ card, state }) =>
  * and each delivered result is read with the definition’s `parse` and shown in the card: a new
  * presentation each time, even for equal text. Throws `StartError` (`container-missing`,
  * `container-busy`) before connecting to anything.
+ * An application callback that throws while the view is being set up (the initial `chrome` call) does not
+ * throw out of `start`: the stack takes back what it made, frees the container and returns a
+ * view whose `ready` rejects with `StartFailure` of kind `application`.
  */
 export function startFaithfulCardApp(
   definition: FaithfulCardAppDefinition,
@@ -101,6 +107,8 @@ export function startFaithfulCardAppOn(
   const mount = document.createElement('div');
   mount.style.display = 'contents';
   let stopProviding: (() => void) | undefined;
+  let view: ContentView | undefined;
+  let surface: CardSurface | undefined;
   try {
     const { texts } = definition;
     const chrome = options.chrome ?? defaultChrome;
@@ -118,7 +126,9 @@ export function startFaithfulCardAppOn(
 
     const policy = contentPolicyFromDocument(claim.container.ownerDocument);
     if (!policy.ok) {
-      show({ kind: 'problem', text: texts.policyFailure });
+      callApplication(() =>
+        show({ kind: 'problem', text: texts.policyFailure }),
+      );
       return viewFailedBeforeConnecting({
         failure: new StartFailure('policy', policy.failure),
         unmount,
@@ -129,26 +139,26 @@ export function startFaithfulCardAppOn(
 
     const connection = connect();
     const lifetime = new AbortController();
-    const view = createFaithfulCardView({
+    const cardView = (view = createFaithfulCardView({
       ...definition.reader,
       policy: policy.policy,
       contentSecurityPolicies: documentContentSecurityPolicies(
         claim.container.ownerDocument,
       ),
       hostLinks: hostLinksFromApp(connection.app, lifetime.signal),
-    });
+    }));
     registerFaithfulCard();
-    const surface = openFaithfulCardSurface();
-    card = surface.element;
+    const opened = (surface = openFaithfulCardSurface());
+    card = opened.element;
     // The card asks the nearest view for its settings when it connects, so the view is provided first.
-    stopProviding = provideContentView(mount, view);
-    show(state);
+    stopProviding = provideContentView(mount, cardView);
+    callApplication(() => show(state));
 
     const report =
       options.onError ?? ((error: unknown) => console.error(error));
     let presentation = 0;
     const problem = (): void => {
-      surface.clear();
+      opened.clear();
       show({ kind: 'problem', text: texts.problem });
     };
     /** The definition’s parse; a throw is the application’s, reported, and the result is unsupported. */
@@ -181,7 +191,7 @@ export function startFaithfulCardAppOn(
       // included, even when the Markdown equals the previous one.
       onToolResult(result) {
         const content = read(result);
-        if (content === undefined || !surface.present(content).ok) {
+        if (content === undefined || !opened.present(content).ok) {
           problem();
           return;
         }
@@ -190,8 +200,8 @@ export function startFaithfulCardAppOn(
       },
       ...(options.onError === undefined ? {} : { onError: options.onError }),
       retire() {
-        view.consent.retire();
-        surface.dispose();
+        cardView.consent.retire();
+        opened.dispose();
       },
       unmount,
       showFailure(failure) {
@@ -207,10 +217,15 @@ export function startFaithfulCardAppOn(
       },
     });
   } catch (error) {
-    // Nothing connected: take back what this start rendered and free the container.
+    // Nothing connected: take back what this start made and free the container.
     stopProviding?.();
     mount.remove();
+    view?.consent.retire();
+    surface?.dispose();
     claim.release();
-    throw error;
+    const failed = applicationFailureOf(error);
+    if (failed === undefined) throw error;
+    // The application's chrome threw before a view existed: `ready` carries the failure.
+    return viewThatNeverStarted(failed.cause);
   }
 }

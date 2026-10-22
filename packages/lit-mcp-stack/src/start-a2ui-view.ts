@@ -18,6 +18,7 @@ import {
   type HostContext,
   type ToolResult,
 } from '@saga-a2ui/mcp/view';
+import { applicationFailureOf, callApplication } from './application-call.js';
 import { claimContainer } from './container-claim.js';
 import {
   connectToHost,
@@ -25,7 +26,11 @@ import {
   type HostIdentity,
   type ServerReply,
 } from './host-connection.js';
-import { runView, type RunningView } from './running-view.js';
+import {
+  runView,
+  viewThatNeverStarted,
+  type RunningView,
+} from './running-view.js';
 import type { ErrorPhase } from './start-failure.js';
 
 /** What the application may use of the host while it states its actions. */
@@ -101,7 +106,10 @@ let views = 0;
  * Starts an own-catalog view in `options.container` and returns it at once. The view connects to
  * the MCP Apps host, holds results that arrive before it is ready, presents the layout over the
  * catalog and gives each result to `onToolResult` with the bound surface to update. Throws
- * `StartError` (`container-missing`, `container-busy`) before connecting to anything. Imports
+ * `StartError` (`container-missing`, `container-busy`) before connecting to anything.
+ * An application callback that throws while the view is being set up (the `actions` factory) does not
+ * throw out of `start`: the stack takes back what it made, frees the container and returns a
+ * view whose `ready` rejects with `StartFailure` of kind `application`. Imports
  * nothing from `@saga-a2ui/components`.
  */
 export function startA2uiView<TData>(
@@ -131,16 +139,19 @@ export function startA2uiViewOn<TData>(
     const connection = connect();
     const { app } = connection;
     const lifetime = new AbortController();
+    const { actions: makeActions } = options;
     const actions =
-      typeof options.actions === 'function'
-        ? options.actions({
-            server: {
-              callServerTool: (request, requestOptions) =>
-                app.callServerTool(request, requestOptions),
-            },
-            links: hostLinksFromApp(app, lifetime.signal),
-          })
-        : options.actions;
+      typeof makeActions === 'function'
+        ? callApplication(() =>
+            makeActions({
+              server: {
+                callServerTool: (request, requestOptions) =>
+                  app.callServerTool(request, requestOptions),
+              },
+              links: hostLinksFromApp(app, lifetime.signal),
+            }),
+          )
+        : makeActions;
 
     defineElements([...options.catalog.components.values()]);
     const AppElement = createA2uiAppElement({
@@ -190,6 +201,31 @@ export function startA2uiViewOn<TData>(
   } catch (error) {
     element?.remove();
     claim.release();
-    throw error;
+    const failed = applicationFailureOf(error);
+    if (failed === undefined) throw error;
+    // The application's own callback threw before a view existed: nothing connected, so what was
+    // made is gone and the view ends as it would for any other startup failure, with `onTeardown`
+    // told once. `ready` carries the failure; the container is free for another start.
+    try {
+      options.onTeardown?.();
+    } catch (teardownError) {
+      try {
+        (options.onError ?? ((e) => console.error(e)))(
+          teardownError,
+          'teardown',
+        );
+      } catch {
+        // A reporter that throws must not turn a typed startup failure into a throw.
+      }
+    }
+    return {
+      ...viewThatNeverStarted(failed.cause),
+      surface: {
+        update: () => ({
+          ok: false,
+          failure: { kind: 'rejected', message: 'The app is not connected.' },
+        }),
+      },
+    };
   }
 }

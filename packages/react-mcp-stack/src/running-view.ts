@@ -198,3 +198,14 @@ export function viewFailedBeforeConnecting(options: {
     },
   };
 }
+
+/**
+ * The view of a start whose application callback threw before anything ran: the stack already took
+ * back what it had made and freed the container, so `ready` rejects with the failure and there is
+ * nothing left to dispose.
+ */
+export function viewThatNeverStarted(cause: unknown): RunningView {
+  const ready = Promise.reject<void>(new StartFailure('application', cause));
+  ready.catch(() => undefined);
+  return { ready, dispose: () => Promise.resolve() };
+}

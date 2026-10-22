@@ -217,6 +217,50 @@ describe('startA2uiView', () => {
     await vi.waitFor(() => expect(calls).toEqual(['archive']));
   });
 
+  it('returns a running view whose ready rejects as application, after cleanup, when the actions factory throws; the container is free again', async () => {
+    const teardowns: string[] = [];
+    const view = await start({
+      actions: () => {
+        throw new Error('actions broke');
+      },
+      onTeardown: () => teardowns.push('teardown'),
+    });
+    await expect(view.ready).rejects.toBeInstanceOf(StartFailure);
+    await expect(view.ready).rejects.toMatchObject({
+      kind: 'application',
+      cause: expect.objectContaining({ message: 'actions broke' }),
+    });
+    expect(container.childNodes).toHaveLength(0);
+    expect(teardowns).toEqual(['teardown']);
+    expect(view.surface.update({ label: 'late' }).ok).toBe(false);
+    await view.dispose();
+    expect(teardowns).toEqual(['teardown']);
+
+    // Restart works at once: the failed start left no claim on the container.
+    const again = await start();
+    await again.ready;
+    await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+  });
+
+  it('still disposes the failed start when onTeardown also throws, and reports that throw', async () => {
+    const errors: Array<[unknown, string]> = [];
+    const view = await start({
+      actions: () => {
+        throw new Error('actions broke');
+      },
+      onTeardown: () => {
+        throw new Error('teardown broke');
+      },
+      onError: (error, phase) => errors.push([error, phase]),
+    });
+    await expect(view.ready).rejects.toMatchObject({ kind: 'application' });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.[1]).toBe('teardown');
+    expect(container.childNodes).toHaveLength(0);
+    const again = await start();
+    await again.ready;
+  });
+
   it('retires the surface and removes the view when the host tears it down', async () => {
     const view = await start();
     await view.ready;

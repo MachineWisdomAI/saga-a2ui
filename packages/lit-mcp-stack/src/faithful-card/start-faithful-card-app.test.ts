@@ -257,6 +257,42 @@ describe('startFaithfulCardApp', () => {
     expect([...new Set(tokens)]).toEqual([1, 2]);
   });
 
+  it('returns a running view whose ready rejects as application, after cleanup, when the initial chrome throws; the container is free again', async () => {
+    let calls = 0;
+    const view = await start({
+      chrome: () => {
+        calls += 1;
+        throw new Error('chrome startup');
+      },
+    });
+    await expect(view.ready).rejects.toBeInstanceOf(StartFailure);
+    await expect(view.ready).rejects.toMatchObject({
+      kind: 'application',
+      cause: expect.objectContaining({ message: 'chrome startup' }),
+    });
+    expect(calls).toBe(1);
+    expect(container.childNodes).toHaveLength(0);
+    await view.dispose();
+
+    await host!.close();
+    const again = await start();
+    await again.ready;
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.waiting));
+  });
+
+  it('fails startup as application, not as a throw, when the chrome throws while showing a policy failure', async () => {
+    embedPolicy('{"level":"nope"}');
+    const view = await start({
+      chrome: () => {
+        throw new Error('chrome startup');
+      },
+    });
+    await expect(view.ready).rejects.toMatchObject({ kind: 'application' });
+    expect(container.childNodes).toHaveLength(0);
+    expect(host!.connects()).toBe(0);
+    await view.dispose();
+  });
+
   it('refuses a second start on a running container and keeps the first view intact; restarts after dispose', async () => {
     const first = await start();
     await first.ready;
