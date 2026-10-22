@@ -105,6 +105,8 @@ const COPIED_ENTRIES = [
   'e2e/action-consumer',
   'e2e/archive-fixture',
   'e2e/card-app-stack',
+  // The stack probe's branded page reads the application's stylesheet the card-styling pages share.
+  'e2e/card-styling/branded.ts',
   'e2e/card-workflow',
   'e2e/catalog-isolation',
   'e2e/faithful-card',
@@ -347,6 +349,7 @@ export async function buildInstalledReactCardProbe(
   const consumer = path.join(work, 'react-card-consumer');
   copyApplication(consumer, [
     'e2e/card-app-stack',
+    'e2e/card-styling/branded.ts',
     'tsconfig.json',
     CARD_STACK_CONFIG,
   ]);

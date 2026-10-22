@@ -6,6 +6,10 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // the assertions are computed styles. The expected values are the stylesheet's own numbers, so a
 // renderer that dropped a committed class, element or marker would not match them. The same
 // assertions run against both renderers.
+//
+// Scope: this is evidence for the renderers' card surfaces (`openFaithfulCardSurface`) mounted by
+// a test page that calls `window.cardPage`. It does not start a card application. What a branded
+// card does when `startFaithfulCardApp` of a stack starts it is qualified in card-app-stack.spec.ts.
 
 const renderers = ['react', 'lit'] as const;
 

@@ -5,6 +5,7 @@ import type {
 } from '@saga-a2ui/components/faithful-card';
 import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 import type { HostContext, ReadingProfile } from '@saga-a2ui/mcp/view';
+import { BRANDED_CSS, classifyAttribution } from '../card-styling/branded.js';
 import { PROBE_TEXTS, PROBE_UNSUPPORTED } from './texts.js';
 
 // Test-only probe of the card application stacks in a real browser. It is a minimal consumer of one
@@ -118,6 +119,41 @@ export function runProbe(stack: ProbeStack): void {
   };
   const classified =
     document.querySelector('meta[name="probe-classify"]') !== null;
+
+  // A page that asks for branding gets the application's stylesheet and its own classification of
+  // the closing paragraph, the same ones the lower-level card-styling specification loads. Both
+  // are the application's: the stack only starts and presents the card. The observer re-runs the
+  // classifier whenever the card's content changes, so the marker moving with each answer is the
+  // application's to follow, as the styling guide says.
+  if (document.querySelector('meta[name="probe-brand"]') !== null) {
+    const style = document.createElement('style');
+    style.textContent = BRANDED_CSS;
+    document.head.append(style);
+    // The Lit card sits inside open shadow roots, whose changes an observer on the container does
+    // not see, so each root found is watched too.
+    const watched = new WeakSet<Node>();
+    const watch = (root: Node): void => {
+      if (watched.has(root)) return;
+      watched.add(root);
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    };
+    const observer: MutationObserver = new MutationObserver(() => {
+      for (const element of container.querySelectorAll('*')) {
+        if (element.shadowRoot) watchShadows(element.shadowRoot);
+      }
+      classifyAttribution(document);
+    });
+    const watchShadows = (root: ShadowRoot): void => {
+      watch(root);
+      for (const element of root.querySelectorAll('*'))
+        if (element.shadowRoot) watchShadows(element.shadowRoot);
+    };
+    watch(container);
+  }
 
   const definition = stack.FaithfulCardApp.define({
     name: 'Probe answers',
