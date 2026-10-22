@@ -9,7 +9,8 @@ import { ActionsScope, type ReactActions } from '@saga-a2ui/react/actions';
 import type { ServerTransport } from '@saga-a2ui/core/actions';
 import type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
-import { createElement, type ReactNode } from 'react';
+import { createElement, Fragment, type ReactNode } from 'react';
+import { watchActionSetup } from './action-setup.js';
 import {
   applicationFailureOf,
   callApplication,
@@ -89,7 +90,10 @@ export interface RunningA2uiView<TData> extends RunningView {
  * An application callback that throws while the view is being set up (the `actions` factory) does not
  * throw out of `start`, nor does a catalog component that throws in the first render: the stack
  * takes back what it made, frees the container and returns a view whose `ready` rejects with
- * `StartFailure` of kind `application`. Imports
+ * `StartFailure` of kind `application`. So does an action setup (`attach`) that throws when the
+ * view mounts: the actions' own `onSetupError` still hears it, and since the setup runs just after
+ * the first render, the failure arrives while the view is starting and the container is free once
+ * `dispose()` settles. A throw in a later render goes to `onError` with phase `result`. Imports
  * nothing from `@saga-a2ui/components`.
  */
 export function startA2uiView<TData>(
@@ -135,24 +139,35 @@ export function startA2uiViewOn<TData>(
           )
         : makeActions;
 
-    const mounted = (root = openStackRoot(claim.container));
+    const mounted = (root = openStackRoot(claim.container, options.onError));
     const shown: ReactNode = createElement(Surface, { of: opened.handle });
     // The first render is part of starting: a component that throws in it fails the start.
+    // An action setup that throws is swallowed by the actions boundary after the application's
+    // sink heard it, and it runs in an effect after this render: readiness waits for it.
+    const setup = actions === undefined ? undefined : watchActionSetup(actions);
     const failed = mounted.renderInitially(
-      actions === undefined
+      setup === undefined
         ? shown
-        : createElement(ActionsScope, { actions, children: shown }),
+        : createElement(ActionsScope, {
+            actions: setup.actions,
+            children: createElement(Fragment, null, shown, setup.marker),
+          }),
     );
     if (failed !== undefined) failApplication(failed.cause);
+    const { readyWhen } = options;
+    const readiness =
+      setup === undefined
+        ? readyWhen
+        : async (signal: AbortSignal): Promise<void> => {
+            await Promise.all([setup.attempted, readyWhen?.(signal)]);
+          };
 
     const running = runView({
       connection,
       lifetime: new AbortController(),
       releaseContainer: claim.release,
       sizing: options.sizing ?? 'host',
-      ...(options.readyWhen === undefined
-        ? {}
-        : { readyWhen: options.readyWhen }),
+      ...(readiness === undefined ? {} : { readyWhen: readiness }),
       ...(options.hostContext === undefined
         ? {}
         : { hostContext: options.hostContext }),

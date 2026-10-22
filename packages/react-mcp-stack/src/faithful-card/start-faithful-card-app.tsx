@@ -128,7 +128,8 @@ function CardApp(props: {
  * `container-busy`) before connecting to anything. The first render happens before the host is
  * connected: a `chrome` that throws in it does not throw out of `start`, it fails startup (`ready`
  * rejects with `StartFailure` of kind `application`) after the stack took back what it made and
- * freed the container. A throw in a later render keeps React's own reporting.
+ * freed the container. A throw in a later render goes to `onError` with phase
+ * `result`, the render a delivered result caused (default `console.error`); `ready` stays resolved.
  */
 export function startFaithfulCardApp(
   definition: FaithfulCardAppDefinition,
@@ -153,7 +154,7 @@ export function startFaithfulCardAppOn(
     const { texts } = definition;
     const Chrome = options.chrome ?? DefaultChrome;
     const store = createStateStore({ kind: 'waiting', text: texts.waiting });
-    const mounted = (root = openStackRoot(claim.container));
+    const mounted = (root = openStackRoot(claim.container, options.onError));
     const unmount = (): void => mounted.root.unmount();
     /** The first render, now: the chrome is the application's, and a throw in it fails the start. */
     const renderInitially = (view?: FaithfulCardView, card?: CardSurface) =>

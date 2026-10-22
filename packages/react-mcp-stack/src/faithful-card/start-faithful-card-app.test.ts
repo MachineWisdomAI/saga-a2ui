@@ -447,25 +447,72 @@ describe('startFaithfulCardApp', () => {
     await again.ready;
   });
 
-  it('a chrome that throws only after the view was ready keeps React’s own reporting: ready stays resolved', async () => {
-    // React reports an uncaught render error to `reportError`, or to the console without one.
-    const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const view = await start({
-      chrome: (props: CardChromeProps) => {
-        if (props.state.kind === 'answer') throw new Error('late chrome');
-        return props.card;
-      },
-    });
+  it('a chrome that throws after the view was ready is reported through onError (phase result); ready stays resolved and disposal is intact', async () => {
+    const windowErrors: unknown[] = [];
+    const onWindowError = (event: ErrorEvent) => {
+      windowErrors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onWindowError);
+    try {
+      const errors: Array<[unknown, string]> = [];
+      const view = await start({
+        chrome: (props: CardChromeProps) => {
+          if (props.state.kind === 'answer') throw new Error('late chrome');
+          return props.card;
+        },
+        onError: (error, phase) => errors.push([error, phase]),
+      });
+      await view.ready;
+      await host!.bridge.sendToolResult(answer('Shown'));
+      await vi.waitFor(() => expect(errors).toHaveLength(1));
+      expect(errors[0]![0]).toEqual(
+        expect.objectContaining({ message: 'late chrome' }),
+      );
+      expect(errors[0]![1]).toBe('result');
+      await settle(20);
+      // The stack reported it; React's own channel did not hear it as well.
+      expect(windowErrors).toEqual([]);
+      await expect(view.ready).resolves.toBeUndefined();
+      await view.dispose();
+      expect(container.childNodes).toHaveLength(0);
+    } finally {
+      window.removeEventListener('error', onWindowError);
+    }
+  });
+
+  it('a late chrome throw goes to the console when no onError is given, and a throwing onError does not stop disposal', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const chrome = (props: CardChromeProps) => {
+      if (props.state.kind === 'answer') throw new Error('late chrome');
+      return props.card;
+    };
+    const view = await start({ chrome });
     await view.ready;
     await host!.bridge.sendToolResult(answer('Shown'));
     await vi.waitFor(() =>
       expect(
-        reported.mock.calls.some((call) =>
+        logged.mock.calls.some((call) =>
           call.some((a) => a instanceof Error && a.message === 'late chrome'),
         ),
       ).toBe(true),
     );
-    await expect(view.ready).resolves.toBeUndefined();
+    await view.dispose();
+    expect(container.childNodes).toHaveLength(0);
+
+    // A reporter that throws is the end of the line: it does not stop cleanup either.
+    document.body.replaceChildren(container);
+    const again = await start({
+      chrome,
+      onError: () => {
+        throw new Error('reporter broke');
+      },
+    });
+    await again.ready;
+    await host!.bridge.sendToolResult(answer('Shown again'));
+    await settle(40);
+    await expect(again.dispose()).resolves.toBeUndefined();
+    expect(container.childNodes).toHaveLength(0);
   });
 
   it('pagehide retires a ready view once and unmounts it', async () => {

@@ -21,6 +21,14 @@ export function failApplication(cause: unknown): never {
   throw new ApplicationCallFailure(cause);
 }
 
+/**
+ * The application's failure as a value, for work that settles after `start` returned (a readiness
+ * gate): `ready` then rejects as `application`, as for a throw from the synchronous part.
+ */
+export function applicationFailureError(cause: unknown): unknown {
+  return new ApplicationCallFailure(cause);
+}
+
 /** The application's own throw, when `error` came out of {@link callApplication}. */
 export function applicationFailureOf(
   error: unknown,

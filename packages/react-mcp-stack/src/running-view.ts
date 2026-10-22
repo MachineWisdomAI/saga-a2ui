@@ -5,6 +5,7 @@ import {
   type HostContext,
   type ToolResult,
 } from '@saga-a2ui/mcp/view';
+import { applicationFailureOf } from './application-call.js';
 import type { HostConnection } from './host-connection.js';
 import { StartFailure, type ErrorPhase } from './start-failure.js';
 
@@ -56,9 +57,14 @@ export interface RunViewOptions {
 }
 
 function startFailureOf(failure: unknown): StartFailure {
-  return failure instanceof ViewStartFailure
-    ? new StartFailure(failure.kind, failure.cause)
-    : new StartFailure('application', failure);
+  if (failure instanceof ViewStartFailure) {
+    // Readiness work the stack itself holds for an application callback (the action setup).
+    const own = applicationFailureOf(failure.cause);
+    return own === undefined
+      ? new StartFailure(failure.kind, failure.cause)
+      : new StartFailure('application', own.cause);
+  }
+  return new StartFailure('application', failure);
 }
 
 export function runView(options: RunViewOptions): RunningView {

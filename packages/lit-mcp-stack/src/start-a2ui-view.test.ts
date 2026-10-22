@@ -246,6 +246,42 @@ describe('startA2uiView', () => {
     await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
   });
 
+  it('an actions setup (attach) that throws on the first presentation fails startup as application, after cleanup, and the actions sink still hears it', async () => {
+    const sink: unknown[] = [];
+    const teardowns: string[] = [];
+    const errors: unknown[] = [];
+    let handshakes = 0;
+    host = await startTestHost({ onInitialized: () => (handshakes += 1) });
+    const view = await start({
+      actions: createLitActions({
+        attach: () => {
+          throw new Error('attach broke');
+        },
+        onSetupError: (error) => sink.push(error),
+      }),
+      onTeardown: () => teardowns.push('teardown'),
+      onError: (error) => errors.push(error),
+    });
+    await expect(view.ready).rejects.toBeInstanceOf(StartFailure);
+    await expect(view.ready).rejects.toMatchObject({
+      kind: 'application',
+      cause: expect.objectContaining({ message: 'attach broke' }),
+    });
+    expect(sink).toEqual([
+      expect.objectContaining({ message: 'attach broke' }),
+    ]);
+    expect(errors).toEqual([]);
+    expect(container.childNodes).toHaveLength(0);
+    expect(teardowns).toEqual(['teardown']);
+    expect(handshakes).toBe(0); // the failure was known before the handshake began
+    expect(view.surface.update({ label: 'late' }).ok).toBe(false);
+    await view.dispose();
+
+    const again = await start();
+    await again.ready;
+    await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+  });
+
   it('still disposes the failed start when onTeardown also throws, and reports that throw', async () => {
     const errors: Array<[unknown, string]> = [];
     const view = await start({

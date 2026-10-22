@@ -242,6 +242,45 @@ describe('startA2uiView', () => {
     await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
   });
 
+  it('an actions setup (attach) that throws on the first mount fails startup as application, after cleanup, and the actions sink still hears it', async () => {
+    const sink: unknown[] = [];
+    const teardowns: string[] = [];
+    const errors: unknown[] = [];
+    host = await startTestHost();
+    const view = await start({
+      actions: createReactActions({
+        attach: () => {
+          throw new Error('attach broke');
+        },
+        onSetupError: (error) => sink.push(error),
+      }),
+      onTeardown: () => teardowns.push('teardown'),
+      onError: (error) => errors.push(error),
+    });
+    await expect(view.ready).rejects.toBeInstanceOf(StartFailure);
+    await expect(view.ready).rejects.toMatchObject({
+      kind: 'application',
+      cause: expect.objectContaining({ message: 'attach broke' }),
+    });
+    expect(sink).toEqual([
+      expect.objectContaining({ message: 'attach broke' }),
+    ]);
+    // The failure is the start's own, so the later-failure channel did not also hear it.
+    expect(errors).toEqual([]);
+    // Cleanup is complete once the view is disposed (the setup runs after the first render, so
+    // the connection was already under way); then the container is free for another start.
+    await view.dispose();
+    expect(container.childNodes).toHaveLength(0);
+    expect(teardowns).toEqual(['teardown']);
+
+    // The failed start ended its connection, so a new start gets a new host.
+    await host.close();
+    host = undefined;
+    const again = await start();
+    await again.ready;
+    await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+  });
+
   it('a catalog component that throws on the initial render fails startup as application, after cleanup', async () => {
     const BrokenApi = {
       name: 'Broken',

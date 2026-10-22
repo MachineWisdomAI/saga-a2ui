@@ -18,7 +18,11 @@ import {
   type HostContext,
   type ToolResult,
 } from '@saga-a2ui/mcp/view';
-import { applicationFailureOf, callApplication } from './application-call.js';
+import {
+  applicationFailureOf,
+  callApplication,
+  failApplication,
+} from './application-call.js';
 import { claimContainer } from './container-claim.js';
 import {
   connectToHost,
@@ -153,6 +157,26 @@ export function startA2uiViewOn<TData>(
           )
         : makeActions;
 
+    // The app element presents the surface, and so starts the actions, as it connects. A setup
+    // that throws there is swallowed into the element's safe fallback after the application's sink
+    // heard it; the stack notes it here, so the start fails as `application` instead of reporting
+    // a view that shows nothing. Only the first presentation, made as the element connects, counts.
+    let connecting = true;
+    let setupFailure: { readonly cause: unknown } | undefined;
+    const watched: A2uiActions | undefined =
+      actions === undefined
+        ? undefined
+        : {
+            begin(mount) {
+              try {
+                return actions.begin(mount);
+              } catch (error) {
+                if (connecting) setupFailure ??= { cause: error };
+                throw error;
+              }
+            },
+          };
+
     defineElements([...options.catalog.components.values()]);
     const AppElement = createA2uiAppElement({
       createSession: () =>
@@ -161,13 +185,18 @@ export function startA2uiViewOn<TData>(
           decoder: a2uiV0_9Decoder,
         }),
       layout: options.layout,
-      ...(actions === undefined ? {} : { actions }),
+      ...(watched === undefined ? {} : { actions: watched }),
     });
     views += 1;
     customElements.define(`saga-a2ui-view-${views}`, AppElement);
     const shown = new AppElement();
     element = shown;
-    claim.container.append(shown);
+    try {
+      claim.container.append(shown);
+    } finally {
+      connecting = false;
+    }
+    if (setupFailure !== undefined) failApplication(setupFailure.cause);
 
     const surface: BoundSurface<TData> = {
       update: (data) => shown.updateData(data),

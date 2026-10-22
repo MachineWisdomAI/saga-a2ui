@@ -1,13 +1,19 @@
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
+import type { ErrorPhase } from './start-failure.js';
 
 // A view's first render is part of starting it: the application's chrome or catalog components
 // run in it, and a throw there is an application callback that threw during startup. React reports
 // such a throw asynchronously (to `window` by default) and unmounts the tree, so left alone the
 // view would be "ready" with nothing on screen. This renders the first tree synchronously and
 // hands the throw back, so the caller can end the start as `StartFailure('application')` after
-// its own cleanup. Throws after the first render keep React's own reporting.
+// its own cleanup.
+//
+// A throw in a later render (the chrome or a component rendering a result) is an application
+// callback that threw after the view was ready: it goes to the view's `onError` with phase
+// `result`, the render that the delivered result caused. React still unmounts the tree it could
+// not render, and nothing the application already changed is rolled back.
 
 export interface StackRoot {
   readonly root: Root;
@@ -18,20 +24,26 @@ export interface StackRoot {
   renderInitially(tree: ReactNode): { readonly cause: unknown } | undefined;
 }
 
-/** What React does with an error nothing caught, when the root is not told otherwise. */
-function reportLikeReact(error: unknown): void {
-  if (typeof globalThis.reportError === 'function')
-    globalThis.reportError(error);
-  else console.error(error);
-}
-
-export function openStackRoot(container: Element): StackRoot {
+export function openStackRoot(
+  container: Element,
+  onError: ((error: unknown, phase: ErrorPhase) => void) | undefined,
+): StackRoot {
   let initial: { readonly cause: unknown } | undefined;
   let rendering = false;
   const root = createRoot(container, {
     onUncaughtError(error) {
-      if (!rendering) reportLikeReact(error);
-      else initial ??= { cause: error };
+      if (rendering) {
+        initial ??= { cause: error };
+        return;
+      }
+      try {
+        (onError ?? ((reported: unknown) => console.error(reported)))(
+          error,
+          'result',
+        );
+      } catch {
+        // A reporter that throws must not break React's own cleanup of the failed tree.
+      }
     },
   });
   return {
