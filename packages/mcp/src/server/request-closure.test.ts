@@ -114,6 +114,42 @@ describe('attachRequestLifetime', () => {
     expect(finishes()).toBe(1);
   });
 
+  it('calls an earlier close callback with the receiver the protocol gives it', async () => {
+    const server = newServer();
+    const { lifetime, finishes } = countedLifetime();
+    const receivers: unknown[] = [];
+    server.server.onclose = function (this: unknown) {
+      receivers.push(this);
+    };
+    attachRequestLifetime(server, lifetime);
+    const transport = fakeTransport();
+    await server.connect(transport);
+
+    transport.onclose?.();
+
+    expect(receivers).toEqual([server.server]);
+    expect(receivers[0]).toBe(server.server);
+    expect(finishes()).toBe(1);
+  });
+
+  it('keeps the receiver and still finishes when the earlier callback throws', async () => {
+    const server = newServer();
+    const { lifetime, finishes } = countedLifetime();
+    const receivers: unknown[] = [];
+    server.server.onclose = function (this: unknown) {
+      receivers.push(this);
+      throw new Error('callback failed');
+    };
+    attachRequestLifetime(server, lifetime);
+    const transport = fakeTransport();
+    await server.connect(transport);
+
+    expect(() => transport.onclose?.()).toThrow('callback failed');
+
+    expect(receivers[0]).toBe(server.server);
+    expect(finishes()).toBe(1);
+  });
+
   it('finishes even when an earlier close callback throws', async () => {
     const server = newServer();
     const { lifetime, finishes } = countedLifetime();

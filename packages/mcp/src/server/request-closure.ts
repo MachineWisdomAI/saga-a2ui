@@ -23,7 +23,8 @@ const attached = new WeakMap<McpServer, RequestLifetime>();
  * server is created and before it is returned from the factory.
  *
  * It chains to a `server.server.onclose` callback that is already set, so attach after installing
- * your own; the upstream handler chains to this one in the same way. Attaching the same lifetime
+ * your own; that callback keeps the receiver (`this`) the protocol calls it with, and the upstream
+ * handler chains to this one in the same way. Attaching the same lifetime
  * again changes nothing. A different lifetime throws `RequestLifetimeAttachmentError`: it could
  * never be finished, and its request deadline would run on.
  */
@@ -44,9 +45,11 @@ export function attachRequestLifetime(
   };
 
   const previousOnClose = server.server.onclose;
-  server.server.onclose = () => {
+  // A `function`, not an arrow: the callback is invoked as a method of the protocol object, and
+  // the application's own callback must receive that same `this`.
+  server.server.onclose = function (this: unknown): void {
     try {
-      previousOnClose?.();
+      previousOnClose?.call(this);
     } finally {
       finishOnce();
     }
