@@ -28,6 +28,8 @@ export interface ProbeOptions {
     hostName: string | undefined,
   ) => void;
   readonly onError: (error: unknown, phase: string) => void;
+  /** The application's constructable sheets, empty unless the page is branded. Only a stack whose `stylesVia` is `styles` takes them. */
+  readonly styles: readonly CSSStyleSheet[];
 }
 
 export interface ProbeStack {
@@ -37,6 +39,8 @@ export interface ProbeStack {
     context: HostContext | undefined,
     hostName: string | undefined,
   ) => ReadingProfile;
+  /** How the application's stylesheet reaches this stack's card: the page's own CSS (React) or the start's `styles` option (Lit). */
+  readonly stylesVia: 'page' | 'styles';
   start(
     definition: FaithfulCardAppDefinition,
     options: ProbeOptions,
@@ -120,15 +124,22 @@ export function runProbe(stack: ProbeStack): void {
   const classified =
     document.querySelector('meta[name="probe-classify"]') !== null;
 
+  let brandSheets: readonly CSSStyleSheet[] = [];
+
   // A page that asks for branding gets the application's stylesheet and its own classification of
   // the closing paragraph, the same ones the lower-level card-styling specification loads. Both
   // are the application's: the stack only starts and presents the card. The observer re-runs the
   // classifier whenever the card's content changes, so the marker moving with each answer is the
   // application's to follow, as the styling guide says.
   if (document.querySelector('meta[name="probe-brand"]') !== null) {
-    const style = document.createElement('style');
-    style.textContent = BRANDED_CSS;
-    document.head.append(style);
+    if (stack.stylesVia === 'page') {
+      const style = document.createElement('style');
+      style.textContent = BRANDED_CSS;
+      document.head.append(style);
+    } else {
+      brandSheets = [new CSSStyleSheet()];
+      brandSheets[0]?.replaceSync(BRANDED_CSS);
+    }
     // The Lit card sits inside open shadow roots, whose changes an observer on the container does
     // not see, so each root found is watched too.
     const watched = new WeakSet<Node>();
@@ -167,6 +178,7 @@ export function runProbe(stack: ProbeStack): void {
 
   const options = (gated: boolean): ProbeOptions => ({
     container,
+    styles: brandSheets,
     sizing: 'own',
     // Stands in for embedded fonts: the test settles it by hand, before or after the view ends. It
     // ignores the abort on purpose, so a late outcome after disposal can be observed.

@@ -24,6 +24,8 @@ const chrome = ({ card, state }: CardChromeParts) =>
 runProbe({
   FaithfulCardApp,
   readingProfile,
+  // The Lit card sits in shadow roots a page stylesheet cannot reach: the start adopts the sheets.
+  stylesVia: 'styles',
   start: (definition, options) =>
     startFaithfulCardApp(definition, { ...options, chrome }),
 });
