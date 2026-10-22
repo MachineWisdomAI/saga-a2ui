@@ -20,7 +20,7 @@ Core, components, MCP and React are available on public npm at `0.1.0-rc.1`. See
 
 ### Delivery
 
-`mcp/` is for MCP/MCP Apps delivery, host capabilities and lifecycle. It provides separate `/server`, `/view` and `/policy` entry points. It consumes core where needed (the host link contract, as a type); it does not own visual protocol parsing, and it never depends on components or a renderer. `/view` owns every ordering rule of a view: `runToolResultView` installs handlers before `connect`, holds early results until the view is ready, applies the host context before the first result, ends the view once on dispose, host teardown or `pagehide` and reports a throwing application callback without rolling its changes back; `hostLinksFromApp`, `startOwnSizing` and `readingProfile` sit beside it.
+`mcp/` is for MCP/MCP Apps delivery, host capabilities and lifecycle. It provides separate `/server`, `/view` and `/policy` entry points. It consumes core where needed (the host link contract, as a type); it does not own visual protocol parsing, and it never depends on components or a renderer. `/view` owns every ordering rule of a view: `runToolResultView` installs handlers before `connect`, holds early results until the view is ready, applies the host context before the first result, ends the view once on dispose, host teardown or `pagehide` and reports a throwing application callback without rolling its changes back; `hostLinksFromApp`, `startOwnSizing`, `readingProfile` and `readStructuredResult` (the one place that decides what MCP's `isError` and `structuredContent` mean for a card result's default reading) sit beside it.
 
 ### GenUI renderers
 
