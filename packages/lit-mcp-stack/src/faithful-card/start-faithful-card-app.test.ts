@@ -10,11 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   readEnvelopeOrText,
   gate,
+  pagehideListeners,
   settle,
   startTestHost,
   toolResult,
   UNSUPPORTED_WORDING,
   unreachableHost,
+  watchClose,
   type TestHost,
 } from '../stack.test-support.js';
 import { StartFailure } from '../start-failure.js';
@@ -462,6 +464,85 @@ describe('startFaithfulCardApp', () => {
     dispatchEvent(new Event('pagehide'));
     await vi.waitFor(() => expect(container.childNodes).toHaveLength(0));
     await view.dispose();
+  });
+
+  it('removes the card before the connection closes when it is disposed while starting, and the container restarts', async () => {
+    const fonts = gate();
+    const view = await start({ readyWhen: () => fonts.promise });
+    const closing = watchClose(host!.connection.app, container);
+    await view.dispose();
+    expect(await kindOf(view.ready)).toBe('disposed');
+    expect(closing.held()).toBe(0);
+    await host!.close();
+    const again = await start(); // the container is free
+    await again.ready;
+  });
+
+  it('keeps the connect failure on screen until the view is disposed, then restarts', async () => {
+    const view = startFaithfulCardAppOn(unreachableHost, definition, {
+      container,
+      sizing: 'host',
+    });
+    views.push(view);
+    expect(await kindOf(view.ready)).toBe('connect');
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.connectFailure));
+    await settle();
+    expect(status()).toBe(TEXTS.connectFailure); // not readyFailure, and still shown
+    await view.dispose();
+    expect(container.childNodes).toHaveLength(0);
+    const again = await start();
+    await again.ready;
+  });
+
+  it('removes its pagehide listener when a ready view’s callbacks and reporter throw, and a later pagehide is inert', async () => {
+    const listening = pagehideListeners();
+    const view = await start(
+      {
+        onError: () => {
+          throw new Error('reporter broke');
+        },
+        hostContext: (context) => {
+          if (context?.userAgent === 'throw-now') throw new Error('broke');
+        },
+      },
+      { hostContext: { theme: 'light' } },
+    );
+    await view.ready;
+    expect(listening()).toBe(1);
+    await host!.bridge.sendHostContextChange({ userAgent: 'throw-now' });
+    await settle();
+    expect(listening()).toBe(1); // a throwing callback does not end the view
+    await view.dispose();
+    expect(listening()).toBe(0);
+    expect(container.childNodes).toHaveLength(0);
+    dispatchEvent(new Event('pagehide'));
+    await settle();
+    await host!.close();
+    const again = await start();
+    await again.ready;
+  });
+
+  it('removes its pagehide listener when a callback throws while starting, and keeps the failure text until disposed', async () => {
+    const listening = pagehideListeners();
+    const view = await start({
+      onError: () => {
+        throw new Error('reporter broke');
+      },
+      hostContext: () => {
+        throw new Error('theme broke');
+      },
+    });
+    expect(await kindOf(view.ready)).toBe('application');
+    expect(listening()).toBe(0);
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+    dispatchEvent(new Event('pagehide'));
+    await settle();
+    expect(status()).toBe(TEXTS.problem); // a later pagehide changes nothing
+    await view.dispose();
+    expect(container.childNodes).toHaveLength(0);
+    await host!.close();
+    const again = await start();
+    await again.ready;
   });
 
   it('gives the chrome function the card and the state', async () => {

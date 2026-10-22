@@ -13,9 +13,13 @@ import {
   type RunningA2uiView,
 } from './index.js';
 import {
+  gate,
+  pagehideListeners,
   settle,
   startTestHost,
   toolResult,
+  unreachableHost,
+  watchClose,
   type TestHost,
 } from './stack.test-support.js';
 import { startA2uiViewOn } from './start-a2ui-view.js';
@@ -367,4 +371,87 @@ describe('startA2uiView', () => {
     await settle();
     expect(container.childNodes).toHaveLength(0);
   });
+
+  it('reports a handshake that fails as connect, shows nothing, and leaves the container free', async () => {
+    const view = startA2uiViewOn(unreachableHost, {
+      container,
+      layout,
+      catalog,
+      onToolResult: () => undefined,
+    });
+    views.push(view);
+    await expect(view.ready).rejects.toMatchObject({ kind: 'connect' });
+    await view.dispose();
+    expect(container.childNodes).toHaveLength(0);
+    const again = await start();
+    await again.ready;
+    await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+  });
+});
+
+describe('ending a view', () => {
+  it('removes the view before the connection closes when it is disposed while starting', async () => {
+    host = await startTestHost();
+    const closing = watchClose(host.connection.app, container);
+    const fonts = gate();
+    const view = await start({ readyWhen: () => fonts.promise });
+    await view.dispose();
+    await expect(view.ready).rejects.toMatchObject({ kind: 'disposed' });
+    expect(closing.held()).toBe(0);
+    await host.close();
+    host = undefined;
+    const again = await start(); // the container is free
+    await again.ready;
+  });
+
+  it('removes the view before the connection closes when the page goes away while starting', async () => {
+    host = await startTestHost();
+    const closing = watchClose(host.connection.app, container);
+    const fonts = gate();
+    const view = await start({ readyWhen: () => fonts.promise });
+    dispatchEvent(new Event('pagehide'));
+    await view.dispose();
+    expect(closing.held()).toBe(0);
+  });
+
+  it.each(['starting', 'ready'] as const)(
+    'ends a %s view once, removes its pagehide listener and frees the container, although onTeardown and the reporter throw',
+    async (state) => {
+      host = await startTestHost();
+      const listening = pagehideListeners();
+      const fonts = gate();
+      let teardowns = 0;
+      const view = await start({
+        readyWhen: () => fonts.promise,
+        onTeardown: () => {
+          teardowns += 1;
+          throw new Error('teardown broke');
+        },
+        onError: () => {
+          throw new Error('reporter broke');
+        },
+      });
+      expect(listening()).toBe(1);
+      if (state === 'ready') {
+        fonts.resolve();
+        await view.ready;
+      }
+      await view.dispose();
+      expect(listening()).toBe(0);
+      expect(container.childNodes).toHaveLength(0);
+
+      // Nothing retained answers a later pagehide, and nothing runs twice.
+      dispatchEvent(new Event('pagehide'));
+      await view.dispose();
+      await settle();
+      expect(teardowns).toBe(1);
+      expect(view.surface.update({ label: 'late' }).ok).toBe(false);
+
+      await host.close();
+      host = undefined;
+      const again = await start();
+      await again.ready;
+      await vi.waitFor(() => expect(label()?.textContent).toBe('Waiting'));
+    },
+  );
 });

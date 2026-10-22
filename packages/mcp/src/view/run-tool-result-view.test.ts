@@ -46,6 +46,8 @@ interface Run {
   readonly log: string[];
   readonly failures: Array<{ kind: ViewFailureKind; cause: unknown }>;
   readonly errors: Array<{ error: unknown; phase: string }>;
+  /** Why each `onTeardown` call was made: the startup failure kind, or `undefined` for any other ending. */
+  readonly teardownReasons: Array<ViewFailureKind | undefined>;
   readonly view: ToolResultView;
 }
 
@@ -95,6 +97,7 @@ async function startRun(options: RunOptions = {}): Promise<Run> {
   const log: string[] = [];
   const failures: Run['failures'] = [];
   const errors: Run['errors'] = [];
+  const teardownReasons: Run['teardownReasons'] = [];
   const view = runToolResultView({
     app,
     transport: viewSide,
@@ -111,8 +114,9 @@ async function startRun(options: RunOptions = {}): Promise<Run> {
       log.push(`context:${context?.theme ?? '-'}:${hostName ?? '-'}`);
       options.onHostContext?.(context, hostName, log);
     },
-    onTeardown: () => {
+    onTeardown: (reason) => {
       log.push('teardown');
+      teardownReasons.push(reason?.kind);
       options.onTeardown?.(log);
     },
     onFailure: (failure) =>
@@ -121,7 +125,7 @@ async function startRun(options: RunOptions = {}): Promise<Run> {
       ? undefined
       : (error, phase) => errors.push({ error, phase }),
   });
-  return { app, bridge, log, failures, errors, view };
+  return { app, bridge, log, failures, errors, teardownReasons, view };
 }
 
 afterEach(async () => {
@@ -348,6 +352,8 @@ describe('ending during startup', () => {
     await expect(kindOf(run.view.ready)).resolves.toBe('disposed');
     expect(aborted).toEqual([true]);
     expect(run.log).toEqual(['teardown']);
+    // An ending the caller asked for is not a startup failure, so onTeardown is told no reason.
+    expect(run.teardownReasons).toEqual([undefined]);
     expect(run.failures.map((f) => f.kind)).toEqual(['disposed']);
   });
 
@@ -411,6 +417,8 @@ describe('startup failures', () => {
     await expect(kindOf(run.view.ready)).resolves.toBe('connect');
     expect(run.failures.map((f) => f.kind)).toEqual(['connect']);
     expect(run.log).toEqual(['teardown']);
+    // onTeardown hears the failure that ended the view, before the connection closes.
+    expect(run.teardownReasons).toEqual(['connect']);
   });
 
   it('a readyWhen rejection is reported as ready, distinct from a connect failure, and ends the view', async () => {

@@ -67,7 +67,6 @@ function startFailureOf(failure: unknown): StartFailure {
 export function runView(options: RunViewOptions): RunningView {
   const { app, transport } = options.connection;
   const report = options.onError ?? ((error: unknown) => console.error(error));
-  let ready = false;
   let onScreen = true;
   let failureShown = false;
   let sizingStarted = false;
@@ -110,7 +109,7 @@ export function runView(options: RunViewOptions): RunningView {
       }
       options.hostContext?.(context, hostName);
     },
-    onTeardown() {
+    onTeardown(startupFailure) {
       options.lifetime.abort();
       const failures: unknown[] = [];
       try {
@@ -118,13 +117,14 @@ export function runView(options: RunViewOptions): RunningView {
       } catch (error) {
         failures.push(error);
       }
-      // A view that was ready has nothing more to show. One still starting may yet have a failure
-      // to show, which is known only after the connection has ended (see below).
-      if (ready) {
+      // Whatever ended the view, nothing it showed may outlast its connection. Only a start that
+      // failed keeps something on screen: the failure, which is known only after the connection
+      // has ended (see below).
+      if (startupFailure === undefined) {
         try {
           leave();
         } catch (error) {
-          failures.push(error);
+          reportError(error, 'teardown');
         }
       }
       queueMicrotask(() => {
@@ -150,9 +150,7 @@ export function runView(options: RunViewOptions): RunningView {
   });
 
   const readiness = running.ready.then(
-    () => {
-      ready = true;
-    },
+    () => undefined,
     (failure: unknown) => {
       throw startFailureOf(failure);
     },

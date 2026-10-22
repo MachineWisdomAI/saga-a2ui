@@ -74,9 +74,11 @@ export interface ToolResultViewDependencies {
    * Called once, whichever way the view ends (host teardown request, `dispose()`, `pagehide`, or a
    * startup failure), before the connection ends. An application that holds something outside
    * the page's own rendering releases it here. It must tolerate being called on a view that
-   * never showed anything.
+   * never showed anything. It is told the startup failure that ended the view, so a caller that
+   * shows that failure can keep what it shows; for any other ending (including a `dispose()`,
+   * host teardown or `pagehide` while still starting) it is told nothing.
    */
-  readonly onTeardown: () => void;
+  readonly onTeardown: (failure?: ViewStartFailure) => void;
   /** Optional. Called once if the view did not become ready; `ready` rejects with the same value. */
   readonly onFailure?: (failure: ViewStartFailure) => void;
   /**
@@ -191,7 +193,7 @@ export function runToolResultView(
 
     let teardownFailed: { readonly error: unknown } | undefined;
     try {
-      deps.onTeardown();
+      deps.onTeardown(failure);
     } catch (error) {
       teardownFailed = { error };
     }
