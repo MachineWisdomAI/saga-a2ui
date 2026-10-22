@@ -8,6 +8,8 @@ import {
   SDK_PACKAGES,
   assertInstalledTarballs,
   assertSameRevision,
+  candidateProvenance,
+  candidateSummary,
   checkInstalledCombination,
   checkPagePairing,
   CARRIED_CASES,
@@ -659,6 +661,63 @@ describe('packed candidates', () => {
       );
       expect(finding?.guidance).toMatch(/restart the server/);
     });
+  });
+});
+
+describe('the provenance a candidate states', () => {
+  // `candidate.json` serializes the provenance fields and `CANDIDATE.md` prints the same text, so
+  // both are read here from one record. The summary needs only the fields it prints.
+  const record = {
+    ...candidateProvenance(),
+    version: VERSION_A,
+    source: { commit: COMMIT_A, dirty: false },
+    packages: [],
+    combinations: [],
+    exclusions: [],
+    recipe: {
+      node: { testedHere: 'v22', minimum: '22', ciPinned: '22' },
+      npm: '11',
+      platform: 'linux-x64',
+      consumerInstall: { ok: true, treeValid: true },
+      consumerOverrides: {},
+    },
+    versionMismatch: { installProbe: { refused: true } },
+    carriedEvidence: { localResult: null },
+  };
+  const statements = (): string[] => [
+    JSON.stringify(record),
+    candidateSummary(record),
+  ];
+
+  it('does not claim a first candidate or that nothing was ever published', () => {
+    for (const text of statements()) {
+      expect(text).not.toMatch(/first candidate/i);
+      expect(text).not.toMatch(/ever been published/i);
+      expect(text).not.toMatch(/no earlier release/i);
+      expect(text).not.toMatch(/nothing is published/i);
+      expect(text).not.toMatch(/no SAGA package/i);
+    }
+    expect(record.predecessor).not.toHaveProperty('published', null);
+  });
+
+  it('acknowledges the public registry history without inventorying it', () => {
+    for (const text of statements()) {
+      expect(text).toMatch(/public npm releases/i);
+      expect(text).toContain('0.1.0-rc.1');
+      expect(text).toMatch(/does not (list|inventory)/i);
+    }
+  });
+
+  it('limits what was rehearsed to candidate builds, with no registry upgrade', () => {
+    expect(record.predecessor.registryUpgradeExercised).toBe(false);
+    for (const text of statements()) {
+      expect(text).toMatch(/candidate builds only/i);
+      expect(text).toMatch(/no upgrade from a registry release/i);
+      expect(text).toMatch(/local source rehearsal/i);
+      expect(text).toMatch(/anonymous registry install/i);
+      expect(text).toMatch(/real host/i);
+    }
+    expect(record.status).toBe('unreleased candidate');
   });
 });
 

@@ -1,15 +1,18 @@
-# Preparing a four-package release
+# Preparing a five-package release
 
-`@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp` and
-`@saga-a2ui/react` have a public npm release at `0.1.0-rc.1`. See
-[public installation](public-install.md) for the verified recipe. Subsequent
-release candidates use the `next` tag; pin exact versions in applications.
+The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`,
+`@saga-a2ui/mcp`, `@saga-a2ui/react` and `@saga-a2ui/react-mcp-stack`. The first
+four already have public npm releases (`0.1.0-rc.1` and later prereleases);
+`react-mcp-stack` has none. See [public installation](public-install.md) for the
+verified registry recipe. Subsequent release candidates use the `next` tag; pin
+exact versions in applications.
 
-For a subsequent release, the reviewed source manifests and generated
-`release.json` determine the prepared versions. Source versions can advance ahead
-of npm. This procedure does not authorize publication.
-Lit, the CLI, the workspace and the example application are outside this
-publication set.
+The reviewed source manifests and generated `release.json` determine the
+prepared versions. Source versions can advance ahead of npm: `0.7.0-rc.1` on the
+integration branch is a source version, not a registry release. This procedure
+does not authorize publication, and nothing here has published a `0.7.0` package.
+Lit, `lit-mcp-stack`, the CLI, the workspace and the example applications are
+outside this publication set.
 
 ## Build the exact artifacts
 
@@ -22,7 +25,7 @@ npm run release:pack -- release-out
 
 `release-out/release.json` identifies the source revision, dirty state, exact
 package manifests, file inventories, SHA-256 digests and npm SHA-512 integrity.
-The four tarballs are in `release-out/packages`. A dirty build is preparation
+The five tarballs are in `release-out/packages`. A dirty build is preparation
 only: rebuild after committing and reviewing the final source. This command
 does not publish, tag, deploy or change repository visibility.
 
@@ -30,36 +33,97 @@ Release packing retains the enrolled versions and exact sibling dependencies,
 ships Apache-2.0 `LICENSE` with every package, and includes the Markdown notices
 with components. Exports are TypeScript source and require a TypeScript-aware
 bundler. No precompiled JavaScript runtime is claimed. The release set has no
-dependency on `@saga-a2ui/lit`.
+dependency on `@saga-a2ui/lit` or `@saga-a2ui/lit-mcp-stack`.
 
 The existing `candidate:pack` remains a separate, nonpublishable qualification
 path: its copies always have `private: true`, commit-derived candidate versions
-and an invalid registry, even after source version enrollment.
+and an invalid registry, even after source version enrollment. Candidate and
+local-CI rehearsal evidence is not evidence about release bytes (see
+[candidate installation, updates and rollback](candidate-update-and-rollback.md)).
 
-## Install and qualify before publishing
+## Release sequence
 
-Install all four local tarballs together in an external consumer. Use React and
-React DOM **19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
+Each step is a separate, reviewed change or an owner action. Step 1 has landed
+for `0.7.0` (the integration branch holds every version at its pin); steps 2
+onward are pending, and nothing here has published a `0.7.0` package.
+
+1. Child changes land on the integration branch with every version held at its
+   pin ([version policy](version-policy.md)).
+2. One final integration pull request into `main` removes the pin; the updater
+   advances the baseline and the reviewer confirms it equals the intended version.
+3. Qualify the merged head as a candidate: from that commit run `candidate:pack`,
+   `candidate:verify`, `candidate:rehearse` and the packed-consumer suites,
+   including `test:pnpm-react` (see [candidate installation, updates and
+   rollback](candidate-update-and-rollback.md)). This is the behavioral
+   qualification and is a local source rehearsal.
+4. An explicit promotion change (`chore(release): promote version`) turns the
+   prerelease into `0.7.0`. Promotion changes only version metadata, so
+   unchanged behavioral evidence from step 3 carries over. Build `release:pack`
+   from the promoted commit and verify those exact bytes (identities, sibling
+   pins, files, dependency graph, and the lower-level and stack-only installs
+   below). Fresh package
+   bytes alone do not require rerunning unchanged behavior or host evidence;
+   a source change after step 3 does.
+5. The owner approves the exact source, package names, versions, tarball
+   integrity and tag.
+6. Publish the approved bytes (see below), then verify through an anonymous
+   registry install.
+
+## Qualify the exact artifacts before publishing
+
+Verify the five tarballs that would be published, not a candidate or an earlier
+build of different source. Evidence from another source revision or version
+identity is context, not qualification of these bytes. Use React and React DOM
+**19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
 consumer-root override `@a2ui/markdown-it: 0.2.1`. SAGA owns A2UI **0.13.0** and its
 Zod **3.25.76** context; do not add direct application A2UI dependencies or force
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
 
+The stack pins exact siblings that are not on the registry yet, so a local
+install supplies them from the tarballs through overrides. Keep two consumers
+apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
+neither stands in for the other:
+
+- **Lower-level consumer** (availability of the five packages). It names every
+  SAGA tarball as a direct dependency and as an override, plus React, React DOM,
+  MCP Apps and Zod.
+- **Stack-only consumer** (the documented one-stack recipe). Its direct
+  dependencies are only `@saga-a2ui/react-mcp-stack`, the framework peers
+  (`react`, `react-dom`) and the upstream packages the application's own catalog
+  is written against (`@a2ui/react`, `@a2ui/web_core`, Zod 3.25.76). It names no
+  other SAGA package; the unpublished siblings are supplied by overrides only.
+  Direct declarations of the siblings would mask a dependency the stack failed
+  to declare, so only this consumer shows that the recipe resolves.
+
+Then check two different footprints; neither stands in for the other:
+
+- **Installed tree** (an install check, on the stack-only consumer). An
+  application that depends on the stack and declares `react` and `react-dom`
+  gets `core`, `components`, `mcp`, `react`, the MCP Apps bridge and `markdown-it`
+  beneath the stack, resolved with strict peers and exactly one React runtime.
+  Components and Markdown belong in this tree.
+- **Emitted browser graph** (a bundle check). An own-catalog application's
+  browser bundle excludes components and Markdown, and no browser entry imports
+  the stack's Node-only `/server` entry; the server is composed separately. The
+  stack's `exports.test.ts` inspects this; an install does not.
+
 Run strict peer installation, dependency-tree checks and strict TypeScript
 compilation without `skipLibCheck`, then the application's existing build and
 tests. Reuse unchanged runtime and host evidence; requalify changed resources
 with their application owner. Local tarballs are not anonymous public npm
-installation evidence.
+installation evidence, and a local or CI rehearsal is not acceptance in a real host.
 
 ## Publication and verification
 
 The owner approves the exact source, package names, versions, tarball integrity
-and tag before publication. Verify scope ownership and publish rights. A dry
+and tag before publication. Verify publish rights for each package. A dry
 run, `npm publish TARFILE --dry-run --access public --tag next --ignore-scripts`,
 inspects publication metadata without uploading. Publish only the approved
-tarball bytes through the authorized account and public npm access.
+tarball bytes through the authorized account and public npm access, the four
+packages the stack pins before the stack itself.
 
-After publication, install the four exact versions anonymously from the public
+After publication, install the exact versions anonymously from the public
 registry in a clean consumer, compare registry integrity to the approved
 artifacts, and run that consumer's strict install/build/typecheck/tests. Preserve
 its lockfile. Only then document these versions as publicly available.
