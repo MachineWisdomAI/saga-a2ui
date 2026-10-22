@@ -60,8 +60,10 @@ describe('package subpath exports', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
       'OperationConfigurationError',
+      'RequestLifetimeAttachmentError',
       'StageFailure',
       'assertBudgetSettings',
+      'attachRequestLifetime',
       'createServerBudgets',
       'operationViewFromHtml',
       'registerProtectedOperation',
