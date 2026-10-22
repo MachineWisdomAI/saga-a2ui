@@ -2,6 +2,11 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as faithfulCard from '@saga-a2ui/components/faithful-card';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath export, the way an application does, and
 // the module graph behind that export is bundled to show what a consumer really pulls in.
@@ -153,5 +158,47 @@ describe('@saga-a2ui/components/faithful-card', () => {
     ]) {
       expect(ownCode, marker).not.toContain(marker);
     }
+  });
+});
+
+describe('dependency direction', () => {
+  it('imports core only, and no DOM, MCP or renderer', () => {
+    const { files, violations } = checkPackageDirection('components');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    [
+      "import { runToolResultView } from '@saga-a2ui/mcp/view';",
+      'a delivery package',
+    ],
+    ["import { LitElement } from 'lit';", 'a renderer'],
+    ["document.body.append(document.createElement('p'));", 'a browser object'],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('components');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('components', manifest, [
+        ...files,
+        mutant,
+      ]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('components');
+    const wrong = 'react';
+    const found = directionViolations(
+      'components',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });

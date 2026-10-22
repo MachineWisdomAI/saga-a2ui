@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest';
 import * as a2ui from '@saga-a2ui/react/a2ui';
 import * as actions from '@saga-a2ui/react/actions';
 import * as faithfulCard from '@saga-a2ui/react/faithful-card';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath exports, the way an application does, and
 // the module graph behind each export is bundled to show what a consumer really pulls in.
@@ -115,5 +120,47 @@ describe('the optional React exports', () => {
     // `lit` itself is not asserted absent: the card surface renders with the upstream
     // `A2uiSurface`, whose `@a2ui/web_core` declares `lit` for its own elements. The Lit renderer
     // package (`@a2ui/lit`, `@saga-a2ui/lit`) stays out, which is what the checks above hold.
+  });
+});
+
+describe('dependency direction', () => {
+  it('imports core and components only: no delivery, other renderer or stack', () => {
+    const { files, violations } = checkPackageDirection('react');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    [
+      "import { runToolResultView } from '@saga-a2ui/mcp/view';",
+      'a delivery package',
+    ],
+    ["import { LitElement } from 'lit';", 'the other renderer'],
+    [
+      "import { startA2uiView } from '@saga-a2ui/react-mcp-stack';",
+      'a stack package',
+    ],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('react');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('react', manifest, [...files, mutant]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('react');
+    const wrong = 'lit';
+    const found = directionViolations(
+      'react',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });
