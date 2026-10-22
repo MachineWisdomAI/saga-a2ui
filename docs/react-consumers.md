@@ -1,6 +1,23 @@
 # Installing the React renderer with MCP
 
-Use SAGA's React A2UI entry point for surfaces and catalogs:
+## One stack, plus React
+
+An application installs one stack package, `@saga-a2ui/react-mcp-stack`, plus its framework peers (`react` and `react-dom`, singletons at the version SAGA supports), and imports from the stack only:
+
+```ts
+import {startA2uiView, defineSurface, z, ActionButton, createReactActions} from '@saga-a2ui/react-mcp-stack';
+import {FaithfulCardApp, startFaithfulCardApp} from '@saga-a2ui/react-mcp-stack/faithful-card';
+```
+
+The main entry is for an application's own catalog; the `/faithful-card` entry starts a card application from one validated definition. The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
+
+Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The package's `exports.test.ts` inspects the bundle; `npm run test:pnpm-react` and `npm run candidate:verify` check the install.
+
+The stack is part of the `0.7.0` release set. It is not on public npm yet, so no registry command here installs it; see [public installation](public-install.md) for the published `0.1.0-rc.1` recipe and for what changes at `0.7.0`. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
+
+## The React integration surface
+
+Use SAGA's React A2UI entry point for surfaces and catalogs when you compose below the stack:
 
 ```ts
 import {Catalog, Surface, openSurface, type BoundSurface, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
