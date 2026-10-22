@@ -87,6 +87,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
       '@modelcontextprotocol/ext-apps',
       '@modelcontextprotocol/server',
       '@saga-a2ui/components/faithful-card',
+      '@saga-a2ui/core/host-links',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
       '@saga-a2ui/mcp/server',
       '@saga-a2ui/mcp/view',
@@ -273,7 +274,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
         '@saga-a2ui/react/src/faithful-card/faithful-card.css',
         '@saga-a2ui/components/src/faithful-card/reader.ts',
         '@saga-a2ui/core/src/protocols/a2ui/v0_9/session.ts',
-        '@saga-a2ui/mcp/src/view/index.ts',
+        '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
       ]) {
         expect(installed(file), file).toBe(true);
       }

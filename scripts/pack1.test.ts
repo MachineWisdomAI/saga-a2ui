@@ -291,11 +291,12 @@ describe('the five owned packages, packed', () => {
     expect(
       Object.keys(sdk.manifests.components?.peerDependencies ?? {}),
     ).toEqual([]);
+    // Delivery names core (the host link contract) and no component, renderer or parser.
     expect(
       Object.keys(sdk.manifests.mcp?.dependencies ?? {}).filter((dependency) =>
         /^@saga-a2ui\/|lit|react|markdown/.test(dependency),
       ),
-    ).toEqual([]);
+    ).toEqual(['@saga-a2ui/core']);
     // The React peers are exact, and the Lit package has none.
     expect(sdk.manifests.react?.peerDependencies).toMatchObject({
       react: '19.3.1',
