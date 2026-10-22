@@ -201,7 +201,11 @@ describe('the React card consumer built from the packed SDK packages', () => {
       '@saga-a2ui/core',
       '@saga-a2ui/mcp',
       '@saga-a2ui/react',
+      // The bridge's own peer: the stack supplies it, so a strict install needs nothing more
+      // from the application (scripts/check-react-pnpm.ts installs the stack alone).
+      'zod',
     ]);
+    expect(stack.dependencies?.zod).toBe('4.6.7');
     for (const name of ['components', 'core', 'mcp', 'react'])
       expect(stack.dependencies?.[`@saga-a2ui/${name}`], name).toBe(
         sdk.version,
