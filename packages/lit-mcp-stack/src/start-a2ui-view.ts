@@ -16,6 +16,7 @@ import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
   hostLinksFromApp,
   type HostContext,
+  type ToolInput,
   type ToolResult,
 } from '@saga-a2ui/mcp/view';
 import {
@@ -69,7 +70,8 @@ export interface StartA2uiViewOptions<TData> {
    * Optional. The application’s action setup (`createLitActions`), or a function that makes it
    * from the host when the setup needs the server (`host.server`).
    */
-  readonly actions?: A2uiActions | ((host: ViewHost) => A2uiActions);
+  readonly actions?:
+    A2uiActions | ((host: ViewHost) => A2uiActions | undefined);
   /** Optional. Work the view needs before it shows anything; `signal` aborts when the view ends. */
   readonly readyWhen?: (signal: AbortSignal) => Promise<void>;
   /** `own`: the view tells the host its size. `host` (the default): the bridge reports it. */
@@ -79,6 +81,12 @@ export interface StartA2uiViewOptions<TData> {
     context: HostContext | undefined,
     hostName: string | undefined,
   ) => void;
+  /**
+   * Optional. The tool call that is starting, with its own arguments: the only place the host
+   * announces them. Delivered once the view is ready, before the held result. It is not that
+   * call's response and authenticates nothing.
+   */
+  readonly onToolInput?: (input: ToolInput) => void;
   /** Each delivered result, once the view is ready. Update the surface through `view.surface`. */
   readonly onToolResult: (
     result: ToolResult,
@@ -215,6 +223,9 @@ export function startA2uiViewOn<TData>(
         ? {}
         : { hostContext: options.hostContext }),
       onToolResult: (result) => options.onToolResult(result, view),
+      ...(options.onToolInput === undefined
+        ? {}
+        : { onToolInput: options.onToolInput }),
       ...(options.onError === undefined ? {} : { onError: options.onError }),
       retire() {
         try {

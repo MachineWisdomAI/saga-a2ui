@@ -15,11 +15,12 @@
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/client": "2.3.1",
-    "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
+    "@saga-a2ui/components": "*",
     "@saga-a2ui/core": "*",
     "@saga-a2ui/lit": "*",
+    "@saga-a2ui/lit-mcp-stack": "*",
     "@saga-a2ui/mcp": "*",
     "lit": "^3.3.3",
     "zod": "4.6.7"

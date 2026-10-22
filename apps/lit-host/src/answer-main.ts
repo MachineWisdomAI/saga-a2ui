@@ -1,33 +1,26 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { createA2uiAppElement } from '@saga-a2ui/lit';
+import { startA2uiView } from '@saga-a2ui/lit-mcp-stack';
 import { answerCardData, answerLayout } from './answer-card/presentation.js';
-import { answerCatalog, registerAnswerElements } from './lit/answer-card.js';
-import { connectAnswerView } from './mcp/answer-view.js';
+import { answerCatalog } from './lit/answer-card.js';
+import { createAnswerView } from './mcp/answer-view.js';
 
 // Composition root of the answer view. No server code: the question and answer arrive only through
-// the host's bridge and reach the page as A2UI data bound to text, so they stay inert text.
-const AnswerApp = createA2uiAppElement({
-  createSession: () =>
-    createMessageSession({
-      catalogs: [answerCatalog],
-      decoder: a2uiV0_9Decoder,
-    }),
+// the host's bridge and reach the page as A2UI data bound to text, so they stay inert text. The
+// stack connects to the host, holds what arrives early and ends the view; this page decides what
+// each notification means (mcp/answer-view.ts) and how a state looks (answer-card/).
+const container = document.querySelector('answer-app');
+if (!container) throw new Error('answer.html has no answer-app element');
+
+// Every state replaces the whole card, so a stale answer never stays beside a new state. The stack
+// calls the handlers only once the view is ready, after `view` exists.
+const answer = createAnswerView(
+  (state) => void view.surface.update(answerCardData(state)),
+);
+const view = startA2uiView({
+  container,
   layout: answerLayout,
+  catalog: answerCatalog,
+  identity: { name: 'saga-a2ui-answer-view', version: '0.0.0' },
+  onToolInput: answer.onToolInput,
+  onToolResult: answer.onToolResult,
 });
-registerAnswerElements();
-customElements.define('answer-app', AnswerApp);
-
-const app =
-  document.querySelector<InstanceType<typeof AnswerApp>>('answer-app');
-if (!app) throw new Error('answer.html has no answer-app element');
-
-await connectAnswerView({
-  app: new App({ name: 'saga-a2ui-answer-view', version: '0.0.0' }),
-  transport: new PostMessageTransport(window.parent, window.parent),
-  // Every state replaces the whole card, so a stale answer never stays beside a new state.
-  show: (state) => void app.updateData(answerCardData(state)),
-});
+await view.ready;

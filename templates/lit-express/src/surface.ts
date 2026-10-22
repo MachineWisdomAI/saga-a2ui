@@ -1,5 +1,4 @@
-import { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
+import { defineSurface, z } from '@saga-a2ui/lit-mcp-stack';
 
 // The layout of the starter surface: its data and its components. The layout gives the markup its
 // IDs and its structure and nothing else: it names no action, no handler and no function. Which

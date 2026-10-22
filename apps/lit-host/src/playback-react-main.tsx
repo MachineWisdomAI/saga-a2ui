@@ -1,4 +1,4 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps'; // saga-boundary: integration-import the player page is not an A2UI surface, so neither stack entry starts it; it makes the bridge and the transport the runner connects over
 import { createInstanceHost } from '@saga-a2ui/core/actions';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';

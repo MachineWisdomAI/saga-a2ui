@@ -1,4 +1,4 @@
-import type { App } from '@modelcontextprotocol/ext-apps';
+import type { App } from '@modelcontextprotocol/ext-apps'; // saga-boundary: integration-import the player view is not an A2UI surface, so neither stack entry starts it; the lifetime is runToolResultView's and none of its ordering is copied here
 import type { CallToolResult, Transport } from '@modelcontextprotocol/client';
 import {
   Action,
@@ -16,7 +16,7 @@ import {
   type InstanceView,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
-import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view';
+import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view'; // saga-boundary: integration-import the player view is not an A2UI surface, so neither stack entry starts it; the lifetime is runToolResultView's and none of its ordering is copied here
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
   MEDIA_PATH_PREFIX,

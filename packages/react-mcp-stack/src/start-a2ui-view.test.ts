@@ -130,6 +130,40 @@ describe('startA2uiView', () => {
     expect(received!.surface).toBe(view.surface);
   });
 
+  it('gives the application the tool call that is starting, once ready and before the held result', async () => {
+    const seen: string[] = [];
+    host = await startTestHost({
+      onInitialized: (bridge) => {
+        void bridge.sendToolInput({ arguments: { label: 'asked' } });
+        void bridge.sendToolResult(toolResult({ label: 'First' }));
+      },
+    });
+    const view = await start({
+      onToolInput: (input) =>
+        void seen.push(`input:${JSON.stringify(input.arguments)}`),
+      onToolResult: (result) => void seen.push(`result:${labelFor(result)}`),
+    });
+    await view.ready;
+    expect(seen).toEqual(['input:{"label":"asked"}', 'result:First']);
+  });
+
+  it('reports a throw from onToolInput with its phase and keeps the view running', async () => {
+    const errors: Array<[string, string]> = [];
+    host = await startTestHost();
+    const view = await start({
+      onToolInput: () => {
+        throw new Error('input broke');
+      },
+      onError: (error, phase) =>
+        void errors.push([(error as Error).message, phase]),
+    });
+    await view.ready;
+    await host.bridge.sendToolInput({ arguments: {} });
+    await vi.waitFor(() => expect(errors).toEqual([['input broke', 'input']]));
+    await host.bridge.sendToolResult(toolResult({ label: 'Still here' }));
+    await vi.waitFor(() => expect(label()?.textContent).toBe('Still here'));
+  });
+
   it('refuses a second start on a running container; restarts after dispose', async () => {
     const first = await start();
     await first.ready;

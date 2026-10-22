@@ -38,14 +38,7 @@ const settle = (page: Page) => page.waitForTimeout(300);
 const sendDescription = (frame: Frame, value: string) =>
   frame.evaluate(
     (description) =>
-      window.sagaSend?.({
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId: 'fixture',
-          path: '/description',
-          value: description,
-        },
-      }),
+      window.sagaUpdatePanel?.({ title: 'Episode title', description }),
     value,
   );
 
@@ -417,14 +410,13 @@ test.describe('revoking consent', () => {
     );
     const toggle = opened.view.getByTestId('images-toggle');
     await expect(toggle).toBeEnabled();
+    // A control a script kept hold of before the view ended.
+    const retained = await toggle.elementHandle();
     await opened.teardown();
-    await expect(toggle).toBeDisabled();
-    await expect(opened.view.getByTestId('images-unavailable')).toHaveAttribute(
-      'data-reason',
-      'view-ended',
-    );
-    // Even if the disabled state were bypassed, the retired view hands out no live grant.
-    await toggle.evaluate((element) => {
+    // The stack retires the view: the card, and the control with it, leave the page.
+    await expect(toggle).toHaveCount(0);
+    // Even a control kept from before hands out no live grant.
+    await retained?.evaluate((element) => {
       element.removeAttribute('disabled');
       (element as HTMLElement).click();
     });
@@ -579,9 +571,11 @@ test.describe('concurrent views', () => {
     await expect(stricter.view.getByTestId('md-image')).toHaveCount(1);
     await expect(stricter.view.getByTestId('md-link-inert')).toHaveCount(1);
     await stricter.teardown();
+    // Both views are retired and removed; neither leaves a control behind.
     await expect(
       standard.view.getByRole('button', { name: /link/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(stricter.view.getByTestId('md-link-inert')).toHaveCount(0);
   });
 });
 

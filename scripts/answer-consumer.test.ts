@@ -52,14 +52,11 @@ describe('the answer consumer built from the packed SDK packages', () => {
     expect(own.every((specifier) => /^\.\/[a-z-]+\.js$/.test(specifier))).toBe(
       true,
     ); // siblings only, never ../
+    // The application imports no upstream A2UI package and no protocol module: the card surface
+    // and the stack own those (the consumer boundary scan checks the same rule on the source).
     expect(packages).toEqual([
-      '@a2ui/lit/v0_9',
-      '@a2ui/web_core/v0_9',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/core/host-links',
-      '@saga-a2ui/core/protocols/a2ui/v0_9',
-      '@saga-a2ui/core/protocols/a2ui/zod3', // the answer surface's data schema
-      '@saga-a2ui/lit',
       '@saga-a2ui/lit-mcp-stack/faithful-card',
       '@saga-a2ui/lit/faithful-card',
       'lit',
@@ -216,9 +213,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
     ).toEqual([]);
     expect(
       modules.filter((id) =>
-        /\/consumer\/src\/(answer-app|answer-function|answer-surface|main)\.ts$/.test(
-          id,
-        ),
+        /\/consumer\/src\/(answer-app|answer-function|main)\.ts$/.test(id),
       ),
     ).toEqual([]);
     for (const marker of [

@@ -1,4 +1,4 @@
-import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps'; // saga-boundary: integration-import this page is not an A2UI surface (a list), so neither stack entry starts it; it makes the bridge and the transport the runner connects over
 import {
   connectSubscriptionsView,
   type SubscriptionsViewState,

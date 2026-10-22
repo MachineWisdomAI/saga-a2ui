@@ -4,6 +4,11 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as main from '@saga-a2ui/lit-mcp-stack';
 import * as card from '@saga-a2ui/lit-mcp-stack/faithful-card';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath exports, the way an application does, and
 // the module graph behind each export is bundled to show what a consumer really pulls in. This is
@@ -114,5 +119,46 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
     expect(
       anyOf(modules, /node_modules\/(react|react-dom|@a2ui\/react)\//),
     ).toEqual([]);
+  });
+});
+
+describe('dependency direction', () => {
+  it('connects the Lit renderer to MCP delivery and imports no React renderer or other stack', () => {
+    const { files, violations } = checkPackageDirection('lit-mcp-stack');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    ["import { createElement } from 'react';", 'the other renderer'],
+    [
+      "import { startA2uiView } from '@saga-a2ui/react-mcp-stack';",
+      'the other stack',
+    ],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('lit-mcp-stack');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('lit-mcp-stack', manifest, [
+        ...files,
+        mutant,
+      ]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('lit-mcp-stack');
+    const wrong = 'react';
+    const found = directionViolations(
+      'lit-mcp-stack',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });

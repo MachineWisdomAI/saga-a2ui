@@ -1,135 +1,52 @@
-import { App } from '@modelcontextprotocol/ext-apps';
-import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/client';
-import {
-  Catalog,
-  type ComponentApi,
-  type SurfaceModel,
-} from '@a2ui/web_core/v0_9';
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-  type MessageSession,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
-import { emptyPanel, SURFACE_ID } from '../saga-panel/fixture.js';
-import { connectEpisodeView, type EpisodeViewConnection } from './view.js';
+import { describe, expect, it } from 'vitest';
+import type { PanelData } from '../saga-panel/fixture.js';
+import { createEpisodeView, NO_EPISODE } from './view.js';
 
-// The view's bridge seam, exercised with a real `App` and `AppBridge` joined by an in-memory
-// transport, and a real A2UI session. Only rendering is absent (no DOM in these tests): the
-// observable result is the surface the session holds and the problem text shown.
-
-const catalog = new Catalog<ComponentApi>(SAGA_CATALOG_ID, 'v0.9', [
-  SagaPanelApi,
-]);
+// What the episode view decides about each delivered result. Delivery order, holding an early
+// result and ending are the stack's (packages/*-mcp-stack tests); the page that composes them is
+// exercised in a real browser by e2e/mcp-view.spec.ts. The observable result is the panel data
+// asked for, the problem text shown, and when image consent is revoked relative to them.
 
 const episode = (id: string, title: string) => ({
   content: [{ type: 'text' as const, text: title }],
   structuredContent: { episodeId: id, title, description: `About ${title}` },
 });
 
-interface Harness {
-  readonly session: MessageSession<ComponentApi>;
-  readonly bridge: AppBridge;
-  readonly app: App;
-  readonly problems: (string | undefined)[];
-  deliveries: unknown[];
-  /** `revoke` for each image-consent revocation and `deliver` for each hand-off, in order. */
-  readonly events: string[];
-  surface(): SurfaceModel<ComponentApi> | undefined;
-  title(): unknown;
-  /** Connects a view. Pass `onInitialized` to act while the handshake is still in flight. */
-  connect(
-    onInitialized?: (bridge: AppBridge) => void,
-  ): Promise<EpisodeViewConnection>;
-}
-
-const toClean: {
-  session?: MessageSession<ComponentApi>;
-  app?: App;
-  bridge?: AppBridge;
-}[] = [];
-
-function harness(): Harness {
-  const session = createMessageSession({
-    catalogs: [catalog],
-    decoder: a2uiV0_9Decoder,
-  });
-  let current: SurfaceModel<ComponentApi> | undefined;
-  session.onSurfaceCreated((surface) => (current = surface));
-  session.onSurfaceDeleted(() => (current = undefined));
-  // The session the Lit `saga-app` would own: it starts with the panel surface.
-  session.ingest(emptyPanel.opening);
-
-  const app = new App(
-    { name: 'test-view', version: '0.0.0' },
-    {},
-    { autoResize: false },
-  );
-  const bridge = new AppBridge(
-    null,
-    { name: 'test-host', version: '0.0.0' },
-    {},
-  );
-  toClean.push({ session, app, bridge });
-  const problems: (string | undefined)[] = [];
-  const deliveries: unknown[] = [];
+function harness(rejectWith?: () => string | undefined) {
   const events: string[] = [];
-
-  return {
-    session,
-    bridge,
-    app,
-    problems,
-    deliveries,
-    events,
-    surface: () => current,
-    title: () => current?.dataModel.get('/title'),
-    async connect(onInitialized) {
-      const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-      bridge.oninitialized = () => onInitialized?.(bridge);
-      await bridge.connect(hostSide);
-      return connectEpisodeView({
-        app,
-        transport: viewSide,
-        deliver: (input) => {
-          deliveries.push(input);
-          events.push('deliver');
-          return session.ingest(input);
-        },
-        showProblem: (message) => problems.push(message),
-        revokeImageConsent: () => events.push('revoke'),
-        retireImageConsent: () => events.push('retire'),
-      });
+  const updates: PanelData[] = [];
+  const problems: (string | undefined)[] = [];
+  const view = createEpisodeView({
+    update(data) {
+      events.push('update');
+      updates.push(data);
+      const rejection = rejectWith?.();
+      return rejection === undefined
+        ? { ok: true }
+        : { ok: false, failure: { kind: 'rejected', message: rejection } };
     },
-  };
+    showProblem: (message) => void problems.push(message),
+    revokeImageConsent: () => void events.push('revoke'),
+  });
+  return { view, events, updates, problems };
 }
-
-afterEach(async () => {
-  for (const { session, app, bridge } of toClean.splice(0)) {
-    session?.dispose();
-    await app?.close().catch(() => undefined);
-    await bridge?.close().catch(() => undefined);
-  }
-});
 
 describe('episode view result handling', () => {
-  it('renders a result delivered during initialization exactly once', async () => {
+  it('shows a delivered episode with its title and description and no problem', () => {
     const h = harness();
-    const early = episode('ep-001', 'Early title');
-    await h.connect((bridge) => void bridge.sendToolResult(early));
-    await expect.poll(() => h.title()).toBe('Early title');
-    expect(h.deliveries).toHaveLength(1);
+    h.view.onToolResult(episode('ep-001', 'First'));
+    expect(h.updates).toEqual([{ title: 'First', description: 'About First' }]);
+    expect(h.problems).toEqual([undefined]);
   });
 
-  it('replaces the shown episode with a later result', async () => {
+  it('replaces the shown episode with a later result', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'First'));
-    await expect.poll(() => h.title()).toBe('First');
-    await h.bridge.sendToolResult(episode('ep-002', 'Second'));
-    await expect.poll(() => h.title()).toBe('Second');
+    h.view.onToolResult(episode('ep-001', 'First'));
+    h.view.onToolResult(episode('ep-002', 'Second'));
+    expect(h.updates.at(-1)).toEqual({
+      title: 'Second',
+      description: 'About Second',
+    });
   });
 
   it.each([
@@ -155,70 +72,35 @@ describe('episode view result handling', () => {
       'a result without structured content',
       { content: [{ type: 'text' as const, text: 'plain' }] },
     ],
-  ])(
-    'clears the prior surface and shows a fallback for %s',
-    async (_name, bad) => {
-      const h = harness();
-      await h.connect();
-      await h.bridge.sendToolResult(episode('ep-001', 'First'));
-      await expect.poll(() => h.title()).toBe('First');
-
-      await h.bridge.sendToolResult(bad);
-      await expect.poll(() => h.surface()).toBeUndefined();
-      expect(h.problems.at(-1)).toEqual(expect.any(String));
-      expect(h.problems.at(-1)).not.toBe('');
-    },
-  );
-
-  it('shows the next valid result after a failure and clears the fallback', async () => {
+  ])('empties the panel and shows a fallback for %s', (_name, bad) => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult({ isError: true, content: [] });
-    await expect.poll(() => h.surface()).toBeUndefined();
-    await h.bridge.sendToolResult(episode('ep-002', 'Recovered'));
-    await expect.poll(() => h.title()).toBe('Recovered');
+    h.view.onToolResult(episode('ep-001', 'First'));
+    h.view.onToolResult(bad);
+    expect(h.updates.at(-1)).toEqual(NO_EPISODE);
+    expect(h.problems.at(-1)).toEqual(expect.any(String));
+    expect(h.problems.at(-1)).not.toBe('');
+    expect(JSON.stringify([h.updates.at(-1), h.problems])).not.toContain(
+      'secret',
+    );
+  });
+
+  it('shows the next valid result after a failure and clears the fallback', () => {
+    const h = harness();
+    h.view.onToolResult({ isError: true, content: [] });
+    h.view.onToolResult(episode('ep-002', 'Recovered'));
+    expect(h.updates.at(-1)).toEqual({
+      title: 'Recovered',
+      description: 'About Recovered',
+    });
     expect(h.problems.at(-1)).toBeUndefined();
   });
 
-  it('keeps showing nothing across repeated failures', async () => {
+  it('keeps showing nothing across repeated failures', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult({ isError: true, content: [] });
-    await h.bridge.sendToolResult({ isError: true, content: [] });
-    await expect.poll(() => h.problems.length).toBe(2);
-    expect(h.surface()).toBeUndefined();
-  });
-
-  it('ignores results after disposal', async () => {
-    const h = harness();
-    const view = await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'Before'));
-    await expect.poll(() => h.title()).toBe('Before');
-
-    view.dispose();
-    await h.bridge
-      .sendToolResult(episode('ep-002', 'After'))
-      .catch(() => undefined);
-    await h.bridge
-      .sendToolResult({ isError: true, content: [] })
-      .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(h.title()).toBe('Before');
-    expect(h.deliveries).toHaveLength(1);
-  });
-
-  it('is disposed by the host teardown request', async () => {
-    const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'Before'));
-    await expect.poll(() => h.title()).toBe('Before');
-
-    await h.bridge.teardownResource({});
-    await h.bridge
-      .sendToolResult(episode('ep-002', 'After'))
-      .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(h.title()).toBe('Before');
+    h.view.onToolResult({ isError: true, content: [] });
+    h.view.onToolResult({ isError: true, content: [] });
+    expect(h.updates).toEqual([NO_EPISODE, NO_EPISODE]);
+    expect(h.problems).toHaveLength(2);
   });
 
   it.each([
@@ -228,102 +110,34 @@ describe('episode view result handling', () => {
       'a result that is not a public episode',
       { content: [], structuredContent: { surprise: true } },
     ],
-  ])('revokes image consent before it applies %s', async (_name, result) => {
+  ])('revokes image consent before it applies %s', (_name, result) => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(result);
-    await expect.poll(() => h.events.length).toBeGreaterThan(0);
+    h.view.onToolResult(result);
     expect(h.events[0]).toBe('revoke');
-    expect(h.events.indexOf('revoke')).toBeLessThan(
-      h.events.indexOf('deliver'),
-    );
   });
 
-  it('starts a new consent period for every result, even a repeat of the one shown', async () => {
+  it('starts a new consent period for every result, even a repeat of the one shown', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
-    await expect.poll(() => h.title()).toBe('Same');
-    await h.bridge.sendToolResult(episode('ep-001', 'Same'));
-    await expect
-      .poll(() => h.events.filter((event) => event === 'revoke').length)
-      .toBe(2);
+    h.view.onToolResult(episode('ep-001', 'Same'));
+    h.view.onToolResult(episode('ep-001', 'Same'));
+    expect(h.events).toEqual(['revoke', 'update', 'revoke', 'update']);
   });
 
-  it('retires image consent for good once when the host asks the view to tear down, and not again on dispose', async () => {
-    const h = harness();
-    const view = await h.connect();
-    await h.bridge.teardownResource({});
-    expect(h.events).toEqual(['retire']);
-    await view.dispose();
-    expect(h.events).toEqual(['retire']);
-  });
-
-  it('retires image consent for good when the view is disposed', async () => {
-    const h = harness();
-    const view = await h.connect();
-    await view.dispose();
-    expect(h.events).toEqual(['retire']);
-  });
-
-  it('does not touch consent for results that arrive after disposal', async () => {
-    const h = harness();
-    const view = await h.connect();
-    view.dispose();
-    h.events.length = 0;
-    await h.bridge
-      .sendToolResult(episode('ep-002', 'After'))
-      .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(h.events).toEqual([]);
-  });
-
-  it('clears the prior surface when the session rejects a later result', async () => {
-    const h = harness();
-    let reject = false;
-    const app = new App(
-      { name: 'reject-view', version: '0.0.0' },
-      {},
-      { autoResize: false },
-    );
-    const bridge = new AppBridge(
-      null,
-      { name: 'test-host', version: '0.0.0' },
-      {},
-    );
-    toClean.push({ app, bridge });
-    const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-    await bridge.connect(hostSide);
-    await connectEpisodeView({
-      app,
-      transport: viewSide,
-      // Rejects episode data only; the panel-removal message still reaches the real session.
-      deliver: (input) =>
-        reject &&
-        (input as { updateDataModel?: unknown }[]).some(
-          (m) => m.updateDataModel,
-        )
-          ? {
-              ok: false,
-              failure: {
-                kind: 'rejected',
-                message: 'Controlled ingestion rejection',
-              },
-            }
-          : h.session.ingest(input),
-      showProblem: (message) => h.problems.push(message),
-      revokeImageConsent: () => undefined,
-      retireImageConsent: () => undefined,
+  it('empties the panel and shows the reason when the surface rejects a later result', () => {
+    let rejection: string | undefined;
+    const h = harness(() => rejection);
+    h.view.onToolResult(episode('ep-001', 'Before'));
+    rejection = 'Controlled surface rejection';
+    h.view.onToolResult(episode('ep-002', 'Rejected'));
+    // The rejected data is followed by the emptied panel; the rejection is what is told.
+    expect(h.updates.at(-1)).toEqual(NO_EPISODE);
+    expect(h.problems.at(-1)).toBe('Controlled surface rejection');
+    rejection = undefined;
+    h.view.onToolResult(episode('ep-003', 'Recovered'));
+    expect(h.updates.at(-1)).toEqual({
+      title: 'Recovered',
+      description: 'About Recovered',
     });
-    await bridge.sendToolResult(episode('ep-001', 'Before'));
-    await expect.poll(() => h.title()).toBe('Before');
-    reject = true;
-    await bridge.sendToolResult(episode('ep-002', 'Rejected'));
-    await expect.poll(() => h.surface()).toBeUndefined();
-    expect(h.problems.at(-1)).toBe('Controlled ingestion rejection');
-    reject = false;
-    await bridge.sendToolResult(episode('ep-003', 'Recovered'));
-    await expect.poll(() => h.title()).toBe('Recovered');
     expect(h.problems.at(-1)).toBeUndefined();
   });
 });

@@ -4,6 +4,11 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as main from '@saga-a2ui/react-mcp-stack';
 import * as card from '@saga-a2ui/react-mcp-stack/faithful-card';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath exports, the way an application does, and
 // the module graph behind each export is bundled to show what a consumer really pulls in. This is
@@ -110,5 +115,46 @@ describe('@saga-a2ui/react-mcp-stack', () => {
     ).toBeGreaterThan(0);
     expect(anyOf(modules, /\/packages\/lit\//)).toEqual([]);
     expect(anyOf(modules, /node_modules\/@a2ui\/lit\//)).toEqual([]);
+  });
+});
+
+describe('dependency direction', () => {
+  it('connects the React renderer to MCP delivery and imports no Lit renderer or other stack', () => {
+    const { files, violations } = checkPackageDirection('react-mcp-stack');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    ["import { LitElement } from 'lit';", 'the other renderer'],
+    [
+      "import { startA2uiView } from '@saga-a2ui/lit-mcp-stack';",
+      'the other stack',
+    ],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('react-mcp-stack');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('react-mcp-stack', manifest, [
+        ...files,
+        mutant,
+      ]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('react-mcp-stack');
+    const wrong = 'lit';
+    const found = directionViolations(
+      'react-mcp-stack',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });

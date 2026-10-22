@@ -307,7 +307,7 @@ for (const template of QUALIFIED_STARTERS) {
         await expect(view.getByTestId('view-status'), ending).toHaveText(
           CLOSED_TEXT,
         );
-        await expect(view.locator('starter-app'), ending).toHaveCount(0);
+        await expect(view.locator('starter-app > *'), ending).toHaveCount(0);
 
         await retained?.evaluate((button) => (button as HTMLElement).click());
         await page.waitForTimeout(150);

@@ -2,11 +2,11 @@ import {
   A2uiLitElement,
   basicCatalog,
   type LitComponentApi,
-} from '@a2ui/lit/v0_9';
-import { CommonSchemas } from '@a2ui/web_core/v0_9';
-import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
-import { actionButtonEntry } from '@saga-a2ui/lit/actions';
+} from '@a2ui/lit/v0_9'; // saga-boundary: integration-import the application authors its own components against upstream's component API
+import { Catalog, CommonSchemas } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value and schemas
+import { actionButtonEntry, z } from '@saga-a2ui/lit-mcp-stack';
 import { html, nothing } from 'lit';
+import { CATALOG_ID } from './surface.js';
 
 // The application-owned catalog: the components its layout may name, and nothing else. `Line` is
 // this application's own component; it shows supplied text as text, never as markup. Layout comes
@@ -52,3 +52,8 @@ export const starterEntries: readonly LitComponentApi[] = [
   Line,
   actionButtonEntry,
 ];
+
+/** What the stack presents the layout over; it defines each entry's element when the view starts. */
+export const starterCatalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
+  ...starterEntries,
+]);
