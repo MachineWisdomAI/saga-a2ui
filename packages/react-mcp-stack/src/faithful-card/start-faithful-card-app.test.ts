@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
-import { FaithfulCardApp } from '@saga-a2ui/components/faithful-card';
+import {
+  FaithfulCardApp,
+  type CardResultOutcome,
+  type CardResultReader,
+} from '@saga-a2ui/components/faithful-card';
+import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  classifyEnvelopeOrText,
+  readEnvelopeOrText,
   gate,
   settle,
   startTestHost,
@@ -34,21 +39,30 @@ const TEXTS = {
   policyFailure: 'The content policy is not valid.',
 };
 
-const definition = FaithfulCardApp.define({ name: 'Answers', version: '1.0.0' })
-  .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
-  .policy('document')
-  .result((value) => {
-    const answer = (value as { answer?: unknown } | undefined)?.answer;
-    if (answer === 'throw') throw new Error('the map broke');
-    return typeof answer === 'string'
-      ? {
-          markdown: answer,
-          heading: (value as { question?: string }).question,
-        }
-      : undefined;
-  })
-  .texts(TEXTS)
-  .build();
+// The default fixture reader: structured `{answer, question}` only, an error result rejected. The
+// application's own reading of the whole result is exercised further down.
+const readStructuredAnswer = (result: DeliveredResult): CardResultOutcome => {
+  if (result.isError) return { kind: 'rejected' };
+  const value = result.structuredContent as
+    { answer?: unknown; question?: string } | undefined;
+  if (value?.answer === 'throw') throw new Error('the map broke');
+  return typeof value?.answer === 'string'
+    ? {
+        kind: 'content',
+        content: { markdown: value.answer, heading: value.question },
+      }
+    : { kind: 'rejected' };
+};
+
+const definitionReading = (read: CardResultReader) =>
+  FaithfulCardApp.define({ name: 'Answers', version: '1.0.0' })
+    .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
+    .policy('document')
+    .result(read)
+    .texts(TEXTS)
+    .build();
+
+const definition = definitionReading(readStructuredAnswer);
 
 const answer = (text: string, question?: string) =>
   toolResult({ answer: text, ...(question === undefined ? {} : { question }) });
@@ -73,9 +87,10 @@ afterEach(async () => {
 async function start(
   options: Partial<StartFaithfulCardOptions> = {},
   hostOptions: Parameters<typeof startTestHost>[0] = {},
+  started = definition,
 ) {
   host = await startTestHost(hostOptions);
-  const view = startFaithfulCardAppOn(host.connect, definition, {
+  const view = startFaithfulCardAppOn(host.connect, started, {
     container,
     sizing: 'host',
     ...options,
@@ -546,10 +561,10 @@ describe('startFaithfulCardApp', () => {
   });
 });
 
-// The application's classification of the whole result. The stack owns what happens next: the
+// The application's reading of the whole result. The stack owns what happens next: the
 // card is cleared or presented, consent and link state follow the presentation, and a throw is
 // reported. The wording and the envelope below are the fixture's, never the stack's.
-describe('startFaithfulCardApp with an application result classification', () => {
+describe('startFaithfulCardApp with an application reader of the whole result', () => {
   const FENCED = '```\nfirst line\n  second line\n```\n';
   const ERROR_TEXT = 'The service could not answer.';
   const envelope = (overrides: Record<string, unknown> = {}) => ({
@@ -569,11 +584,9 @@ describe('startFaithfulCardApp with an application result classification', () =>
 
   const startClassified = async (
     options: Partial<StartFaithfulCardOptions> = {},
+    read: CardResultReader = readEnvelopeOrText,
   ) => {
-    const view = await start({
-      classifyResult: classifyEnvelopeOrText,
-      ...options,
-    });
+    const view = await start(options, {}, definitionReading(read));
     await view.ready;
     return view;
   };
@@ -622,7 +635,7 @@ describe('startFaithfulCardApp with an application result classification', () =>
     expect(cardText()).toBe('');
   });
 
-  it('classifies only the first text block, then checks that string: a later block is not a fallback', async () => {
+  it('reads only the first text block, then checks that string: a later block is not a fallback', async () => {
     await startClassified();
     await host!.bridge.sendToolResult({
       content: [
@@ -801,25 +814,25 @@ describe('startFaithfulCardApp with an application result classification', () =>
   });
 
   it('shows the definition’s problem text for a rejection that supplies none', async () => {
-    await startClassified({ classifyResult: () => ({ kind: 'rejected' }) });
+    await startClassified({}, () => ({ kind: 'rejected' }));
     await host!.bridge.sendToolResult(withStructured(envelope()));
     await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
   });
 
-  it('reports a classifier that throws (phase result), clears the answer, shows the definition’s problem text and recovers', async () => {
+  it('reports a reader that throws (phase result), clears the answer, shows the definition’s problem text and recovers', async () => {
     const errors: Array<[unknown, string]> = [];
-    await startClassified({
-      classifyResult: (result) => {
+    await startClassified(
+      { onError: (error, phase) => errors.push([error, phase]) },
+      (result) => {
         if (
           result.content.some(
             (block) => block.type === 'text' && block.text === 'throw',
           )
         )
-          throw new Error('the classifier broke');
-        return classifyEnvelopeOrText(result);
+          throw new Error('the reader broke');
+        return readEnvelopeOrText(result);
       },
-      onError: (error, phase) => errors.push([error, phase]),
-    });
+    );
     await host!.bridge.sendToolResult(withStructured(envelope()));
     await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
 
@@ -828,7 +841,7 @@ describe('startFaithfulCardApp with an application result classification', () =>
     expect(cardText()).toBe('');
     expect(errors).toHaveLength(1);
     expect(errors[0]![1]).toBe('result');
-    expect((errors[0]![0] as Error).message).toBe('the classifier broke');
+    expect((errors[0]![0] as Error).message).toBe('the reader broke');
 
     await host!.bridge.sendToolResult(
       withStructured(envelope({ answer: 'Recovered.' })),
@@ -836,7 +849,7 @@ describe('startFaithfulCardApp with an application result classification', () =>
     await vi.waitFor(() => expect(cardText()).toContain('Recovered.'));
   });
 
-  it('keeps the definition’s parser and its texts.problem when no classification is supplied', async () => {
+  it('shows the definition’s texts.problem when its reader rejects without wording', async () => {
     const view = await start();
     await view.ready;
     await host!.bridge.sendToolResult(text('only text, no structured content'));

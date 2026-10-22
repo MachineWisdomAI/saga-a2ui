@@ -3,11 +3,8 @@ import type {
   FaithfulCardApp,
   FaithfulCardAppDefinition,
 } from '@saga-a2ui/components/faithful-card';
-import type {
-  HostContext,
-  ReadingProfile,
-  ToolResult,
-} from '@saga-a2ui/mcp/view';
+import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
+import type { HostContext, ReadingProfile } from '@saga-a2ui/mcp/view';
 import { PROBE_TEXTS, PROBE_UNSUPPORTED } from './texts.js';
 
 // Test-only probe of the card application stacks in a real browser. It is a minimal consumer of one
@@ -30,8 +27,6 @@ export interface ProbeOptions {
     hostName: string | undefined,
   ) => void;
   readonly onError: (error: unknown, phase: string) => void;
-  /** Present only when the page asks for the application's own reading of the whole result. */
-  readonly classifyResult?: (result: ToolResult) => CardResultOutcome;
 }
 
 export interface ProbeStack {
@@ -62,41 +57,41 @@ export function runProbe(stack: ProbeStack): void {
   };
   const container = control('root');
 
-  const definition = stack.FaithfulCardApp.define({
-    name: 'Probe answers',
-    version: '0.0.0',
-  })
-    .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
-    .policy('document')
-    .result((value) => {
-      const content = value as { answer?: unknown; question?: unknown };
-      if (content.answer === 'throw') throw new Error('map rejected');
-      if (typeof content.answer !== 'string') return undefined;
-      line(
-        `result:${content.answer}:theme=${document.documentElement.dataset.theme ?? '-'}`,
-      );
-      return {
+  /** The default reading: structured content alone; an error result is rejected unread. */
+  const readStructured = (result: DeliveredResult): CardResultOutcome => {
+    if (result.isError) return { kind: 'rejected' };
+    const content = result.structuredContent as
+      { answer?: unknown; question?: unknown } | undefined;
+    if (content?.answer === 'throw') throw new Error('map rejected');
+    if (typeof content?.answer !== 'string') return { kind: 'rejected' };
+    line(
+      `result:${content.answer}:theme=${document.documentElement.dataset.theme ?? '-'}`,
+    );
+    return {
+      kind: 'content',
+      content: {
         markdown: content.answer,
         ...(typeof content.question === 'string'
           ? { heading: content.question }
           : {}),
-      };
-    })
-    .texts(PROBE_TEXTS)
-    .build();
+      },
+    };
+  };
 
   /**
    * The application's own protocol, for a page that asks for it: `{version: 1, question, answer}`
    * in structured content, the answer a non-empty string; absent or `null` structured content shows
    * the first text block's string when it is not empty. Anything else is rejected with the
    * application's wording. The error flag reaches it like any other field: an error result is
-   * rejected with its own text, else with the application's unsupported wording.
+   * rejected with its own text, else with the application's unsupported wording. A first text block
+   * of `throw` makes the reader itself throw.
    */
-  const classifyResult = (result: ToolResult): CardResultOutcome => {
+  const readEnvelopeOrText = (result: DeliveredResult): CardResultOutcome => {
     const unsupported = { kind: 'rejected', text: PROBE_UNSUPPORTED } as const;
     const first = result.content.find((block) => block.type === 'text');
-    const text = first?.type === 'text' && first.text !== '' ? first.text : '';
-    if (result.isError === true) {
+    const text = first?.text ?? '';
+    if (text === 'throw') throw new Error('reader rejected');
+    if (result.isError) {
       return text === '' ? unsupported : { kind: 'rejected', text };
     }
     const structured: unknown = result.structuredContent;
@@ -124,10 +119,19 @@ export function runProbe(stack: ProbeStack): void {
   const classified =
     document.querySelector('meta[name="probe-classify"]') !== null;
 
+  const definition = stack.FaithfulCardApp.define({
+    name: 'Probe answers',
+    version: '0.0.0',
+  })
+    .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
+    .policy('document')
+    .result(classified ? readEnvelopeOrText : readStructured)
+    .texts(PROBE_TEXTS)
+    .build();
+
   const options = (gated: boolean): ProbeOptions => ({
     container,
     sizing: 'own',
-    ...(classified ? { classifyResult } : {}),
     // Stands in for embedded fonts: the test settles it by hand, before or after the view ends. It
     // ignores the abort on purpose, so a late outcome after disposal can be observed.
     readyWhen: (signal) =>

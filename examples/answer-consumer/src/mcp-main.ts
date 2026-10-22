@@ -4,7 +4,7 @@ import {
   type CardChromeParts,
 } from '@saga-a2ui/lit-mcp-stack/faithful-card';
 import { html } from 'lit';
-import { readAnswerMarkdown } from './answer-result.js';
+import { readAnswerResult } from './answer-result.js';
 import { ANSWER_READER } from './answer-policy.js';
 import { applyBranding, brandings } from './branding.js';
 
@@ -24,10 +24,7 @@ const definition = FaithfulCardApp.define({
 })
   .reader(ANSWER_READER)
   .policy('document')
-  .result((structuredContent) => {
-    const markdown = readAnswerMarkdown(structuredContent);
-    return markdown === undefined ? undefined : { markdown };
-  })
+  .result(readAnswerResult)
   .texts({
     waiting: 'Waiting for the answer…',
     problem: 'The answer could not be shown.',

@@ -4,7 +4,7 @@ import {
   type CardChromeProps,
 } from '@saga-a2ui/react-mcp-stack/faithful-card';
 import '@saga-a2ui/react-mcp-stack/faithful-card.css';
-import { readAnswerMarkdown } from './answer-result.js';
+import { readAnswerResult } from './answer-result.js';
 import './card-view.css';
 
 // The application: one card that shows whatever answer the host last delivered, and nothing else. The
@@ -66,12 +66,10 @@ export async function mountCardView(brand: Brand): Promise<void> {
   })
     .reader(READER)
     .policy('document')
-    // Only the published output (`{ contractVersion: 1, markdown }`) is read. Fields beyond those two
-    // are never bound: a result cannot select assets, CSS, a template or a policy.
-    .result((structuredContent) => {
-      const markdown = readAnswerMarkdown(structuredContent);
-      return markdown === undefined ? undefined : { markdown };
-    })
+    // Only the published output (`{ contractVersion: 1, markdown }`) is read, and never from an
+    // error result. Fields beyond those two are never bound: a result cannot select assets, CSS,
+    // a template or a policy.
+    .result(readAnswerResult)
     .texts(TEXTS)
     .build();
   const view = startFaithfulCardApp(definition, {

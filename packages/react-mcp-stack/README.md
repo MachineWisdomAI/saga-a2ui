@@ -3,7 +3,7 @@
 The React stack for an MCP Apps view: it connects one React renderer to one delivery, the host's MCP Apps bridge, so an application writes only its own decisions. Entry points:
 
 - `.`: `startA2uiView` for an own-catalog A2UI view, `createReactActions`, the authoring exports, and `readingProfile`.
-- `/faithful-card`: `FaithfulCardApp`, `startFaithfulCardApp` (with the optional `classifyResult`, the application's reading of the whole delivered result), `CardResultOutcome`, `useHostLink` and `readingProfile`.
+- `/faithful-card`: `FaithfulCardApp`, `startFaithfulCardApp`, `CardResultOutcome`, `CardResultReader`, `DeliveredResult` (what the definition's one `result` reader receives), `useHostLink` and `readingProfile`.
 - `/faithful-card.css`: the card's stylesheet.
 - `/content-policy`: `createContentPolicy` and `embedContentPolicy`, for the server that states the policy the card application reads from its document.
 - `/server`: `createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`, and the types `OperationView` and `RequestLifetime`. Node only; no browser entry imports it.

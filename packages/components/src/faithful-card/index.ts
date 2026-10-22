@@ -72,9 +72,8 @@ export {
   type CardAppPolicySource,
   type CardAppReaderOptions,
   type CardAppTexts,
-  type CardResultClassifier,
   type CardResultOutcome,
-  type CardResultParser,
+  type CardResultReader,
   type FaithfulCardAppBuilder,
   type FaithfulCardAppDefinition,
 } from './card-app.js';
