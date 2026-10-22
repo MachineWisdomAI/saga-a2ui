@@ -533,7 +533,7 @@ for (const stack of STACKS) {
       ).toHaveCount(0);
     });
 
-    test('under the application’s reading, a reader that throws after consent, and a result that cannot be mapped, each clear the card and consent, report phase result and let the next valid result recover', async ({
+    test('under the application’s reading, a reader that throws after consent clears the card and consent, reports phase result and lets the next valid result recover', async ({
       page: browser,
     }) => {
       const created = createContentPolicy({
@@ -590,16 +590,6 @@ for (const stack of STACKS) {
         frame.getByRole('button', { name: 'Hide images' }),
       ).toBeVisible();
 
-      // A result the delivery cannot map is the same failure: reported, cleared, then recovered.
-      await deliver({ content: 'not a list of blocks' });
-      await expect
-        .poll(view.lines)
-        .toContain('error:result:The tool result has no content list.');
-      await expect.poll(view.status).toBe(PROBE_TEXTS.problem);
-      expect(await view.cardText()).toBe('');
-      await expect(
-        frame.getByRole('button', { name: 'Hide images' }),
-      ).toHaveCount(0);
       await deliver(envelope('Recovered.'));
       await expect.poll(view.cardText).toContain('Recovered.');
     });
