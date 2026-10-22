@@ -207,9 +207,5 @@
       ]
     }
   ],
-  "release_paths": ["templates/lit-*/**"],
-  "integration": {
-    "base": "feat/v0.7-composition",
-    "version": "0.7.0-rc.1"
-  }
+  "release_paths": ["templates/lit-*/**"]
 }
