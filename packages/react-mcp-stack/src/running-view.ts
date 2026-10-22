@@ -3,6 +3,7 @@ import {
   startOwnSizing,
   ViewStartFailure,
   type HostContext,
+  type ToolInput,
   type ToolResult,
 } from '@saga-a2ui/mcp/view';
 import { applicationFailureOf } from './application-call.js';
@@ -44,6 +45,8 @@ export interface RunViewOptions {
   ) => void;
   /** Called for each delivered result once the view is ready (the held one at that moment). */
   readonly onToolResult: (result: ToolResult) => void;
+  /** Called for the tool call that is starting, once the view is ready and before the held result. */
+  readonly onToolInput?: (input: ToolInput) => void;
   readonly onError?: (error: unknown, phase: ErrorPhase) => void;
   /** The first step of ending, once, before the connection ends: retire consent and the surface. */
   readonly retire: () => void;
@@ -101,6 +104,9 @@ export function runView(options: RunViewOptions): RunningView {
       ? {}
       : { readyWhen: options.readyWhen }),
     onToolResult: options.onToolResult,
+    ...(options.onToolInput === undefined
+      ? {}
+      : { onToolInput: options.onToolInput }),
     onHostContext(context, hostName) {
       // Told only once the host can hear it: sizing before the handshake would be dropped, and the
       // size it measured would then count as sent.
