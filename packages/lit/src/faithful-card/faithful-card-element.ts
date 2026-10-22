@@ -487,6 +487,7 @@ export class FaithfulCardContentElement extends LitElement {
     switch (node.kind) {
       case 'paragraph':
         // Only the card's final top-level block can be closing; see `FAITHFUL_CARD_STYLING.closing`.
+        // prettier-ignore (any whitespace added inside the element would become part of its text)
         return html`<p dir=${dir} data-saga-closing=${marker}>
           ${this.inlines(node.children, r)}
         </p>`;
