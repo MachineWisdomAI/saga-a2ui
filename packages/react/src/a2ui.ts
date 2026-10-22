@@ -8,6 +8,9 @@ export {
   type NodeViewProps,
 } from '@a2ui/react/v0_9';
 export { Catalog, CommonSchemas, type SurfaceModel } from '@a2ui/web_core/v0_9';
+// The layout components' contracts, for an application that builds its own layout components
+// over them (`createComponentImplementation(ColumnApi, ...)`); `@a2ui/react` ships no basic catalog.
+export { ColumnApi, ListApi, RowApi } from '@a2ui/web_core/v0_9/basic_catalog';
 export {
   openSurface,
   Surface,

@@ -46,7 +46,10 @@ describe('the optional React exports', () => {
     expect(Object.keys(a2ui).sort()).toEqual([
       'A2uiSurface',
       'Catalog',
+      'ColumnApi',
       'CommonSchemas',
+      'ListApi',
+      'RowApi',
       'Surface',
       'createComponentImplementation',
       'openSurface',

@@ -44,8 +44,6 @@ export const answerConsumerServerDist = path.join(
 
 /** The packages the consumer imports itself, besides the SDK packages. */
 export const ANSWER_CONSUMER_OWN_DEPENDENCIES = [
-  '@a2ui/lit',
-  '@a2ui/web_core',
   '@modelcontextprotocol/server',
   'lit',
   'zod',

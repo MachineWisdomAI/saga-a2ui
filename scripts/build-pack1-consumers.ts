@@ -72,8 +72,6 @@ const REACT_FILES = [
 ];
 
 const LIT_DEPENDENCIES = [
-  '@a2ui/lit',
-  '@a2ui/web_core',
   '@modelcontextprotocol/client',
   '@modelcontextprotocol/ext-apps',
   '@modelcontextprotocol/server',
@@ -81,8 +79,6 @@ const LIT_DEPENDENCIES = [
   'zod',
 ];
 const REACT_DEPENDENCIES = [
-  '@a2ui/react',
-  '@a2ui/web_core',
   '@modelcontextprotocol/client',
   '@modelcontextprotocol/ext-apps',
   '@modelcontextprotocol/server',

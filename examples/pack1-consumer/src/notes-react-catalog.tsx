@@ -1,18 +1,22 @@
 import {
+  ActionButtonEntry,
+  Catalog,
+  ColumnApi,
+  CommonSchemas,
   createComponentImplementation,
+  ListApi,
+  RowApi,
+  z,
   type ReactCatalogComponent,
-} from '@a2ui/react/v0_9'; // saga-boundary: integration-import the application authors its own components against upstream's component API
-import { ColumnApi, ListApi, RowApi } from '@a2ui/web_core/v0_9/basic_catalog'; // saga-boundary: integration-import the layout components are built over upstream's component contracts
-import { Catalog } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value
-import { ActionButtonEntry } from '@saga-a2ui/react/actions';
+} from '@saga-a2ui/react-mcp-stack';
 import type { ReactNode } from 'react';
-import { LineApi } from './notes-line.js';
+import { LINE_KINDS } from './notes-line.js';
 import { CATALOG_ID } from './notes-surface.js';
 
 // The application-owned catalog of the React consumer. `@a2ui/react` 0.13.0 ships no basic
 // catalog, so the layout components are built the way an application builds its own:
 // `createComponentImplementation` over the upstream component contracts, the same ones the Lit
-// catalog takes from upstream's basic catalog. `Line` has the contract it has in the Lit catalog
+// catalog takes from upstream's basic catalog. `Line` has the roles it has in the Lit catalog
 // (notes-line.ts) and renders the same elements; `ActionButton` is SAGA's opt-in control. Nothing
 // else is in the catalog.
 
@@ -31,6 +35,13 @@ function childrenOf(
       : buildChild(child.id, child.basePath),
   );
 }
+
+const LineApi = {
+  name: 'Line',
+  schema: z
+    .object({ text: CommonSchemas.DynamicString, kind: z.enum(LINE_KINDS) })
+    .strict(),
+};
 
 const Line = createComponentImplementation(LineApi, ({ props }) => {
   const text = String(props.text ?? '');

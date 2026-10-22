@@ -1,8 +1,8 @@
-import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
   ActionButton,
   createLitActions,
   startA2uiView,
+  type HostLinks,
 } from '@saga-a2ui/lit-mcp-stack';
 import { createNotesController } from './notes-controller.js';
 import { notesCatalog, type CatalogEntry } from './notes-catalog.js';

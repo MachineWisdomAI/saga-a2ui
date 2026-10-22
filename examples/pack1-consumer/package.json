@@ -5,9 +5,6 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "@a2ui/lit": "0.13.0",
-    "@a2ui/react": "0.13.0",
-    "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/server": "2.3.1",
@@ -16,7 +13,6 @@
     "@saga-a2ui/lit": "*",
     "@saga-a2ui/lit-mcp-stack": "*",
     "@saga-a2ui/mcp": "*",
-    "@saga-a2ui/react": "*",
     "@saga-a2ui/react-mcp-stack": "*",
     "lit": "^3.3.3",
     "react": "19.3.1",

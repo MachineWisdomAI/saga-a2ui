@@ -15,7 +15,15 @@ export {
   type CardViewState,
   type StartFaithfulCardOptions,
 } from './start-faithful-card-app.js';
-export { StartFailure, type StartFailureKind } from '../start-failure.js';
+// The failures `startFaithfulCardApp` reports, and the phase its `onError` callback is told: the
+// same values the main entry exports, so one `catch` serves an application that uses both.
+export {
+  StartError,
+  StartFailure,
+  type ErrorPhase,
+  type StartFailureKind,
+  type StartMisuse,
+} from '../start-failure.js';
 export type { RunningView } from '../running-view.js';
 // A link the card's host can be asked to open, for the application's own chrome.
 export {

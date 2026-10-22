@@ -48,9 +48,17 @@ const anyOf = (modules: string[], pattern: RegExp): string[] =>
 describe('@saga-a2ui/react-mcp-stack', () => {
   it('exposes exactly the supported names', () => {
     expect(Object.keys(main).sort()).toEqual([
+      'Action',
       'ActionButton',
       'ActionButtonEntry',
+      'Catalog',
+      'ColumnApi',
+      'CommonSchemas',
+      'ListApi',
+      'RowApi',
+      'StartError',
       'StartFailure',
+      'createComponentImplementation',
       'createReactActions',
       'defineSurface',
       'readingProfile',
@@ -59,6 +67,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
     ]);
     expect(Object.keys(card).sort()).toEqual([
       'FaithfulCardApp',
+      'StartError',
       'StartFailure',
       'readingProfile',
       'startFaithfulCardApp',
@@ -75,6 +84,12 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'registerPublicOperation',
       'viewUriForHtml',
     ]);
+  });
+
+  it('serves one start failure and one misuse error to the application from both entries', () => {
+    expect(main.StartFailure).toBe(card.StartFailure);
+    expect(main.StartError).toBe(card.StartError);
+    expect(new main.StartError('container-busy').code).toBe('container-busy');
   });
 
   it('serves one reading profile to the application from both entries', () => {

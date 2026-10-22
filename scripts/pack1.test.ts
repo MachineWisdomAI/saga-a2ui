@@ -637,10 +637,14 @@ describe('the installed consumers', () => {
   });
 
   it('install the React consumer on the pinned upstream pair: @a2ui/react and @a2ui/web_core 0.13.0, React and React DOM 19.3.1, not the 0.14.0 the proposal inspected', () => {
-    const versions = installedVersionsOf(
-      prepared.react.consumer,
-      NOTES_CONSUMERS.react.ownDependencies,
-    );
+    // The consumer declares neither upstream package: the stack's packed manifests do, and it is
+    // linked beneath them.
+    const versions = installedVersionsOf(prepared.react.consumer, [
+      '@a2ui/react',
+      '@a2ui/web_core',
+      'react',
+      'react-dom',
+    ]);
     expect(versions).toMatchObject({
       '@a2ui/react': '0.13.0',
       '@a2ui/web_core': '0.13.0',

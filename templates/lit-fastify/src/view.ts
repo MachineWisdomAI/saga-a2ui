@@ -1,8 +1,8 @@
-import type { ActionBinding } from '@saga-a2ui/core/actions';
 import {
   ActionButton,
   createLitActions,
   startA2uiView,
+  type ActionBinding,
   type BoundSurface,
 } from '@saga-a2ui/lit-mcp-stack';
 import { createStarterActions } from './actions.js';
