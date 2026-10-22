@@ -14,15 +14,34 @@ import { fileURLToPath } from 'node:url';
 
 export type RuleName = 'wire-literal' | 'integration-import' | 'session-symbol';
 
+/** One occurrence of a rule in code: where it starts in that text, and the text that matched. */
+export interface RuleMatch {
+  readonly index: number;
+  readonly text: string;
+}
+
 export interface Rule {
   readonly name: RuleName;
   readonly description: string;
-  /** The text of each match on one line of code (comments are already blanked). */
-  readonly match: (code: string) => string[];
+  /**
+   * Each match in a whole text of code (comments are already blanked). The patterns allow the
+   * white space, line breaks included, that ordinary formatting puts inside the form they name.
+   */
+  readonly match: (code: string) => RuleMatch[];
 }
 
-const all = (pattern: RegExp, code: string): string[] =>
-  [...code.matchAll(pattern)].map((one) => one[0]);
+const all = (pattern: RegExp, code: string): RuleMatch[] =>
+  [...code.matchAll(pattern)].map((one) => ({
+    index: one.index,
+    text: one[0],
+  }));
+
+// A property key is bare (`createSurface:`), quoted (`"createSurface":`) or computed
+// (`["createSurface"]:`). A longer identifier that merely starts with the name is not the key.
+const WIRE_KEY =
+  /(?<![\w$])(?:createSurface|updateComponents|updateDataModel)(?![\w$])\s*:|(["'])(?:createSurface|updateComponents|updateDataModel)\1\s*\]?\s*:/g;
+const VERSION_FIELD =
+  /(?<![\w$])version\s*:\s*(["'`])v0\.9\1|(["'])version\2\s*\]?\s*:\s*(["'`])v0\.9\3/g;
 
 const IMPORT_FORM = String.raw`(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)`;
 // The bridge is the view side of MCP Apps: the package and its client subpaths. Its `/server`
@@ -34,10 +53,7 @@ export const RULES: readonly Rule[] = [
     name: 'wire-literal',
     description:
       "A2UI wire literals: createSurface:, updateComponents:, updateDataModel:, version: 'v0.9'",
-    match: (code) => [
-      ...all(/\b(?:createSurface|updateComponents|updateDataModel)\s*:/g, code),
-      ...all(/\bversion\s*:\s*['"]v0\.9['"]/g, code),
-    ],
+    match: (code) => [...all(WIRE_KEY, code), ...all(VERSION_FIELD, code)],
   },
   {
     name: 'integration-import',
@@ -156,45 +172,89 @@ function parseExemption(raw: string): ParsedExemption | string | undefined {
   return { rules: rules as RuleName[], reason: match[2]!.trim() };
 }
 
-/** Scans lines of code. `lineOffset` is the line number of the first line within its file. */
-function scanLines(
+/**
+ * Scans a text of code, whole, so a form that ordinary formatting breaks across lines (an import
+ * whose module sits on the next line, a `version:` whose value does) is still one match.
+ *
+ * A hit is reported at the line where it starts. An exemption is one line: it covers a hit of
+ * the rule it names that starts or ends on that line or has that line between, which for the
+ * small forms the rules match is the statement's own line or lines and nothing else. An
+ * exemption that covers no hit of the rule it names is stale. `lineOffset` is the line number of
+ * the first line within its file.
+ */
+function scanText(
   file: string,
-  rawLines: readonly string[],
-  codeLines: readonly string[],
+  raw: string,
+  code: string,
   lineOffset: number,
 ): FileScan {
   const hits: Hit[] = [];
   const exempt: Hit[] = [];
   const problems: Problem[] = [];
-  rawLines.forEach((raw, index) => {
+
+  const lineStarts = [0];
+  for (let index = 0; index < code.length; index += 1)
+    if (code[index] === '\n') lineStarts.push(index + 1);
+  const lineOf = (offset: number): number => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (lineStarts[middle]! <= offset) low = middle;
+      else high = middle - 1;
+    }
+    return lineOffset + low;
+  };
+
+  const exemptions = new Map<number, ParsedExemption>();
+  raw.split('\n').forEach((text, index) => {
     const line = lineOffset + index;
-    const parsed = parseExemption(raw);
+    const parsed = parseExemption(text);
     if (typeof parsed === 'string')
       problems.push({ file, line, message: parsed });
-    const covered = typeof parsed === 'object' ? parsed : undefined;
-    const matched = new Set<RuleName>();
-    for (const rule of RULES) {
-      for (const text of rule.match(codeLines[index] ?? '')) {
-        matched.add(rule.name);
-        if (covered?.rules.includes(rule.name))
-          exempt.push({
-            file,
-            line,
-            rule: rule.name,
-            text,
-            exemption: covered.reason,
-          });
-        else hits.push({ file, line, rule: rule.name, text });
+    else if (parsed !== undefined) exemptions.set(line, parsed);
+  });
+
+  const used = new Set<string>();
+  for (const rule of RULES) {
+    for (const found of rule.match(code)) {
+      const first = lineOf(found.index);
+      const last = lineOf(found.index + Math.max(found.text.length - 1, 0));
+      let covering: { line: number; exemption: ParsedExemption } | undefined;
+      for (
+        let line = first;
+        line <= last && covering === undefined;
+        line += 1
+      ) {
+        const exemption = exemptions.get(line);
+        if (exemption?.rules.includes(rule.name))
+          covering = { line, exemption };
       }
+      if (covering === undefined) {
+        hits.push({ file, line: first, rule: rule.name, text: found.text });
+        continue;
+      }
+      used.add(`${covering.line}:${rule.name}`);
+      exempt.push({
+        file,
+        line: first,
+        rule: rule.name,
+        text: found.text,
+        exemption: covering.exemption.reason,
+      });
     }
-    for (const named of covered?.rules ?? [])
-      if (!matched.has(named))
+  }
+  for (const [line, exemption] of exemptions)
+    for (const named of exemption.rules)
+      if (!used.has(`${line}:${named}`))
         problems.push({
           file,
           line,
           message: `stale exemption: no ${named} hit on this line`,
         });
-  });
+  problems.sort((a, b) => a.line - b.line);
+  hits.sort((a, b) => a.line - b.line);
+  exempt.sort((a, b) => a.line - b.line);
   return { hits, exempt, problems };
 }
 
@@ -203,7 +263,7 @@ export const TEACHING_FENCE = /\b(?:before|historical)\b/i;
 
 /** Scans a source file. */
 export function scanCode(file: string, text: string): FileScan {
-  return scanLines(file, text.split('\n'), blankComments(text).split('\n'), 1);
+  return scanText(file, text, blankComments(text), 1);
 }
 
 /** Scans the code fences of a Markdown file, except those whose info string says `before` or `historical`. */
@@ -218,8 +278,8 @@ export function scanMarkdown(file: string, text: string): FileScan {
   const fenceLines: string[] = [];
   const flush = (): void => {
     if (open === undefined || TEACHING_FENCE.test(open.info)) return;
-    const code = blankComments(fenceLines.join('\n')).split('\n');
-    const scan = scanLines(file, fenceLines, code, open.start + 1);
+    const body = fenceLines.join('\n');
+    const scan = scanText(file, body, blankComments(body), open.start + 1);
     result.hits.push(...scan.hits);
     result.exempt.push(...scan.exempt);
     result.problems.push(...scan.problems);

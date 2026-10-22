@@ -171,6 +171,15 @@ describe('dependency direction', () => {
     ["import { App } from '@modelcontextprotocol/ext-apps';", 'an MCP module'],
     ["import { LitElement } from 'lit';", 'a renderer'],
     ["document.body.append(document.createElement('p'));", 'a browser object'],
+    ['export const style = new CSSStyleSheet();', 'a browser constructor'],
+    [
+      "export const parsed = new DOMParser().parseFromString('', 'text/html');",
+      'a browser parser',
+    ],
+    [
+      'export const watch = (node: HTMLDivElement) => node.focus();',
+      'a browser element type',
+    ],
   ])(
     'fails for a deliberate wrong-direction change: %s (%s)',
     (line, _what) => {
@@ -180,6 +189,23 @@ describe('dependency direction', () => {
       expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
     },
   );
+
+  it('allows pure code, and prose or names that only look like a browser object', () => {
+    const { manifest } = readPackage('core');
+    const pure = {
+      path: 'src/pure.ts',
+      text: [
+        '// A constructable CSSStyleSheet is the renderer\u2019s, never this package\u2019s.',
+        '/* document.body, window.name and customElements are not used here */',
+        'export const sheetName = (id: string): string => `sheet-${id}`;',
+        "export const event = new CustomEvent('x');",
+        'export const controller = new AbortController();',
+        "export const at = new URL('https://example.test').href;",
+        '',
+      ].join('\n'),
+    };
+    expect(directionViolations('core', manifest, [pure])).toEqual([]);
+  });
 
   it('fails for a wrong-direction dependency declared in the manifest', () => {
     const { manifest, files } = readPackage('core');

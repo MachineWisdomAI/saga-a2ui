@@ -167,25 +167,37 @@ Additional server slices add their own recipe by joining the qualified inventory
 
 An application installs one stack plus its framework peers and writes only what is its own. The stack connects to the host, holds a result that arrives before the view is ready (the latest wins), gives each result to the application, and ends the view once, before the connection ends, when the host tears it down, `dispose()` runs or the page goes away. A raw `pagehide` listener is not needed for any of that; the application keeps one only for behavior that is its own.
 
-The Lit starter's whole composition is this (`templates/lit-node/src/view.ts` is the tested source; the layout is in `surface.ts` and the catalog in `catalog.ts`):
+The Lit starter's composition is this. It is excerpted line for line from `templates/lit-node/src/view.ts`, and `scripts/guide.test.ts` fails when a line stops being there or when the call omits an option `createLitActions` requires. The layout is in `surface.ts` and the catalog in `catalog.ts`. `requireElement`, `say`, `show`, `retire`, `bindings` and `stopWatching` are the application's own helpers and state in the same file: what a result means and what ending the view takes with it.
 
 ```ts
-import {ActionButton, createLitActions, startA2uiView} from '@saga-a2ui/lit-mcp-stack';
+import {
+  ActionButton,
+  createLitActions,
+  startA2uiView,
+} from '@saga-a2ui/lit-mcp-stack';
 
 const view = startA2uiView({
-  container: document.querySelector('starter-app')!,
-  layout: starterSurface,   // defineSurface(...): the surface's identity, data type and components
-  catalog: starterCatalog,  // the components the layout may name
+  container: requireElement('starter-app'),
+  layout: starterSurface,
+  catalog: starterCatalog,
+  identity: { name: 'saga-starter-view', version: '0.0.0' },
   actions: createLitActions({
-    attach: (surfaceView) =>
-      surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => handle.bindAction('activate', clearNote)),
+    attach: (surfaceView) => {
+      stopWatching.push(
+        surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
+          bindings.push(handle.bindAction('activate', actions.clearNote));
+        }),
+      );
+    },
+    onSetupError: () => say(PROBLEM_TEXT),
   }),
-  onToolResult: (result, running) => running.surface.update({headline: headlineFor(result)}),
+  onToolResult: (result, running) => show(result, running.surface),
+  onTeardown: retire,
 });
 await view.ready;
 ```
 
-`surface.update` validates the data against the layout and applies it in place: the mounted controls, their bindings and focus survive, and a rejected update changes nothing. A card application states a validated definition instead (`FaithfulCardApp.define(...)`) and starts it with `startFaithfulCardApp` from `@saga-a2ui/lit-mcp-stack/faithful-card` or `@saga-a2ui/react-mcp-stack/faithful-card`. Neither stack asks the application to write A2UI messages, to import the MCP Apps bridge, or to order the handshake; the repository's consumer boundary scan (`scripts/consumer-boundary.test.ts`) fails a template, example or view module that does. A catalog is the one place an application imports upstream's component API, and each such line says so in a `// saga-boundary:` comment.
+`attach` runs once for each presented surface and binds the application's action to the control it finds. `onSetupError` is required: it receives the error of a setup that throws, and the page shows only the safe fallback while the text goes to your callback. In `show`, `surface.update({ headline })` validates the data against the layout and applies it in place: the mounted controls, their bindings and focus survive, and a rejected update changes nothing. A card application states a validated definition instead (`FaithfulCardApp.define(...)`) and starts it with `startFaithfulCardApp` from `@saga-a2ui/lit-mcp-stack/faithful-card` or `@saga-a2ui/react-mcp-stack/faithful-card`. Neither stack asks the application to write A2UI messages, to import the MCP Apps bridge, or to order the handshake; the repository's consumer boundary scan (`scripts/consumer-boundary.test.ts`) fails a template, example or view module that does. A catalog is the one place an application imports upstream's component API, and each such line says so in a `// saga-boundary:` comment.
 
 A stack's installed tree includes `@saga-a2ui/components` and `markdown-it` as its declared dependencies; the emitted bundle of an application that uses only the main entry does not (the card entry is where they are used). The [React consumer dependency guide](react-consumers.md) has the React recipe and the registry-versus-candidate distinction.
 

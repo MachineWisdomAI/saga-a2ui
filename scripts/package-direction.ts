@@ -88,7 +88,25 @@ export interface Violation {
 }
 
 const COMMENTS = /\/\*[\s\S]*?\*\/|(^|[^:'"`\\])\/\/.*$/gm;
-const DOM = /\b(document\.|window\.|customElements\b|HTMLElement\b)/;
+// What code names when it needs a browser: the page and window objects, custom elements, element
+// and shadow-tree types, the constructors that exist only in a browser (a constructable style
+// sheet, a parser, the observers), and the browser's timing and storage entry points. Names that
+// Node or any JavaScript host also provides (`Event`, `AbortController`, `URL`, `fetch`) are not
+// listed: a neutral package may use them.
+const DOM = new RegExp(
+  String.raw`\b(?:` +
+    [
+      String.raw`document\.`,
+      String.raw`window\.`,
+      String.raw`globalThis\.(?:document|window)\b`,
+      String.raw`customElements\b`,
+      String.raw`(?:HTML|SVG)[A-Za-z]*Element\b`,
+      String.raw`(?:Document|ShadowRoot|CSSStyleSheet|CSSStyleDeclaration)\b`,
+      String.raw`(?:DOMParser|DocumentFragment|MutationObserver|ResizeObserver|IntersectionObserver)\b`,
+      String.raw`(?:getComputedStyle|requestAnimationFrame|localStorage|sessionStorage)\b`,
+    ].join('|') +
+    `)`,
+);
 const SPECIFIER = new RegExp(
   [
     String.raw`\b(?:import|export)\b[^'"\`;]*?\bfrom\s*['"]([^'"]+)['"]`,

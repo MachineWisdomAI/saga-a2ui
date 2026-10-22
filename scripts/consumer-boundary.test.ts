@@ -58,6 +58,31 @@ describe('each rule reports a known-bad line', () => {
       'integration-import',
       "const { App } = require('@modelcontextprotocol/ext-apps');",
     ],
+    // The same glue as ordinary formatting writes it: across lines, and with quoted keys.
+    [
+      'integration-import',
+      "import { App } from\n  '@modelcontextprotocol/ext-apps';",
+    ],
+    [
+      'integration-import',
+      "import {\n  App,\n  PostMessageTransport,\n} from '@modelcontextprotocol/ext-apps';",
+    ],
+    [
+      'integration-import',
+      "import { runToolResultView }\n  from\n  '@saga-a2ui/mcp/view';",
+    ],
+    ['integration-import', "const m = await import(\n  '@a2ui/react/v0_9'\n);"],
+    [
+      'integration-import',
+      "const { App } = require(\n  '@modelcontextprotocol/ext-apps/app-bridge',\n);",
+    ],
+    ['wire-literal', 'const m = { "createSurface": { surfaceId: "x" } };'],
+    ['wire-literal', "const m = { 'updateComponents' : { components: [] } };"],
+    ['wire-literal', 'const m = { ["updateDataModel"]: { value: {} } };'],
+    ['wire-literal', "const message = {version:\n  'v0.9'};"],
+    ['wire-literal', "const message = { version\n    :\n    'v0.9' };"],
+    ['wire-literal', 'const message = { "version": "v0.9" };'],
+    ['wire-literal', "const message = { 'version':\n  `v0.9` };"],
     ['session-symbol', 'const session = createMessageSession({ catalogs });'],
     ['session-symbol', 'decoder: a2uiV0_9Decoder,'],
     ['session-symbol', 'const send = (input: unknown): IngestResult => ok;'],
@@ -119,6 +144,13 @@ describe('near-misses are not reported', () => {
     "import { startA2uiView } from '@saga-a2ui/lit-mcp-stack';",
     "import { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';",
     "import { sessionFactory } from './factory.js';",
+    // Quoted or broken-up forms that are still not the glue.
+    'const layout = { "createSurfaceLayout": spec };',
+    'const label = "createSurface";',
+    'const message = { "version": "v0.10" };',
+    "const message = { 'version':\n  'v1.0' };",
+    "import { App } from\n  './not-the-bridge.js';",
+    "import {\n  registerAppTool,\n} from\n  '@modelcontextprotocol/ext-apps/server';",
   ])('%s', (line) => {
     expect(rulesOf(line)).toEqual([]);
   });
@@ -225,6 +257,88 @@ describe('an exemption is one line that names its rule and gives a reason', () =
     expect(scanned.problems.map((problem) => problem.message)).toEqual([
       'stale exemption: no integration-import hit on this line',
     ]);
+  });
+
+  describe('for a form that spans lines', () => {
+    const multiline = (first: string, second: string): string =>
+      [
+        `import { Catalog } from${first}`,
+        `  '@a2ui/web_core/v0_9';${second}`,
+        'const next = 1;',
+      ].join('\n');
+    const reason =
+      '// saga-boundary: integration-import the app authors a catalog';
+
+    it('reports the hit at the line where the form starts, with the line of the module in the span', () => {
+      const scanned = scanCode('catalog.ts', multiline('', ''));
+      expect(scanned.hits.map((hit) => [hit.line, hit.rule])).toEqual([
+        [1, 'integration-import'],
+      ]);
+    });
+
+    it.each([
+      ['the line the form starts on', ` ${reason}`, ''],
+      ['the line of the module', '', ` ${reason}`],
+    ])('is covered by an exemption on %s', (_name, first, second) => {
+      const scanned = scanCode('catalog.ts', multiline(first, second));
+      expect(scanned.hits).toEqual([]);
+      expect(scanned.problems).toEqual([]);
+      expect(scanned.exempt.map((hit) => [hit.line, hit.rule])).toEqual([
+        [1, 'integration-import'],
+      ]);
+    });
+
+    it('is not covered by an exemption on a line outside the form, which is stale', () => {
+      const scanned = scanCode(
+        'catalog.ts',
+        `${multiline('', '')}\nconst after = 2; ${reason}`,
+      );
+      expect(scanned.hits.map((hit) => hit.line)).toEqual([1]);
+      expect(
+        scanned.problems.map((problem) => [problem.line, problem.message]),
+      ).toEqual([
+        [4, 'stale exemption: no integration-import hit on this line'],
+      ]);
+    });
+
+    it('covers a quoted key and a broken-up version value on their own lines and no others', () => {
+      const scanned = scanCode(
+        'fixture.ts',
+        [
+          'const open = { "createSurface": {} }; // saga-boundary: wire-literal a fixture states a message',
+          'const next = {',
+          '  version:',
+          "    'v0.9', // saga-boundary: wire-literal a fixture states a message",
+          '};',
+          'const bad = { "updateDataModel": {} };',
+        ].join('\n'),
+      );
+      expect(scanned.exempt.map((hit) => [hit.line, hit.rule])).toEqual([
+        [1, 'wire-literal'],
+        [3, 'wire-literal'],
+      ]);
+      expect(scanned.hits.map((hit) => [hit.line, hit.rule])).toEqual([
+        [6, 'wire-literal'],
+      ]);
+      expect(scanned.problems).toEqual([]);
+    });
+
+    it('gives a Markdown fence the same lines as the file', () => {
+      const scanned = scanMarkdown(
+        'guide.md',
+        [
+          'text',
+          '',
+          '```ts',
+          'import { App } from',
+          "  '@modelcontextprotocol/ext-apps';",
+          '```',
+        ].join('\n'),
+      );
+      expect(scanned.hits.map((hit) => [hit.line, hit.rule])).toEqual([
+        [4, 'integration-import'],
+      ]);
+    });
   });
 });
 
