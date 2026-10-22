@@ -129,3 +129,26 @@ describe('the Lit card’s styling surface', () => {
     expect(failure?.classList.contains('saga-card-failure')).toBe(true);
   });
 });
+
+describe('the Lit card’s committed content elements', () => {
+  // One document that uses every Markdown construct the committed element list names.
+  const everyElement = [
+    '# One',
+    '## Two',
+    '### Three',
+    '#### Four',
+    'A paragraph with **strong**, *emphasis* and `code`.',
+    '- a bullet',
+    '1. a number',
+    '> a quote',
+    '```\npreformatted\n```',
+    '| a |\n| - |\n| 1 |',
+    '---',
+  ].join('\n\n');
+
+  it('renders each one inside .saga-card-content', async () => {
+    const { content } = await render(everyElement);
+    for (const name of FAITHFUL_CARD_STYLING.elements)
+      expect(content?.querySelector(name), name).not.toBeNull();
+  });
+});

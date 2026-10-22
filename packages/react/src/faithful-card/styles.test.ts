@@ -120,3 +120,42 @@ describe('the exported stylesheet', () => {
     }
   });
 });
+
+describe('the committed content elements', () => {
+  // One document that uses every Markdown construct the committed element list names.
+  const everyElement = [
+    '# One',
+    '## Two',
+    '### Three',
+    '#### Four',
+    'A paragraph with **strong**, *emphasis* and `code`.',
+    '- a bullet',
+    '1. a number',
+    '> a quote',
+    '```\npreformatted\n```',
+    '| a |\n| - |\n| 1 |',
+    '---',
+  ].join('\n\n');
+
+  it('renders each one inside .saga-card-content, in the React card', () => {
+    mounted = mount();
+    mounted.render(
+      createElement(FaithfulCardProvider, {
+        view: trusted({}).view,
+        children: createElement(FaithfulCard, {
+          contractVersion: 1,
+          markdown: everyElement,
+        }),
+      }),
+    );
+    const content = mounted.container.querySelector('.saga-card-content');
+    for (const name of FAITHFUL_CARD_STYLING.elements)
+      expect(content?.querySelector(name), name).not.toBeNull();
+  });
+
+  it('documents each one in the stylesheet’s header', () => {
+    const elements = documentation.slice(documentation.indexOf('Elements.'));
+    for (const name of FAITHFUL_CARD_STYLING.elements)
+      expect(elements, name).toMatch(new RegExp(`\\b${name}\\b`));
+  });
+});

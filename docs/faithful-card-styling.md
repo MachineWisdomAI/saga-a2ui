@@ -14,7 +14,42 @@ The names live in one list, `FAITHFUL_CARD_STYLING` in `@saga-a2ui/components/fa
 | `.saga-card-link-status`  | The readable answer after a link request, directly after its `.saga-card-link`                             |
 | `.saga-card-controls`     | The Strict control row (Reveal source, Show images)                                                        |
 
-Inside `.saga-card-content` an application may select the semantic elements `h3`–`h6` (the page owns the top levels, so a Markdown `#` renders as `h3`), `p`, `ol`, `ul`, `li`, `blockquote`, `pre`, `code` and `table`.
+Inside `.saga-card-content` an application may select the semantic elements `h3`–`h6` (the page owns the top levels, so a Markdown `#` renders as `h3`), `p`, `ol`, `ul`, `li`, `blockquote`, `pre`, `code`, `table`, and the CommonMark inline and rule elements `strong`, `em` and `hr`.
+
+## Strong, emphasis and rules
+
+CommonMark `**strong**`, `*emphasis*` and a thematic break (`---`) render as `strong`, `em` and `hr`. The card sets no weight, size, slant or colour on `strong` or `em`, so each takes the browser's default (a weight of 700 from a 400 body, an italic slant) and inherits its size and colour from the block that holds it. Its only rule for `hr` is the line it draws, in `--saga-card-border-color`. An application restyles them by element, and a treatment it gives a block reaches the `strong` or `em` inside:
+
+```css
+.saga-card strong {
+  font-weight: 700;
+}
+
+/* Right-to-left emphasis is not slanted. The card gives each block the direction of its own text. */
+.saga-card em:dir(rtl) {
+  font-style: normal;
+  font-size: 1.15em;
+}
+
+/* One divider: a rule draws it, so a footer that follows a rule adds none. */
+.saga-card .saga-card-content > hr + p[data-saga-closing='paragraph'] {
+  border-top: 0;
+}
+```
+
+A closing paragraph that is only a strong sentence keeps the footer's size and colour on its `strong`, and the weight the application gives it.
+
+### Replacing selectors that reached into the card's markup
+
+A rule written against what the card happened to render moves to the committed names by a mechanical replacement. It keeps the visual rule; it does not promise the same document structure, which stays the renderer's.
+
+| Instead of a selector on                                          | Select                                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| An attribute such as `[data-testid=…]` or `[data-annotation=…]`   | The class or element it sat on, from the lists above                |
+| An element a renderer wrapped around a paragraph, list or table   | `.saga-card-content > p`, `> ul`, `> ol`, `> table` and so on       |
+| A bold or italic span by a generated class                        | `.saga-card strong`, `.saga-card em`                                |
+| A divider by its position or class                                | `.saga-card .saga-card-content > hr`                                |
+| The last paragraph by position, to find a footer                  | `[data-saga-closing='paragraph']`, then the application's own test  |
 
 ## Custom properties
 
@@ -22,7 +57,7 @@ Set any of these on the card or an ancestor. Each has a neutral fallback; unset 
 
 `--saga-card-font-family`, `--saga-card-font-size`, `--saga-card-line-height`, `--saga-card-reading-width` (default `70ch`), `--saga-card-text-color`, `--saga-card-accent-color` (links and the quote rule), `--saga-card-muted-color` (link hostnames), `--saga-card-border-color` (tables and rules) and `--saga-card-code-background`.
 
-There is no typed bridge from a host's own CSS variables to these properties. An application maps a host's theme onto them itself.
+There is no typed bridge from a host's own CSS variables to these properties. An application maps a host's theme onto them itself. For a host that is read on a device rather than at a desk, both stacks export `readingProfile(context, hostName)` (from their main and `/faithful-card` entries), the one place that recognises such hosts. It answers `'device'` or `'desktop'` for the `hostContext` callback's arguments, and the application maps the answer onto its own tokens (for example a larger `--saga-card-font-size`) and onto a `data-reading-profile` attribute of its own. The card decides nothing from the profile, and the application never branches on a host name.
 
 ## The closing marker
 
@@ -55,4 +90,4 @@ Re-run the classifier each time the card shows new content; the marker moves wit
 
 ## Qualification
 
-`apps/lit-host/e2e/card-styling.spec.ts` renders a branded stylesheet written against this surface alone (`e2e/card-styling/branded.ts`) in both renderers, mounted through each renderer's `openFaithfulCardSurface`, and asserts computed styles for a paragraph, a list, a link and the closing block. It also covers a trailing list, a paragraph nested in a quote, list item or table cell, and a final paragraph that merely reads like an attribution: it carries the marker and receives no application footer styling, because the fixture's classifier rejects it. A structural scan of the stylesheet, the React templates and the Lit element for the committed names is a small additional check; the rendering is the proof.
+`apps/lit-host/e2e/card-styling.spec.ts` renders a branded stylesheet written against this surface alone (`e2e/card-styling/branded.ts`) in both renderers, mounted through each renderer's `openFaithfulCardSurface`, and asserts computed styles for a paragraph, a list, a link and the closing block. It also covers a trailing list, a paragraph nested in a quote, list item or table cell, and a final paragraph that merely reads like an attribution: it carries the marker and receives no application footer styling, because the fixture's classifier rejects it. Strong, emphasis and rules are covered the same way: `strong` at weight 700, right-to-left `em` set apart from Latin `em`, a closing strong sentence inheriting the footer's size and colour, and exactly one divider where a rule precedes the footer; without the stylesheet they keep the browser's defaults. A structural scan of the stylesheet, the React templates and the Lit element for the committed names is a small additional check; the rendering is the proof.

@@ -94,6 +94,23 @@ export const BRANDED_CSS = `
   font-weight: 700;
 }
 
+/* CommonMark strong, emphasis and rule, by their semantic elements. */
+.saga-card strong {
+  font-weight: 700;
+}
+
+/* Emphasis in right-to-left text is not slanted; it is set a little larger instead. */
+.saga-card em:dir(rtl) {
+  font-style: normal;
+  font-size: 1.15em;
+}
+
+/* A rule is the divider; the closing paragraph after it adds none, so the card shows one. */
+.saga-card hr {
+  margin: 20px 0 0;
+  border-top: 1px solid rgb(195, 206, 210);
+}
+
 /* The closing block, wherever the content ends in a paragraph: structural, whatever its words. */
 .saga-card .saga-card-content > p[data-saga-closing='paragraph'] {
   margin-bottom: 4px;
@@ -107,6 +124,12 @@ export const BRANDED_CSS = `
   color: rgb(85, 98, 117);
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* After a rule the footer's own divider would double it. */
+.saga-card .saga-card-content > hr + p[data-saga-closing='paragraph'][data-app-attribution] {
+  margin-top: 0;
+  border-top: 0;
 }
 `;
 
