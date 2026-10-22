@@ -483,13 +483,11 @@ export class FaithfulCardContentElement extends LitElement {
     // A quote or list item sets the direction its own marker or rule follows from its text, and its
     // paragraphs inherit it: automatic direction ignores any descendant that sets its own.
     const dir = inContainer ? nothing : 'auto';
+    const marker = closing ? FAITHFUL_CARD_STYLING.closing.value : nothing;
     switch (node.kind) {
       case 'paragraph':
         // Only the card's final top-level block can be closing; see `FAITHFUL_CARD_STYLING.closing`.
-        return html`<p
-          dir=${dir}
-          data-saga-closing=${closing ? FAITHFUL_CARD_STYLING.closing.value : nothing}
-        >
+        return html`<p dir=${dir} data-saga-closing=${marker}>
           ${this.inlines(node.children, r)}
         </p>`;
       case 'heading': {

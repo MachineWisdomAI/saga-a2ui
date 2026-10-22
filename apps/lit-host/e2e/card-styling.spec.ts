@@ -81,7 +81,9 @@ for (const renderer of renderers) {
       expect(await style(numbered, 'width', '::before')).toBe('64px');
       expect(await style(numbered, 'display', '::before')).toBe('grid');
       // The list keeps its list semantics: the generated disk shows the browser's own counter.
-      expect(await style(numbered, 'content', '::before')).toBe('"1"');
+      expect(await style(numbered, 'content', '::before')).toBe(
+        'counter(list-item)',
+      );
       await expect(page.locator('.saga-card-content > ol > li')).toHaveCount(2);
     });
 
