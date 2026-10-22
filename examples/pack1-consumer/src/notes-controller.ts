@@ -1,5 +1,5 @@
 import { PostMessageTransport, type App } from '@modelcontextprotocol/ext-apps';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import { runToolResultView } from '@saga-a2ui/mcp/view';
 import { createNotesActions } from './notes-actions.js';
 import { VIEW_TEXT, readNotesResult } from './notes-contract.js';
 import { RowHolds } from './row-holds.js';
@@ -71,13 +71,11 @@ export function createNotesController(
     say(shown.status);
   };
 
-  // The application's one way to end its view, for a host teardown and for the page going away
-  // alike. Removing the surface disposes its bindings (local actions, the optional card) and
-  // cancels what is still undecided, so a retained button no longer does anything. Idempotent.
-  let retired = false;
+  // The application's one way to end its view. Removing the surface disposes its bindings (local
+  // actions, the optional card) and cancels what is still undecided, so a retained button no longer
+  // does anything. The runner calls it once, before the connection ends, on a host teardown request
+  // and on the page going away alike.
   const retire = (): void => {
-    if (retired) return;
-    retired = true;
     surface.remove();
     say(VIEW_TEXT.closed);
   };
@@ -86,18 +84,13 @@ export function createNotesController(
     actions,
     say,
     async connect() {
-      const connection = await connectToolResultView({
+      const view = runToolResultView({
         app,
         transport: new PostMessageTransport(window.parent, window.parent),
         onToolResult: show,
-        // The host is closing this view; it ends the connection itself once it has the answer.
         onTeardown: retire,
       });
-      // The page is going away: end the application's bindings first, then the connection.
-      addEventListener('pagehide', () => {
-        retire();
-        connection.dispose();
-      });
+      await view.ready;
     },
   };
 }

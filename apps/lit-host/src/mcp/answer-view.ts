@@ -1,10 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
 import {
-  connectToolResultView,
+  runToolResultView,
   type ToolInput,
   type ToolResult,
-  type ToolResultViewConnection,
 } from '@saga-a2ui/mcp/view';
 import {
   AnswerRequestSchema,
@@ -25,7 +24,10 @@ export interface AnswerViewDependencies {
   readonly show: (state: AnswerViewState) => void;
 }
 
-export type AnswerViewConnection = ToolResultViewConnection;
+/** A started answer view. `dispose` settles after the view has ended. */
+export interface AnswerViewConnection {
+  dispose(): Promise<void>;
+}
 
 const PROBLEM_TEXT = 'The answer could not be shown.';
 const INVALID_QUESTION_TEXT = 'That question could not be read.';
@@ -60,9 +62,9 @@ function knownFailureText(result: ToolResult): string | undefined {
  * - An error, a result outside the published contract, or an unreadable input clears the answer
  *   and shows a problem. Failure text is shown only when it is one of the server's known safe
  *   texts. The next valid delivery recovers.
- * - After dispose or host teardown, nothing is delivered (see `connectToolResultView`).
+ * - After dispose or host teardown, nothing is delivered (see `runToolResultView`).
  */
-export function connectAnswerView(
+export async function connectAnswerView(
   deps: AnswerViewDependencies,
 ): Promise<AnswerViewConnection> {
   let awaited: string | undefined;
@@ -102,10 +104,15 @@ export function connectAnswerView(
     present({ kind: 'answer', result: answer.data });
   };
 
-  return connectToolResultView({
+  const view = runToolResultView({
     app: deps.app,
     transport: deps.transport,
     onToolInput,
     onToolResult,
+    onTeardown() {
+      // Nothing outside the page's own rendering to release.
+    },
   });
+  await view.ready;
+  return view;
 }

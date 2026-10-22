@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as actions from '@saga-a2ui/core/actions';
+import * as hostLinks from '@saga-a2ui/core/host-links';
 import * as a2uiV0_9 from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
@@ -63,6 +64,15 @@ describe('@saga-a2ui/core exports', () => {
         (id) => id.includes('/packages/lit/') || id.includes('/packages/mcp/'),
       ),
     ).toEqual([]);
+  });
+
+  it('expose exactly the supported names for the host link contract, which imports nothing', async () => {
+    expect(Object.keys(hostLinks).sort()).toEqual([
+      'NO_HOST_LINKS',
+      'describeLinkOutcome',
+    ]);
+    const { modules } = await bundledModules('@saga-a2ui/core/host-links');
+    expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]);
   });
 
   it('expose exactly the supported names for actions', () => {

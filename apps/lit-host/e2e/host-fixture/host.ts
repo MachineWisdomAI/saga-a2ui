@@ -1,6 +1,7 @@
 import {
   AppBridge,
   PostMessageTransport,
+  type McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import type {
   CallToolRequest,
@@ -36,7 +37,14 @@ declare global {
       options?: {
         resultDuringInitialization?: Parameters<AppBridge['sendToolResult']>[0];
         slot?: string;
+        /** The host context in the initialize response, e.g. the theme the host negotiated. */
+        hostContext?: McpUiHostContext;
       },
+    ) => Promise<void>;
+    /** Sends the view in `slot` a partial host-context change (`ui/notifications/host-context-changed`). */
+    changeHostContext?: (
+      change: McpUiHostContext,
+      slot?: string,
     ) => Promise<void>;
     /** Asks the view in `slot` (default: the default slot) to tear down (`ui/resource-teardown`); its iframe stays in place. */
     teardownView?: (slot?: string) => Promise<void>;
@@ -99,6 +107,7 @@ window.mountView = async (resource, options) => {
     null,
     { name: 'local-host-fixture', version: '0.0.0' },
     openLink ? { serverTools: {}, openLinks: {} } : { serverTools: {} },
+    options?.hostContext ? { hostContext: options.hostContext } : undefined,
   );
   bridges.set(slot, bridge);
   if (openLink) bridge.onopenlink = ({ url }) => openLink({ url });
@@ -129,6 +138,10 @@ window.mountView = async (resource, options) => {
 
 window.deliverToolResult = async (result, slot = DEFAULT_SLOT) => {
   await bridgeIn(slot).sendToolResult(result);
+};
+
+window.changeHostContext = async (change, slot = DEFAULT_SLOT) => {
+  await bridgeIn(slot).sendHostContextChange(change);
 };
 
 window.deliverToolInput = async (params, slot = DEFAULT_SLOT) => {

@@ -5,8 +5,8 @@ import {
   createFaithfulCardReader,
   createImageConsentScope,
   type ImageEnforcement,
-  type LinkOpenOutcome,
 } from '@saga-a2ui/components/faithful-card';
+import { type LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
   a2uiV0_9Decoder,
   createMessageSession,

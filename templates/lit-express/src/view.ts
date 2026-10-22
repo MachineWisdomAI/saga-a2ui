@@ -8,7 +8,7 @@ import {
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
 import { ActionButton, createLitActions } from '@saga-a2ui/lit/actions';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import { runToolResultView } from '@saga-a2ui/mcp/view';
 import { createStarterActions } from './actions.js';
 import { starterEntries } from './catalog.js';
 import { AccountOutputSchema, StatusOutputSchema } from './contract.js';
@@ -108,29 +108,22 @@ export async function startView(): Promise<void> {
     );
   };
 
-  // The application's one way to end its view, for a host teardown and for the page going away
-  // alike. Idempotent: the first call ends the discovery, then every binding, then removes the
-  // element, so a retained button no longer does anything.
-  let retired = false;
+  // The application's one way to end its view: the discovery ends, then every binding, then the
+  // element goes, so a retained button no longer does anything. The runner calls it once, before
+  // the connection ends, on a host teardown request and on the page going away alike.
   const retire = (): void => {
-    if (retired) return;
-    retired = true;
     for (const stop of stopWatching.splice(0)) stop();
     for (const binding of bindings.splice(0)) binding.dispose();
     element()?.remove();
     say(CLOSED_TEXT);
   };
 
-  const connection = await connectToolResultView({
+  // The first result is shown once the view is ready; a later one replaces what is shown.
+  const view = runToolResultView({
     app,
     transport: new PostMessageTransport(window.parent, window.parent),
     onToolResult: show,
-    // The host is closing this view; it ends the connection itself once it has the answer.
     onTeardown: retire,
   });
-  // The page is going away: end the application's bindings first, then the connection.
-  addEventListener('pagehide', () => {
-    retire();
-    connection.dispose();
-  });
+  await view.ready;
 }

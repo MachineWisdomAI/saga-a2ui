@@ -13,11 +13,7 @@ import {
   type DeclaredSubscriptionRead,
   type SubscriptionsResult,
 } from './subscriptions.js';
-import {
-  connectToolResultView,
-  type ToolResult,
-  type ToolResultViewConnection,
-} from '@saga-a2ui/mcp/view';
+import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view';
 
 /** What the view presents. Only `subscriptions` carries private subscription rows. */
 export type SubscriptionsViewState =
@@ -44,7 +40,9 @@ export interface SubscriptionsViewDependencies {
   readonly readBoundMs?: number;
 }
 
-export interface SubscriptionsViewConnection extends ToolResultViewConnection {
+export interface SubscriptionsViewConnection {
+  /** Ends the view. Idempotent; settles after the view has ended. */
+  dispose(): Promise<void>;
   /** Re-reads with no arguments. Does not replay a failed input. */
   retry(): void;
   /** Keeps a row only when that id is in the result currently shown. */
@@ -100,30 +98,27 @@ function incomingBytes(value: unknown): number {
  *
  * A read that does not finish within its bound is retired the same way: the late result is not
  * shown. Retry calls the safe read (`list_subscriptions` with no arguments) and nothing else.
- * Host teardown retires the read in flight, its timer and the private rows, and `retry` and
- * `select` then do nothing. It does not close the connection; the later `dispose()` does, once.
+ * However the view ends (host teardown, `dispose()` or `pagehide`) it retires the read in flight,
+ * its timer and the private rows once, and `retry` and `select` then do nothing.
  *
  * The label says only whether the data on screen is still from the sign-in it started with. It
  * never grants access; the server authorizes every call from the verified request.
  */
-export function connectSubscriptionsView(
+export async function connectSubscriptionsView(
   deps: SubscriptionsViewDependencies,
 ): Promise<SubscriptionsViewConnection> {
   let pinnedSession: string | undefined;
   let shown: SubscriptionsResult | undefined;
   let selectedId: string | undefined;
   let invalidated = false;
-  // Delivery and presentation have ended. `tornDown` is the host's teardown request: it retires the
-  // view's own work but leaves closing the connection to `dispose()`, which the host's later close
-  // and the application's disposal still reach exactly once. `disposed` is that later disposal.
-  let tornDown = false;
-  let disposed = false;
+  // Delivery and presentation have ended, however the lifetime runner ended the view.
+  let ended = false;
   let nextRead = 0;
   let activeRead = 0;
   let readTimer: ReturnType<typeof setTimeout> | undefined;
   const readBoundMs = deps.readBoundMs ?? SUBSCRIPTION_LIMITS.readBoundMs;
 
-  const retired = () => disposed || tornDown;
+  const retired = () => ended;
 
   const stopTimer = () => {
     if (readTimer === undefined) return;
@@ -285,7 +280,7 @@ export function connectSubscriptionsView(
       );
   };
 
-  return connectToolResultView({
+  const view = runToolResultView({
     app: deps.app,
     transport: deps.transport,
     onToolInput(input) {
@@ -302,9 +297,9 @@ export function connectSubscriptionsView(
       readThroughHost(declared);
     },
     onTeardown() {
-      // The host closes the connection after it answers, and nothing else says the view is going
-      // away. Retire the read, its timer and the private rows now; `dispose()` closes the connection.
-      tornDown = true;
+      // Nothing else says the view is going away. Retire the read, its timer and the private rows
+      // now, before the runner closes the connection.
+      ended = true;
       retireReads();
       dropPrivate();
     },
@@ -321,7 +316,9 @@ export function connectSubscriptionsView(
       if (invalidated || activeRead !== 0) return;
       apply(result);
     },
-  }).then((connection) => ({
+  });
+  await view.ready;
+  return {
     retry() {
       readThroughHost({ kind: 'unfiltered' });
     },
@@ -336,10 +333,6 @@ export function connectSubscriptionsView(
       selectedId = subscriptionId;
       deps.show({ kind: 'subscriptions', subscriptions: shown, selectedId });
     },
-    dispose() {
-      disposed = true;
-      retireReads();
-      connection.dispose();
-    },
-  }));
+    dispose: () => view.dispose(),
+  };
 }

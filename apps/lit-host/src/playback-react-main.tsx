@@ -66,10 +66,9 @@ root.render(
   </StrictMode>,
 );
 
-// Release the player even if the host never sends a teardown request. Unmounting the root retires
-// the control's instance before the host closes.
+// The view ends itself, and releases the player, on `pagehide`. Unmounting the root retires the
+// control's instance before the host closes.
 window.addEventListener('pagehide', () => {
-  connection.dispose();
   root.unmount();
   actions.close();
 });

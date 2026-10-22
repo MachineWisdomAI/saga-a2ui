@@ -1,16 +1,18 @@
 import {
   describeContentFailure,
-  describeLinkOutcome,
   type BlockNode,
   type ImageConsent,
   type ImageContext,
   type InlineNode,
   type InterpretedCard,
-  type LinkOpenOutcome,
   type ReadResult,
   type FaithfulCardReader,
   type TableCell,
 } from '@saga-a2ui/components/faithful-card';
+import {
+  describeLinkOutcome,
+  type LinkOpenOutcome,
+} from '@saga-a2ui/core/host-links';
 import {
   LitElement,
   html,

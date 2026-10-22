@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createAppHostLinks } from './host-links.js';
+import { hostLinksFromApp } from './host-links.js';
 
 // The host link callback, exercised with a real `App` and `AppBridge` joined by an in-memory
 // transport. The host's own handler is the only place a link can be opened, so what it receives
@@ -50,7 +50,7 @@ describe('opening a link through the host', () => {
       return {};
     });
     await expect(
-      createAppHostLinks(app).open('https://docs.example.com/guide'),
+      hostLinksFromApp(app).open('https://docs.example.com/guide'),
     ).resolves.toBe('opened');
     expect(received).toEqual(['https://docs.example.com/guide']);
   });
@@ -60,7 +60,7 @@ describe('opening a link through the host', () => {
       isError: true,
     }));
     await expect(
-      createAppHostLinks(app).open('https://docs.example.com/'),
+      hostLinksFromApp(app).open('https://docs.example.com/'),
     ).resolves.toBe('denied');
   });
 
@@ -69,7 +69,7 @@ describe('opening a link through the host', () => {
       throw new Error('host exploded');
     });
     await expect(
-      createAppHostLinks(app).open('https://docs.example.com/'),
+      hostLinksFromApp(app).open('https://docs.example.com/'),
     ).resolves.toBe('failed');
   });
 
@@ -80,9 +80,43 @@ describe('opening a link through the host', () => {
       return {};
     });
     await expect(
-      createAppHostLinks(app).open('https://docs.example.com/'),
+      hostLinksFromApp(app).open('https://docs.example.com/'),
     ).resolves.toBe('unavailable');
     expect(received).toEqual([]);
+  });
+
+  it('reports unavailable and makes no request once the signal has aborted', async () => {
+    const received: string[] = [];
+    const app = await connected({ openLinks: {} }, async (url) => {
+      received.push(url);
+      return {};
+    });
+    const lifetime = new AbortController();
+    const links = hostLinksFromApp(app, lifetime.signal);
+    await expect(links.open('https://docs.example.com/a')).resolves.toBe(
+      'opened',
+    );
+    lifetime.abort();
+    await expect(links.open('https://docs.example.com/b')).resolves.toBe(
+      'unavailable',
+    );
+    expect(received).toEqual(['https://docs.example.com/a']);
+  });
+
+  it('reports unavailable when the signal aborts while the request is outstanding', async () => {
+    let release: (() => void) | undefined;
+    const app = await connected({ openLinks: {} }, async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return {};
+    });
+    const lifetime = new AbortController();
+    const pending = hostLinksFromApp(app, lifetime.signal).open(
+      'https://docs.example.com/',
+    );
+    await expect.poll(() => release).toBeDefined();
+    lifetime.abort();
+    release?.();
+    await expect(pending).resolves.toBe('unavailable');
   });
 
   it('reports the capability as unavailable before the view has connected', async () => {
@@ -92,7 +126,7 @@ describe('opening a link through the host', () => {
       { autoResize: false },
     );
     await expect(
-      createAppHostLinks(app).open('https://docs.example.com/'),
+      hostLinksFromApp(app).open('https://docs.example.com/'),
     ).resolves.toBe('unavailable');
   });
 });

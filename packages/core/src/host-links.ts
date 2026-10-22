@@ -1,6 +1,7 @@
-// How a card asks its host to open a link the content policy has already validated. The contract
-// is renderer-neutral, so every renderer's card (Lit, React) and every application's host adapter
-// share one definition and one set of reader-facing messages.
+// How a view asks its host to open a link the content policy has already validated. The contract
+// is renderer- and delivery-neutral: the card renderers (Lit, React) consume it, MCP delivery
+// supplies an implementation, and neither depends on the other. They share one definition and one
+// set of reader-facing messages.
 
 /**
  * What happened to a request to open a validated link.

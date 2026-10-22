@@ -1239,17 +1239,16 @@ describe('host teardown of the playback view', () => {
     expect(kinds(r)).not.toContain('playing');
   });
 
-  it('leaves the connection for dispose(), which closes it once however often it is called', async () => {
+  it('closes the connection once after answering the host, however often dispose is called', async () => {
     const r = await rig();
     await r.select(EP1);
     let closes = 0;
     const close = r.app.close.bind(r.app);
     r.app.close = () => ((closes += 1), close());
     await r.bridge.teardownResource({});
-    expect(closes).toBe(0);
 
-    r.view.dispose();
-    r.view.dispose();
+    await r.view.dispose();
+    await r.view.dispose();
 
     expect(closes).toBe(1);
   });
@@ -2443,7 +2442,9 @@ describe('the description card’s image consent beside the Play control', () =>
     expect(consentCalls(r)).toEqual(['revokeAll', 'retire']);
     const logged = r.consentLog.length;
 
-    await r.deliver(EP2);
+    // The connection is closed once the host's request is answered, so the late delivery may not
+    // even be sent; if it is, it reaches nothing.
+    await r.deliver(EP2).catch(() => undefined);
     await settled();
 
     expect(r.consentLog).toHaveLength(logged);

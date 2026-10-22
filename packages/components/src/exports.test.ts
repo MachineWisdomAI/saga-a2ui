@@ -52,12 +52,10 @@ describe('@saga-a2ui/components/faithful-card', () => {
       'FaithfulCardApi',
       'MAX_IMAGE_HOSTS',
       'MAX_NESTING_LEVEL',
-      'NO_HOST_LINKS',
       'createContentPolicy',
       'createFaithfulCardReader',
       'createImageConsentScope',
       'describeContentFailure',
-      'describeLinkOutcome',
       'establishImageEnforcement',
     ]);
   });

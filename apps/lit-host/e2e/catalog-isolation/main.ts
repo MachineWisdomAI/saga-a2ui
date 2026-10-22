@@ -9,7 +9,7 @@ import {
   ElementConflictError,
 } from '@saga-a2ui/lit';
 import { answerLayout } from '../../src/answer-card/presentation.js';
-import { NO_HOST_LINKS } from '@saga-a2ui/components/faithful-card';
+import { NO_HOST_LINKS } from '@saga-a2ui/core/host-links';
 import {
   AnswerCardElement,
   answerCatalog,
