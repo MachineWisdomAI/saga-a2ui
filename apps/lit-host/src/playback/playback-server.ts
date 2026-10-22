@@ -7,7 +7,7 @@ import {
   registerAppResource,
   registerAppTool,
   RESOURCE_MIME_TYPE,
-} from '@modelcontextprotocol/ext-apps/server';
+} from '@modelcontextprotocol/ext-apps/server'; // saga-boundary: integration-import backend registration of the Play and Open tools and the player view resource with the MCP Apps server API; this server module is the backend side and never touches the view bridge
 import { calculateJwkThumbprint } from 'jose';
 import {
   throwIfEnded,

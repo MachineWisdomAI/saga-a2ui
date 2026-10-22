@@ -10,6 +10,7 @@ import {
   ScanConfigurationError,
   countsByRule,
   formatReport,
+  globToRegExp,
   repoRoot,
   scan,
   scanCode,
@@ -29,6 +30,40 @@ import { exportTemplate, templateDirectory } from './starter-template.js';
 
 const rulesOf = (text: string): RuleName[] =>
   scanCode('consumer.ts', text).hits.map((hit) => hit.rule);
+
+// A server consumer is either scanned or excluded with a reason; the third state, present but
+// neither, is how a server directory silently escapes the guard.
+const SERVER_FILE = /(?:^|\/)server\/|(?:^|-)server\.tsx?$|\/server\.tsx?$/;
+const ROOTS = ['templates', 'examples', 'demo', 'apps'];
+const OUT_OF_TREE = new Set(['node_modules', 'dist', 'dist-installed']);
+const serverFiles = (base: string, directory = ''): string[] =>
+  fs
+    .readdirSync(path.join(base, directory), { withFileTypes: true })
+    .flatMap((entry) => {
+      const relative =
+        directory === '' ? entry.name : `${directory}/${entry.name}`;
+      if (entry.isDirectory())
+        return OUT_OF_TREE.has(entry.name) ? [] : serverFiles(base, relative);
+      return /\.tsx?$/.test(entry.name) && SERVER_FILE.test(relative)
+        ? [relative]
+        : [];
+    });
+const unaccountedServerFiles = (
+  base: string,
+  scanned: readonly string[],
+  exclude: readonly { glob: string }[],
+): string[] => {
+  const excluded = exclude.map((entry) => globToRegExp(entry.glob));
+  return ROOTS.filter((one) => fs.existsSync(path.join(base, one)))
+    .flatMap((one) =>
+      serverFiles(path.join(base, one)).map((file) => `${one}/${file}`),
+    )
+    .filter(
+      (file) =>
+        !scanned.includes(file) && !excluded.some((one) => one.test(file)),
+    )
+    .sort();
+};
 
 describe('each rule reports a known-bad line', () => {
   it.each<[RuleName, string]>([
@@ -57,6 +92,16 @@ describe('each rule reports a known-bad line', () => {
     [
       'integration-import',
       "const { App } = require('@modelcontextprotocol/ext-apps');",
+    ],
+    // The rule names the whole package. Its server subpath is a backend dependency a server may
+    // keep, but only through a reviewed line (see the exemption cases below), not by pattern.
+    [
+      'integration-import',
+      "import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';",
+    ],
+    [
+      'integration-import',
+      "import {\n  registerAppTool,\n} from\n  '@modelcontextprotocol/ext-apps/server';",
     ],
     // The same glue as ordinary formatting writes it: across lines, and with quoted keys.
     [
@@ -140,7 +185,6 @@ describe('near-misses are not reported', () => {
     'const next = updateComponentsFor(layout);',
     "const version = 'v0.9';", // a constant, not a message field
     "import { runToolResultView } from '@saga-a2ui/mcp/server';",
-    "import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';",
     "import { startA2uiView } from '@saga-a2ui/lit-mcp-stack';",
     "import { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';",
     "import { sessionFactory } from './factory.js';",
@@ -150,7 +194,7 @@ describe('near-misses are not reported', () => {
     'const message = { "version": "v0.10" };',
     "const message = { 'version':\n  'v1.0' };",
     "import { App } from\n  './not-the-bridge.js';",
-    "import {\n  registerAppTool,\n} from\n  '@modelcontextprotocol/ext-apps/server';",
+    "import { createServer } from '@saga-a2ui/mcp/server';",
   ])('%s', (line) => {
     expect(rulesOf(line)).toEqual([]);
   });
@@ -214,6 +258,23 @@ describe('an exemption is one line that names its rule and gives a reason', () =
     expect(scanned.exempt.map((hit) => [hit.rule, hit.exemption])).toEqual([
       ['integration-import', 'the app authors its own catalog'],
     ]);
+  });
+
+  it('a server that registers tools with the MCP Apps server API keeps that one import through a reviewed line, and no other', () => {
+    const scanned = scanCode(
+      'server/tools.ts',
+      [
+        "import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'; // saga-boundary: integration-import backend registration of an app-only tool",
+        "import { App } from '@modelcontextprotocol/ext-apps/app-bridge';",
+      ].join('\n'),
+    );
+    expect(scanned.exempt.map((hit) => [hit.line, hit.rule])).toEqual([
+      [1, 'integration-import'],
+    ]);
+    expect(scanned.hits.map((hit) => [hit.line, hit.rule])).toEqual([
+      [2, 'integration-import'],
+    ]);
+    expect(scanned.problems).toEqual([]);
   });
 
   it('covers only the rule it names: another rule on the same line is still a hit', () => {
@@ -354,6 +415,8 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-boundary-'));
     write('templates/lit-a/src/view.ts', BAD);
     write('templates/lit-a/src/view.test.ts', BAD);
+    write('templates/lit-a/server/listener.ts', BAD);
+    write('templates/lit-a/server/listener.test.ts', BAD);
     write('apps/host/e2e/send.spec.ts', 'const m = { createSurface: {} };\n');
     write('apps/host/src/main.ts', BAD);
     write('apps/host/src/view-main.ts', 'export {};\n');
@@ -365,6 +428,7 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
 
   const include: IncludeEntry[] = [
     { glob: 'templates/*/src/**/*.ts', kind: 'code' },
+    { glob: 'templates/*/server/**/*.ts', kind: 'code' },
     { glob: 'apps/*/src/*.ts', kind: 'code' },
     { glob: 'apps/*/e2e/**/*.ts', kind: 'code' },
     { glob: 'docs/**/*.md', kind: 'markdown' },
@@ -381,13 +445,38 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
     expect(report.files).toEqual([
       'apps/host/src/view-main.ts',
       'docs/guide.md',
+      'templates/lit-a/server/listener.ts',
       'templates/lit-a/src/view.ts',
     ]);
-    // What remains is judged: the view and the guide's fence, and nothing excluded.
+    // What remains is judged: the view, the server, the guide's fence, and nothing excluded.
     expect(report.hits.map((hit) => hit.file)).toEqual([
       'docs/guide.md',
+      'templates/lit-a/server/listener.ts',
       'templates/lit-a/src/view.ts',
     ]);
+  });
+
+  it('names a server file that is neither scanned nor excluded, and accepts it once it is either', () => {
+    write('examples/e/server/store.ts', 'export {};\n');
+    const files = scan(root, include, exclude).files;
+    expect(unaccountedServerFiles(root, files, exclude)).toEqual([
+      'examples/e/server/store.ts',
+    ]);
+    // Scanned: the include entry that reaches it.
+    const widened = [
+      ...include,
+      { glob: 'examples/*/server/**/*.ts', kind: 'code' as const },
+    ];
+    expect(
+      unaccountedServerFiles(root, scan(root, widened, exclude).files, exclude),
+    ).toEqual([]);
+    // Excluded: an entry that carries its reason.
+    expect(
+      unaccountedServerFiles(root, files, [
+        ...exclude,
+        { glob: 'examples/e/server/**', reason: 'a retained fixture' },
+      ]),
+    ).toEqual([]);
   });
 
   it('never reads dependencies, builds or the other worktrees', () => {
@@ -422,9 +511,12 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
 
   it('reports the unexempted hits in its text report', () => {
     const text = formatReport(scan(root, include, exclude));
-    expect(text).toContain('files scanned: 3');
+    expect(text).toContain('files scanned: 4');
     expect(text).toContain(
       'HIT templates/lit-a/src/view.ts:1 [integration-import]',
+    );
+    expect(text).toContain(
+      'HIT templates/lit-a/server/listener.ts:1 [integration-import]',
     );
   });
 });
@@ -481,6 +573,29 @@ describe('the repository consumers hold application meaning only', () => {
       ).toBeGreaterThanOrEqual(5);
   });
 
+  it('scans the server side of every maintained template, example and demonstration', () => {
+    for (const name of REQUIRED_TEMPLATES)
+      expect(
+        report.files.filter((file) =>
+          file.startsWith(`templates/${name}/server/`),
+        ).length,
+        name,
+      ).toBeGreaterThanOrEqual(5);
+    for (const server of [
+      'examples/answer-consumer/server/answer-server.ts',
+      'examples/pack1-consumer/server/notes-server.ts',
+      'examples/react-card-consumer/server/card-server.ts',
+      'demo/lit-node/server/demo-server.ts',
+      'apps/lit-host/src/mcp/server.ts',
+      'apps/lit-host/src/playback/playback-server.ts',
+    ])
+      expect(report.files, server).toContain(server);
+  });
+
+  it('leaves no server consumer file neither scanned nor excluded with a reason', () => {
+    expect(unaccountedServerFiles(repoRoot, report.files, EXCLUDE)).toEqual([]);
+  });
+
   it('has no unexempted hit and no malformed or stale exemption', () => {
     expect(
       report.hits.map(
@@ -526,4 +641,32 @@ describe('the starter output produced by the qualification run', () => {
       expect(report.problems).toEqual([]);
     },
   );
+});
+
+describe('the documentation-only CI route runs this scan', () => {
+  // A documentation-only change skips the application job (scripts/ci-scope.py, checked by
+  // scripts/test-ci-scope.py), so a prohibited code fence is caught only if the always-on job runs
+  // the scan. This asserts that wiring; the guard's own outcomes are proved above.
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github/workflows/ci.yml'),
+    'utf8',
+  );
+  const alwaysOn = workflow.slice(
+    workflow.indexOf('\n  changes:'),
+    workflow.indexOf('\n  app:'),
+  );
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
+
+  it('runs the documentation checks in the job that does not need the application', () => {
+    expect(alwaysOn).toMatch(/run: npm run test:docs\s*$/m);
+    expect(alwaysOn).not.toMatch(/needs\.changes\.outputs\.application/);
+  });
+
+  it('includes this scan in those documentation checks', () => {
+    expect(manifest.scripts['test:docs']).toContain(
+      'scripts/consumer-boundary.test.ts',
+    );
+  });
 });

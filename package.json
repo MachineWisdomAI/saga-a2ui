@@ -26,7 +26,7 @@
     "verify": "tsx scripts/verify.ts",
     "test:pnpm-react": "tsx scripts/check-react-pnpm.ts",
     "release:pack": "tsx scripts/release-packages.ts",
-    "test:docs": "vitest run scripts/guide.test.ts scripts/guide-actions-document.test.ts scripts/tour-document.test.ts",
+    "test:docs": "vitest run scripts/guide.test.ts scripts/guide-actions-document.test.ts scripts/tour-document.test.ts scripts/consumer-boundary.test.ts",
     "hooks:install": "node scripts/git-hooks.mjs",
     "hooks:check": "node scripts/git-hooks.mjs --check",
     "format": "node scripts/format.mjs --write",
