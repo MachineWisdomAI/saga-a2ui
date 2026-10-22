@@ -167,7 +167,7 @@ Additional server slices add their own recipe by joining the qualified inventory
 
 An application installs one stack plus its framework peers and writes only what is its own. The stack connects to the host, holds a result that arrives before the view is ready (the latest wins), gives each result to the application, and ends the view once, before the connection ends, when the host tears it down, `dispose()` runs or the page goes away. A raw `pagehide` listener is not needed for any of that; the application keeps one only for behavior that is its own.
 
-The Lit starter's composition is this. It is excerpted line for line from `templates/lit-node/src/view.ts`, and `scripts/guide.test.ts` fails when a line stops being there or when the call omits an option `createLitActions` requires. The layout is in `surface.ts` and the catalog in `catalog.ts`. `requireElement`, `say`, `show`, `retire`, `bindings` and `stopWatching` are the application's own helpers and state in the same file: what a result means and what ending the view takes with it.
+The Lit starter's composition is this. It is excerpted line for line from `templates/lit-node/src/view.ts`, and `scripts/guide.test.ts` fails when a line stops being there or when the call omits an option `createLitActions` requires. The layout is in `surface.ts` and the catalog in `catalog.ts`. `requireElement`, `say`, `show` and `retire` are the application's own helpers in the same file: what a result means and what ending the view takes with it. `retire` ends only what the application owns. The surface owns the discovery and the bindings made in `attach`, and ends them when it leaves the page, before the stack calls `onTeardown`.
 
 ```ts
 import {
@@ -183,10 +183,10 @@ const view = startA2uiView({
   identity: { name: 'saga-starter-view', version: '0.0.0' },
   actions: createLitActions({
     attach: (surfaceView) => {
-      stopWatching.push(
-        surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-          bindings.push(handle.bindAction('activate', actions.clearNote));
-        }),
+      surfaceView.watchById(
+        CLEAR_ID,
+        ActionButton,
+        (handle) => void handle.bindAction('activate', actions.clearNote),
       );
     },
     onSetupError: () => say(PROBLEM_TEXT),

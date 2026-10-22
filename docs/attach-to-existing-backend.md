@@ -149,10 +149,10 @@ From `templates/lit-node/src/view.ts`:
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
 attach: (surfaceView) => {
-  stopWatching.push(
-    surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -273,10 +273,10 @@ From `templates/lit-express/src/view.ts`:
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
 attach: (surfaceView) => {
-  stopWatching.push(
-    surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -397,10 +397,10 @@ From `templates/lit-fastify/src/view.ts`:
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
 attach: (surfaceView) => {
-  stopWatching.push(
-    surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -519,10 +519,10 @@ From `templates/lit-hono/src/view.ts`:
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
 attach: (surfaceView) => {
-  stopWatching.push(
-    surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -631,10 +631,10 @@ From `templates/lit-hapi/src/view.ts`:
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
 attach: (surfaceView) => {
-  stopWatching.push(
-    surfaceView.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
