@@ -35,7 +35,7 @@ export const CARD_SURFACE_TAG = 'saga-faithful-card-surface';
  * provides the card's view (`provideContentView`).
  */
 export interface CardSurface {
-  /** The element that shows the card. Empty until the first `present`. */
+  /** The element that shows the card: an empty card until the first `present`. */
   readonly element: HTMLElement;
   /**
    * Shows `content` as a new presentation. Never throws. Content the surface refuses (for example
@@ -61,6 +61,8 @@ interface Shown {
   readonly content: CardContent | undefined;
   /** Advances with every presentation, so the previous one is replaced even by equal text. */
   readonly presentation: number;
+  /** True once the surface is disposed: nothing is shown. An empty or cleared card is still shown, empty. */
+  readonly ended: boolean;
 }
 
 /** The state of one card surface. Only this module can make one. */
@@ -69,7 +71,11 @@ class OpenedCardSurface implements CardSurface {
   private readonly listeners = new Set<() => void>();
   private consent: ImageConsentScope | undefined;
   private ended = false;
-  private current: Shown = { content: undefined, presentation: 0 };
+  private current: Shown = {
+    content: undefined,
+    presentation: 0,
+    ended: false,
+  };
 
   constructor() {
     this.element = new FaithfulCardSurfaceElement();
@@ -119,7 +125,11 @@ class OpenedCardSurface implements CardSurface {
 
   private replace(content: CardContent | undefined): void {
     this.consent?.revokeAll();
-    this.current = { content, presentation: this.current.presentation + 1 };
+    this.current = {
+      content,
+      presentation: this.current.presentation + 1,
+      ended: this.ended,
+    };
     for (const listener of [...this.listeners]) listener();
   }
 }
@@ -151,7 +161,7 @@ export class FaithfulCardSurfaceElement extends createA2uiAppElement({
 
   override render() {
     const shown = this.owner?.shown;
-    if (shown?.content === undefined) return nothing;
+    if (shown === undefined || shown.ended) return nothing;
     // The key is the presentation: a new one mounts a fresh card, which carries nothing of the old.
     return html`${keyed(shown.presentation, super.render())}`;
   }

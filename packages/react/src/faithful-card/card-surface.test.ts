@@ -53,10 +53,10 @@ const STRICT_IMAGES: TrustedOptions = {
 };
 
 describe('a card surface', () => {
-  it('shows nothing until content is presented, then shows it', async () => {
+  it('shows an empty card until content is presented, then shows it', async () => {
     const { view, byTestId, present } = start();
-    expect(byTestId('card-root')).toEqual([]);
-    expect(view.container.textContent).toBe('');
+    expect(byTestId('card-content')).toHaveLength(1);
+    expect(byTestId('card-content')[0]?.textContent).toBe('');
     expect(await present('First **answer**')).toEqual({ ok: true });
     expect(view.container.querySelector('strong')?.textContent).toBe('answer');
   });
@@ -123,7 +123,7 @@ describe('a card surface', () => {
     press(view, byTestId('images-toggle')[0]);
     const grant = host.consent.grant();
     act(() => surface.clear());
-    expect(view.container.textContent).toBe('');
+    expect(byTestId('card-content')[0]?.textContent).toBe('');
     expect(grant.live).toBe(false);
     await present('Back again');
     expect(view.container.textContent).toBe('Back again');

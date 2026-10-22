@@ -59,9 +59,10 @@ const STRICT_IMAGES: TrustedOptions = {
 };
 
 describe('a Lit card surface', () => {
-  it('shows nothing until content is presented, then shows it', async () => {
+  it('shows an empty card until content is presented, then shows it', async () => {
     const { surface, byTestId, present } = await start();
-    expect(byTestId('card-root')).toEqual([]);
+    expect(byTestId('card-content')).toHaveLength(1);
+    expect(shownText(surface).trim()).toBe('');
     expect(await present('First **answer**')).toEqual({ ok: true });
     expect(queryDeep(surface.element, 'strong')[0]?.textContent).toBe('answer');
   });
@@ -131,7 +132,8 @@ describe('a Lit card surface', () => {
     const watcher = host.consent.grant();
     surface.clear();
     await settle();
-    expect(byTestId('card-root')).toEqual([]);
+    expect(byTestId('card-content')).toHaveLength(1);
+    expect(shownText(surface).trim()).toBe('');
     expect(watcher.live).toBe(false);
     await present('Back again');
     expect(shownText(surface)).toContain('Back again');

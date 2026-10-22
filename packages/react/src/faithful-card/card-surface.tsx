@@ -51,6 +51,7 @@ export interface CardSurface {
 interface Shown {
   /** Advances with every presentation, so the previous one is replaced even by equal text. */
   readonly presentation: number;
+  /** False once the surface is disposed; an empty or cleared card is still shown, empty. */
   readonly showing: boolean;
 }
 
@@ -66,7 +67,7 @@ class OpenedCardSurface implements CardSurface {
   private readonly listeners = new Set<() => void>();
   private consent: ImageConsentScope | undefined;
   private ended = false;
-  private current: Shown = { presentation: 0, showing: false };
+  private current: Shown = { presentation: 0, showing: true };
 
   get handle() {
     return this.bound.handle;
@@ -93,14 +94,14 @@ class OpenedCardSurface implements CardSurface {
     if (this.ended) return { ok: false, message: 'The surface was disposed.' };
     const applied = this.bound.update(cardData(content));
     if (!applied.ok) return applied;
-    this.replace(true);
+    this.replace();
     return applied;
   }
 
   clear(): void {
     if (this.ended) return;
     this.bound.update(cardData({ markdown: '' }));
-    this.replace(false);
+    this.replace();
   }
 
   dispose(): void {
@@ -115,9 +116,12 @@ class OpenedCardSurface implements CardSurface {
     this.notify();
   }
 
-  private replace(showing: boolean): void {
+  private replace(): void {
     this.consent?.revokeAll();
-    this.current = { presentation: this.current.presentation + 1, showing };
+    this.current = {
+      presentation: this.current.presentation + 1,
+      showing: true,
+    };
     this.notify();
   }
 
