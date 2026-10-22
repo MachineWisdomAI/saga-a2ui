@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Lit card stack probe</title>
+  </head>
+  <body>
+    <!-- Controls the test drives to settle the readiness work, end the view or start it again by hand. -->
+    <button data-testid="release-ready">Ready work succeeds</button>
+    <button data-testid="fail-ready">Ready work fails</button>
+    <button data-testid="dispose">Dispose</button>
+    <button data-testid="start-again">Start again</button>
+    <!-- Out of flow, so the lines it gains never change the size the view reports. -->
+    <ol data-testid="log" style="position: fixed; top: 0; right: 0; margin: 0"></ol>
+    <div data-testid="root"></div>
+    <script type="module" src="./lit-main.ts"></script>
+  </body>
+</html>
