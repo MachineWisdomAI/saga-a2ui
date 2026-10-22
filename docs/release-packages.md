@@ -43,18 +43,27 @@ local-CI rehearsal evidence is not evidence about release bytes (see
 
 ## Release sequence
 
-Each step is a separate, reviewed change or an owner action. None has happened
-for `0.7.0`.
+Each step is a separate, reviewed change or an owner action. Step 1 has landed
+for `0.7.0` (the integration branch holds every version at its pin); steps 2
+onward are pending, and nothing here has published a `0.7.0` package.
 
 1. Child changes land on the integration branch with every version held at its
    pin ([version policy](version-policy.md)).
 2. One final integration pull request into `main` removes the pin; the updater
    advances the baseline and the reviewer confirms it equals the intended version.
-3. Qualify the merged head: build `release:pack` from that commit and run the
-   qualification below on those tarballs.
+3. Qualify the merged head as a candidate: from that commit run `candidate:pack`,
+   `candidate:verify`, `candidate:rehearse` and the packed-consumer suites,
+   including `test:pnpm-react` (see [candidate installation, updates and
+   rollback](candidate-update-and-rollback.md)). This is the behavioral
+   qualification and is a local source rehearsal.
 4. An explicit promotion change (`chore(release): promote version`) turns the
-   prerelease into `0.7.0`. Promotion changes the version strings, so rebuild
-   the artifacts from the promoted commit and requalify those exact bytes.
+   prerelease into `0.7.0`. Promotion changes only version metadata, so
+   unchanged behavioral evidence from step 3 carries over. Build `release:pack`
+   from the promoted commit and verify those exact bytes (identities, sibling
+   pins, files, dependency graph, and the lower-level and stack-only installs
+   below). Fresh package
+   bytes alone do not require rerunning unchanged behavior or host evidence;
+   a source change after step 3 does.
 5. The owner approves the exact source, package names, versions, tarball
    integrity and tag.
 6. Publish the approved bytes (see below), then verify through an anonymous
@@ -62,7 +71,7 @@ for `0.7.0`.
 
 ## Qualify the exact artifacts before publishing
 
-Qualify the five tarballs that would be published, not a candidate or an earlier
+Verify the five tarballs that would be published, not a candidate or an earlier
 build of different source. Evidence from another source revision or version
 identity is context, not qualification of these bytes. Use React and React DOM
 **19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
@@ -71,15 +80,29 @@ Zod **3.25.76** context; do not add direct application A2UI dependencies or forc
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
 
-Because the stack pins exact siblings that are not on the registry yet, name every
-tarball as a direct dependency and as an override, as `npm run test:pnpm-react`
-does. Then check two different footprints; neither stands in for the other:
+The stack pins exact siblings that are not on the registry yet, so a local
+install supplies them from the tarballs through overrides. Keep two consumers
+apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
+neither stands in for the other:
 
-- **Installed tree** (an install check). An application that depends on the
-  stack and declares `react` and `react-dom` gets `core`, `components`, `mcp`,
-  `react`, the MCP Apps bridge and `markdown-it` beneath the stack, resolved with
-  strict peers and exactly one React runtime. Components and Markdown belong in
-  this tree.
+- **Lower-level consumer** (availability of the five packages). It names every
+  SAGA tarball as a direct dependency and as an override, plus React, React DOM,
+  MCP Apps and Zod.
+- **Stack-only consumer** (the documented one-stack recipe). Its direct
+  dependencies are only `@saga-a2ui/react-mcp-stack`, the framework peers
+  (`react`, `react-dom`) and the upstream packages the application's own catalog
+  is written against (`@a2ui/react`, `@a2ui/web_core`, Zod 3.25.76). It names no
+  other SAGA package; the unpublished siblings are supplied by overrides only.
+  Direct declarations of the siblings would mask a dependency the stack failed
+  to declare, so only this consumer shows that the recipe resolves.
+
+Then check two different footprints; neither stands in for the other:
+
+- **Installed tree** (an install check, on the stack-only consumer). An
+  application that depends on the stack and declares `react` and `react-dom`
+  gets `core`, `components`, `mcp`, `react`, the MCP Apps bridge and `markdown-it`
+  beneath the stack, resolved with strict peers and exactly one React runtime.
+  Components and Markdown belong in this tree.
 - **Emitted browser graph** (a bundle check). An own-catalog application's
   browser bundle excludes components and Markdown, and no browser entry imports
   the stack's Node-only `/server` entry; the server is composed separately. The

@@ -37,10 +37,10 @@ import {
 // lifetime cases of the PACK1 browser spec run against that rebuilt page and server over a real MCP
 // connection. The result records which artifacts were installed and built and which cases ran.
 //
-// A and B are packed from the same source revision and differ only in their version, because this
-// repository has no earlier candidate: the rebuilt resources are therefore expected to be identical,
-// and the rehearsal shows the procedure and the behavior of each rebuilt application, not a
-// difference between two versions of the code. No published release exists, and none is involved.
+// A and B are packed from the same source revision and differ only in their version: the rebuilt
+// resources are therefore expected to be identical, and the rehearsal shows the procedure and the
+// behavior of each rebuilt application, not a difference between two versions of the code. Public
+// npm releases already exist, but no registry release is involved and no upgrade from one is exercised.
 //
 //   npm run build && npm run candidate:pack -- --out candidate-out
 //   npm run candidate:rehearse -- --candidate candidate-out/candidate.json
@@ -121,8 +121,9 @@ export interface RehearsalRecord {
   >;
 }
 
-const STATEMENT =
-  'Candidates A and B are packed from one source revision and differ only in version, so the rebuilt resources are expected to be identical. This rehearses installing, updating and restoring built applications and the behavior of each rebuilt application over a real MCP connection; it is not a difference between two versions of the code, and no published release exists or was involved.';
+/** Stored in `rehearsal.json` and printed in `CANDIDATE.md`; the candidate record states the same limits. */
+export const REHEARSAL_STATEMENT =
+  'Candidates A and B are packed from one source revision and differ only in version, so the rebuilt resources are expected to be identical. This rehearses installing, updating and restoring built applications and the behavior of each rebuilt application over a real MCP connection; it is not a difference between two versions of the code. Public npm releases of SAGA packages already exist (this record does not list them); no registry release was involved or exercised, and no upgrade from a registry release was tested.';
 
 const expectation = (
   packed: readonly PackedPackage[],
@@ -345,7 +346,7 @@ export async function rehearseTransition(
   }
   return {
     format: 1,
-    statement: STATEMENT,
+    statement: REHEARSAL_STATEMENT,
     candidates: { A: install.version, B: update.version },
     stages,
     transitions,

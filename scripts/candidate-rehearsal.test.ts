@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   REHEARSED_TITLES,
+  REHEARSAL_STATEMENT,
   STAGES,
   observedCases,
   rehearsalSummary,
@@ -152,8 +153,9 @@ describe('the update and rollback rehearsal', () => {
       serverRestoredByRollback: true,
     });
     expect(record.statement).toMatch(
-      /differ only in version.*not a difference between two versions of the code.*no published release/,
+      /differ only in version.*not a difference between two versions of the code.*no registry release was involved/,
     );
+    expect(record.statement).not.toMatch(/no published release exists/i);
     expect(rehearsalSummary(record)).toContain(
       `rollback restored the view exactly`,
     );
@@ -211,6 +213,47 @@ describe('the update and rollback rehearsal', () => {
       /The update install of the own consumer is not candidate B:\n.*version-mismatch.*Reinstall @saga-a2ui\/lit from candidate tarball/s,
     );
   }, 240_000);
+});
+
+describe('the statement a rehearsal records', () => {
+  // `rehearsal.json` stores the statement and the `CANDIDATE.md` section prints it, so both are read
+  // from one record that needs no installs.
+  const record = {
+    format: 1 as const,
+    statement: REHEARSAL_STATEMENT,
+    candidates: {
+      A: '0.0.0-candidate.gaaaaaaaaaaaa',
+      B: '0.0.0-candidate.gbbbbbbbbbbbb',
+    },
+    stages: [],
+    transitions: {},
+  };
+  const texts = (): string[] => [
+    JSON.stringify(record),
+    rehearsalSummary(record),
+  ];
+
+  it('does not claim that no public release exists', () => {
+    for (const text of texts()) {
+      expect(text).not.toMatch(/no published release exists/i);
+      expect(text).not.toMatch(
+        /no (SAGA )?package has (ever )?been published/i,
+      );
+      expect(text).not.toMatch(/first candidate/i);
+      expect(text).not.toMatch(/no earlier release/i);
+    }
+  });
+
+  it('keeps the limit that no registry release was involved or tested', () => {
+    for (const text of texts()) {
+      expect(text).toMatch(
+        /Public npm releases of SAGA packages already exist/,
+      );
+      expect(text).toMatch(/no registry release was involved/i);
+      expect(text).toMatch(/no upgrade from a registry release/i);
+      expect(text).toMatch(/not a difference between two versions of the code/);
+    }
+  });
 });
 
 describe('the browser report', () => {
