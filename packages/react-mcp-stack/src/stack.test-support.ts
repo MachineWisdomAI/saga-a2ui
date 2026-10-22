@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import type { CardResultOutcome } from '@saga-a2ui/components/faithful-card';
-import type { ToolResult } from '@saga-a2ui/mcp/view';
+import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 import type { HostConnection } from './host-connection.js';
 
 // Test-only. A real bridge and a real host joined by an in-memory transport: what a stack starts
@@ -113,14 +113,15 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-// Synthetic whole-result classification, standing in for an application's own protocol. The
-// wording and the envelope belong to this fixture; the stack knows neither.
+// Synthetic application reader of the whole result, standing in for an application's own protocol.
+// The wording, the envelope and every rule below belong to this fixture; neither the stack, the
+// MCP mapping nor the core result type knows them.
 
 /** The wording an application supplies when it rejects a result it cannot show. */
 export const UNSUPPORTED_WORDING = 'This answer cannot be shown by this view.';
 
 /** The text a result carries: its first `text` block, when that block's string is not empty. */
-function usableText(result: ToolResult): string | undefined {
+function usableText(result: DeliveredResult): string | undefined {
   const first = result.content.find((block) => block.type === 'text');
   return first?.type === 'text' && first.text !== '' ? first.text : undefined;
 }
@@ -133,7 +134,7 @@ function usableText(result: ToolResult): string | undefined {
  * text when it carries some, however valid its structured content. Every rejection carries
  * wording: the error's text, else {@link UNSUPPORTED_WORDING}.
  */
-export function classifyEnvelopeOrText(result: ToolResult): CardResultOutcome {
+export function readEnvelopeOrText(result: DeliveredResult): CardResultOutcome {
   const text = usableText(result);
   const unsupported = { kind: 'rejected', text: UNSUPPORTED_WORDING } as const;
   if (result.isError === true) {

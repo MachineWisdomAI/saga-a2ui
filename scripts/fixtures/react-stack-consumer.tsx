@@ -20,8 +20,9 @@ import {
   startFaithfulCardApp,
   useHostLink,
   type CardChromeProps,
-  type CardContent,
   type CardResultOutcome,
+  type CardResultReader,
+  type DeliveredResult,
 } from '@saga-a2ui/react-mcp-stack/faithful-card';
 import {
   createContentPolicy,
@@ -36,7 +37,6 @@ import {
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/react-mcp-stack/server';
-import type { ToolResult } from '@saga-a2ui/react-mcp-stack';
 
 // The one-stack install, as an application writes it: this file imports the React stack (both
 // entries) and the application's own catalog authoring, and nothing else from the SDK. The
@@ -94,23 +94,27 @@ export function startOwn(container: Element): RunningA2uiView<{
 }
 
 // The card entry.
-const definition = FaithfulCardApp.define({
-  name: 'stack-card',
-  version: '1.0.0',
-})
-  .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
-  .policy('document')
-  .result((value): CardContent | undefined =>
-    typeof value === 'string' ? { markdown: value } : undefined,
-  )
-  .texts({
-    waiting: 'Waiting',
-    problem: 'Problem',
-    connectFailure: 'No host',
-    readyFailure: 'Not ready',
-    policyFailure: 'Bad policy',
+const defineCard = (read: CardResultReader) =>
+  FaithfulCardApp.define({
+    name: 'stack-card',
+    version: '1.0.0',
   })
-  .build();
+    .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
+    .policy('document')
+    .result(read)
+    .texts({
+      waiting: 'Waiting',
+      problem: 'Problem',
+      connectFailure: 'No host',
+      readyFailure: 'Not ready',
+      policyFailure: 'Bad policy',
+    })
+    .build();
+const readString = (result: DeliveredResult): CardResultOutcome =>
+  !result.isError && typeof result.structuredContent === 'string'
+    ? { kind: 'content', content: { markdown: result.structuredContent } }
+    : { kind: 'rejected' };
+const definition = defineCard(readString);
 const Chrome = ({ card, state }: CardChromeProps) => (
   <main>
     <p role="status">{state.kind === 'answer' ? 'Answer' : state.text}</p>
@@ -133,18 +137,22 @@ export async function startCard(container: Element): Promise<RunningView> {
 }
 
 // The composition entries, as an application's chrome and server use them, all from the stack. A
-// card application reads its own whole result and words its own rejection; the reading profile
+// card application reads its own whole result, content blocks and error flag included, and words
+// its own rejection; the reading profile
 // maps the application's tokens without a host name; the application renders a link of its own
 // under the card's rules; the server composes budgets and a content-addressed view around a
 // policy created and embedded through the stack's content-policy entry. Real types, no casts. The
 // MCP server object an application registers operations on is the application's own dependency
 // and is not needed to compose these.
-const classify = (result: ToolResult): CardResultOutcome => {
+const readWhole = (result: DeliveredResult): CardResultOutcome => {
   const text = result.content.find((block) => block.type === 'text');
-  return text?.type === 'text' && result.structuredContent == null
+  return text?.type === 'text' &&
+    typeof text.text === 'string' &&
+    result.structuredContent == null
     ? { kind: 'content', content: { markdown: text.text, heading: '' } }
     : { kind: 'rejected', text: 'Unsupported' };
 };
+const wholeResultDefinition = defineCard(readWhole);
 const LinkedChrome = ({ card }: CardChromeProps) => {
   const link = useHostLink('https://docs.example.com/guide');
   return (
@@ -159,10 +167,9 @@ const LinkedChrome = ({ card }: CardChromeProps) => {
 export async function startClassifiedCard(
   container: Element,
 ): Promise<RunningView> {
-  const view = startFaithfulCardApp(definition, {
+  const view = startFaithfulCardApp(wholeResultDefinition, {
     container,
     sizing: 'host',
-    classifyResult: classify,
     chrome: LinkedChrome,
     hostContext: (context, hostName) => {
       document.documentElement.dataset.readingProfile = readingProfile(

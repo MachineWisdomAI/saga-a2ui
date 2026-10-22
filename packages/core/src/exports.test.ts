@@ -2,6 +2,11 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as actions from '@saga-a2ui/core/actions';
+import * as deliveredResult from '@saga-a2ui/core/delivered-result';
+import type {
+  ContentBlock,
+  DeliveredResult,
+} from '@saga-a2ui/core/delivered-result';
 import * as hostLinks from '@saga-a2ui/core/host-links';
 import * as a2uiV0_9 from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
@@ -69,6 +74,34 @@ describe('@saga-a2ui/core exports', () => {
         (id) => id.includes('/packages/lit/') || id.includes('/packages/mcp/'),
       ),
     ).toEqual([]);
+  });
+
+  it('expose a delivered-result contract that is types only and imports nothing', async () => {
+    expect(Object.keys(deliveredResult)).toEqual([]);
+    const { modules } = await bundledModules(
+      '@saga-a2ui/core/delivered-result',
+    );
+    expect(modules.some((id) => id.endsWith('/delivered-result.ts'))).toBe(
+      true,
+    ); // the graph was really walked
+    expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]);
+  });
+
+  it('lets a delivered result keep every block, opaque ones as supplied, and distinguish absent, null and malformed structured data', () => {
+    const image: ContentBlock = {
+      type: 'image',
+      data: 'AAAA',
+      mimeType: 'image/png',
+    };
+    const text: ContentBlock = { type: 'text', text: '' };
+    const absent: DeliveredResult = { isError: false, content: [text, image] };
+    const nulled: DeliveredResult = { ...absent, structuredContent: null };
+    const malformed: DeliveredResult = { ...absent, structuredContent: 'x' };
+    expect('structuredContent' in absent).toBe(false);
+    expect('structuredContent' in nulled).toBe(true);
+    expect(nulled.structuredContent).toBeNull();
+    expect(malformed.structuredContent).toBe('x');
+    expect(absent.content[1]).toBe(image);
   });
 
   it('expose exactly the supported names for the host link contract, which imports nothing', async () => {

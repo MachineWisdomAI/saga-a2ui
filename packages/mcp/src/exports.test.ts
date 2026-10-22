@@ -74,8 +74,8 @@ describe('package subpath exports', () => {
     ]);
     expect(Object.keys(view).sort()).toEqual([
       'ViewStartFailure',
+      'deliveredResultFromToolResult',
       'hostLinksFromApp',
-      'readStructuredResult',
       'readingProfile',
       'runToolResultView',
       'startOwnSizing',

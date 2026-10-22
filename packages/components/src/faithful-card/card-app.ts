@@ -1,9 +1,10 @@
+import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 import type { CardContent } from './card-layout.js';
 import { createFaithfulCardReader } from './reader.js';
 
 // The definition of a card application: what the application decides, as one validated, immutable
 // value. It holds identity, the reader's options, where the content policy comes from, the
-// operation that reads a tool result and the texts the application shows. It knows nothing of a
+// reader of a whole delivered result and the texts the application shows. It knows nothing of a
 // document, a connection or a renderer, so each stack package can start the same definition; that
 // reuse by a delivery other than MCP is unqualified until such a consumer exists.
 
@@ -28,32 +29,21 @@ export interface CardAppReaderOptions {
 export type CardAppPolicySource = 'document';
 
 /**
- * Reads one tool result's `structuredContent` (unchecked input) into card content. `undefined` is
- * an unsupported result: the stack clears the answer and shows `texts.problem`. The application
- * wraps its own schema's `safeParse`, so this package stays independent of the schema library.
- */
-export type CardResultParser = (
-  structuredContent: unknown,
-) => CardContent | undefined;
-
-/**
- * What an application decides about one whole tool result: content to present, or a rejection.
- * A rejection may carry the words the application shows for it; without them the definition's
- * `texts.problem` is shown. The wording is the application's, never this package's.
+ * What an application decides about one whole delivered result: content to present, or a
+ * rejection. A rejection may carry the words the application shows for it; without them the
+ * definition's `texts.problem` is shown. The wording is the application's, never this package's.
  */
 export type CardResultOutcome =
   | { readonly kind: 'content'; readonly content: CardContent }
   | { readonly kind: 'rejected'; readonly text?: string };
 
 /**
- * The application's reading of one whole delivered result, in place of the delivery's default
- * reading. It receives the result exactly as delivered, whatever the delivery calls an error, and
- * decides what it means; nothing is intercepted. A throw is reported and the result is rejected
- * without wording. `Result` is the delivery's own type: this package names no delivery.
+ * The application's one reading of a delivered result, and the only place that decides what the
+ * result means: its schema, its fallback, its wording and what an error result is. It receives the
+ * delivery-neutral result exactly as mapped, `isError` included, and nothing is intercepted before
+ * it. A throw is reported and the result is rejected without wording.
  */
-export type CardResultClassifier<Result = unknown> = (
-  result: Result,
-) => CardResultOutcome;
+export type CardResultReader = (result: DeliveredResult) => CardResultOutcome;
 
 /** Every sentence the application shows around the card. The card never decides what they say. */
 export interface CardAppTexts {
@@ -81,7 +71,7 @@ export interface FaithfulCardAppDefinition {
   readonly identity: CardAppIdentity;
   readonly reader: CardAppReaderOptions;
   readonly policy: CardAppPolicySource;
-  readonly parse: CardResultParser;
+  readonly readResult: CardResultReader;
   readonly texts: CardAppTexts;
 }
 
@@ -98,7 +88,7 @@ interface Draft {
   readonly identity: CardAppIdentity;
   readonly reader?: CardAppReaderOptions;
   readonly policy?: CardAppPolicySource;
-  readonly parse?: CardResultParser;
+  readonly readResult?: CardResultReader;
   readonly texts?: CardAppTexts;
 }
 
@@ -118,8 +108,8 @@ export class FaithfulCardAppBuilder {
     return new FaithfulCardAppBuilder({ ...this.draft, policy: source });
   }
 
-  result(parse: CardResultParser): FaithfulCardAppBuilder {
-    return new FaithfulCardAppBuilder({ ...this.draft, parse });
+  result(read: CardResultReader): FaithfulCardAppBuilder {
+    return new FaithfulCardAppBuilder({ ...this.draft, readResult: read });
   }
 
   texts(texts: CardAppTexts): FaithfulCardAppBuilder {
@@ -131,7 +121,7 @@ export class FaithfulCardAppBuilder {
    * first missing or invalid field, in the order identity, reader, policy, result, texts.
    */
   build(): FaithfulCardAppDefinition {
-    const { identity, reader, policy, parse, texts } = this.draft;
+    const { identity, reader, policy, readResult, texts } = this.draft;
     const text = (field: string, value: unknown): string =>
       typeof value === 'string' && value !== ''
         ? value
@@ -162,8 +152,8 @@ export class FaithfulCardAppBuilder {
           ? 'the policy source is missing.'
           : 'the only supported source is "document".',
       );
-    if (typeof parse !== 'function')
-      invalid('result', 'the operation that reads a result is missing.');
+    if (typeof readResult !== 'function')
+      invalid('result', 'the function that reads a result is missing.');
     if (texts === undefined) invalid('texts', 'the texts are missing.');
 
     const checkedTexts = Object.fromEntries(
@@ -178,7 +168,7 @@ export class FaithfulCardAppBuilder {
         maxLength: reader.maxLength,
       }),
       policy: 'document' as const,
-      parse,
+      readResult,
       texts: Object.freeze(checkedTexts),
     }) as FaithfulCardAppDefinition;
   }
@@ -196,40 +186,30 @@ export const FaithfulCardApp = {
 
 /**
  * Reads one delivered result into what a stack presents: the one outcome rule both stacks share,
- * so neither renders its own copy of it. It is delivery-neutral. It never looks inside `result`;
- * what a delivery's fields mean (an error flag, a structured payload) is decided by the delivery,
- * which supplies that default reading as `read`.
+ * so neither carries its own copy of it. It is delivery-neutral and never looks inside the result;
+ * the definition's reader alone decides what it means.
  *
- * With a `classify` operation the application decides, from the whole result, and `read` is not
- * called. Without one, `read` decides: content to present, or `undefined` for a rejection. In
- * either case a throw is handed to `reportError` (which must not throw) and the result is rejected
- * without wording, so the stack clears the answer and shows the definition's `texts.problem`. A
- * classifier that returns anything but a content or rejection outcome is rejected the same way,
- * since its return is unchecked application input.
+ * `deliver` produces the result, so a delivery whose mapping can throw is guarded by the same rule
+ * as the reader. In either case a throw is handed to `reportError` (which must not throw) and the
+ * result is rejected without wording, so the stack clears the answer and shows the definition's
+ * `texts.problem`. A reader that returns anything but a content or rejection outcome is rejected
+ * the same way, since its return is unchecked application input.
  */
-export function readCardResult<Result>(
-  result: Result,
-  options: {
-    readonly read: (result: Result) => CardContent | undefined;
-    readonly classify?: CardResultClassifier<Result> | undefined;
-    readonly reportError: (error: unknown) => void;
-  },
+export function readCardResult(
+  definition: Pick<FaithfulCardAppDefinition, 'readResult'>,
+  deliver: () => DeliveredResult,
+  reportError: (error: unknown) => void,
 ): CardResultOutcome {
-  const rejected: CardResultOutcome = { kind: 'rejected' };
   try {
-    if (options.classify !== undefined) {
-      return checkedOutcome(options.classify(result));
-    }
-    const content = options.read(result);
-    return content === undefined ? rejected : { kind: 'content', content };
+    return checkedOutcome(definition.readResult(deliver()));
   } catch (error) {
-    options.reportError(error);
-    return rejected;
+    reportError(error);
+    return { kind: 'rejected' };
   }
 }
 
 /**
- * A classifier's return is unchecked application input. Wording that is not a non-empty string
+ * A reader's return is unchecked application input. Wording that is not a non-empty string
  * is dropped, so a caller only ever sees wording to show or none.
  */
 function checkedOutcome(value: unknown): CardResultOutcome {

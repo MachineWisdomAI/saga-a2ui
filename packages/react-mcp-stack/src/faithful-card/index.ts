@@ -4,8 +4,11 @@ export { FaithfulCardApp } from '@saga-a2ui/components/faithful-card';
 export type {
   CardContent,
   CardResultOutcome,
+  CardResultReader,
   FaithfulCardAppDefinition,
 } from '@saga-a2ui/components/faithful-card';
+// What an application's `result` reader receives: the delivery-neutral whole result.
+export type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 export {
   startFaithfulCardApp,
   type CardChromeProps,

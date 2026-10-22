@@ -533,6 +533,77 @@ for (const stack of STACKS) {
       ).toHaveCount(0);
     });
 
+    test('under the application’s reading, a reader that throws after consent, and a result that cannot be mapped, each clear the card and consent, report phase result and let the next valid result recover', async ({
+      page: browser,
+    }) => {
+      const created = createContentPolicy({
+        level: 'strict',
+        imageHosts: ['images.example.com'],
+      });
+      if (!created.ok) throw new Error(created.failure.message);
+      await browser.route(/^https:\/\//, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"></svg>',
+        }),
+      );
+      const view = await mount(
+        browser,
+        {},
+        (html) => embedContentPolicy(classified(html), created.policy),
+        true,
+        resourcePermissionsOf(created.policy).resourceDomains,
+      );
+      const frame = browser.frameLocator('iframe[title="MCP App view"]');
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      const deliver = (result: unknown) =>
+        browser.evaluate(
+          (one) => window.deliverToolResult?.(one as never),
+          result,
+        );
+
+      const withImage = envelope('![chart](https://images.example.com/c.png)');
+      await deliver(withImage);
+      await frame.getByRole('button', { name: 'Show images' }).click();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toBeVisible();
+
+      // The reader throws after consent was given: the answer and its consent are gone.
+      await deliver({ content: [{ type: 'text', text: 'throw' }] });
+      await expect.poll(view.lines).toContain('error:result:reader rejected');
+      await expect.poll(view.status).toBe(PROBE_TEXTS.problem);
+      expect(await view.cardText()).toBe('');
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toHaveCount(0);
+
+      // The next valid result recovers, and consent was not carried over to it.
+      await deliver(withImage);
+      await expect(
+        frame.getByRole('button', { name: 'Show images' }),
+      ).toBeVisible();
+      await frame.getByRole('button', { name: 'Show images' }).click();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toBeVisible();
+
+      // A result the delivery cannot map is the same failure: reported, cleared, then recovered.
+      await deliver({ content: 'not a list of blocks' });
+      await expect
+        .poll(view.lines)
+        .toContain('error:result:The tool result has no content list.');
+      await expect.poll(view.status).toBe(PROBE_TEXTS.problem);
+      expect(await view.cardText()).toBe('');
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toHaveCount(0);
+      await deliver(envelope('Recovered.'));
+      await expect.poll(view.cardText).toContain('Recovered.');
+    });
+
     test('under the application’s reading, an equal answer delivered again retires the previous link outcome', async ({
       page: browser,
     }) => {

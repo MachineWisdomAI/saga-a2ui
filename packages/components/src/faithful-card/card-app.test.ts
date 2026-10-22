@@ -1,9 +1,10 @@
+import type { DeliveredResult } from '@saga-a2ui/core/delivered-result';
 import { describe, expect, it } from 'vitest';
 import {
   FaithfulCardApp,
   readCardResult,
   type CardAppTexts,
-  type CardContent,
+  type CardResultOutcome,
 } from './card-app.js';
 
 // The definition of a card application, built and read without a DOM, a connection or a renderer.
@@ -17,18 +18,34 @@ const TEXTS: CardAppTexts = {
   policyFailure: 'The content policy is not valid.',
 };
 
-const parseAnswer = (value: unknown): CardContent | undefined =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as { answer?: unknown }).answer === 'string'
-    ? { markdown: (value as { answer: string }).answer }
-    : undefined;
+// The application's own reader: this fixture decides what a result means, the package does not.
+const delivered = (
+  structuredContent?: unknown,
+  overrides: Partial<DeliveredResult> = {},
+): DeliveredResult => ({
+  isError: false,
+  content: [],
+  ...(structuredContent === undefined ? {} : { structuredContent }),
+  ...overrides,
+});
+
+const readAnswer = (result: DeliveredResult): CardResultOutcome => {
+  const value = result.structuredContent;
+  return typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { answer?: unknown }).answer === 'string'
+    ? {
+        kind: 'content',
+        content: { markdown: (value as { answer: string }).answer },
+      }
+    : { kind: 'rejected' };
+};
 
 function complete() {
   return FaithfulCardApp.define({ name: 'Answers', version: '1.2.3' })
     .reader({ dialect: 'commonmark-tables-strikethrough', maxLength: 50_000 })
     .policy('document')
-    .result(parseAnswer)
+    .result(readAnswer)
     .texts(TEXTS);
 }
 
@@ -44,18 +61,21 @@ describe('FaithfulCardApp', () => {
     expect(definition.texts).toEqual(TEXTS);
     expect(Object.keys(definition).sort()).toEqual([
       'identity',
-      'parse',
       'policy',
+      'readResult',
       'reader',
       'texts',
     ]);
   });
 
-  it('parses a supported result into card content and maps anything else to undefined', () => {
-    const { parse } = complete().build();
-    expect(parse({ answer: 'Yes.' })).toEqual({ markdown: 'Yes.' });
-    expect(parse({ answer: 7 })).toBeUndefined();
-    expect(parse(undefined)).toBeUndefined();
+  it('holds the one reader the application supplied, which turns a delivered result into an outcome', () => {
+    const { readResult } = complete().build();
+    expect(readResult).toBe(readAnswer);
+    expect(readResult(delivered({ answer: 'Yes.' }))).toEqual({
+      kind: 'content',
+      content: { markdown: 'Yes.' },
+    });
+    expect(readResult(delivered({ answer: 7 }))).toEqual({ kind: 'rejected' });
   });
 
   it('is immutable: neither the definition nor its parts can be changed', () => {
@@ -65,7 +85,7 @@ describe('FaithfulCardApp', () => {
     const definition = FaithfulCardApp.define(identity)
       .reader(reader)
       .policy('document')
-      .result(parseAnswer)
+      .result(readAnswer)
       .texts(texts)
       .build();
 
@@ -76,6 +96,9 @@ describe('FaithfulCardApp', () => {
       definition.texts,
     ])
       expect(Object.isFrozen(frozen)).toBe(true);
+    expect(() => {
+      (definition as { readResult: unknown }).readResult = () => undefined;
+    }).toThrow(TypeError);
     expect(() => {
       (definition.texts as { problem: string }).problem = 'changed';
     }).toThrow(TypeError);
@@ -91,7 +114,7 @@ describe('FaithfulCardApp', () => {
     const base = FaithfulCardApp.define({ name: 'A', version: '1' })
       .reader({ dialect: 'commonmark', maxLength: 10 })
       .policy('document')
-      .result(parseAnswer);
+      .result(readAnswer);
     const first = base.texts(TEXTS).build();
     const second = base.texts({ ...TEXTS, problem: 'Other' }).build();
     expect(first.texts.problem).toBe(TEXTS.problem);
@@ -107,7 +130,7 @@ describe('FaithfulCardApp', () => {
         FaithfulCardApp.define(identity)
           .reader({ dialect: 'commonmark', maxLength: 10 })
           .policy('document')
-          .result(parseAnswer)
+          .result(readAnswer)
           .texts(TEXTS)
           .build(),
       ).toThrow(new RegExp(`\\b${field}\\b`));
@@ -117,7 +140,7 @@ describe('FaithfulCardApp', () => {
       expect(() =>
         FaithfulCardApp.define({ name: 'A', version: '1' })
           .policy('document')
-          .result(parseAnswer)
+          .result(readAnswer)
           .texts(TEXTS)
           .build(),
       ).toThrow(/reader/);
@@ -131,7 +154,7 @@ describe('FaithfulCardApp', () => {
         FaithfulCardApp.define({ name: 'A', version: '1' })
           .reader(reader as never)
           .policy('document')
-          .result(parseAnswer)
+          .result(readAnswer)
           .texts(TEXTS)
           .build(),
       ).toThrow(new RegExp(`reader.*${field}|${field}`));
@@ -141,7 +164,7 @@ describe('FaithfulCardApp', () => {
       expect(() =>
         FaithfulCardApp.define({ name: 'A', version: '1' })
           .reader({ dialect: 'commonmark', maxLength: 10 })
-          .result(parseAnswer)
+          .result(readAnswer)
           .texts(TEXTS)
           .build(),
       ).toThrow(/policy/);
@@ -149,7 +172,7 @@ describe('FaithfulCardApp', () => {
         FaithfulCardApp.define({ name: 'A', version: '1' })
           .reader({ dialect: 'commonmark', maxLength: 10 })
           .policy('network' as never)
-          .result(parseAnswer)
+          .result(readAnswer)
           .texts(TEXTS)
           .build(),
       ).toThrow(/policy/);
@@ -178,7 +201,7 @@ describe('FaithfulCardApp', () => {
         FaithfulCardApp.define({ name: 'A', version: '1' })
           .reader({ dialect: 'commonmark', maxLength: 10 })
           .policy('document')
-          .result(parseAnswer)
+          .result(readAnswer)
           .build(),
       ).toThrow(/texts/);
     });
@@ -189,7 +212,7 @@ describe('FaithfulCardApp', () => {
           FaithfulCardApp.define({ name: 'A', version: '1' })
             .reader({ dialect: 'commonmark', maxLength: 10 })
             .policy('document')
-            .result(parseAnswer)
+            .result(readAnswer)
             .texts({ ...TEXTS, [key]: bad } as never)
             .build(),
         ).toThrow(new RegExp(`texts\\.${key}\\b`));
@@ -205,90 +228,77 @@ describe('FaithfulCardApp', () => {
 });
 
 describe('readCardResult', () => {
-  // The result here is an opaque value: this package knows no delivery, so the delivery's own
-  // default reading arrives as `read`, and the application's as `classify`.
-  type Delivered = { readonly shown?: string; readonly failed?: boolean };
-  const read = (result: Delivered): CardContent | undefined =>
-    result.failed === true || result.shown === undefined
-      ? undefined
-      : { markdown: result.shown };
   const quiet = () => undefined;
-
-  it('uses the delivery’s default reading when no classifier is supplied', () => {
-    expect(
-      readCardResult({ shown: 'Yes.' }, { read, reportError: quiet }),
-    ).toEqual({ kind: 'content', content: { markdown: 'Yes.' } });
-    expect(readCardResult({}, { read, reportError: quiet })).toEqual({
-      kind: 'rejected',
-    });
+  const asDefinition = (readResult: (result: DeliveredResult) => unknown) => ({
+    readResult: readResult as never,
   });
 
-  it('reports a default reading that throws and rejects the result without wording', () => {
-    const errors: unknown[] = [];
-    expect(
-      readCardResult(
-        {},
-        {
-          read: () => {
-            throw new Error('read broke');
-          },
-          reportError: (error) => errors.push(error),
-        },
-      ),
-    ).toEqual({ kind: 'rejected' });
-    expect(errors).toHaveLength(1);
-  });
-
-  it('gives a classifier the result untouched, bypassing the default reading, and returns its outcome as it is', () => {
+  it('gives the reader the delivered result untouched and returns its outcome', () => {
+    const whole = delivered({ answer: 'x' }, { isError: true });
     const seen: unknown[] = [];
-    const whole = { failed: true, shown: 'x' };
-    let defaulted = false;
-    const outcome = readCardResult(whole, {
-      read: (result) => {
-        defaulted = true;
-        return read(result);
-      },
-      classify(result) {
+    const outcome = readCardResult(
+      asDefinition((result) => {
         seen.push(result);
         return { kind: 'rejected', text: 'Supplied wording.' };
-      },
-      reportError: quiet,
-    });
+      }),
+      () => whole,
+      quiet,
+    );
+    expect(seen).toEqual([whole]);
     expect(seen[0]).toBe(whole);
-    expect(defaulted).toBe(false);
     expect(outcome).toEqual({ kind: 'rejected', text: 'Supplied wording.' });
     expect(
-      readCardResult(whole, {
-        read,
-        classify: () => ({
+      readCardResult(
+        asDefinition(() => ({
           kind: 'content',
           content: { markdown: 'Shown.\n', heading: '' },
-        }),
-        reportError: quiet,
-      }),
+        })),
+        () => whole,
+        quiet,
+      ),
     ).toEqual({
       kind: 'content',
       content: { markdown: 'Shown.\n', heading: '' },
     });
   });
 
-  it('rejects, without wording, a classifier that throws or returns something that is not an outcome', () => {
+  it('rejects without wording, and reports, a reader that throws', () => {
     const errors: unknown[] = [];
-    const reportError = (error: unknown) => errors.push(error);
     expect(
       readCardResult(
-        {},
-        {
-          read,
-          classify: () => {
-            throw new Error('classifier broke');
-          },
-          reportError,
-        },
+        asDefinition(() => {
+          throw new Error('reader broke');
+        }),
+        () => delivered(),
+        (error) => errors.push(error),
       ),
     ).toEqual({ kind: 'rejected' });
     expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('reader broke');
+  });
 
+  it('rejects without wording, and reports, a delivery mapping that throws, without calling the reader', () => {
+    const errors: unknown[] = [];
+    let read = false;
+    expect(
+      readCardResult(
+        asDefinition(() => {
+          read = true;
+          return { kind: 'rejected' };
+        }),
+        () => {
+          throw new TypeError('no content list');
+        },
+        (error) => errors.push(error),
+      ),
+    ).toEqual({ kind: 'rejected' });
+    expect(read).toBe(false);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('rejects, without wording, a return that is not an outcome, since a reader’s return is unchecked input', () => {
+    const errors: unknown[] = [];
+    const reportError = (error: unknown) => errors.push(error);
     for (const bad of [
       undefined,
       null,
@@ -300,9 +310,13 @@ describe('readCardResult', () => {
       { kind: 'other' },
     ]) {
       expect(
-        readCardResult({}, { read, classify: () => bad as never, reportError }),
+        readCardResult(
+          asDefinition(() => bad),
+          () => delivered(),
+          reportError,
+        ),
       ).toEqual({ kind: 'rejected' });
     }
-    expect(errors).toHaveLength(1);
+    expect(errors).toEqual([]);
   });
 });

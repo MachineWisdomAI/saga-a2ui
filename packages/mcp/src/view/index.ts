@@ -15,4 +15,4 @@ export {
 export { hostLinksFromApp } from './host-links.js';
 export { startOwnSizing } from './own-sizing.js';
 export { readingProfile, type ReadingProfile } from './reading-profile.js';
-export { readStructuredResult } from './structured-result.js';
+export { deliveredResultFromToolResult } from './delivered-result.js';

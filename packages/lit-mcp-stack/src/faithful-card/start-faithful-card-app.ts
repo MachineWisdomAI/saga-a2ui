@@ -1,6 +1,5 @@
 import {
   readCardResult,
-  type CardResultClassifier,
   type CardResultOutcome,
   type FaithfulCardAppDefinition,
 } from '@saga-a2ui/components/faithful-card';
@@ -11,7 +10,10 @@ import {
   registerFaithfulCard,
 } from '@saga-a2ui/lit/faithful-card';
 import type { CardSurface, ContentView } from '@saga-a2ui/lit/faithful-card';
-import { hostLinksFromApp, readStructuredResult } from '@saga-a2ui/mcp/view';
+import {
+  deliveredResultFromToolResult,
+  hostLinksFromApp,
+} from '@saga-a2ui/mcp/view';
 import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
 import { html, render, type TemplateResult } from 'lit';
 import { applicationFailureOf, callApplication } from '../application-call.js';
@@ -62,14 +64,6 @@ export interface StartFaithfulCardOptions {
     context: HostContext | undefined,
     hostName: string | undefined,
   ) => void;
-  /**
-   * Optional. The application’s reading of each whole delivered result, in place of the
-   * definition’s `structuredContent`-only parse. It receives the result as delivered, `isError`
-   * included, and returns the content to present or a rejection that may carry the words to show
-   * (otherwise `texts.problem` shows). A throw is reported (phase `result`) and rejects the result.
-   * The stack still owns clearing, presenting, consent and link state, and error reporting.
-   */
-  readonly classifyResult?: CardResultClassifier<ToolResult>;
   /** Optional. The application’s chrome around the card. By default the status text, then the card. */
   readonly chrome?: CardChrome;
   /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
@@ -88,7 +82,7 @@ const defaultChrome: CardChrome = ({ card, state }) =>
 /**
  * Starts a card application in `options.container` and returns it at once. The embedded policy is
  * read from the container’s document, the host is connected with its handlers installed first,
- * and each delivered result is read with the definition’s `parse` and shown in the card: a new
+ * and each delivered result is read by the definition’s one `result` reader and shown in the card: a new
  * presentation each time, even for equal text. Throws `StartError` (`container-missing`,
  * `container-busy`) before connecting to anything.
  * An application callback that throws while the view is being set up (the initial `chrome` call) does not
@@ -171,24 +165,22 @@ export function startFaithfulCardAppOn(
       opened.clear();
       show({ kind: 'problem', text });
     };
-    /** The application’s reading of the result; a throw is reported, and the result is rejected. */
+    /**
+     * The definition's one reader decides what the whole result means. A throw from the reader or
+     * from mapping the delivery's result is reported (phase `result`) and rejects the result.
+     */
     const read = (result: ToolResult): CardResultOutcome =>
-      readCardResult(result, {
-        // The delivery's default: MCP's error flag and structured content, decided once in the
-        // MCP package. The application's `classifyResult`, when given, replaces it.
-        read: (delivered) =>
-          readStructuredResult(delivered, (structured) =>
-            definition.parse(structured),
-          ),
-        classify: options.classifyResult,
-        reportError(error) {
+      readCardResult(
+        definition,
+        () => deliveredResultFromToolResult(result),
+        (error) => {
           try {
             report(error, 'result');
           } catch {
             // A reporter that throws must not stop the answer from clearing.
           }
         },
-      });
+      );
 
     return runView({
       connection,
