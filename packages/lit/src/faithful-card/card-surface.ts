@@ -7,10 +7,6 @@ import {
   type CardContent,
   type ImageConsentScope,
 } from '@saga-a2ui/components/faithful-card';
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { html, nothing } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import {
@@ -136,8 +132,7 @@ class OpenedCardSurface implements CardSurface {
 
 /** The element behind {@link CardSurface}: an app element over the card's layout and catalog. */
 export class FaithfulCardSurfaceElement extends createA2uiAppElement({
-  createSession: () =>
-    createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
+  catalog,
   layout,
 }) {
   /** Set once by the surface that created this element. */

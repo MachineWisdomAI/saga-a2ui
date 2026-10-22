@@ -1,11 +1,7 @@
 import type { LitComponentApi } from '@a2ui/lit/v0_9';
 import type { Catalog } from '@a2ui/web_core/v0_9';
 import type { ServerTransport } from '@saga-a2ui/core/actions';
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-  type SurfaceLayout,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { type SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import {
   createA2uiAppElement,
   defineElements,
@@ -187,11 +183,7 @@ export function startA2uiViewOn<TData>(
 
     defineElements([...options.catalog.components.values()]);
     const AppElement = createA2uiAppElement({
-      createSession: () =>
-        createMessageSession({
-          catalogs: [options.catalog],
-          decoder: a2uiV0_9Decoder,
-        }),
+      catalog: options.catalog,
       layout: options.layout,
       ...(watched === undefined ? {} : { actions: watched }),
     });

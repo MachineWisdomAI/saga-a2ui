@@ -34,7 +34,7 @@ Define the surface once with `defineSurface`, open it with your catalog and moun
 ```tsx
 const bound = openSurface(layout, catalog); // throws, with the session's message, if the layout is not accepted
 <Surface of={bound.handle} />
-bound.update(data); // {ok: true} | {ok: false, message}
+bound.update(data); // {ok: true} | {ok: false, failure: {kind, message}}
 bound.dispose();    // idempotent
 ```
 

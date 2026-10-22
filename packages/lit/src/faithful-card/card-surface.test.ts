@@ -145,7 +145,14 @@ describe('a Lit card surface', () => {
     await press(byTestId('images-toggle')[0]);
     const shown = byTestId('card-content')[0];
     const rejected = await present(42);
-    expect(rejected.ok).toBe(false);
+    // The same structured failure the React card surface returns for the same content.
+    expect(rejected).toEqual({
+      ok: false,
+      failure: {
+        kind: 'invalid-data',
+        message: expect.stringContaining('markdown'),
+      },
+    });
     expect(byTestId('card-content')[0]).toBe(shown);
     expect(byTestId('md-image')).toHaveLength(1);
   });
@@ -173,7 +180,10 @@ describe('a Lit card surface', () => {
     surface.dispose();
     await settle();
     expect(byTestId('card-root')).toEqual([]);
-    expect(surface.present({ markdown: 'Late' }).ok).toBe(false);
+    expect(surface.present({ markdown: 'Late' })).toEqual({
+      ok: false,
+      failure: { kind: 'rejected', message: 'The surface was disposed.' },
+    });
   });
 
   it('needs the card registered before it can be opened, and says so', () => {

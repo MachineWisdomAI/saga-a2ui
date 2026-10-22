@@ -91,7 +91,11 @@ class OpenedCardSurface implements CardSurface {
   }
 
   present(content: CardContent): UpdateResult {
-    if (this.ended) return { ok: false, message: 'The surface was disposed.' };
+    if (this.ended)
+      return {
+        ok: false,
+        failure: { kind: 'rejected', message: 'The surface was disposed.' },
+      };
     const applied = this.bound.update(cardData(content));
     if (!applied.ok) return applied;
     this.replace();

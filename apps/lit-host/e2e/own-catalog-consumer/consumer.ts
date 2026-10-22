@@ -1,10 +1,6 @@
 import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
 import { CommonSchemas, Catalog } from '@a2ui/web_core/v0_9';
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-  defineSurface,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
 import { html, nothing } from 'lit';
@@ -42,8 +38,7 @@ defineElements([Note]);
 customElements.define(
   'own-notes-app',
   createA2uiAppElement({
-    createSession: () =>
-      createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
+    catalog: catalog,
     layout: defineSurface({
       surfaceId: 'notes',
       catalogId: catalog.id,

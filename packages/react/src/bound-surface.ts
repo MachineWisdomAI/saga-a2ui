@@ -3,8 +3,10 @@ import type { Catalog, SurfaceModel } from '@a2ui/web_core/v0_9';
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  type IngestFailure,
   type MessageSession,
   type SurfaceLayout,
+  type SurfaceUpdateFailure,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { createElement, useSyncExternalStore, type ReactElement } from 'react';
 
@@ -27,9 +29,16 @@ export interface SurfaceHandle {
   readonly [opaqueHandle]: true;
 }
 
-/** `message` is plain text that is safe to display. */
+/** Why an update changed nothing. `message` is plain text that is safe to display. */
+export interface UpdateFailure {
+  readonly kind: SurfaceUpdateFailure['kind'] | IngestFailure['kind'];
+  readonly message: string;
+}
+
+/** The same structured result the Lit app element's `updateData` returns. */
 export type UpdateResult =
-  { readonly ok: true } | { readonly ok: false; readonly message: string };
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: UpdateFailure };
 
 export interface BoundSurface<TData> {
   readonly handle: SurfaceHandle;
@@ -104,13 +113,13 @@ export function openSurface<TData>(
     handle,
     update(data) {
       if (handle.disposed)
-        return { ok: false, message: 'The surface was disposed.' };
+        return {
+          ok: false,
+          failure: { kind: 'rejected', message: 'The surface was disposed.' },
+        };
       const input = layout.update(data);
-      if (!input.ok) return { ok: false, message: input.failure.message };
-      const applied = session.ingest(input.messages);
-      return applied.ok
-        ? { ok: true }
-        : { ok: false, message: applied.failure.message };
+      if (!input.ok) return { ok: false, failure: input.failure };
+      return session.ingest(input.messages);
     },
     dispose() {
       // Mounted surfaces stop rendering before the model they render is disposed.

@@ -1,8 +1,4 @@
-import {
-  a2uiV0_9Decoder,
-  createMessageSession,
-  type IngestResult,
-} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { type IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import {
   createA2uiAppElement,
   defineElements,
@@ -51,11 +47,7 @@ registerAnswerElements();
 customElements.define(
   'saga-app',
   createSagaAppElement({
-    createSession: () =>
-      createMessageSession({
-        catalogs: [sagaCatalog],
-        decoder: a2uiV0_9Decoder,
-      }),
+    catalog: sagaCatalog,
     layout: initialFixture,
     content: content.view,
   }),
@@ -63,11 +55,7 @@ customElements.define(
 customElements.define(
   'answer-app',
   createA2uiAppElement({
-    createSession: () =>
-      createMessageSession({
-        catalogs: [answerCatalog],
-        decoder: a2uiV0_9Decoder,
-      }),
+    catalog: answerCatalog,
     layout: answerLayout,
   }),
 );

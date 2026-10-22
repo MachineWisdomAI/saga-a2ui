@@ -860,6 +860,7 @@ function defineApp(app: string): void {
   customElements.define(
     `${app}-app`,
     createA2uiAppElement({
+      catalog,
       createSession: () => {
         const session = createMessageSession({
           catalogs: [catalog],
