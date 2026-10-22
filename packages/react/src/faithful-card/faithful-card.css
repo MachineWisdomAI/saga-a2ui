@@ -31,6 +31,15 @@
  *   .saga-card-placeholder       an image reference that is not loaded
  *   .saga-card-table-scroll      the keyboard-focusable region a table scrolls in
  * An image the policy permits is a plain `img` inside the card, sized to the card.
+ *
+ * Elements. Inside `.saga-card-content` an application may select h3-h6, p, ol, ul, li, blockquote,
+ * pre, code and table.
+ *
+ * Closing block. The final top-level block of the content carries data-saga-closing="paragraph"
+ * when, and only when, that block is a paragraph, whatever its words. A trailing list, quote, table
+ * or code block means no marker, and a paragraph nested in a quote, list or table is never marked.
+ * The marker is structural: the card recognises no attribution, and the application decides what a
+ * marked paragraph is. Documented in docs/faithful-card-styling.md.
  */
 .saga-card {
   display: block;

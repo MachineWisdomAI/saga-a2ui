@@ -1,16 +1,11 @@
-import {
-  createContentPolicy,
-  createFaithfulCardReader,
-  createImageConsentScope,
-  establishImageEnforcement,
-} from '@saga-a2ui/components/faithful-card';
+import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { type HostLinks } from '@saga-a2ui/core/host-links';
 import {
+  createFaithfulCardView,
   documentContentSecurityPolicies,
   faithfulCardEntry,
   provideContentView,
   registerFaithfulCard,
-  type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
 import { startNotesView } from './notes-view.js';
 
@@ -32,23 +27,15 @@ await startNotesView((app) => {
       }
     },
   };
-  const reader = createFaithfulCardReader({
+  const policy = createContentPolicy({ level: 'standard', imageHosts: [] });
+  if (!policy.ok) throw new Error(policy.failure.message);
+  const content = createFaithfulCardView({
     dialect: 'commonmark-tables-strikethrough',
     maxLength: 50_000,
-  });
-  const policy = createContentPolicy({ level: 'standard', imageHosts: [] });
-  if (!reader.ok) throw new Error(reader.failure.message);
-  if (!policy.ok) throw new Error(policy.failure.message);
-  const content: ContentView = {
-    reader: reader.reader,
     policy: policy.policy,
+    contentSecurityPolicies: documentContentSecurityPolicies(document),
     hostLinks,
-    imageEnforcement: establishImageEnforcement(
-      policy.policy,
-      documentContentSecurityPolicies(document),
-    ),
-    consent: createImageConsentScope(),
-  };
+  });
   registerFaithfulCard();
   const body = {
     id: 'note-body',

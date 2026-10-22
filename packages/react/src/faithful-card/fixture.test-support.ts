@@ -11,8 +11,6 @@ import {
 } from '@a2ui/web_core/v0_9/basic_catalog';
 import {
   createContentPolicy,
-  createFaithfulCardReader,
-  createImageConsentScope,
   type ImageConsentScope,
   type ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
@@ -36,7 +34,11 @@ import {
   type SurfaceHandle,
 } from '../a2ui.js';
 import { faithfulCardEntry } from './catalog.js';
-import { FaithfulCardProvider, type FaithfulCardView } from './view.js';
+import {
+  createFaithfulCardView,
+  FaithfulCardProvider,
+  type FaithfulCardView,
+} from './view.js';
 
 // Test-only. A synthetic application over the published `@a2ui/react` runtime: its own catalog
 // (Column and Text, built from the upstream contracts the way an application builds its own, plus
@@ -200,12 +202,6 @@ export interface Trusted {
 
 /** Trusted settings as an application builds them once. */
 export function trusted(options: TrustedOptions = {}): Trusted {
-  const reader = createFaithfulCardReader({
-    dialect: options.dialect ?? 'commonmark-tables-strikethrough',
-    maxLength: options.maxLength ?? 5000,
-  });
-  if (!reader.ok)
-    throw new Error(`unexpected reader failure: ${reader.failure.kind}`);
   const policy = createContentPolicy({
     level: options.level ?? 'standard',
     ...(options.imageHosts === undefined
@@ -233,19 +229,19 @@ export function trusted(options: TrustedOptions = {}): Trusted {
       return Promise.resolve(answer);
     },
   };
-  const consent = createImageConsentScope();
-  return {
-    view: {
-      reader: reader.reader,
-      policy: policy.policy,
-      hostLinks,
-      imageEnforcement: options.enforcement ?? 'established',
-      consent,
-    },
-    consent,
-    requests,
-    pending,
-  };
+  // The views of these suites are made by the public factory, as an application makes its own. The
+  // document's restrictions are modelled by passing the policy's derived value, or nothing.
+  const view = createFaithfulCardView({
+    dialect: options.dialect ?? 'commonmark-tables-strikethrough',
+    maxLength: options.maxLength ?? 5000,
+    policy: policy.policy,
+    contentSecurityPolicies:
+      (options.enforcement ?? 'established') === 'established'
+        ? [policy.policy.resource.contentSecurityPolicy]
+        : [],
+    hostLinks,
+  });
+  return { view, consent: view.consent, requests, pending };
 }
 
 /** A bound surface under a provider, as an application mounts it. */

@@ -1,8 +1,10 @@
-import type {
-  FaithfulCardReader,
-  ImageConsentScope,
-  ContentPolicy,
-  ImageEnforcement,
+import {
+  createCardView,
+  type CardViewSettings,
+  type FaithfulCardReader,
+  type ImageConsentScope,
+  type ContentPolicy,
+  type ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
 import type { HostLinks } from '@saga-a2ui/core/host-links';
 
@@ -21,6 +23,35 @@ export interface ContentView {
   readonly hostLinks: HostLinks;
   readonly imageEnforcement: ImageEnforcement;
   readonly consent: ImageConsentScope;
+  /**
+   * The application's own stylesheets for the card. A card lives inside shadow roots that a rule
+   * of the page cannot select into, so each connected card adopts these into the root it is in
+   * (see `adopt-styles.ts`). Custom properties need none of this: they inherit.
+   */
+  readonly styles?: readonly CSSStyleSheet[];
+}
+
+/** What {@link createFaithfulCardView} takes: the renderer-neutral settings and, for Lit, the application's styles. */
+export interface LitCardViewSettings extends CardViewSettings {
+  readonly styles?: readonly CSSStyleSheet[];
+}
+
+/**
+ * Creates the view an application provides to its cards, once: the reader for its dialect and
+ * content bound, the policy and host links it passes, image enforcement established from the
+ * Content-Security-Policy values it passes (it reads no document: a caller that has one reads the
+ * values and passes them in, for example with {@link documentContentSecurityPolicies}) and a
+ * fresh consent scope that ends with the view. Throws, naming the setting, when the reader
+ * settings are invalid; no view exists then.
+ */
+export function createFaithfulCardView(
+  settings: LitCardViewSettings,
+): ContentView {
+  const { styles, ...cardSettings } = settings;
+  return Object.freeze({
+    ...createCardView(cardSettings),
+    ...(styles === undefined ? {} : { styles: Object.freeze([...styles]) }),
+  });
 }
 
 export const CONTENT_VIEW_REQUEST = 'saga-content-view-request';

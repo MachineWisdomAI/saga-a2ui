@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { FAITHFUL_CARD_STYLING } from '@saga-a2ui/components/faithful-card';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, type Mounted } from '../actions/fixture.test-support.js';
 import { createElement } from 'react';
@@ -34,6 +35,13 @@ const markdown = [
   '',
   '| a |\n| - |\n| 1 |',
 ].join('\n');
+
+/** The committed class names a source does not name: the structural scan of the styling surface. */
+function missingNames(source: string): string[] {
+  return FAITHFUL_CARD_STYLING.classes.filter(
+    (name) => !source.includes(`.${name} `),
+  );
+}
 
 function classesRendered(level: 'standard' | 'strict'): Set<string> {
   const host = trusted({ level });
@@ -72,20 +80,31 @@ describe('the exported stylesheet', () => {
     ).toBe(true);
   });
 
-  it('keeps every existing token and adds the font-size and reading-width tokens, each with a fallback', () => {
-    for (const token of [
-      '--saga-card-font-family',
-      '--saga-card-line-height',
-      '--saga-card-text-color',
-      '--saga-card-accent-color',
-      '--saga-card-muted-color',
-      '--saga-card-border-color',
-      '--saga-card-code-background',
-      '--saga-card-font-size',
-      '--saga-card-reading-width',
-    ]) {
+  it('keeps every committed token, each documented and read with a fallback', () => {
+    for (const token of FAITHFUL_CARD_STYLING.tokens) {
       expect(documentation, token).toContain(token);
       expect(css, token).toMatch(new RegExp(`var\\(${token},`));
+    }
+  });
+
+  it('documents the closing marker and every committed class, and the card renders each committed class', () => {
+    expect(documentation).toContain(
+      `${FAITHFUL_CARD_STYLING.closing.attribute}="${FAITHFUL_CARD_STYLING.closing.value}"`,
+    );
+    expect(missingNames(documentation)).toEqual([]);
+    const used = new Set([
+      ...classesRendered('standard'),
+      ...classesRendered('strict'),
+    ]);
+    // The link and its answer exist only while a link is activatable, the controls only under Strict.
+    for (const name of FAITHFUL_CARD_STYLING.classes)
+      expect([...used], name).toContain(name);
+  });
+
+  it('fails the scan when a committed class is removed from the stylesheet’s contract', () => {
+    for (const name of FAITHFUL_CARD_STYLING.classes) {
+      const without = documentation.replaceAll(`.${name} `, '. ');
+      expect(missingNames(without), name).toEqual([name]);
     }
   });
 

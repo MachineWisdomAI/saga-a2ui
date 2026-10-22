@@ -1,4 +1,6 @@
 import {
+  closesWithParagraph,
+  FAITHFUL_CARD_STYLING,
   type BlockNode,
   type ContentPolicy,
   type ImageContext,
@@ -125,16 +127,42 @@ export function Blocks(props: {
     ...props.rendering,
     counters: { link: 0, image: 0, table: 0 },
   };
-  return <>{inOrder(props.nodes.map((node) => block(node, pass, false)))}</>;
+  const closing = closesWithParagraph(props.nodes)
+    ? props.nodes.length - 1
+    : -1;
+  return (
+    <>
+      {inOrder(
+        props.nodes.map((node, index) =>
+          block(node, pass, false, index === closing),
+        ),
+      )}
+    </>
+  );
 }
 
-function block(node: BlockNode, r: Pass, inContainer: boolean): ReactNode {
+/** The structural marker of the styling surface; see `FAITHFUL_CARD_STYLING.closing`. */
+const CLOSING_MARKER = {
+  [FAITHFUL_CARD_STYLING.closing.attribute]:
+    FAITHFUL_CARD_STYLING.closing.value,
+};
+
+function block(
+  node: BlockNode,
+  r: Pass,
+  inContainer: boolean,
+  closing = false,
+): ReactNode {
   // A quote or list item sets the direction its own marker or rule follows from its text, and its
   // paragraphs inherit it: automatic direction ignores any descendant that sets its own.
   const dir = inContainer ? undefined : 'auto';
   switch (node.kind) {
     case 'paragraph':
-      return <p dir={dir}>{inlines(node.children, r)}</p>;
+      return (
+        <p dir={dir} {...(closing ? CLOSING_MARKER : undefined)}>
+          {inlines(node.children, r)}
+        </p>
+      );
     case 'heading': {
       // The surrounding page owns the top levels; card headings start at h3.
       const content = inlines(node.children, r);

@@ -51,4 +51,18 @@ export {
   type ImageConsent,
   type ImageConsentScope,
 } from './image-consent.js';
+export { requestLinkOpen } from './link-request.js';
 export { FaithfulCardApi } from './catalog.js';
+export {
+  createCardView,
+  type CardViewParts,
+  type CardViewSettings,
+} from './card-view.js';
+export {
+  cardData,
+  cardLayout,
+  FAITHFUL_CARD_CATALOG_ID,
+  type CardContent,
+  type CardData,
+} from './card-layout.js';
+export { closesWithParagraph, FAITHFUL_CARD_STYLING } from './styling.js';

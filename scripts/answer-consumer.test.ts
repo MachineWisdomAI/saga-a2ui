@@ -189,7 +189,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       'mcp-main.ts',
       'answer-view.ts',
       'answer-surface.ts',
-      'content-view.ts',
+      'answer-policy.ts',
     ]) {
       expect(
         modules.some((id) => id.endsWith(`/consumer/src/${own}`)),

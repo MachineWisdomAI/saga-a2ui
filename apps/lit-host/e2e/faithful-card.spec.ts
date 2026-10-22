@@ -139,7 +139,7 @@ test.describe('one implementation, two trusted dialects', () => {
             (child.className ? `.${child.className}` : ''),
         ),
       );
-    expect(order).toEqual(['p', 'div.table-scroll', 'p']);
+    expect(order).toEqual(['p', 'div.saga-card-table-scroll', 'p']);
 
     // The episode consumer's CommonMark reads the same text without a table or a struck span.
     await expect(card(page, 'episode').getByRole('table')).toHaveCount(0);

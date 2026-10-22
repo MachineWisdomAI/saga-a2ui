@@ -1,6 +1,7 @@
-import type {
-  ImageConsent,
-  ImageContext,
+import {
+  requestLinkOpen,
+  type ImageConsent,
+  type ImageContext,
 } from '@saga-a2ui/components/faithful-card';
 import type { HostLinks, LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
@@ -205,13 +206,8 @@ export function useCardLifecycle(
     openLink(hostLinks, ordinal, url) {
       if (!owner.current()) return;
       void (async () => {
-        let outcome: LinkOpenOutcome;
-        try {
-          outcome = await hostLinks.open(url);
-        } catch {
-          // An adapter that rejects has not opened the link; the reader is told so.
-          outcome = 'failed';
-        }
+        // An adapter that rejects has not opened the link; the reader is told so.
+        const outcome = await requestLinkOpen(hostLinks, url);
         // An answer for a revision that is gone (new content, a replaced view, an unmounted card) is not shown.
         if (owner.current())
           update((previous) => ({

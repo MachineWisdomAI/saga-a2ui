@@ -1,9 +1,13 @@
 import type { LinkOpenOutcome } from '@saga-a2ui/core/host-links';
-import { registerFaithfulCard } from '@saga-a2ui/lit/faithful-card';
+import {
+  createFaithfulCardView,
+  documentContentSecurityPolicies,
+  registerFaithfulCard,
+} from '@saga-a2ui/lit/faithful-card';
 import { createAnswerAppElement } from './answer-app.js';
 import { briefAnswers, fixtureAnswers } from './answer-function.js';
 import { brandings, type BrandName } from './branding.js';
-import { createContentView } from './content-view.js';
+import { ANSWER_READER, createAnswerPolicy } from './answer-policy.js';
 
 // Composition root of the standalone page. The query string only selects among this application's
 // own compiled-in choices so one build can show them side by side; nothing in an answer can change
@@ -14,11 +18,12 @@ const answer =
   params.get('answers') === 'brief' ? briefAnswers : fixtureAnswers;
 const level = params.get('level') === 'strict' ? 'strict' : 'standard';
 
-const content = createContentView({
-  level,
+const content = createFaithfulCardView({
+  ...ANSWER_READER,
   // The one host images may come from. Images load only while this document's Content-Security-Policy
   // is exactly what the policy derives for it (see the meta element in index.html).
-  imageHosts: ['images.example.com'],
+  policy: createAnswerPolicy({ level, imageHosts: ['images.example.com'] }),
+  contentSecurityPolicies: documentContentSecurityPolicies(document),
   // The only way a link leaves the page: a new window without the opener, and only for a link the policy
   // allowed. A page cannot learn whether the browser opened it (`noopener` makes window.open return null
   // either way), so the outcome reports only that the request was made.

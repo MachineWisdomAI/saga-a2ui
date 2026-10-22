@@ -55,7 +55,11 @@ describe('the optional React exports', () => {
     expect(Object.keys(faithfulCard).sort()).toEqual([
       'FaithfulCard',
       'FaithfulCardProvider',
+      'FaithfulCardSurface',
+      'createFaithfulCardView',
       'faithfulCardEntry',
+      'openFaithfulCardSurface',
+      'useHostLink',
     ]);
   });
 
@@ -102,9 +106,12 @@ describe('the optional React exports', () => {
     expect(
       anyOf(
         modules,
-        /node_modules\/(lit|lit-html|lit-element|@lit|@lit-labs|jsdom|happy-dom|@modelcontextprotocol|@a2ui\/lit)\//,
+        /node_modules\/(jsdom|happy-dom|@modelcontextprotocol|@a2ui\/lit)\//,
       ),
     ).toEqual([]);
     expect(anyOf(modules, /\/packages\/(lit|mcp)\//)).toEqual([]);
+    // `lit` itself is not asserted absent: the card surface renders with the upstream
+    // `A2uiSurface`, whose `@a2ui/web_core` declares `lit` for its own elements. The Lit renderer
+    // package (`@a2ui/lit`, `@saga-a2ui/lit`) stays out, which is what the checks above hold.
   });
 });

@@ -71,6 +71,7 @@ describe('a card in a bound surface', () => {
     );
     expect(byTestId(view, 'card-content')).toHaveLength(1);
     expect(view.container.querySelector('strong')?.textContent).toBe('answer');
+    const mountedContent = byTestId(view, 'card-content')[0];
     await change(
       surface,
       answerData('Second answer with [a link](https://docs.example.com/)'),
@@ -79,6 +80,8 @@ describe('a card in a bound surface', () => {
     expect(view.container.querySelector('strong')).toBeNull();
     expect(byTestId(view, 'md-link')).toHaveLength(1);
     expect(byTestId(view, 'card-content')).toHaveLength(1);
+    // An ordinary data update is applied in place: the mounted content is the same element.
+    expect(byTestId(view, 'card-content')[0]).toBe(mountedContent);
   });
 
   it('opens a layout whose root is the card, and validates each update against the layout', async () => {
