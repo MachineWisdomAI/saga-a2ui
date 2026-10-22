@@ -3,6 +3,7 @@
 export { FaithfulCardApp } from '@saga-a2ui/components/faithful-card';
 export type {
   CardContent,
+  CardResultOutcome,
   FaithfulCardAppDefinition,
 } from '@saga-a2ui/components/faithful-card';
 export {

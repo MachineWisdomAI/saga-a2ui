@@ -208,8 +208,17 @@ function assertStackOnlyFootprint(app: string): void {
   if (!stylesheet.startsWith(stack))
     fail('the card stylesheet does not resolve inside the installed stack');
 
+  // 4. The composition entries resolve from the application, each inside the installed stack: the
+  // server entry and the content-policy entry are subpaths of the one package the application
+  // installs, not packages of their own.
+  for (const entry of ['server', 'content-policy', 'faithful-card']) {
+    const resolved = real(require.resolve(`${STACK}/${entry}`));
+    if (!resolved.startsWith(stack))
+      fail(`${STACK}/${entry} does not resolve inside the installed stack`);
+  }
+
   console.log(
-    `stack-only footprint: ${STACK_DECLARED.join(', ')} and markdown-it installed beneath the stack; one React runtime (${reactDirectories[0]}).`,
+    `stack-only footprint: ${STACK_DECLARED.join(', ')} and markdown-it installed beneath the stack; one React runtime (${reactDirectories[0]}); the server, content-policy and card entries resolve inside the stack.`,
   );
 }
 

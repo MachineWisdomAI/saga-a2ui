@@ -306,9 +306,36 @@ Modules in `apps/lit-host/src`:
 | Entry | Holds |
 | --- | --- |
 | `.` | `startA2uiView({ container, layout, catalog, actions, readyWhen, sizing, hostContext, onToolResult, onTeardown, onError })`, the own-catalog authoring exports (`ActionButton`, `createLitActions` or `createReactActions`), `StartError`. It imports neither `@saga-a2ui/components` nor Markdown: the emitted bundle of an own-catalog application holds neither (checked on the built pages by `scripts/pack1.test.ts` and `scripts/answer-consumer.test.ts`). |
-| `./faithful-card` | `FaithfulCardApp` (the definition builder of `@saga-a2ui/components/faithful-card`), `startFaithfulCardApp(definition, { container, readyWhen, sizing, hostContext, chrome, onError })`, `contentPolicyFromDocument` and `documentContentSecurityPolicies`. |
+| `./faithful-card` | `FaithfulCardApp` (the definition builder of `@saga-a2ui/components/faithful-card`), `startFaithfulCardApp(definition, { container, readyWhen, sizing, hostContext, classifyResult, chrome, onError })`, the type `CardResultOutcome`, the card's host link (`useHostLink` in the React stack, `bindHostLink` in the Lit stack), `readingProfile`, and for the Lit stack `contentPolicyFromDocument` and `documentContentSecurityPolicies`. |
+| `./content-policy` | `createContentPolicy` and `embedContentPolicy` (and their types): how a server states and embeds the policy that the card application reads back from its document. No renderer and no delivery code. |
+| `./server` | `createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime` and the types `OperationView` and `RequestLifetime`, re-exported from `@saga-a2ui/mcp/server`, which keeps their specification. Node only: no browser entry imports it, and `exports.test.ts` checks that the browser graphs hold no server module and the server graph holds no renderer or components module. |
+| `.` (and `./faithful-card`) | `readingProfile(context, hostName)`: the one place that recognises hosts read on a device, from `@saga-a2ui/mcp/view`. |
 
 Both starts return a running view synchronously (`{ ready, dispose }`; the A2UI view also exposes `surface`). The layout is validated before the connection is made, results that arrive during the readiness work are held and the latest is shown once it settles, and the stack owns the view's size reports. A second start on a container with a running view throws `container-busy` and leaves the first alone; after `dispose()` settles the container starts again. The card application is a pure value, `FaithfulCardApp.define({ name, version }).reader(...).policy('document').result(parse).texts(...).build()`; the parse is the application's only decision about a result, and `undefined` is an unsupported result. Its reuse by a delivery other than MCP is unqualified. `apps/lit-host/e2e/card-app-stack.spec.ts` runs both stacks in Chromium against the local host fixture (a fixture, not any actual host).
+
+#### Reading the whole result (the consumer-driven E2 amendment)
+
+The definition's parse reads `structuredContent` alone and rejects an `isError` result before reading it. That is the default and it is unchanged. An application whose protocol is richer passes `classifyResult` to either stack's `startFaithfulCardApp`:
+
+```ts
+import {startFaithfulCardApp, type CardResultOutcome} from '@saga-a2ui/react-mcp-stack/faithful-card';
+
+const classify = (result: ToolResult): CardResultOutcome => {
+  // The application's own protocol: a result the application cannot use is rejected with its own words.
+  return usable(result)
+    ? {kind: 'content', content: {markdown: textOf(result), heading: headingOf(result)}}
+    : {kind: 'rejected', text: 'This answer needs a newer version of the app.'};
+};
+startFaithfulCardApp(definition, {container, sizing: 'host', classifyResult: classify});
+```
+
+The function receives the result as delivered, `isError` and `content` included, and the stack intercepts nothing: whether an error result is shown, and what it says, is the application's decision. It returns `{kind: 'content', content}` or `{kind: 'rejected', text?}`. A rejection shows `text` when the application supplies it and the definition's `texts.problem` otherwise; either way the shown answer clears, image consent and the link outcome of the previous presentation end, and the next accepted result recovers. A classifier that throws is reported to `onError` with phase `result` and rejects the result without wording, exactly as a throwing `parse` does; the stack does not undo anything the callback already changed. A return that is not an outcome is rejected the same way, because it is unchecked application input.
+
+The decision is made once, by `readCardResult` in `@saga-a2ui/components/faithful-card`, which both stacks call; each stack keeps only the rendering of the outcome. The classifier is the stack's option rather than a builder step because it needs the delivery's result type; the definition stays delivery-neutral, so the neutral parser of E1 and its default behaviour do not change. The SDK names no application protocol, version or wording: the matrix in `card-app.test.ts` and in each stack's `start-faithful-card-app.test.ts` uses a synthetic envelope and synthetic wording. It covers a valid envelope, an absent or `null` `structuredContent` falling back to text with its whitespace and terminal newline intact, a classifier that considers only the first `text` block and then checks that string (an empty first block is not skipped in favour of a later one; that rule is the fixture's, the SDK imposes none), present-but-malformed structured content rejected even beside usable text, an error result reaching the classifier whole, an equal answer presented again, and recovery after an error and after a rejection. The browser check runs the same through both stacks.
+
+#### The reading profile and the application's tokens
+
+`readingProfile(context, hostName)` answers `'device'` or `'desktop'` and is exported by both stacks. It recognises the hosts the recorded observations read on a device (Alexa+), the historical `HTMLFragmentWrapper` host name, a host context whose `deviceClass` is an Echo Show class (`echo_show`, `echo_show_8`, `echo_show_15`, matched as a whole underscore-separated word), and a declared `mobile` platform. The `deviceClass` field is an extension beyond the MCP Apps host context schema; the context accepts it and passes it on. The names come from a consumer's fixtures, not from fresh host evidence. The profile decides nothing about presentation: the application calls it from its `hostContext` callback and maps the answer onto its own tokens and its own `data-reading-profile` attribute, with no host-name test of its own. `card-app-stack.spec.ts` shows an `echo_show_15` context setting a 1.6 scale on the application's font-size token with no transform and no sideways overflow.
 
 ### Consumer boundary scan and package directions
 
