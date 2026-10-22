@@ -1,3 +1,4 @@
+import { headInsertionPoint } from './head-insertion.js';
 import {
   createContentPolicy,
   type ContentPolicy,
@@ -14,12 +15,6 @@ import {
 /** The `id` of the script element that carries the policy's configuration. */
 export const CONTENT_POLICY_ELEMENT_ID = 'saga-content-policy';
 
-const HEAD_OPENING = /<head(?:\s[^>]*)?>/i;
-const CHARSET_META = /<meta\s+charset\s*=[^>]*>/i;
-const CHARSET_META_AT_START = /^\s*<meta\s+charset\s*=[^>]*>/i;
-const SCRIPT_OPENING = /<script/i;
-const COMMENT_OPENING = /<!--/;
-
 /**
  * JSON that can sit inside a script element. Every `<` is written as the six characters
  * backslash, `u`, `0`, `0`, `3`, `c`, so no value can contain a closing tag or open a comment;
@@ -30,41 +25,14 @@ function inertJson(value: unknown): string {
 }
 
 /**
- * Where the policy-derived restrictions go: immediately after `<head …>`, or after a
- * `<meta charset>` only when that meta is head's first element, so the declaration stays at the
- * top and the restrictions still precede every script. A document that does not fit is refused;
- * a position is never guessed.
- */
-function insertionPoint(html: string): number {
-  const head = HEAD_OPENING.exec(html);
-  if (head === null)
-    throw new Error(
-      'The view document has no <head> to carry its content restrictions.',
-    );
-  const afterHead = head.index + head[0].length;
-  const charset = CHARSET_META_AT_START.exec(html.slice(afterHead));
-  const insertAt = afterHead + (charset?.[0].length ?? 0);
-  if (SCRIPT_OPENING.test(html.slice(0, insertAt)))
-    throw new Error(
-      'The view document has a script before its head, so the content restrictions would not precede every script.',
-    );
-  if (COMMENT_OPENING.test(html.slice(0, insertAt)))
-    throw new Error(
-      'The view document has a comment before the insertion point, which could hold the head that was found.',
-    );
-  if (CHARSET_META.test(html.slice(insertAt)))
-    throw new Error(
-      'The charset declaration must be the first element of the view document head: it would otherwise follow the content restrictions or a script.',
-    );
-  return insertAt;
-}
-
-/**
  * Returns the view document with the policy-derived `Content-Security-Policy` meta and the
- * policy's configuration inserted where they precede every script. Throws, so that nothing is
- * served, when the document has no `<head>`, has a `<script` or a comment before the insertion
- * point, declares its charset anywhere but as head's first element, or when the policy's
- * Content-Security-Policy contains a `"`.
+ * policy's configuration inserted where they precede every script: immediately after the head's
+ * start tag, or after a `<meta charset>` only when that is head's first element. The position is
+ * found in the document's real structure (a `>` in a quoted attribute or a comment that mentions a
+ * head does not move it) and the rest of the text is kept byte for byte. Throws, so that nothing
+ * is served, when the document has no `<head>` of its own, has a script or any other element but
+ * `html` before it, declares its charset anywhere but as head's first element, or when the
+ * policy's Content-Security-Policy contains a `"`.
  */
 export function embedContentPolicy(
   html: string,
@@ -75,7 +43,7 @@ export function embedContentPolicy(
     throw new Error(
       'The content security policy contains a double quote, which would end its attribute.',
     );
-  const insertAt = insertionPoint(html);
+  const insertAt = headInsertionPoint(html);
   const restrictions = `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy}">`;
   const configuration = `<script type="application/json" id="${CONTENT_POLICY_ELEMENT_ID}">${inertJson(policy.configuration)}</script>`;
   return (

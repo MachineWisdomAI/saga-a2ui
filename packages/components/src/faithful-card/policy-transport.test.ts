@@ -124,6 +124,90 @@ describe('embedContentPolicy: placement', () => {
   });
 });
 
+// The markup around the insertion point is read as the HTML parser reads it: a `>` inside a quoted
+// attribute does not end a tag, and a comment is not an element. Each case is judged on the parsed
+// result, with the original bytes untouched around the two inserted elements.
+describe('embedContentPolicy: the structure around the insertion point', () => {
+  const STRICT = policyOf({ level: 'strict', imageHosts: ['a.example.com'] });
+  const SCRIPT = `script#${CONTENT_POLICY_ELEMENT_ID}`;
+  const CSP = 'meta:Content-Security-Policy';
+
+  /** The document with the two inserted elements taken out again. */
+  function withoutInsertion(html: string): string {
+    return html.replace(
+      /<meta http-equiv="Content-Security-Policy"[^>]*><script type="application\/json" id="saga-content-policy">[^<]*<\/script>/,
+      '',
+    );
+  }
+
+  it.each([
+    [
+      'a > inside a quoted head attribute',
+      '<!doctype html><html><head data-description="a > b"><title>t</title><script>window.ran=1</script></head><body></body></html>',
+      [CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a > inside a single-quoted head attribute',
+      "<html><head data-d='x > y'><script>1</script></head></html>",
+      [CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a > inside an attribute of the first-element charset meta',
+      '<head><meta charset="utf-8" data-d="a > b"><script>1</script></head>',
+      ['meta:charset', CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a normal comment before a first-element charset meta',
+      '<head><!-- build header --><meta charset="utf-8"><script>1</script></head>',
+      ['meta:charset', CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a comment holding a fake head, a fake script and a fake charset',
+      '<!-- <head><script>1</script><meta charset="x"> --><html><head><title>t</title><script>1</script></head></html>',
+      [CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a comment between the head tag and its attributes-bearing html tag',
+      '<!doctype html><!-- a --><html lang="en" data-x="<head>"><!-- b --><head><script>1</script></head></html>',
+      [CSP, SCRIPT, 'script'],
+    ],
+    [
+      'a script whose text mentions a charset meta',
+      '<head><title>t</title><script>var s = \'<meta charset="x">\';</script></head>',
+      [CSP, SCRIPT, 'script'],
+    ],
+    [
+      'an unquoted charset value and CRLF line ends',
+      '<html>\r\n<head>\r\n<meta charset=utf-8>\r\n<script>1</script></head></html>',
+      ['meta:charset', CSP, SCRIPT, 'script'],
+    ],
+  ])('keeps the order and the original bytes with %s', (_name, html, order) => {
+    const embedded = embedContentPolicy(html, STRICT);
+    const doc = parse(embedded);
+    expect(elementsInOrder(doc)).toEqual(order);
+    expect(doc.querySelector('meta[http-equiv]')?.getAttribute('content')).toBe(
+      STRICT.resource.contentSecurityPolicy,
+    );
+    expect(withoutInsertion(embedded)).toBe(html);
+    const rebuilt = contentPolicyFromEmbedded(
+      doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
+    );
+    expect(rebuilt.ok && rebuilt.policy.configuration).toEqual(
+      STRICT.configuration,
+    );
+  });
+
+  it('keeps the head attribute that held a > in the parsed document', () => {
+    const doc = parse(
+      embedContentPolicy(
+        '<html><head data-description="a > b"><script>1</script></head></html>',
+        STRICT,
+      ),
+    );
+    expect(doc.head.getAttribute('data-description')).toBe('a > b');
+  });
+});
+
 describe('embedContentPolicy: documents it refuses', () => {
   const policy = policyOf();
 
@@ -145,9 +229,20 @@ describe('embedContentPolicy: documents it refuses', () => {
       'declares its charset after other head content',
       '<html><head><title>t</title><meta charset="utf-8"></head></html>',
     ],
+    ['has a head only inside a comment', '<!-- <head> --><html></html>'],
     [
-      'has a comment that could hide the head',
-      '<!-- <head> --><html><head></head></html>',
+      'has an element other than html before the head',
+      '<meta name="x"><head></head>',
+    ],
+    ['has text before the head', 'text<head></head>'],
+    ['ends inside the head tag', '<html><head data-x="1'],
+    [
+      'declares a second charset after the first',
+      '<head><meta charset="utf-8"><meta charset="utf-8"></head>',
+    ],
+    [
+      'declares its charset in the body',
+      '<head><title>t</title></head><body><meta charset="utf-8"></body>',
     ],
   ])('throws for a document that %s', (_name, html) => {
     expect(() => embedContentPolicy(html, policy)).toThrow();

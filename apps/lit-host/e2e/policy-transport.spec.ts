@@ -123,3 +123,42 @@ test('a real Strict policy survives the served document and rebuilds equal', asy
     policy.resource.contentSecurityPolicy,
   );
 });
+
+test('a head attribute holding a > and a comment before the charset still leave the restrictions first in the parsed page', async ({
+  page,
+}) => {
+  const policy = strictPolicy();
+  await serve(
+    page,
+    embedContentPolicy(
+      '<!doctype html><html><head data-description="a > b"><!-- build header --><meta charset="utf-8"><title>t</title><script>window.applicationScriptRan = true;</script></head><body></body></html>',
+      policy,
+    ),
+  );
+  const observed = await page.evaluate(() => ({
+    order: [...document.head.children].map((element) =>
+      element.localName === 'meta'
+        ? element.hasAttribute('charset')
+          ? 'meta:charset'
+          : `meta:${element.getAttribute('http-equiv')}`
+        : element.id === ''
+          ? element.localName
+          : `${element.localName}#${element.id}`,
+    ),
+    headAttribute: document.head.getAttribute('data-description'),
+    cspContent:
+      document.querySelector('meta[http-equiv]')?.getAttribute('content') ??
+      null,
+    applicationScriptRan: Reflect.get(window, 'applicationScriptRan'),
+  }));
+  expect(observed.order).toEqual([
+    'meta:charset',
+    'meta:Content-Security-Policy',
+    'script#saga-content-policy',
+    'title',
+    'script',
+  ]);
+  expect(observed.headAttribute).toBe('a > b');
+  expect(observed.cspContent).toBe(policy.resource.contentSecurityPolicy);
+  expect(observed.applicationScriptRan).toBe(true);
+});
