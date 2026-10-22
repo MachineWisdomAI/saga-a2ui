@@ -401,7 +401,7 @@ class GuidanceTest(unittest.TestCase):
         spec.loader.exec_module(module)
         document = UPDATER.parents[1] / "docs" / "version-policy.md"
         self.assertEqual(document.read_text(), module.GUIDANCE)
-        for rule in ["share one major.minor", "Integration release procedure", '"integration"']:
+        for rule in ["shares one major.minor", "Integration release procedure", '"integration"']:
             self.assertIn(rule, module.GUIDANCE)
 
 
