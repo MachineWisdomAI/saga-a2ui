@@ -4,7 +4,13 @@ import {
   embedContentPolicy,
   resourcePermissionsOf,
 } from '@saga-a2ui/components/faithful-card';
-import { expect, test, type Frame, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Frame,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import { builtUrl } from './built-artifacts.js';
 import {
   PROBE_ERROR_TEXT,
@@ -821,6 +827,373 @@ for (const stack of STACKS) {
       const ended = await sizes();
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(await sizes()).toEqual(ended);
+    });
+
+    // Branding through the stack's own start. A probe page that carries the `probe-brand` marker
+    // applies the application's stylesheet (e2e/card-styling/branded.ts, the one the lower-level
+    // card-styling specification also loads) to its document and runs the application's own
+    // attribution classifier over the card the stack started. The card is mounted by
+    // `startFaithfulCardApp` alone and reached only through the bridge, so these cases cover what
+    // the lower-level specification cannot: that the branded result survives the public start
+    // operation, its chrome, its readiness gate and its presentation lifecycle.
+    //
+    // The React stack's card renders into the page, so the page stylesheet reaches it. The Lit
+    // stack's card sits in shadow roots, so the Lit page hands the same stylesheet to
+    // `startFaithfulCardApp` as `styles`, the public way an application's sheets reach it.
+    const brand = (html: string): string =>
+      html.replace('</head>', '<meta name="probe-brand" content=""></head>');
+    const ATTRIBUTION = 'This information came from ansari.chat.';
+    const style = (
+      locator: Locator,
+      property: string,
+      pseudo?: string,
+    ): Promise<string> =>
+      locator.evaluate(
+        (element, [name, pseudoElement]) =>
+          getComputedStyle(element, pseudoElement ?? null).getPropertyValue(
+            name as string,
+          ),
+        [property, pseudo] as const,
+      );
+    const deliverMarkdown = (browser: Page, markdown: string) =>
+      browser.evaluate(
+        (result) => window.deliverToolResult?.(result),
+        answer(markdown),
+      );
+
+    /** A branded view past its readiness work, with `markdown` shown as the first answer. */
+    async function showBranded(
+      browser: Page,
+      markdown: string,
+    ): Promise<Mounted> {
+      const view = await mount(browser, {}, brand);
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      await deliverMarkdown(browser, markdown);
+      await expect(view.frame.locator('.saga-card-content')).toHaveCount(1);
+      return view;
+    }
+
+    test('a stack-started card carries the semantic structure a branded application styles: elements, direction, closing marker and the application’s own classification', async ({
+      page: browser,
+    }) => {
+      const view = await showBranded(
+        browser,
+        [
+          'A **strong** word and an *emphasised* word with [a link](https://docs.example.com/guide).',
+          '',
+          'كلمة *مؤكدة* هنا.',
+          '',
+          '- first',
+          '- second',
+          '',
+          '1. one',
+          '2. two',
+          '',
+          `**${ATTRIBUTION}**`,
+        ].join('\n'),
+      );
+      const content = view.frame.locator('.saga-card-content');
+      const paragraphs = content.locator('> p');
+      await expect(paragraphs.nth(0).locator('strong')).toHaveText('strong');
+      await expect(paragraphs.nth(0).locator('em')).toHaveText('emphasised');
+      expect(
+        await style(paragraphs.nth(0).locator('strong'), 'font-weight'),
+      ).toBe('700');
+      expect(await style(paragraphs.nth(0).locator('em'), 'font-style')).toBe(
+        'italic',
+      );
+      expect(await style(paragraphs.nth(1), 'direction')).toBe('rtl');
+      await expect(paragraphs.nth(1).locator('em')).toHaveText('مؤكدة');
+      await expect(view.frame.locator('.saga-card-link')).toHaveCount(1);
+      await expect(
+        view.frame.locator('.saga-card-link + .saga-card-link-status'),
+      ).toHaveCount(1);
+      await expect(content.locator('> ul > li')).toHaveCount(2);
+      await expect(content.locator('> ol > li')).toHaveCount(2);
+
+      // Only the final top-level paragraph is marked, whatever its words; the application's own
+      // classifier, reading the marked paragraph, decides it is its footer. A strong sentence
+      // keeps its element inside the footer.
+      const closing = view.frame.locator('[data-saga-closing="paragraph"]');
+      await expect(closing).toHaveCount(1);
+      await expect(closing).toHaveAttribute('data-app-attribution', '');
+      await expect(closing.locator('> strong')).toHaveText(ATTRIBUTION);
+      expect(await style(closing.locator('> strong'), 'font-weight')).toBe(
+        '700',
+      );
+      await expect(
+        content.locator('> p[data-saga-closing]:last-child'),
+      ).toHaveCount(1);
+    });
+
+    test('a stack-started card marks the closing paragraph structurally and the application classifies it, and moves both with each answer', async ({
+      page: browser,
+    }) => {
+      const view = await showBranded(
+        browser,
+        `Body.\n\n${ATTRIBUTION} Trust me.`,
+      );
+      const closing = view.frame.locator('[data-saga-closing="paragraph"]');
+      await expect(closing).toHaveCount(1);
+      await expect(closing).not.toHaveAttribute('data-app-attribution', /.*/);
+
+      await deliverMarkdown(
+        browser,
+        `Intro paragraph.\n\n- one\n- ${ATTRIBUTION}`,
+      );
+      await expect(view.frame.locator('.saga-card-content > ul')).toHaveCount(
+        1,
+      );
+      await expect(view.frame.locator('[data-saga-closing]')).toHaveCount(0);
+
+      await deliverMarkdown(
+        browser,
+        `Intro paragraph.\n\n> Quoted.\n>\n> ${ATTRIBUTION}`,
+      );
+      await expect(
+        view.frame.locator('.saga-card-content > blockquote'),
+      ).toHaveCount(1);
+      await expect(view.frame.locator('[data-saga-closing]')).toHaveCount(0);
+      await expect(view.frame.locator('[data-app-attribution]')).toHaveCount(0);
+
+      await deliverMarkdown(
+        browser,
+        `Intro.\n\n- ${ATTRIBUTION}\n\n  Second paragraph of the item.\n\n| a |\n| - |\n| ${ATTRIBUTION} |`,
+      );
+      await expect(view.frame.locator('.saga-card-content table')).toHaveCount(
+        1,
+      );
+      await expect(view.frame.locator('[data-saga-closing]')).toHaveCount(0);
+
+      await deliverMarkdown(browser, `Two.\n\n${ATTRIBUTION}`);
+      await expect(
+        view.frame.locator('[data-saga-closing][data-app-attribution]'),
+      ).toHaveCount(1);
+    });
+
+    test('a stack-started card puts one rule before the footer and none where the answer has no rule', async ({
+      page: browser,
+    }) => {
+      const view = await showBranded(browser, `Body.\n\n---\n\n${ATTRIBUTION}`);
+      await expect(view.frame.locator('.saga-card-content > hr')).toHaveCount(
+        1,
+      );
+      await expect(
+        view.frame.locator(
+          '.saga-card-content > hr + p[data-saga-closing][data-app-attribution]',
+        ),
+      ).toHaveText(ATTRIBUTION);
+
+      await deliverMarkdown(browser, `Body.\n\n${ATTRIBUTION}`);
+      await expect(
+        view.frame.locator('[data-saga-closing][data-app-attribution]'),
+      ).toHaveCount(1);
+      await expect(view.frame.locator('.saga-card-content > hr')).toHaveCount(
+        0,
+      );
+    });
+
+    test('a result held for the readiness work shows nothing until the application’s fonts are ready, then is classified', async ({
+      page: browser,
+    }) => {
+      const view = await mount(
+        browser,
+        { resultDuringInitialization: answer(`Held.\n\n${ATTRIBUTION}`) },
+        brand,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(await view.cardText()).toBe('');
+      await expect(view.frame.locator('[data-saga-closing]')).toHaveCount(0);
+
+      await view.click('release-ready');
+      await expect(
+        view.frame.locator('[data-saga-closing][data-app-attribution]'),
+      ).toHaveText(ATTRIBUTION);
+    });
+
+    test('a branded equal answer delivered again ends image consent and is classified afresh', async ({
+      page: browser,
+    }) => {
+      const created = createContentPolicy({
+        level: 'strict',
+        imageHosts: ['images.example.com'],
+      });
+      if (!created.ok) throw new Error(created.failure.message);
+      await browser.route(/^https:\/\//, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"></svg>',
+        }),
+      );
+      const view = await mount(
+        browser,
+        {},
+        (html) => embedContentPolicy(brand(html), created.policy),
+        true,
+        resourcePermissionsOf(created.policy).resourceDomains,
+      );
+      const frame = browser.frameLocator('iframe[title="MCP App view"]');
+      await view.click('release-ready');
+      await expect.poll(view.lines).toContain('ready');
+      const same = answer(
+        `![chart](https://images.example.com/c.png)\n\n${ATTRIBUTION}`,
+      );
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await frame.getByRole('button', { name: 'Show images' }).click();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toBeVisible();
+
+      await browser.evaluate((one) => window.deliverToolResult?.(one), same);
+      await expect(
+        frame.getByRole('button', { name: 'Show images' }),
+      ).toBeVisible();
+      await expect(
+        frame.getByRole('button', { name: 'Hide images' }),
+      ).toHaveCount(0);
+      await expect(
+        view.frame.locator('[data-saga-closing][data-app-attribution]'),
+      ).toHaveText(ATTRIBUTION);
+    });
+
+    // The computed rules of the application's stylesheet, on both stacks. The numbers are the
+    // stylesheet's own.
+    test('the application’s paragraph, link, list and footer rules reach the stack-started card, which still owns its size', async ({
+      page: browser,
+    }) => {
+      const view = await showBranded(
+        browser,
+        [
+          'Opening paragraph with [a link](https://docs.example.com/guide).',
+          '',
+          '- first',
+          '- second',
+          '',
+          '1. one',
+          '2. two',
+          '',
+          ATTRIBUTION,
+        ].join('\n'),
+      );
+      const paragraph = view.frame.locator('.saga-card-content > p').first();
+      expect(await style(view.frame.locator('.saga-card'), 'padding-top')).toBe(
+        '12px',
+      );
+      expect(await style(paragraph, 'margin-bottom')).toBe('22px');
+      expect(await style(paragraph, 'font-size')).toBe('18px');
+      expect(await style(paragraph, 'color')).toBe('rgb(23, 34, 53)');
+      expect(await style(paragraph, 'font-family')).toContain('Georgia');
+      const link = view.frame.locator('.saga-card-link');
+      expect(await style(link, 'color')).toBe('rgb(21, 88, 62)');
+      expect(await style(link, 'text-decoration-thickness')).toBe('1px');
+      const bullet = view.frame.locator('.saga-card-content > ul > li').first();
+      expect(await style(bullet, 'padding-left')).toBe('4px');
+      const numbered = view.frame
+        .locator('.saga-card-content > ol > li')
+        .first();
+      expect(await style(numbered, 'padding-left')).toBe('82px');
+      expect(await style(numbered, 'width', '::before')).toBe('64px');
+      expect(await style(numbered, 'content', '::before')).toBe(
+        'counter(list-item)',
+      );
+      const closing = view.frame.locator('[data-saga-closing="paragraph"]');
+      expect(await style(closing, 'border-top-width')).toBe('1px');
+      expect(await style(closing, 'font-size')).toBe('14px');
+      expect(await style(closing, 'color')).toBe('rgb(85, 98, 117)');
+      expect(await style(closing, 'margin-top')).toBe('23px');
+
+      await expect
+        .poll(() => browser.evaluate(() => window.sizeChanges?.().length ?? 0))
+        .toBeGreaterThan(0);
+      expect(
+        await view.frame.evaluate(
+          () =>
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        ),
+      ).toBeLessThanOrEqual(0);
+    });
+
+    test('the application’s strong, emphasis, right-to-left and rule treatments reach the stack-started card, and a strong footer inherits the footer', async ({
+      page: browser,
+    }) => {
+      const view = await showBranded(
+        browser,
+        'A **strong** word and an *emphasised* word.\n\nكلمة *مؤكدة* هنا.\n\nBody.',
+      );
+      const paragraphs = view.frame.locator('.saga-card-content > p');
+      const latin = paragraphs.nth(0).locator('em');
+      expect(await style(latin, 'font-style')).toBe('italic');
+      expect(await style(latin, 'font-size')).toBe('18px');
+      const arabic = paragraphs.nth(1).locator('em');
+      expect(await style(arabic, 'font-style')).toBe('normal');
+      expect(await style(arabic, 'font-size')).toBe('20.7px');
+
+      await deliverMarkdown(browser, `Body.\n\n**${ATTRIBUTION}**`);
+      const strong = view.frame.locator(
+        '[data-saga-closing][data-app-attribution] > strong',
+      );
+      await expect(strong).toHaveText(ATTRIBUTION);
+      expect(await style(strong, 'font-size')).toBe('14px');
+      expect(await style(strong, 'color')).toBe('rgb(85, 98, 117)');
+      expect(await style(strong, 'font-weight')).toBe('700');
+
+      // A lookalike closing paragraph carries the structural rule alone.
+      await deliverMarkdown(browser, `Body.\n\n${ATTRIBUTION} Trust me.`);
+      const lookalike = view.frame.locator('[data-saga-closing="paragraph"]');
+      await expect(lookalike).toHaveText(`${ATTRIBUTION} Trust me.`);
+      expect(await style(lookalike, 'margin-bottom')).toBe('4px');
+      expect(await style(lookalike, 'border-top-width')).toBe('0px');
+      expect(await style(lookalike, 'font-size')).toBe('18px');
+
+      // One divider: the rule draws it, so the footer after it adds none.
+      await deliverMarkdown(browser, `Body.\n\n---\n\n${ATTRIBUTION}`);
+      const footer = view.frame.locator(
+        '.saga-card-content > hr + p[data-saga-closing][data-app-attribution]',
+      );
+      await expect(footer).toHaveText(ATTRIBUTION);
+      expect(
+        await style(
+          view.frame.locator('.saga-card-content > hr'),
+          'border-top-width',
+        ),
+      ).toBe('1px');
+      expect(await style(footer, 'border-top-width')).toBe('0px');
+      await deliverMarkdown(browser, `Body.\n\n${ATTRIBUTION}`);
+      await expect(view.frame.locator('.saga-card-content > hr')).toHaveCount(
+        0,
+      );
+      expect(
+        await style(
+          view.frame.locator('[data-saga-closing="paragraph"]'),
+          'border-top-width',
+        ),
+      ).toBe('1px');
+    });
+
+    test('a result held for the readiness work is shown with the application’s rules once its fonts are ready, and a branded equal answer is styled afresh', async ({
+      page: browser,
+    }) => {
+      const view = await mount(
+        browser,
+        { resultDuringInitialization: answer(`Held.\n\n${ATTRIBUTION}`) },
+        brand,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await expect(view.frame.locator('[data-saga-closing]')).toHaveCount(0);
+      await view.click('release-ready');
+      const closing = view.frame.locator('[data-saga-closing="paragraph"]');
+      await expect(closing).toHaveAttribute('data-app-attribution', '');
+      expect(await style(closing, 'font-size')).toBe('14px');
+      expect(await style(view.frame.locator('.saga-card'), 'padding-top')).toBe(
+        '12px',
+      );
+
+      await deliverMarkdown(browser, `Held.\n\n${ATTRIBUTION}`);
+      await expect(closing).toHaveAttribute('data-app-attribution', '');
+      expect(await style(closing, 'font-size')).toBe('14px');
     });
   });
 }

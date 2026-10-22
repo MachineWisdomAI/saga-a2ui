@@ -66,6 +66,12 @@ export interface StartFaithfulCardOptions {
   ) => void;
   /** Optional. The application’s chrome around the card. By default the status text, then the card. */
   readonly chrome?: CardChrome;
+  /**
+   * Optional. The application's constructable stylesheets for the card. The card sits inside shadow
+   * roots a page stylesheet cannot select into; each connected card adopts these into the root it
+   * lives in (see `createFaithfulCardView`). Custom properties need none of this: they inherit.
+   */
+  readonly styles?: readonly CSSStyleSheet[];
   /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
   readonly onError?: (error: unknown, phase: ErrorPhase) => void;
 }
@@ -150,6 +156,7 @@ export function startFaithfulCardAppOn(
         claim.container.ownerDocument,
       ),
       hostLinks: hostLinksFromApp(connection.app, lifetime.signal),
+      ...(options.styles === undefined ? {} : { styles: options.styles }),
     }));
     registerFaithfulCard();
     const opened = (surface = openFaithfulCardSurface());

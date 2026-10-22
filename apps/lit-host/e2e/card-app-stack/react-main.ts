@@ -30,6 +30,8 @@ function Chrome({ card, state }: CardChromeProps) {
 runProbe({
   FaithfulCardApp,
   readingProfile,
-  start: (definition, options) =>
+  // The React card renders into the page, so the page's own stylesheet reaches it.
+  stylesVia: 'page',
+  start: (definition, { styles: _page, ...options }) =>
     startFaithfulCardApp(definition, { ...options, chrome: Chrome }),
 });
