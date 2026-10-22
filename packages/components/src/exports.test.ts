@@ -49,12 +49,18 @@ describe('@saga-a2ui/components/faithful-card', () => {
     expect(Object.keys(faithfulCard).sort()).toEqual([
       'CONTENT_POLICY_ELEMENT_ID',
       'DEFAULT_CONTENT_POLICY',
+      'FAITHFUL_CARD_CATALOG_ID',
       'FAITHFUL_CARD_CONTRACT_VERSION',
+      'FAITHFUL_CARD_STYLING',
       'FaithfulCardApi',
       'MAX_IMAGE_HOSTS',
       'MAX_NESTING_LEVEL',
       'NO_HOST_LINKS',
+      'cardData',
+      'cardLayout',
+      'closesWithParagraph',
       'contentPolicyFromEmbedded',
+      'createCardView',
       'createContentPolicy',
       'createFaithfulCardReader',
       'createImageConsentScope',
@@ -62,6 +68,7 @@ describe('@saga-a2ui/components/faithful-card', () => {
       'describeLinkOutcome',
       'embedContentPolicy',
       'establishImageEnforcement',
+      'requestLinkOpen',
       'resourcePermissionsOf',
     ]);
   });

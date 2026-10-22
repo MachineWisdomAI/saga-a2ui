@@ -1,9 +1,11 @@
-import type {
-  ContentPolicy,
-  FaithfulCardReader,
-  HostLinks,
-  ImageConsentScope,
-  ImageEnforcement,
+import {
+  createCardView,
+  type CardViewSettings,
+  type ContentPolicy,
+  type FaithfulCardReader,
+  type HostLinks,
+  type ImageConsentScope,
+  type ImageEnforcement,
 } from '@saga-a2ui/components/faithful-card';
 import { createContext, useMemo, type ReactNode } from 'react';
 
@@ -27,6 +29,19 @@ export interface FaithfulCardView {
   /** `establishImageEnforcement(policy, <the document's Content-Security-Policy values>)`; anything else keeps every image inert. */
   readonly imageEnforcement: ImageEnforcement;
   readonly consent: ImageConsentScope;
+}
+
+/**
+ * Creates the view an application gives {@link FaithfulCardProvider}, once: the reader for its
+ * dialect and content bound, the policy and host links it passes, image enforcement established
+ * from the Content-Security-Policy values it passes (it reads no document: a caller that has one
+ * reads the values and passes them in) and a fresh consent scope that ends with the view. Throws,
+ * naming the setting, when the reader settings are invalid; no view exists then.
+ */
+export function createFaithfulCardView(
+  settings: CardViewSettings,
+): FaithfulCardView {
+  return Object.freeze(createCardView(settings));
 }
 
 /** Without a provider the context is empty, and a card refuses to show anything. */
