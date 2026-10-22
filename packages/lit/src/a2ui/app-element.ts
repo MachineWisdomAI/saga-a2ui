@@ -1,8 +1,11 @@
 import { A2uiSurface, type LitComponentApi } from '@a2ui/lit/v0_9';
 import type { Subscription, SurfaceModel } from '@a2ui/web_core/v0_9';
 import type {
+  IngestFailure,
   IngestResult,
   MessageSession,
+  SurfaceLayout,
+  SurfaceUpdateFailure,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { LitElement, html, nothing } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
@@ -33,13 +36,21 @@ export interface A2uiActions {
   begin(mount: A2uiSurfaceMount): () => void;
 }
 
-export interface A2uiAppDependencies {
+/** Why `updateData` changed nothing. `message` is plain text that is safe to display. */
+export interface A2uiUpdateFailure {
+  readonly kind: SurfaceUpdateFailure['kind'] | IngestFailure['kind'];
+  readonly message: string;
+}
+
+export type A2uiUpdateResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failure: A2uiUpdateFailure };
+
+export interface A2uiAppDependencies<TData> {
   /** Creates a fresh session on each connect. The element owns and disposes what it creates. */
   readonly createSession: () => A2uiSession;
-  /** Unchecked input applied to each new session (the initial surface). */
-  readonly initialInput: unknown;
-  /** The one surface this element presents. */
-  readonly surfaceId: string;
+  /** The one surface this element presents: its identity, its data type and how it opens. */
+  readonly layout: SurfaceLayout<TData>;
   /** Optional. Started per presented surface and ended with it, on every exit. */
   readonly actions?: A2uiActions;
 }
@@ -53,14 +64,19 @@ void A2uiSurface;
  * The application chooses the session (its catalog and decoder) and defines the tag; subclass
  * the result to add application chrome or wiring.
  *
- * Lifecycle: connecting creates a session, subscribes, and applies the initial input.
- * Disconnecting unsubscribes and disposes the session, so a reconnected element starts fresh
- * and nothing from the retired session can reach the page. The element only presents results:
- * decoding and validation live in the session.
+ * Lifecycle: connecting creates a session, subscribes, and opens the layout. Disconnecting
+ * unsubscribes and disposes the session, so a reconnected element starts fresh and nothing from
+ * the retired session can reach the page. The element only presents results: decoding and
+ * validation live in the layout and the session.
  *
- * Failure: input the session rejects clears the surface and shows a safe fallback. Messages
- * applied before the rejection stay applied in the session (there is no atomic rollback); the
- * next input the session accepts clears the fallback and shows the surface again.
+ * Data: `updateData(data)` validates against the layout and applies it as an A2UI data update. It
+ * changes what the mounted controls show without remounting them, so their action bindings and
+ * focus survive. A rejected update (invalid data, an element that is not connected, a disposed
+ * session) returns a failure and changes nothing: the surface, its data and its fallback state
+ * stay as they were. The element has no notion of selection.
+ *
+ * Failure: a layout the session cannot open (for example a root component the catalog lacks)
+ * shows a safe fallback instead of a blank surface.
  *
  * Actions: when `actions` is supplied it starts before each surface is first rendered and ends
  * when that surface is deleted, replaced, or the element disconnects (before the session is
@@ -69,7 +85,7 @@ void A2uiSurface;
  *
  * Catalog components are custom elements the application defines with `defineElements`.
  */
-export function createA2uiAppElement(deps: A2uiAppDependencies) {
+export function createA2uiAppElement<TData>(deps: A2uiAppDependencies<TData>) {
   class A2uiApp extends LitElement {
     // Reactive state is declared with `static properties` and `declare`, not with decorators: this
     // package ships TypeScript source that each application compiles with its own settings, and
@@ -88,8 +104,35 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
     private endPresentation?: () => void;
     private readonly mount = createRef<Element>();
 
-    /** Applies unchecked input to the current session. Never throws for bad input. */
-    ingest(input: unknown): IngestResult {
+    /**
+     * Replaces the surface's data. (Not named `update`: Lit's `ReactiveElement.update` is the
+     * render lifecycle method of every element built on it.) Validated against the layout, then applied in place: no
+     * remount, so the rendered controls, their action bindings and focus survive. Never throws;
+     * a rejection returns a failure and leaves data, identity and any fallback unchanged.
+     */
+    updateData(data: TData): A2uiUpdateResult {
+      const messages = deps.layout.update(data);
+      if (!messages.ok) return { ok: false, failure: messages.failure };
+      return (
+        this.session?.ingest(messages.messages) ?? {
+          ok: false,
+          failure: {
+            kind: 'rejected',
+            message: 'The app is not connected.',
+          },
+        }
+      );
+    }
+
+    /**
+     * Applies unchecked protocol input to the current session, and shows the safe fallback when
+     * the session rejects it. Not part of the application contract (use `updateData`): it is for a
+     * subclass that relays protocol messages it did not author, such as a host that forwards
+     * server-supplied A2UI. Never throws for bad input. Messages applied before a rejection stay
+     * applied (there is no atomic rollback); the next input the session accepts clears the
+     * fallback.
+     */
+    protected ingest(input: unknown): IngestResult {
       const result = this.session?.ingest(input) ?? {
         ok: false as const,
         failure: {
@@ -133,16 +176,16 @@ export function createA2uiAppElement(deps: A2uiAppDependencies) {
       this.session = session;
       this.subscriptions = [
         session.onSurfaceCreated((surface) => {
-          if (surface.id === deps.surfaceId) this.present(surface);
+          if (surface.id === deps.layout.surfaceId) this.present(surface);
         }),
         session.onSurfaceDeleted((id) => {
-          if (id !== deps.surfaceId) return;
+          if (id !== deps.layout.surfaceId) return;
           this.closePresentation();
           this.presentationFailure = undefined;
           this.surface = undefined;
         }),
       ];
-      this.ingest(deps.initialInput);
+      this.ingest(deps.layout.opening);
     }
 
     disconnectedCallback() {

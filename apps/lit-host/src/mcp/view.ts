@@ -6,7 +6,7 @@ import {
 } from '@saga-a2ui/mcp/view';
 import type { A2uiMessage } from '@a2ui/web_core/v0_9';
 import type { IngestResult } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { panelData, panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
+import { emptyPanel, SURFACE_ID } from '../saga-panel/fixture.js';
 import { PublicEpisodeSchema } from './episode.js';
 
 export interface EpisodeViewDependencies {
@@ -77,9 +77,13 @@ export async function connectEpisodeView(
       if (!episode.success)
         return showFailure('The tool result was not a public episode.');
 
-      const data = panelData(episode.data);
+      const data = emptyPanel.update({
+        title: episode.data.title,
+        description: episode.data.description,
+      });
+      if (!data.ok) return showFailure(data.failure.message);
       const outcome = deps.deliver(
-        panelShown ? data : [...panelSurface, ...data],
+        panelShown ? data.messages : [...emptyPanel.opening, ...data.messages],
       );
       if (!outcome.ok) return showFailure(outcome.failure.message);
       panelShown = true;

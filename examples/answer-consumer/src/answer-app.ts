@@ -76,11 +76,11 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
       const asked = ++this.#asked;
       this.#setStatus('Thinking…');
       // The previous answer goes as soon as a new question is asked: it must not look like the new one's.
-      this.ingest(answerData(''));
+      this.updateData(answerData(''));
       try {
         const answer = await deps.answer(question);
         if (asked !== this.#asked) return;
-        this.ingest(answerData(answer.markdown));
+        this.updateData(answerData(answer.markdown));
         this.#setStatus('Answer');
       } catch {
         if (asked !== this.#asked) return;

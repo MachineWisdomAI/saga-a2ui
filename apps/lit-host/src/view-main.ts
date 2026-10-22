@@ -8,7 +8,7 @@ import {
   a2uiV0_9Decoder,
   createMessageSession,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import { panelSurface, SURFACE_ID } from './saga-panel/fixture.js';
+import { emptyPanel } from './saga-panel/fixture.js';
 
 // Composition root of the MCP Apps view (built into one HTML resource by vite.view.config.ts).
 // It contains no server code: data arrives only through the host's bridge.
@@ -34,8 +34,7 @@ if (!content.ok) {
           catalogs: [sagaCatalog],
           decoder: a2uiV0_9Decoder,
         }),
-      initialInput: panelSurface,
-      surfaceId: SURFACE_ID,
+      layout: emptyPanel,
       content: content.view,
     }),
   );

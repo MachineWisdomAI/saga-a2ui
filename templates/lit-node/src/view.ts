@@ -15,9 +15,8 @@ import { AccountOutputSchema, StatusOutputSchema } from './contract.js';
 import {
   CATALOG_ID,
   CLEAR_ID,
-  SURFACE_ID,
-  headlineData,
   starterSurface,
+  type StarterData,
 } from './surface.js';
 
 // The composition root of the view. It uses public package exports only, and the page it builds is
@@ -49,7 +48,7 @@ export async function startView(): Promise<void> {
     noteInput: requireElement<HTMLInputElement>('[data-testid="note"]'),
   });
   const element = ():
-    (HTMLElement & { ingest(input: unknown): unknown }) | null =>
+    (HTMLElement & { updateData(data: StarterData): unknown }) | null =>
     document.querySelector('starter-app');
 
   // What the application must end itself. The binding is the attachment of one definition to one
@@ -64,8 +63,7 @@ export async function startView(): Promise<void> {
     createA2uiAppElement({
       createSession: () =>
         createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-      initialInput: starterSurface,
-      surfaceId: SURFACE_ID,
+      layout: starterSurface,
       actions: createLitActions({
         // #region saga-snippet:bind-action
         // Runs once for each presented surface. The same definition could be attached to any number
@@ -100,7 +98,7 @@ export async function startView(): Promise<void> {
       : running?.success
         ? 'The service is running'
         : '';
-    element()?.ingest(headlineData(headline));
+    element()?.updateData({ headline });
     say(
       result.isError === true
         ? PROBLEM_TEXT

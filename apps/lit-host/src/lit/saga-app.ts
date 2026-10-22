@@ -16,7 +16,7 @@ declare global {
   }
 }
 
-export interface SagaAppDependencies extends A2uiAppDependencies {
+export interface SagaAppDependencies<TData> extends A2uiAppDependencies<TData> {
   /** This view's immutable content policy, host link callback and enforcement result. */
   readonly content: ContentView;
 }
@@ -24,10 +24,11 @@ export interface SagaAppDependencies extends A2uiAppDependencies {
 /**
  * The application's `saga-app` element: `@saga-a2ui/lit` presents the surface; this adds what
  * belongs to the application. That is the heading, this view's content policy for the
- * descriptions inside it, and the demo `window.sagaSend` hook. The composition root (main.ts)
- * chooses the session, fixture and surface.
+ * descriptions inside it, and the demo `window.sagaSend` hook, which relays protocol messages the
+ * host and its browser tests author (the element's protected `ingest`). The composition root
+ * (main.ts) chooses the session, layout and content policy.
  */
-export function createSagaAppElement(deps: SagaAppDependencies) {
+export function createSagaAppElement<TData>(deps: SagaAppDependencies<TData>) {
   class SagaApp extends createA2uiAppElement(deps) {
     private readonly send = (input: unknown): IngestResult =>
       this.ingest(input);

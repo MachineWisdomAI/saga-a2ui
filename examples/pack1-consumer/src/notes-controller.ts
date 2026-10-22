@@ -3,7 +3,7 @@ import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import { createNotesActions } from './notes-actions.js';
 import { VIEW_TEXT, readNotesResult } from './notes-contract.js';
 import { RowHolds } from './row-holds.js';
-import { notesData, statusAt } from './notes-surface.js';
+import { notesData, statusAt, type NotesData } from './notes-surface.js';
 
 // The part of the notes view that does not depend on the renderer: the page's status line and
 // logs, the application's actions and their resource owner, the replacement of the notes a result
@@ -13,7 +13,9 @@ import { notesData, statusAt } from './notes-surface.js';
 
 /** The rendered surface a renderer exposes to the controller. */
 export interface NotesSurface {
-  /** Applies A2UI messages to the surface. Does nothing once the surface is gone. */
+  /** Replaces the notes shown. Does nothing once the surface is gone. */
+  show(data: NotesData): void;
+  /** Applies protocol messages the application wrote itself (a row's status line). Does nothing once the surface is gone. */
   ingest(messages: unknown[]): void;
   /** Ends the rendered surface. Disposing the surface disposes its bindings and cancels what is undecided. */
   remove(): void;
@@ -65,7 +67,7 @@ export function createNotesController(
     readonly structuredContent?: unknown;
   }): void => {
     const shown = readNotesResult(result);
-    surface.ingest(notesData(shown.notes));
+    surface.show(notesData(shown.notes));
     say(shown.status);
   };
 

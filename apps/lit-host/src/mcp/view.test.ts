@@ -13,7 +13,7 @@ import {
   type MessageSession,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
-import { panelSurface, SURFACE_ID } from '../saga-panel/fixture.js';
+import { emptyPanel, SURFACE_ID } from '../saga-panel/fixture.js';
 import { connectEpisodeView, type EpisodeViewConnection } from './view.js';
 
 // The view's bridge seam, exercised with a real `App` and `AppBridge` joined by an in-memory
@@ -60,7 +60,7 @@ function harness(): Harness {
   session.onSurfaceCreated((surface) => (current = surface));
   session.onSurfaceDeleted(() => (current = undefined));
   // The session the Lit `saga-app` would own: it starts with the panel surface.
-  session.ingest(panelSurface);
+  session.ingest(emptyPanel.opening);
 
   const app = new App(
     { name: 'test-view', version: '0.0.0' },

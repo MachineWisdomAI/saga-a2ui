@@ -4,6 +4,8 @@ export {
   type A2uiAppDependencies,
   type A2uiSession,
   type A2uiSurfaceMount,
+  type A2uiUpdateFailure,
+  type A2uiUpdateResult,
 } from './a2ui/app-element.js';
 export {
   defineElements,
