@@ -3,12 +3,27 @@
 Use SAGA's React A2UI entry point for surfaces and catalogs:
 
 ```ts
-import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
+import {Catalog, Surface, openSurface, type BoundSurface, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
 import {faithfulCardEntry} from '@saga-a2ui/react/faithful-card';
-import {createMessageSession, a2uiV0_9Decoder} from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import {defineSurface} from '@saga-a2ui/core/protocols/a2ui/v0_9';
 ```
 
 The entry point forwards the supported upstream A2UI v0.9 APIs; it does not implement another renderer or parser. It also exports `SurfaceModel`, `CommonSchemas`, `createComponentImplementation`, `ReactComponentImplementation` and `NodeViewProps` for custom catalogs.
+
+## Open a typed surface
+
+Define the surface once with `defineSurface`, open it with your catalog and mount it:
+
+```tsx
+const bound = openSurface(layout, catalog); // throws, with the session's message, if the layout is not accepted
+<Surface of={bound.handle} />
+bound.update(data); // {ok: true} | {ok: false, message}
+bound.dispose();    // idempotent
+```
+
+`openSurface` owns the message session, the decoder and the order of the opening messages, so application code imports none of them. `update` is typed from the layout, validates against its schema and applies the data in place: the mounted controls keep their DOM nodes, focus, local state and action bindings. A rejected update returns the failure and changes nothing. After `dispose`, `update` fails and `<Surface>` renders nothing. Open the surface once per surface lifetime, outside render (for example in state or a store), and dispose it where you created it: `<Surface>` never disposes the handle, so Strict Mode's replay of effects cannot end it.
+
+`A2uiSurface` and `SurfaceModel` stay exported for custom use over a session of your own.
 
 ## Let SAGA own its A2UI installation
 
