@@ -59,7 +59,7 @@ jobs:
           else
             npm run format:check -- "$FORMAT_BASE" "$FORMAT_HEAD"
           fi
-      - name: Check guide commands, snippets, links, tour references and notices
+      - name: Check guide commands, snippets, links, tour references, notices and consumer boundary
         run: npm run test:docs
       - name: Check advisory Blueprint length
         env:
