@@ -118,6 +118,7 @@ describe('the application listener installed from the packed packages and run ou
         'components',
         'core',
         'lit',
+        'lit-mcp-stack',
         'mcp',
       ]);
       for (const name of fs.readdirSync(installed)) {

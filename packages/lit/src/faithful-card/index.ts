@@ -11,7 +11,6 @@ export {
   CONTENT_VIEW_REQUEST,
   ContentViewRequest,
   createFaithfulCardView,
-  documentContentSecurityPolicies,
   provideContentView,
   requestContentView,
   type ContentView,

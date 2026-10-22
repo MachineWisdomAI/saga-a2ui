@@ -14,7 +14,7 @@ import { applyBranding, type Branding } from './branding.js';
 // The standalone page's composition: the shared answer surface (answer-surface.ts), its own chrome
 // (brand, question form, status), and a typed answer function it calls itself. SAGA's card shows
 // the Markdown it is given; it never calls the answer function, never sees the question and never
-// decides what the status says. The page an MCP host mounts (answer-view.ts) has no form and no
+// decides what the status says. The page an MCP host mounts (mcp-main.ts) has no form and no
 // answer function: the host delivers the answer.
 
 export interface AnswerAppDependencies {

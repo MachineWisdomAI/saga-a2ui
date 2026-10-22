@@ -40,7 +40,7 @@ export interface LitCardViewSettings extends CardViewSettings {
  * Creates the view an application provides to its cards, once: the reader for its dialect and
  * content bound, the policy and host links it passes, image enforcement established from the
  * Content-Security-Policy values it passes (it reads no document: a caller that has one reads the
- * values and passes them in, for example with {@link documentContentSecurityPolicies}) and a
+ * values and passes them in, for example with the Lit stack's `documentContentSecurityPolicies`) and a
  * fresh consent scope that ends with the view. Throws, naming the setting, when the reader
  * settings are invalid; no view exists then.
  */
@@ -99,16 +99,4 @@ export function requestContentView(from: EventTarget): ContentView | undefined {
   const request = new ContentViewRequest();
   from.dispatchEvent(request);
   return request.view;
-}
-
-/**
- * The Content-Security-Policy values the mounted document carries in `<meta http-equiv>` elements.
- * Pass them to `establishImageEnforcement` with the policy: images load only when the document
- * carries exactly the restrictions that policy derives.
- */
-export function documentContentSecurityPolicies(doc: Document): string[] {
-  return Array.from(
-    doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]'),
-    (meta) => meta.getAttribute('content') ?? '',
-  );
 }

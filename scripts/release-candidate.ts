@@ -36,6 +36,8 @@ export const SDK_PACKAGES: readonly SdkPackage[] = [
   'components',
   'mcp',
   'react',
+  'lit-mcp-stack',
+  'react-mcp-stack',
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -508,7 +510,7 @@ export function combinationRecords(
       id: `notes-${id}`,
       description:
         id === 'own'
-          ? 'The notes application with its own catalog alone (no optional components package installed), with the non-playback server action (archive).'
+          ? 'The notes application with its own catalog alone (its emitted bundle holds no optional component; the stack that starts it declares the components package, so the installed tree has it), with the non-playback server action (archive).'
           : 'The same application with the optional FaithfulCard rendering each note body, with the same server action.',
       packages: [...consumer.installedPackages].sort(),
       resources: [builtResource('notes view', consumer.builtPage.path)],

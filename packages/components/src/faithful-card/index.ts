@@ -65,4 +65,14 @@ export {
   type CardContent,
   type CardData,
 } from './card-layout.js';
+export {
+  FaithfulCardApp,
+  type CardAppIdentity,
+  type CardAppPolicySource,
+  type CardAppReaderOptions,
+  type CardAppTexts,
+  type CardResultParser,
+  type FaithfulCardAppBuilder,
+  type FaithfulCardAppDefinition,
+} from './card-app.js';
 export { closesWithParagraph, FAITHFUL_CARD_STYLING } from './styling.js';

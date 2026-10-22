@@ -1,0 +1,210 @@
+import {
+  openSurface,
+  Surface,
+  type BoundSurface,
+  type Catalog,
+  type ReactCatalogComponent,
+} from '@saga-a2ui/react/a2ui';
+import { ActionsScope, type ReactActions } from '@saga-a2ui/react/actions';
+import type { ServerTransport } from '@saga-a2ui/core/actions';
+import type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
+import { createElement, Fragment, type ReactNode } from 'react';
+import { watchActionSetup } from './action-setup.js';
+import {
+  applicationFailureOf,
+  callApplication,
+  failApplication,
+} from './application-call.js';
+import { claimContainer } from './container-claim.js';
+import {
+  connectToHost,
+  type HostConnection,
+  type HostIdentity,
+  type ServerReply,
+} from './host-connection.js';
+import { openStackRoot, type StackRoot } from './initial-render.js';
+import {
+  runView,
+  viewThatNeverStarted,
+  type RunningView,
+} from './running-view.js';
+import type { ErrorPhase } from './start-failure.js';
+
+/** What the application may use of the host while it states its actions. */
+export interface ViewHost {
+  /** The way an action reaches the application’s server, through the host. */
+  readonly server: ServerTransport<ServerReply>;
+}
+
+export interface StartA2uiViewOptions<TData> {
+  /** The element the view is rendered into. Must be attached to the document and free. */
+  readonly container: Element;
+  /** The one surface the view presents: its identity, its data type and how it opens. */
+  readonly layout: SurfaceLayout<TData>;
+  /** The application's own catalog, which must hold every component the layout names. */
+  readonly catalog: Catalog<ReactCatalogComponent>;
+  /**
+   * Optional. The application’s action setup (`createReactActions`), or a function that makes it
+   * from the host when the setup needs the server (`host.server`).
+   */
+  readonly actions?: ReactActions | ((host: ViewHost) => ReactActions);
+  /** Optional. Work the view needs before it shows anything; `signal` aborts when the view ends. */
+  readonly readyWhen?: (signal: AbortSignal) => Promise<void>;
+  /** `own`: the view tells the host its size. `host` (the default): the bridge reports it. */
+  readonly sizing?: 'own' | 'host';
+  /** Optional. The negotiated host context and the host’s name, before the first result and on change. */
+  readonly hostContext?: (
+    context: HostContext | undefined,
+    hostName: string | undefined,
+  ) => void;
+  /** Each delivered result, once the view is ready. Update the surface through `view.surface`. */
+  readonly onToolResult: (
+    result: ToolResult,
+    view: RunningA2uiView<TData>,
+  ) => void;
+  /**
+   * Optional. Called once, whichever way the view ends (host teardown request, `dispose()`,
+   * `pagehide` or a startup failure), after the surface has been retired and before the connection
+   * ends. For an application that holds something outside the page's own rendering. It must
+   * tolerate being called on a view that never showed anything; a throw is reported and never
+   * skips the connection's disposal.
+   */
+  readonly onTeardown?: () => void;
+  /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
+  readonly onError?: (error: unknown, phase: ErrorPhase) => void;
+  /** Optional. Who the host sees. Defaults to the layout’s surface id at version `0.0.0`. */
+  readonly identity?: HostIdentity;
+}
+
+/** The running view of an own-catalog application, and the typed way to update what it shows. */
+export interface RunningA2uiView<TData> extends RunningView {
+  readonly surface: BoundSurface<TData>;
+}
+
+/**
+ * Starts an own-catalog view in `options.container` and returns it at once. The view connects to
+ * the MCP Apps host, holds results that arrive before it is ready, renders the layout over the
+ * catalog and gives each result to `onToolResult` with the bound surface to update. Throws
+ * `StartError` (`container-missing`, `container-busy`) before connecting to anything.
+ * An application callback that throws while the view is being set up (the `actions` factory) does not
+ * throw out of `start`, nor does a catalog component that throws in the first render: the stack
+ * takes back what it made, frees the container and returns a view whose `ready` rejects with
+ * `StartFailure` of kind `application`. So does an action setup (`attach`) that throws when the
+ * view mounts: the actions' own `onSetupError` still hears it, and since the setup runs just after
+ * the first render, the failure arrives while the view is starting and the container is free once
+ * `dispose()` settles. A throw in a later render goes to `onError` with phase `result`. Imports
+ * nothing from `@saga-a2ui/components`.
+ */
+export function startA2uiView<TData>(
+  options: StartA2uiViewOptions<TData>,
+): RunningA2uiView<TData> {
+  return startA2uiViewOn(
+    () =>
+      connectToHost(
+        options.identity ?? {
+          name: options.layout.surfaceId,
+          version: '0.0.0',
+        },
+        options.sizing ?? 'host',
+      ),
+    options,
+  );
+}
+
+/** {@link startA2uiView} over a connection the caller supplies: the seam the stack’s own tests use. */
+export function startA2uiViewOn<TData>(
+  connect: () => HostConnection,
+  options: StartA2uiViewOptions<TData>,
+): RunningA2uiView<TData> {
+  const claim = claimContainer(options.container);
+  let surface: BoundSurface<TData> | undefined;
+  let root: StackRoot | undefined;
+  try {
+    // The layout is checked against the catalog before anything connects.
+    surface = openSurface(options.layout, options.catalog);
+    const opened = surface;
+    const connection = connect();
+    const { app } = connection;
+    const { actions: makeActions } = options;
+    const actions =
+      typeof makeActions === 'function'
+        ? callApplication(() =>
+            makeActions({
+              server: {
+                callServerTool: (request, requestOptions) =>
+                  app.callServerTool(request, requestOptions),
+              },
+            }),
+          )
+        : makeActions;
+
+    const mounted = (root = openStackRoot(claim.container, options.onError));
+    const shown: ReactNode = createElement(Surface, { of: opened.handle });
+    // The first render is part of starting: a component that throws in it fails the start.
+    // An action setup that throws is swallowed by the actions boundary after the application's
+    // sink heard it, and it runs in an effect after this render: readiness waits for it.
+    const setup = actions === undefined ? undefined : watchActionSetup(actions);
+    const failed = mounted.renderInitially(
+      setup === undefined
+        ? shown
+        : createElement(ActionsScope, {
+            actions: setup.actions,
+            children: createElement(Fragment, null, shown, setup.marker),
+          }),
+    );
+    if (failed !== undefined) failApplication(failed.cause);
+    const { readyWhen } = options;
+    const readiness =
+      setup === undefined
+        ? readyWhen
+        : async (signal: AbortSignal): Promise<void> => {
+            await Promise.all([setup.attempted, readyWhen?.(signal)]);
+          };
+
+    const running = runView({
+      connection,
+      lifetime: new AbortController(),
+      releaseContainer: claim.release,
+      sizing: options.sizing ?? 'host',
+      ...(readiness === undefined ? {} : { readyWhen: readiness }),
+      ...(options.hostContext === undefined
+        ? {}
+        : { hostContext: options.hostContext }),
+      onToolResult: (result) => options.onToolResult(result, view),
+      ...(options.onError === undefined ? {} : { onError: options.onError }),
+      retire() {
+        try {
+          opened.dispose();
+        } finally {
+          options.onTeardown?.();
+        }
+      },
+      unmount: () => mounted.root.unmount(),
+    });
+    const view: RunningA2uiView<TData> = { ...running, surface: opened };
+    return view;
+  } catch (error) {
+    root?.root.unmount();
+    surface?.dispose();
+    claim.release();
+    const failed = applicationFailureOf(error);
+    if (failed === undefined || surface === undefined) throw error;
+    // The application's own callback threw before a view existed: nothing connected, so what was
+    // made is gone and the view ends as it would for any other startup failure, with `onTeardown`
+    // told once. `ready` carries the failure; the container is free for another start.
+    try {
+      options.onTeardown?.();
+    } catch (teardownError) {
+      try {
+        (options.onError ?? ((e) => console.error(e)))(
+          teardownError,
+          'teardown',
+        );
+      } catch {
+        // A reporter that throws must not turn a typed startup failure into a throw.
+      }
+    }
+    return { ...viewThatNeverStarted(failed.cause), surface };
+  }
+}

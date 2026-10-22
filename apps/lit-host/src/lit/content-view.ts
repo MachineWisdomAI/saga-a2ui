@@ -1,13 +1,12 @@
-import {
-  CONTENT_POLICY_ELEMENT_ID,
-  contentPolicyFromEmbedded,
-} from '@saga-a2ui/components/faithful-card';
 import { type HostLinks } from '@saga-a2ui/core/host-links';
 import {
   createFaithfulCardView,
-  documentContentSecurityPolicies,
   type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
+import {
+  contentPolicyFromDocument,
+  documentContentSecurityPolicies,
+} from '@saga-a2ui/lit-mcp-stack/faithful-card';
 
 /**
  * The episode consumer's trusted card settings: CommonMark, and a description bound of 2,000
@@ -32,9 +31,7 @@ export function contentViewFromDocument(
   doc: Document,
   hostLinks: HostLinks,
 ): DocumentContentView {
-  const created = contentPolicyFromEmbedded(
-    doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
-  );
+  const created = contentPolicyFromDocument(doc);
   if (!created.ok) return { ok: false, message: created.failure.message };
   return {
     ok: true,

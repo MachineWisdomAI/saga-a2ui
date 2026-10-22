@@ -25,6 +25,9 @@ import {
 // here by a recorder (the real run is `npm run candidate:rehearse`, in CI), so these cases check what
 // the rehearsal installs, rebuilds, pairs and refuses, and which cases it requires to have run.
 
+/** What the own-catalog Lit consumer installs: the Lit stack brings its declared siblings along. */
+const LIT_STACK_SET = ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'];
+
 const work = createWorkDirectory('saga-rehearsal-test-');
 // The rebuilt server bundles leave third-party packages external, so they must sit inside the repository to resolve them.
 const out = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'rehearsal-test');
@@ -111,16 +114,16 @@ describe('the update and rollback rehearsal', () => {
     expect(
       record.stages.map((stage) => stage.consumers.own!.installedTarballSha256),
     ).toEqual([
-      digests(a, ['core', 'lit', 'mcp']),
-      digests(b, ['core', 'lit', 'mcp']),
-      digests(a, ['core', 'lit', 'mcp']),
+      digests(a, LIT_STACK_SET),
+      digests(b, LIT_STACK_SET),
+      digests(a, LIT_STACK_SET),
     ]);
     expect(
       record.stages.map((stage) => stage.consumers.own!.installedPackages),
     ).toEqual([
-      ['core', 'lit', 'mcp'],
-      ['core', 'lit', 'mcp'],
-      ['core', 'lit', 'mcp'],
+      [...LIT_STACK_SET].sort(),
+      [...LIT_STACK_SET].sort(),
+      [...LIT_STACK_SET].sort(),
     ]);
     // The browser ran once per stage, against that stage's own rebuilt files, with the carried PACK1 cases.
     expect(seen.map((one) => path.basename(one.root))).toEqual([

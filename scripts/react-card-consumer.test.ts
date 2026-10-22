@@ -84,17 +84,22 @@ describe('the React card consumer built from the packed SDK packages', () => {
         ),
       ].sort(),
     ).toEqual([
-      '@modelcontextprotocol/ext-apps',
       '@modelcontextprotocol/server',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/mcp/server',
-      '@saga-a2ui/mcp/view',
-      '@saga-a2ui/react/faithful-card',
-      '@saga-a2ui/react/faithful-card.css',
-      'react',
-      'react-dom/client',
+      '@saga-a2ui/react-mcp-stack/faithful-card',
+      '@saga-a2ui/react-mcp-stack/faithful-card.css',
       'zod',
     ]);
+    // The page imports from the stack alone: no bridge package, no connection, no renderer glue.
+    expect(
+      specifiersOf('src').filter(
+        (specifier) =>
+          specifier.startsWith('@modelcontextprotocol/') ||
+          (specifier.startsWith('@saga-a2ui/') &&
+            !specifier.startsWith('@saga-a2ui/react-mcp-stack/')),
+      ),
+    ).toEqual([]);
     const manifest = JSON.parse(
       fs.readFileSync(
         path.join(reactCardConsumerSource, 'package.json'),
@@ -117,6 +122,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
       'core',
       'mcp',
       'react',
+      'react-mcp-stack',
     ]);
     for (const [name, packed] of Object.entries(sdk.files)) {
       expect(unexpectedPackageFiles(name, packed), name).toEqual([]);
@@ -145,6 +151,18 @@ describe('the React card consumer built from the packed SDK packages', () => {
       ).toBe(true);
     }
     expect(sdk.files.react).toContain('src/faithful-card/faithful-card.css');
+    const stackExports =
+      (sdk.manifests['react-mcp-stack'] as { exports?: Record<string, string> })
+        .exports ?? {};
+    expect(Object.keys(stackExports).sort()).toEqual([
+      '.',
+      './faithful-card',
+      './faithful-card.css',
+    ]);
+    for (const [subpath, target] of Object.entries(stackExports))
+      expect(sdk.files['react-mcp-stack'], subpath).toContain(
+        target.replace(/^\.\//, ''),
+      );
     for (const hash of Object.values(sdk.tarballSha256))
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -173,6 +191,29 @@ describe('the React card consumer built from the packed SDK packages', () => {
       'zod',
     ]);
     expect(components.peerDependencies ?? {}).toEqual({});
+  });
+
+  it('declares the stack with the components package and the bridge as regular dependencies and React as a peer, so one install suffices', () => {
+    const stack = sdk.manifests['react-mcp-stack']!;
+    expect(Object.keys(stack.dependencies ?? {}).sort()).toEqual([
+      '@modelcontextprotocol/ext-apps',
+      '@saga-a2ui/components',
+      '@saga-a2ui/core',
+      '@saga-a2ui/mcp',
+      '@saga-a2ui/react',
+      // The bridge's own peer: the stack supplies it, so a strict install needs nothing more
+      // from the application (scripts/check-react-pnpm.ts installs the stack alone).
+      'zod',
+    ]);
+    expect(stack.dependencies?.zod).toBe('4.6.7');
+    for (const name of ['components', 'core', 'mcp', 'react'])
+      expect(stack.dependencies?.[`@saga-a2ui/${name}`], name).toBe(
+        sdk.version,
+      );
+    expect(stack.peerDependencies).toEqual({
+      react: '19.3.1',
+      'react-dom': '19.3.1',
+    });
   });
 
   // Dependency exclusion is shown on the built graph of an application that really builds, never
@@ -268,8 +309,9 @@ describe('the React card consumer built from the packed SDK packages', () => {
       for (const file of [
         '@saga-a2ui/react/src/faithful-card/card.tsx',
         '@saga-a2ui/react/src/faithful-card/catalog.tsx',
-        '@saga-a2ui/react/src/faithful-card/faithful-card.css',
+        '@saga-a2ui/react-mcp-stack/src/faithful-card/faithful-card.css',
         '@saga-a2ui/components/src/faithful-card/reader.ts',
+        '@saga-a2ui/react-mcp-stack/src/faithful-card/start-faithful-card-app.tsx',
         '@saga-a2ui/core/src/protocols/a2ui/v0_9/session.ts',
         '@saga-a2ui/mcp/src/view/run-tool-result-view.ts',
       ]) {

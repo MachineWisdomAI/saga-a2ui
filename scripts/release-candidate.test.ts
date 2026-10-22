@@ -45,7 +45,7 @@ afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 const sha256 = (file: string): string =>
   createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-it('packs only the four enrolled releases, preserving exact sibling pins, exports and license files', () => {
+it('packs only the five enrolled releases, preserving exact sibling pins, exports and license files', () => {
   const releases = packReleasePackages(
     path.join(work, 'release'),
     path.join(work, 'release-tarballs'),
@@ -55,6 +55,7 @@ it('packs only the four enrolled releases, preserving exact sibling pins, export
     'components',
     'mcp',
     'react',
+    'react-mcp-stack',
   ]);
   const versions = Object.fromEntries(
     releases.map((one) => [`@saga-a2ui/${one.name}`, one.version]),
@@ -316,7 +317,7 @@ describe('packed candidates', () => {
         checkInstalledCombination(modules(consumer), expectation(a)).map(
           (finding) => finding.package,
         ),
-      ).toEqual(['components', 'react']);
+      ).toEqual(['components', 'react', 'lit-mcp-stack', 'react-mcp-stack']);
     });
 
     it('reports a modules location that does not exist or holds no SDK package, with where to install', () => {
@@ -360,8 +361,10 @@ describe('packed candidates', () => {
       expect(half.map((finding) => finding.package).sort()).toEqual([
         'components',
         'core',
+        'lit-mcp-stack',
         'mcp',
         'react',
+        'react-mcp-stack',
       ]);
       for (const finding of half)
         expect(finding.guidance).toContain(

@@ -20,12 +20,14 @@ import {
 // PACK1 and REACT1: builds the installed consumers of examples/pack1-consumer, each in its own
 // clean directory outside the repository, from packed SDK tarballs alone (see packed-consumer.ts).
 //
-//   own   the application's own catalog alone: packs core, lit and mcp. The optional components
-//         package is not installed, and the copy of the source does not contain the file that uses it.
-//   card  the same catalog and behaviors plus the optional FaithfulCard: packs core, lit,
-//         components and mcp.
+//   own   the application's own catalog alone, started by the Lit stack: packs core, lit, mcp,
+//         components and lit-mcp-stack. The stack declares the components package, so the installed
+//         tree has it; the copy of the source does not contain the file that uses the card, and the
+//         built page's module graph holds neither the card nor a Markdown parser.
+//   card  the same catalog and behaviors plus the optional FaithfulCard: the same packages.
 //   react the same contract, server, actions and controller over a React catalog of the
-//         application's own: packs core, react and mcp. Lit is not installed (REACT1).
+//         application's own, started by the React stack: packs core, react, mcp, components and
+//         react-mcp-stack. Lit is not installed (REACT1).
 //
 // Each build produces the page an MCP host mounts (a single self-contained HTML document) and the
 // consumer's MCP server, bundled against the installed copies. The browser specs then mount the
@@ -91,14 +93,14 @@ const REACT_DEPENDENCIES = [
 
 export const PACK1_CONSUMERS: Record<Pack1Consumer, ConsumerRecipe> = {
   own: {
-    packages: ['core', 'lit', 'mcp'],
+    packages: ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'],
     page: 'own.html',
     entry: 'src/main-own.ts',
     leaveOut: ['card.html', 'src/main-card.ts', ...REACT_FILES],
     ownDependencies: LIT_DEPENDENCIES,
   },
   card: {
-    packages: ['core', 'lit', 'components', 'mcp'],
+    packages: ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'],
     page: 'card.html',
     entry: 'src/main-card.ts',
     leaveOut: ['own.html', 'src/main-own.ts', ...REACT_FILES],
@@ -114,7 +116,7 @@ export const PACK1_CONSUMERS: Record<Pack1Consumer, ConsumerRecipe> = {
 export const NOTES_CONSUMERS: Record<NotesConsumer, ConsumerRecipe> = {
   ...PACK1_CONSUMERS,
   react: {
-    packages: ['core', 'react', 'mcp'],
+    packages: ['core', 'react', 'components', 'mcp', 'react-mcp-stack'],
     page: 'react.html',
     entry: 'src/main-react.tsx',
     leaveOut: [

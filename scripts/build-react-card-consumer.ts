@@ -52,11 +52,11 @@ export const REACT_CARD_SDK_PACKAGES = [
   'components',
   'mcp',
   'react',
+  'react-mcp-stack',
 ] as const;
 
 /** The packages the consumer imports itself, besides the SDK packages. */
 export const REACT_CARD_OWN_DEPENDENCIES = [
-  '@modelcontextprotocol/ext-apps',
   '@modelcontextprotocol/server',
   'react',
   'react-dom',

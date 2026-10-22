@@ -10,10 +10,10 @@ import { createA2uiAppElement } from '@saga-a2ui/lit';
 import { faithfulCardEntry } from '@saga-a2ui/lit/faithful-card';
 import { css } from 'lit';
 
-// The one A2UI path both of this application's pages use to show an answer: its catalog (the one
-// optional SAGA component), the surface that binds the card to a data model, and the data updates
-// that replace the answer. The standalone page (main.ts) and the page an MCP host mounts
-// (mcp-main.ts) differ only in where the Markdown comes from.
+// The A2UI path the standalone page (main.ts, through answer-app.ts) uses to show an answer: its
+// catalog (the one optional SAGA component), the surface that binds the card to a data model, and
+// the data updates that replace the answer. The page an MCP host mounts (mcp-main.ts) is started by
+// the Lit stack from a card application definition and holds none of this.
 
 const CATALOG_ID = 'https://answers.example/catalogs/answer/v1';
 const SURFACE_ID = 'answer';
@@ -47,7 +47,7 @@ export function createAnswerSurfaceElement() {
   });
 }
 
-/** The page frame both pages share; the brand's CSS properties (see branding.ts) fill it in. */
+/** The standalone page's frame; the brand's CSS properties (see branding.ts) fill it in. */
 export const answerFrameStyles = css`
   :host {
     display: block;

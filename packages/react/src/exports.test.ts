@@ -49,7 +49,9 @@ describe('the optional React exports', () => {
     expect(Object.keys(actions).sort()).toEqual([
       'ActionButton',
       'ActionButtonEntry',
+      'ActionsScope',
       'InstanceHostProvider',
+      'createReactActions',
       'useActionSetup',
     ]);
     expect(Object.keys(faithfulCard).sort()).toEqual([
