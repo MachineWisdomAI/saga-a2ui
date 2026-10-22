@@ -1,0 +1,35 @@
+{
+  "name": "@saga-a2ui/lit-mcp-stack",
+  "private": true,
+  "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition. A private workspace package, like @saga-a2ui/lit, until Lit is published",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./faithful-card": "./src/faithful-card/index.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test-support.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@a2ui/lit": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@saga-a2ui/components": "*",
+    "@saga-a2ui/core": "*",
+    "@saga-a2ui/lit": "*",
+    "@saga-a2ui/mcp": "*",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "jsdom": "28.1.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  }
+}

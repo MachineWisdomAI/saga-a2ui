@@ -9,9 +9,14 @@ import { FAITHFUL_CARD_CONTRACT_VERSION } from './reader.js';
 // two values the card's catalog contract binds. The layout is authored once here, so both
 // renderers open the same surface and an update means the same thing in each.
 
-/** What an application presents in the card: the Markdown to show. */
+/**
+ * What an application presents in the card: the Markdown to show and, optionally, a heading the
+ * application's own chrome displays. The card renders the Markdown only; the heading never
+ * enters the card's data.
+ */
 export interface CardContent {
   readonly markdown: string;
+  readonly heading?: string;
 }
 
 /** The card surface's data model. The contract version is the component's, never the application's. */

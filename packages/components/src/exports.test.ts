@@ -53,6 +53,7 @@ describe('@saga-a2ui/components/faithful-card', () => {
       'FAITHFUL_CARD_CONTRACT_VERSION',
       'FAITHFUL_CARD_STYLING',
       'FaithfulCardApi',
+      'FaithfulCardApp',
       'MAX_IMAGE_HOSTS',
       'MAX_NESTING_LEVEL',
       'cardData',

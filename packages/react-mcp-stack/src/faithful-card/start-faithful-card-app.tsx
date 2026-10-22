@@ -1,0 +1,254 @@
+import type {
+  CardContent,
+  FaithfulCardAppDefinition,
+} from '@saga-a2ui/components/faithful-card';
+import type { HostContext, ToolResult } from '@saga-a2ui/mcp/view';
+import { hostLinksFromApp } from '@saga-a2ui/mcp/view';
+import {
+  createFaithfulCardView,
+  FaithfulCardProvider,
+  FaithfulCardSurface,
+  openFaithfulCardSurface,
+  type CardSurface,
+  type FaithfulCardView,
+} from '@saga-a2ui/react/faithful-card';
+import {
+  createElement,
+  Fragment,
+  useSyncExternalStore,
+  type ComponentType,
+  type ReactElement,
+} from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { claimContainer } from '../container-claim.js';
+import { connectToHost, type HostConnection } from '../host-connection.js';
+import {
+  runView,
+  viewFailedBeforeConnecting,
+  type RunningView,
+} from '../running-view.js';
+import { StartFailure, type ErrorPhase } from '../start-failure.js';
+import {
+  contentPolicyFromDocument,
+  documentContentSecurityPolicies,
+} from './document-policy.js';
+
+/** What the application’s chrome is told about the card, and what to say beside it. */
+export type CardViewState =
+  | { readonly kind: 'waiting'; readonly text: string }
+  | {
+      readonly kind: 'answer';
+      readonly heading: string | undefined;
+      /** Advances with every presented answer, including one whose text equals the last. */
+      readonly presentation: number;
+    }
+  | { readonly kind: 'problem'; readonly text: string };
+
+/** What the chrome component receives: the card to place, and the state to word around it. */
+export interface CardChromeProps {
+  /** The card. Place it exactly once; it is empty until the first answer. */
+  readonly card: ReactElement;
+  readonly state: CardViewState;
+}
+
+export interface StartFaithfulCardOptions {
+  /** The element the view is rendered into. Must be attached to the document and free. */
+  readonly container: Element;
+  /** `own`: the view tells the host its size. `host`: the bridge reports it. */
+  readonly sizing: 'own' | 'host';
+  /** Optional. Work the view needs before it shows anything (for example fonts); `signal` aborts when the view ends. */
+  readonly readyWhen?: (signal: AbortSignal) => Promise<void>;
+  /** Optional. The negotiated host context and the host’s name, before the first answer and on change. */
+  readonly hostContext?: (
+    context: HostContext | undefined,
+    hostName: string | undefined,
+  ) => void;
+  /** Optional. The application’s chrome around the card. By default the status text, then the card. */
+  readonly chrome?: ComponentType<CardChromeProps>;
+  /** Optional. Receives a throw from a callback after the view was ready. Defaults to `console.error`. */
+  readonly onError?: (error: unknown, phase: ErrorPhase) => void;
+}
+
+const DefaultChrome = (props: CardChromeProps): ReactElement => {
+  const { state } = props;
+  return createElement(
+    Fragment,
+    null,
+    state.kind === 'answer'
+      ? state.heading === undefined
+        ? null
+        : createElement('h2', null, state.heading)
+      : createElement('p', { role: 'status' }, state.text),
+    props.card,
+  );
+};
+
+/** The state the chrome renders, readable by React and settable by the stack. */
+function createStateStore(initial: CardViewState) {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    set(next: CardViewState): void {
+      current = next;
+      for (const listener of [...listeners]) listener();
+    },
+    get: (): CardViewState => current,
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  };
+}
+type StateStore = ReturnType<typeof createStateStore>;
+
+function CardApp(props: {
+  readonly view: FaithfulCardView | undefined;
+  readonly card: CardSurface | undefined;
+  readonly store: StateStore;
+  readonly Chrome: ComponentType<CardChromeProps>;
+}): ReactElement {
+  const state = useSyncExternalStore(props.store.subscribe, props.store.get);
+  const { view, card, Chrome } = props;
+  const cardElement =
+    card === undefined
+      ? createElement(Fragment)
+      : createElement(FaithfulCardSurface, { of: card });
+  const chrome = createElement(Chrome, { card: cardElement, state });
+  return view === undefined
+    ? chrome
+    : createElement(FaithfulCardProvider, { view, children: chrome });
+}
+
+/**
+ * Starts a card application in `options.container` and returns it at once. The embedded policy is
+ * read from the container’s document, the host is connected with its handlers installed first,
+ * and each delivered result is read with the definition’s `parse` and shown in the card: a new
+ * presentation each time, even for equal text. Throws `StartError` (`container-missing`,
+ * `container-busy`) before connecting to anything.
+ */
+export function startFaithfulCardApp(
+  definition: FaithfulCardAppDefinition,
+  options: StartFaithfulCardOptions,
+): RunningView {
+  return startFaithfulCardAppOn(
+    () => connectToHost(definition.identity, options.sizing),
+    definition,
+    options,
+  );
+}
+
+/** {@link startFaithfulCardApp} over a connection the caller supplies: the seam the stack’s own tests use. */
+export function startFaithfulCardAppOn(
+  connect: () => HostConnection,
+  definition: FaithfulCardAppDefinition,
+  options: StartFaithfulCardOptions,
+): RunningView {
+  const claim = claimContainer(options.container);
+  let root: Root | undefined;
+  try {
+    const { texts } = definition;
+    const Chrome = options.chrome ?? DefaultChrome;
+    const store = createStateStore({ kind: 'waiting', text: texts.waiting });
+    const mounted: Root = (root = createRoot(claim.container));
+    const unmount = (): void => mounted.unmount();
+    const render = (view?: FaithfulCardView, card?: CardSurface): void =>
+      mounted.render(createElement(CardApp, { view, card, store, Chrome }));
+
+    const policy = contentPolicyFromDocument(claim.container.ownerDocument);
+    if (!policy.ok) {
+      store.set({ kind: 'problem', text: texts.policyFailure });
+      render();
+      return viewFailedBeforeConnecting({
+        failure: new StartFailure('policy', policy.failure),
+        unmount,
+        releaseContainer: claim.release,
+        ...(options.onError === undefined ? {} : { onError: options.onError }),
+      });
+    }
+
+    const connection = connect();
+    const lifetime = new AbortController();
+    const view = createFaithfulCardView({
+      ...definition.reader,
+      policy: policy.policy,
+      contentSecurityPolicies: documentContentSecurityPolicies(
+        claim.container.ownerDocument,
+      ),
+      hostLinks: hostLinksFromApp(connection.app, lifetime.signal),
+    });
+    const card = openFaithfulCardSurface();
+    render(view, card);
+
+    const report =
+      options.onError ?? ((error: unknown) => console.error(error));
+    let presentation = 0;
+    const problem = (): void => {
+      card.clear();
+      store.set({ kind: 'problem', text: texts.problem });
+    };
+    /** The definition’s parse; a throw is the application’s, reported, and the result is unsupported. */
+    const read = (result: ToolResult): CardContent | undefined => {
+      if (result.isError === true) return undefined;
+      try {
+        return definition.parse(result.structuredContent);
+      } catch (error) {
+        try {
+          report(error, 'result');
+        } catch {
+          // A reporter that throws must not stop the answer from clearing.
+        }
+        return undefined;
+      }
+    };
+
+    return runView({
+      connection,
+      lifetime,
+      releaseContainer: claim.release,
+      sizing: options.sizing,
+      ...(options.readyWhen === undefined
+        ? {}
+        : { readyWhen: options.readyWhen }),
+      ...(options.hostContext === undefined
+        ? {}
+        : { hostContext: options.hostContext }),
+      // Every result is a new selection: `present` ends the earlier presentation, image consent
+      // included, even when the Markdown equals the previous one.
+      onToolResult(result) {
+        const content = read(result);
+        if (content === undefined || !card.present(content).ok) {
+          problem();
+          return;
+        }
+        presentation += 1;
+        store.set({
+          kind: 'answer',
+          heading: content.heading,
+          presentation,
+        });
+      },
+      ...(options.onError === undefined ? {} : { onError: options.onError }),
+      retire() {
+        view.consent.retire();
+        card.dispose();
+      },
+      unmount,
+      showFailure(failure) {
+        const text = {
+          policy: texts.policyFailure,
+          connect: texts.connectFailure,
+          ready: texts.readyFailure,
+          application: texts.problem,
+          disposed: texts.problem,
+        }[failure.kind];
+        store.set({ kind: 'problem', text });
+        return true;
+      },
+    });
+  } catch (error) {
+    // Nothing connected: take back what this start rendered and free the container.
+    root?.unmount();
+    claim.release();
+    throw error;
+  }
+}
