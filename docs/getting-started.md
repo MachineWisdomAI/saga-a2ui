@@ -1,10 +1,10 @@
 # Getting started with SAGA A2UI
 
-This guide takes a developer to a running starter or demonstration, or to a SAGA attachment on a backend they already run. It was written on 2026-10-20 against the repository's current source. Every command and snippet in it is checked by `scripts/guide.test.ts` against the tool, template or package it names, and the existing-backend snippets are generated from the maintained templates, not retyped.
+This guide takes a developer to a running starter or demonstration, or to a SAGA attachment on a backend they already run. It was written on 2026-10-20 and last reconciled on 2026-10-22 against the repository source at `main` `78223b5b26751e90ad86f83aa9b2c851411ae2b4`. Every command and snippet in it is checked by `scripts/guide.test.ts` against the tool, template or package it names, and the existing-backend snippets are generated from the maintained templates, not retyped.
 
 The `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp` and `@saga-a2ui/react` packages are published on public npm at `0.1.0-rc.1`. Use those exact versions together for a registry-based application, with the [React consumer dependency configuration](react-consumers.md) when using React. The packages export TypeScript source for use with a bundler.
 
-The source adds two stack packages, `@saga-a2ui/react-mcp-stack` and `@saga-a2ui/lit-mcp-stack` (see "Which packages do what"). They belong to the `0.7.0` release set and are not on npm yet: nothing here tells you to install them from the registry.
+The source adds two stack packages, `@saga-a2ui/react-mcp-stack` and `@saga-a2ui/lit-mcp-stack` (see "Which packages do what"). The React stack belongs to the `0.7` release candidates (source version `0.7.6-rc.1` when this guide was last reconciled) and neither stack is on npm yet: nothing here tells you to install them from the registry.
 
 The Lit starter and local demo below use matched candidate tarballs built from a source checkout, including `@saga-a2ui/lit`, which is not published on npm, and `@saga-a2ui/lit-mcp-stack`, which is private too. Those candidates have versions of the form `0.0.0-candidate.g<12 hex>` and are not a public registry release. Their installation steps remain separate from the published four-package set. See [candidate installation and updates](candidate-update-and-rollback.md).
 
