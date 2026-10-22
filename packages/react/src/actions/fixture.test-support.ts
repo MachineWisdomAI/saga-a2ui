@@ -15,8 +15,10 @@ import {
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
   type MessageSession,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import {
   createElement,
   Fragment,
@@ -28,6 +30,7 @@ import {
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import type { InstanceView, Limits } from '@saga-a2ui/core/actions';
+import { Surface, type SurfaceHandle } from '../a2ui.js';
 import { ActionButtonEntry } from './action-button.js';
 import { InstanceHostProvider, useActionSetup } from './instance-host.js';
 
@@ -120,71 +123,77 @@ export const catalog = new Catalog<ReactCatalogComponent>(
   [...basicCatalog.functions.values()],
 );
 
-/** The messages that create the surface with the consumer's layout and data. */
-export function layout(
-  surfaceId = SURFACE_ID,
-  extraComponents: readonly object[] = [],
-): unknown[] {
-  return [
-    { version: 'v0.9', createSurface: { surfaceId, catalogId: CATALOG_ID } },
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId,
-        components: [
-          {
-            id: 'root',
-            component: 'Column',
-            children: ['mark-a', 'mark-b', 'orphan', 'upstream-button', 'rows'],
-          },
-          { id: 'mark-a', component: 'ActionButton', child: 'mark-a-label' },
-          { id: 'mark-a-label', component: 'Text', text: 'Mark A' },
-          { id: 'mark-b', component: 'ActionButton', child: 'mark-b-label' },
-          { id: 'mark-b-label', component: 'Text', text: 'Mark B' },
-          { id: 'orphan', component: 'ActionButton', child: 'orphan-label' },
-          { id: 'orphan-label', component: 'Text', text: 'Unbound' },
-          {
-            id: 'upstream-button',
-            component: 'Button',
-            child: 'upstream-label',
-            action: { event: { name: 'upstream-press' } },
-          },
-          { id: 'upstream-label', component: 'Text', text: 'Upstream' },
-          {
-            id: 'rows',
-            component: 'List',
-            children: { componentId: 'row', path: '/rows' },
-          },
-          {
-            id: 'row',
-            component: 'Row',
-            children: ['row-title', 'row-archive'],
-          },
-          { id: 'row-title', component: 'Text', text: { path: 'title' } },
-          {
-            id: 'row-archive',
-            component: 'ActionButton',
-            child: 'row-archive-label',
-          },
-          { id: 'row-archive-label', component: 'Text', text: 'Archive' },
-          ...extraComponents,
-        ],
-      },
+/**
+ * An application's own surface, defined the typed way: one action control and a status line, both
+ * showing data the application updates. The root column and the control have fixed ids so a test can
+ * attach an action to the control.
+ */
+export const markLayout = defineSurface({
+  surfaceId: SURFACE_ID,
+  catalogId: CATALOG_ID,
+  data: z.object({ label: z.string(), status: z.string() }),
+  initial: { label: 'Mark', status: 'Ready' },
+  root: {
+    component: 'Column',
+    bind: {},
+    props: { children: ['mark', 'status'] },
+  },
+  components: [
+    { id: 'mark', component: 'ActionButton', child: 'mark-label' },
+    { id: 'mark-label', component: 'Text', text: { path: '/label' } },
+    { id: 'status', component: 'Text', text: { path: '/status' } },
+  ],
+});
+
+/** The consumer's layout and data: controls, a list with a template row, and an upstream button. */
+export const notesLayout = defineSurface({
+  surfaceId: SURFACE_ID,
+  catalogId: CATALOG_ID,
+  data: z.object({
+    rows: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+  initial: {
+    rows: [
+      { id: 'n-1', title: 'Alpha' },
+      { id: 'n-2', title: 'Beta' },
+    ],
+  },
+  root: {
+    component: 'Column',
+    bind: {},
+    props: {
+      children: ['mark-a', 'mark-b', 'orphan', 'upstream-button', 'rows'],
     },
+  },
+  components: [
+    { id: 'mark-a', component: 'ActionButton', child: 'mark-a-label' },
+    { id: 'mark-a-label', component: 'Text', text: 'Mark A' },
+    { id: 'mark-b', component: 'ActionButton', child: 'mark-b-label' },
+    { id: 'mark-b-label', component: 'Text', text: 'Mark B' },
+    { id: 'orphan', component: 'ActionButton', child: 'orphan-label' },
+    { id: 'orphan-label', component: 'Text', text: 'Unbound' },
     {
-      version: 'v0.9',
-      updateDataModel: {
-        surfaceId,
-        value: {
-          rows: [
-            { id: 'n-1', title: 'Alpha' },
-            { id: 'n-2', title: 'Beta' },
-          ],
-        },
-      },
+      id: 'upstream-button',
+      component: 'Button',
+      child: 'upstream-label',
+      action: { event: { name: 'upstream-press' } },
     },
-  ];
-}
+    { id: 'upstream-label', component: 'Text', text: 'Upstream' },
+    {
+      id: 'rows',
+      component: 'List',
+      children: { componentId: 'row', path: '/rows' },
+    },
+    { id: 'row', component: 'Row', children: ['row-title', 'row-archive'] },
+    { id: 'row-title', component: 'Text', text: { path: 'title' } },
+    {
+      id: 'row-archive',
+      component: 'ActionButton',
+      child: 'row-archive-label',
+    },
+    { id: 'row-archive-label', component: 'Text', text: 'Archive' },
+  ],
+});
 
 export interface Session {
   readonly surface: SurfaceModel<ReactCatalogComponent>;
@@ -194,8 +203,12 @@ export interface Session {
   dispose(): void;
 }
 
-/** A real message session over the application's catalog, with the layout already ingested. */
-export function openSession(messages: unknown[] = layout()): Session {
+/**
+ * Layer A: a message session of its own over the application's catalog, with the opening already
+ * ingested. Tests of the upstream surface's actions and of replacing components through the raw
+ * protocol use it; the bound surface hides the session and the upstream surface model.
+ */
+export function openSession(messages: unknown = notesLayout.opening): Session {
   const session: MessageSession<ReactCatalogComponent> = createMessageSession({
     catalogs: [catalog],
     decoder: a2uiV0_9Decoder,
@@ -241,6 +254,22 @@ export function surfaceView(options: {
       createElement(Setup, { setup: options.setup }),
       createElement(A2uiSurface, { surface: options.surface }),
       options.after,
+    ),
+  });
+}
+
+/** A bound surface under a provider, with the action setup, as an application mounts it. */
+export function boundView(options: {
+  readonly handle: SurfaceHandle;
+  readonly setup: (view: InstanceView) => void;
+}): ReactElement {
+  return createElement(InstanceHostProvider, {
+    onSetupError: () => undefined,
+    children: createElement(
+      Fragment,
+      null,
+      createElement(Setup, { setup: options.setup }),
+      createElement(Surface, { of: options.handle }),
     ),
   });
 }
