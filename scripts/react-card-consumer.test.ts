@@ -88,7 +88,6 @@ describe('the React card consumer built from the packed SDK packages', () => {
       '@modelcontextprotocol/server',
       '@saga-a2ui/components/faithful-card',
       '@saga-a2ui/core/protocols/a2ui/v0_9',
-      '@saga-a2ui/mcp/policy',
       '@saga-a2ui/mcp/server',
       '@saga-a2ui/mcp/view',
       '@saga-a2ui/react/a2ui',
@@ -734,7 +733,11 @@ describe('the React card consumer built from the packed SDK packages', () => {
         consumer,
         'server/card-server.ts',
       );
-      for (const name of ['operation.ts', 'view-identity.ts']) {
+      for (const name of [
+        'operation.ts',
+        'operation-view.ts',
+        'view-identity.ts',
+      ]) {
         expect(
           modules.some((id) =>
             id.includes(
@@ -745,14 +748,17 @@ describe('the React card consumer built from the packed SDK packages', () => {
         ).toBe(true);
       }
       expect(modules.filter(insideRepository)).toEqual([]);
-      // It needs the components package only for the policy; no renderer, protocol decoder or Markdown parser.
-      expect(
-        modules.some((id) =>
-          id.includes(
-            '/consumer/node_modules/@saga-a2ui/components/src/faithful-card/policy.ts',
+      // It needs the components package only for the policy and its transport; no renderer, protocol decoder or Markdown parser.
+      for (const name of ['policy.ts', 'policy-transport.ts']) {
+        expect(
+          modules.some((id) =>
+            id.includes(
+              `/consumer/node_modules/@saga-a2ui/components/src/faithful-card/${name}`,
+            ),
           ),
-        ),
-      ).toBe(true);
+          name,
+        ).toBe(true);
+      }
       expect(
         modules.filter((id) =>
           /\/@saga-a2ui\/(react|lit)\/|\/@a2ui\/|node_modules\/(react|react-dom|lit|markdown-it)\//.test(

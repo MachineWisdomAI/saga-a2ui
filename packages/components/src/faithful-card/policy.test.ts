@@ -142,6 +142,29 @@ describe('creating a content policy', () => {
     },
   );
 
+  // The policy is serialized into a script element and a meta attribute (policy-transport.ts), so
+  // the values that could end either one are refused here, at the policy that owns the rule,
+  // whatever the serializer does with them.
+  it.each([
+    ['a closing script tag', 'a.example.com</script><img src=x>'],
+    ['a less-than sign', 'a<b.example.com'],
+    ['a comment opening', '<!--.example.com'],
+    ['a double quote', 'a".example.com'],
+  ])('rejects %s in an image host', (_name, host) => {
+    const created = createContentPolicy({ imageHosts: [host] });
+    expect(!created.ok && created.failure.kind).toBe('invalid-image-host');
+  });
+
+  it.each([
+    ['a closing script tag', 'https://a.example.com</script>'],
+    ['a less-than sign', 'https://a<b.example.com'],
+    ['a comment opening', 'https://<!--.example.com'],
+    ['a double quote', 'https://a".example.com'],
+  ])('rejects %s in a font origin', (_name, origin) => {
+    const created = createContentPolicy({ fontOrigins: [origin] });
+    expect(!created.ok && created.failure.kind).toBe('invalid-font-origin');
+  });
+
   it('rejects a delimiter host even when a valid host is listed beside it', () => {
     const created = createContentPolicy({
       imageHosts: ['images.example.com', 'images.example.com;bogus'],

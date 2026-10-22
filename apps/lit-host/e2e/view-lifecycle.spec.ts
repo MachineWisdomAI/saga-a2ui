@@ -17,12 +17,7 @@ let resource: HostedResource;
 test.beforeAll(async () => {
   resource = {
     html: await readFile(builtUrl('view-lifecycle/index.html'), 'utf8'),
-    csp: {
-      connectDomains: [],
-      resourceDomains: [],
-      frameDomains: [],
-      baseUriDomains: [],
-    },
+    csp: { connectDomains: [], resourceDomains: [] },
   };
 });
 
@@ -38,10 +33,16 @@ async function mount(
   options: Parameters<NonNullable<Window['mountView']>>[1] = {},
 ): Promise<Mounted> {
   await page.goto('/host-fixture/index.html');
-  await page.evaluate(([html, options]) => window.mountView?.(html, options), [
-    resource,
-    options,
-  ] as const);
+  // The options hold only JSON values; the declared parameter type is too deep for inference.
+  const arg = { hosted: resource, mountOptions: options } as never as {
+    hosted: HostedResource;
+    mountOptions: unknown;
+  };
+  await page.evaluate(
+    ({ hosted, mountOptions }) =>
+      window.mountView?.(hosted, mountOptions as never),
+    arg,
+  );
   const handle = await page
     .locator('iframe[title="MCP App view"]')
     .elementHandle();

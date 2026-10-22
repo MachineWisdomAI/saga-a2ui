@@ -40,6 +40,12 @@ export {
   type ResourcePolicy,
 } from './policy.js';
 export {
+  CONTENT_POLICY_ELEMENT_ID,
+  contentPolicyFromEmbedded,
+  embedContentPolicy,
+  resourcePermissionsOf,
+} from './policy-transport.js';
+export {
   createImageConsentScope,
   type ConsentSubscription,
   type ImageConsent,

@@ -47,16 +47,20 @@ async function bundledModules(
 describe('@saga-a2ui/components/faithful-card', () => {
   it('exposes exactly the supported names', () => {
     expect(Object.keys(faithfulCard).sort()).toEqual([
+      'CONTENT_POLICY_ELEMENT_ID',
       'DEFAULT_CONTENT_POLICY',
       'FAITHFUL_CARD_CONTRACT_VERSION',
       'FaithfulCardApi',
       'MAX_IMAGE_HOSTS',
       'MAX_NESTING_LEVEL',
+      'contentPolicyFromEmbedded',
       'createContentPolicy',
       'createFaithfulCardReader',
       'createImageConsentScope',
       'describeContentFailure',
+      'embedContentPolicy',
       'establishImageEnforcement',
+      'resourcePermissionsOf',
     ]);
   });
 
