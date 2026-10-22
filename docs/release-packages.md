@@ -4,15 +4,18 @@ The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`,
 `@saga-a2ui/mcp`, `@saga-a2ui/react` and `@saga-a2ui/react-mcp-stack`. The first
 four already have public npm releases (`0.1.0-rc.1` and later prereleases);
 `react-mcp-stack` has none. See [public installation](public-install.md) for the
-verified registry recipe. Subsequent release candidates use the `next` tag; pin
-exact versions in applications.
+verified registry recipe. Release candidates use the `next` tag; pin exact
+versions in applications.
 
 The reviewed source manifests and generated `release.json` determine the
-prepared versions. Source versions can advance ahead of npm: `0.7.0-rc.1` on the
-integration branch is a source version, not a registry release. This procedure
-does not authorize publication, and nothing here has published a `0.7.0` package.
-Lit, `lit-mcp-stack`, the CLI, the workspace and the example applications are
-outside this publication set.
+prepared versions. Source versions run ahead of npm: `main` carries the five
+public packages at a `0.7.x-rc.n` version (`0.7.6-rc.1` when this guide was last
+reconciled), and none of those versions is a registry release. The integration
+branch that held every unit at `0.7.0-rc.1` has landed and its pin is retired;
+changes now follow the ordinary [version policy](version-policy.md). This
+procedure does not authorize publication, and nothing here has published a
+`0.7.x` package. Lit, `lit-mcp-stack`, the CLI, the workspace and the example
+applications are outside this publication set.
 
 ## Build the exact artifacts
 
@@ -43,31 +46,34 @@ local-CI rehearsal evidence is not evidence about release bytes (see
 
 ## Release sequence
 
-Each step is a separate, reviewed change or an owner action. Step 1 has landed
-for `0.7.0` (the integration branch holds every version at its pin); steps 2
-onward are pending, and nothing here has published a `0.7.0` package.
+Each step is a separate, reviewed change or an owner action. Steps 1 to 3 are
+preparation, steps 4 and 5 are owner actions that publish a release candidate,
+and stable promotion (step 6) is held and never implied by an earlier step.
 
-1. Child changes land on the integration branch with every version held at its
-   pin ([version policy](version-policy.md)).
-2. One final integration pull request into `main` removes the pin; the updater
-   advances the baseline and the reviewer confirms it equals the intended version.
-3. Qualify the merged head as a candidate: from that commit run `candidate:pack`,
+1. Changes land on `main` through the ordinary [version policy](version-policy.md),
+   so every unit shares one major.minor and the current prerelease advances
+   with product changes. Documentation-only changes leave the versions alone.
+2. Qualify the exact head as a candidate: from that commit run `candidate:pack`,
    `candidate:verify`, `candidate:rehearse` and the packed-consumer suites,
    including `test:pnpm-react` (see [candidate installation, updates and
    rollback](candidate-update-and-rollback.md)). This is the behavioral
-   qualification and is a local source rehearsal.
-4. An explicit promotion change (`chore(release): promote version`) turns the
-   prerelease into `0.7.0`. Promotion changes only version metadata, so
-   unchanged behavioral evidence from step 3 carries over. Build `release:pack`
-   from the promoted commit and verify those exact bytes (identities, sibling
-   pins, files, dependency graph, and the lower-level and stack-only installs
-   below). Fresh package
-   bytes alone do not require rerunning unchanged behavior or host evidence;
-   a source change after step 3 does.
-5. The owner approves the exact source, package names, versions, tarball
-   integrity and tag.
-6. Publish the approved bytes (see below), then verify through an anonymous
-   registry install.
+   qualification and is a local source rehearsal. Reuse unchanged evidence; a
+   source change after this step requalifies what it affects.
+3. Build `release:pack` from that commit and verify those exact bytes
+   (identities, sibling pins, files, dependency graph, and the lower-level,
+   stack-only and server-only installs below). Fresh package bytes alone do not
+   require rerunning unchanged behavior or host evidence.
+4. The owner approves the exact source, package names, versions, tarball
+   integrity and tag, and the tag names the exact commit that was demonstrated.
+5. Publish the approved bytes under the `next` tag (see below), then verify
+   through an anonymous registry install. Downstream adoption and named-host
+   acceptance are separate evidence.
+6. Held until the owner decides: an explicit promotion change
+   (`chore(release): promote version`) turns the prerelease into the stable
+   version. Promotion changes only version metadata, so unchanged behavioral
+   evidence carries over, but the `release:pack` bytes are rebuilt from the
+   promoted commit and verified again, and the stable `latest` tag is a
+   separate publication decision.
 
 ## Qualify the exact artifacts before publishing
 

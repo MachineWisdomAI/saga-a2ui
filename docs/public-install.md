@@ -55,15 +55,17 @@ Public-registry installation, strict typechecking, application builds and a
 standalone container have been verified for this four-package recipe. Host
 behavior has its own [compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
 
-## The planned `0.7.0` release set: one stack plus framework peers
+## The `0.7` release candidates: one stack plus framework peers
 
-The planned release set (the four packages above plus `@saga-a2ui/react-mcp-stack`; see [release preparation](release-packages.md)) replaces the four-package recipe above with one stack package. An application installs `@saga-a2ui/react-mcp-stack` and the React peers, and imports from the stack only (`@saga-a2ui/react-mcp-stack` for its own catalog, `@saga-a2ui/react-mcp-stack/faithful-card` for a card application). The stack declares core, components, MCP and React as regular dependencies, so one install is enough under a strict layout, and it keeps `react` and `react-dom` as your declared singletons. Keep the Markdown override from the recipe above.
+The source release candidates (`0.7.6-rc.1` when this page was last reconciled) add `@saga-a2ui/react-mcp-stack` to the four packages above; see [release preparation](release-packages.md). They replace the four-package recipe with one stack package. An application installs `@saga-a2ui/react-mcp-stack` and the React peers, and imports from the stack only (`@saga-a2ui/react-mcp-stack` for its own catalog, `@saga-a2ui/react-mcp-stack/faithful-card` for a card application). The stack declares core, components, MCP and React as regular dependencies, so one install is enough under a strict layout, and it keeps `react` and `react-dom` as your declared singletons. Keep the Markdown override from the recipe above.
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@RELEASE react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@VERSION react@19.3.1 react-dom@19.3.1
 ```
 
-Replace `RELEASE` with the published `0.7.0` version. **That version is not published yet**, so this command cannot succeed today: `@saga-a2ui/react-mcp-stack` has no registry release, no `0.7.0` of any package exists, and the source version `0.7.0-rc.1` on the integration branch is not a registry release. Until publication, qualification is source and packed-candidate evidence (`npm run test:pnpm-react`, `npm run candidate:verify`), which is a local source rehearsal and not an anonymous registry installation or a real-host acceptance. The [React integration guide](react-consumers.md#one-stack-plus-react) describes what the application imports and the two footprints: the installed tree includes `components`, `markdown-it` and the single `react` and `react-dom` peers, while the emitted browser bundle of an own-catalog application excludes components and Markdown and keeps the server entry separate. The Lit stack, `@saga-a2ui/lit-mcp-stack`, stays private like `@saga-a2ui/lit`.
+Replace `VERSION` with the release candidate the owner has published under the `next` tag. **No such version is published yet**, so this command cannot succeed today: `@saga-a2ui/react-mcp-stack` has no registry release, no `0.7.x` version of any package exists on the registry, and a source version is not a registry release. Until publication, qualification is source and packed-tarball evidence. `npm run test:pnpm-react` installs exactly this recipe under strict pnpm 10: the stack and the two React peers are the only direct dependencies, and the stack's sibling packages come from the packed tarballs through overrides. It then compiles a consumer that imports the stack and nothing else. That is a local rehearsal, not an anonymous registry installation or acceptance in a real host.
+
+The [React integration guide](react-consumers.md#one-stack-plus-react) describes what the application imports and the two footprints: the installed tree includes `components`, `markdown-it` and the single `react` and `react-dom` peers, while the emitted browser bundle of an own-catalog application excludes components and Markdown and keeps the server entry separate. The Lit stack, `@saga-a2ui/lit-mcp-stack`, stays private like `@saga-a2ui/lit`.
 
 ## Run a demo or use a Lit starter
 
