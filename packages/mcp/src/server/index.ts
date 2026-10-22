@@ -32,4 +32,5 @@ export {
   type ProtectedOperation,
   type PublicOperation,
 } from './operation.js';
+export { operationViewFromHtml } from './operation-view.js';
 export { viewUriForHtml } from './view-identity.js';

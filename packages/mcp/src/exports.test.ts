@@ -58,6 +58,7 @@ describe('package subpath exports', () => {
       'StageFailure',
       'assertBudgetSettings',
       'createServerBudgets',
+      'operationViewFromHtml',
       'registerProtectedOperation',
       'registerPublicOperation',
       'throwIfEnded',

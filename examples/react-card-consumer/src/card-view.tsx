@@ -1,6 +1,10 @@
 import { A2uiSurface } from '@saga-a2ui/react/a2ui';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import type { HostLinks } from '@saga-a2ui/components/faithful-card';
+import {
+  CONTENT_POLICY_ELEMENT_ID,
+  contentPolicyFromEmbedded,
+  type HostLinks,
+} from '@saga-a2ui/components/faithful-card';
 import { connectToolResultView } from '@saga-a2ui/mcp/view';
 import {
   FaithfulCardProvider,
@@ -13,10 +17,6 @@ import { readAnswerMarkdown } from './answer-result.js';
 import { openAnswerSurface, type AnswerSurface } from './answer-surface.js';
 import './card-view.css';
 import { createContentView } from './content-view.js';
-import {
-  CONTENT_POLICY_ELEMENT_ID,
-  policyFromEmbedded,
-} from './embedded-policy.js';
 
 // The application: one React root that shows whatever answer the host last delivered, and nothing
 // else. The page is built once. Its policy comes from the document it was served in, its brand from
@@ -99,7 +99,7 @@ export async function mountCardView(brand: Brand): Promise<void> {
   const container = document.getElementById('root');
   if (container === null) throw new Error('The page has no #root element.');
   const root = createRoot(container);
-  const policy = policyFromEmbedded(
+  const policy = contentPolicyFromEmbedded(
     document.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
   );
   if (!policy.ok) {
