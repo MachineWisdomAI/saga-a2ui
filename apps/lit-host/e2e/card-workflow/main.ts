@@ -9,8 +9,10 @@ import {
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
   type IngestResult,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
 import {
   ActionButton,
@@ -99,65 +101,61 @@ declare global {
 }
 
 /** The surface: one list; each row repeats the same component ids with its own data scope. */
-const surface = [
-  {
-    version: 'v0.9',
-    createSurface: { surfaceId: SURFACE_ID, catalogId: CATALOG_ID },
-  },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: SURFACE_ID,
-      components: [
-        {
-          id: 'root',
-          component: 'List',
-          children: { componentId: 'row', path: '/rows' },
-        },
-        {
-          id: 'row',
-          component: 'Column',
-          children: ['row-title', 'row-card', 'row-archive'],
-        },
-        { id: 'row-title', component: 'Text', text: { path: 'title' } },
-        {
-          id: 'row-card',
-          component: 'FaithfulCard',
-          contractVersion: { path: 'contractVersion' },
-          markdown: { path: 'description' },
-        },
-        {
-          id: 'row-archive',
-          component: 'ActionButton',
-          child: 'row-archive-label',
-        },
-        { id: 'row-archive-label', component: 'Text', text: 'Archive' },
-      ],
-    },
-  },
-  {
-    version: 'v0.9',
-    updateDataModel: {
-      surfaceId: SURFACE_ID,
-      value: {
-        rows: [
-          {
-            id: 'n-1',
-            title: 'Alpha',
-            contractVersion: 1,
-            description: 'Alpha description.',
-          },
-          {
-            id: 'n-2',
-            title: 'Beta',
-            contractVersion: 1,
-            description: 'Beta description.',
-          },
-        ],
+const surface = defineSurface({
+  surfaceId: SURFACE_ID,
+  catalogId: CATALOG_ID,
+  data: z.object({
+    rows: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        contractVersion: z.number(),
+        description: z.string(),
+      }),
+    ),
+  }),
+  initial: {
+    rows: [
+      {
+        id: 'n-1',
+        title: 'Alpha',
+        contractVersion: 1,
+        description: 'Alpha description.',
       },
-    },
+      {
+        id: 'n-2',
+        title: 'Beta',
+        contractVersion: 1,
+        description: 'Beta description.',
+      },
+    ],
   },
-];
+  root: {
+    component: 'List',
+    bind: {},
+    props: { children: { componentId: 'row', path: '/rows' } },
+  },
+  components: [
+    {
+      id: 'row',
+      component: 'Column',
+      children: ['row-title', 'row-card', 'row-archive'],
+    },
+    { id: 'row-title', component: 'Text', text: { path: 'title' } },
+    {
+      id: 'row-card',
+      component: 'FaithfulCard',
+      contractVersion: { path: 'contractVersion' },
+      markdown: { path: 'description' },
+    },
+    {
+      id: 'row-archive',
+      component: 'ActionButton',
+      child: 'row-archive-label',
+    },
+    { id: 'row-archive-label', component: 'Text', text: 'Archive' },
+  ],
+});
 
 defineElements(components);
 registerFaithfulCard();
@@ -235,8 +233,7 @@ function createInstance(
       );
       return session;
     },
-    initialInput: surface,
-    surfaceId: SURFACE_ID,
+    layout: surface,
     actions: createLitActions({
       attach: (actions) => {
         workflow.setup.attached += 1;

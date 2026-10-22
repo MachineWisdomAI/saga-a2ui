@@ -4,6 +4,7 @@ import { Action } from '@saga-a2ui/core/actions';
 import {
   a2uiV0_9Decoder,
   createMessageSession,
+  defineSurface,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import { createA2uiAppElement, defineElements } from '@saga-a2ui/lit';
@@ -54,23 +55,16 @@ customElements.define(
   createA2uiAppElement({
     createSession: () =>
       createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
-    initialInput: [
-      {
-        version: 'v0.9',
-        createSurface: { surfaceId: 'notes', catalogId: catalog.id },
-      },
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'notes',
-          components: [
-            { id: 'root', component: 'ActionButton', child: 'label' },
-            { id: 'label', component: 'Note', text: 'Open' },
-          ],
-        },
-      },
-    ],
-    surfaceId: 'notes',
+    layout: defineSurface({
+      surfaceId: 'notes',
+      catalogId: catalog.id,
+      data: z.object({ label: z.string() }),
+      initial: { label: 'Open' },
+      root: { component: 'ActionButton', bind: {}, props: { child: 'label' } },
+      components: [
+        { id: 'label', component: 'Note', text: { path: '/label' } },
+      ],
+    }),
     actions: createLitActions({
       attach: (view) =>
         void view.watchById(

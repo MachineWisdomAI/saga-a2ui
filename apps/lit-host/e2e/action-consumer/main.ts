@@ -22,6 +22,7 @@ import {
   type IngestResult,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
+import { rawLayout } from './raw-layout.js';
 import {
   createA2uiAppElement,
   defineElements,
@@ -907,8 +908,7 @@ function defineApp(app: string): void {
         };
         return session;
       },
-      initialInput: layoutFor(SURFACE_ID),
-      surfaceId: SURFACE_ID,
+      layout: rawLayout(SURFACE_ID, CATALOG_ID, layoutFor(SURFACE_ID)),
       actions: createLitActions({
         attach: attachForScenario(app),
         onSetupError: (error) => consumer.setupErrors.push(String(error)),

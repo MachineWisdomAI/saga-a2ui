@@ -16,12 +16,7 @@ import { createRoot } from 'react-dom/client';
 import { createNotesController } from './notes-controller.js';
 import { VIEW_TEXT } from './notes-contract.js';
 import { notesReactEntries } from './notes-react-catalog.js';
-import {
-  CATALOG_ID,
-  SURFACE_ID,
-  notesSurface,
-  ownBody,
-} from './notes-surface.js';
+import { CATALOG_ID, notesLayout, ownBody } from './notes-surface.js';
 
 // The React composition of the notes view: the same application, contract, actions, controller and
 // server as the Lit consumers, with a React root over the published `@a2ui/react` surface. The
@@ -69,13 +64,18 @@ export async function startNotesReactView(): Promise<void> {
   session.onSurfaceCreated((created) => {
     surface = created;
   });
-  const opened = session.ingest(notesSurface(ownBody));
+  const layout = notesLayout(ownBody);
+  const opened = session.ingest(layout.opening);
   if (!opened.ok || surface === undefined)
     throw new Error('The notes surface was not accepted.');
 
   const root = createRoot(container);
   let live = true;
   const controller = createNotesController(app, {
+    show: (data) => {
+      const update = layout.update(data);
+      if (live && update.ok) session.ingest(update.messages);
+    },
     ingest: (messages) => {
       if (live) session.ingest(messages);
     },

@@ -70,7 +70,7 @@ export function createAnswerViewElement(deps: AnswerViewDependencies) {
         result.isError === true
           ? undefined
           : readAnswerMarkdown(result.structuredContent);
-      this.ingest(answerData(markdown ?? ''));
+      this.updateData(answerData(markdown ?? ''));
       this.#status = markdown === undefined ? PROBLEM_TEXT : 'Answer';
       this.requestUpdate();
     }

@@ -12,6 +12,7 @@ import type {
   UpdateComponentsMessage,
   UpdateDataModelMessage,
 } from '@a2ui/web_core/v0_9';
+import { deepFreeze } from './deep-freeze.js';
 import type { ValidatedMessage } from './message.js';
 
 /** Why input was rejected. `message` is plain text that is safe to display. */
@@ -43,14 +44,6 @@ const malformed = (message: string): DecodeFailure => ({
   kind: 'malformed',
   message,
 });
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
-  }
-  return value;
-}
 
 /**
  * Wrap a message that `decodeCase` has just validated against its upstream schema. Private

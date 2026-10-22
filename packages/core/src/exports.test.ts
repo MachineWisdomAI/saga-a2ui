@@ -41,6 +41,7 @@ describe('@saga-a2ui/core exports', () => {
     expect(Object.keys(a2uiV0_9).sort()).toEqual([
       'a2uiV0_9Decoder',
       'createMessageSession',
+      'defineSurface',
     ]);
     expect(typeof z.object).toBe('function');
   });
