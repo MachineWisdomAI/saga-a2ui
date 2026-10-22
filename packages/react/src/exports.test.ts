@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
+import * as a2ui from '@saga-a2ui/react/a2ui';
 import * as actions from '@saga-a2ui/react/actions';
 import * as faithfulCard from '@saga-a2ui/react/faithful-card';
 
@@ -37,6 +38,14 @@ const anyOf = (modules: string[], pattern: RegExp): string[] =>
 
 describe('the optional React exports', () => {
   it('expose exactly the supported names', () => {
+    expect(Object.keys(a2ui).sort()).toEqual([
+      'A2uiSurface',
+      'Catalog',
+      'CommonSchemas',
+      'Surface',
+      'createComponentImplementation',
+      'openSurface',
+    ]);
     expect(Object.keys(actions).sort()).toEqual([
       'ActionButton',
       'ActionButtonEntry',
