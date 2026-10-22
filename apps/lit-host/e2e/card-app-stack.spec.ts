@@ -6,7 +6,11 @@ import {
 } from '@saga-a2ui/components/faithful-card';
 import { expect, test, type Frame, type Page } from '@playwright/test';
 import { builtUrl } from './built-artifacts.js';
-import { PROBE_TEXTS, PROBE_UNSUPPORTED } from './card-app-stack/texts.js';
+import {
+  PROBE_ERROR_TEXT,
+  PROBE_TEXTS,
+  PROBE_UNSUPPORTED,
+} from './card-app-stack/texts.js';
 import type { HostedResource } from './host-fixture/host.js';
 
 // The card application stacks in a real browser: `startFaithfulCardApp` of the React stack and of the
@@ -442,26 +446,45 @@ for (const stack of STACKS) {
       expect(PROBE_UNSUPPORTED).not.toBe(PROBE_TEXTS.problem);
       expect(await view.cardText()).toBe('');
 
-      // Present but malformed structured content is rejected even with fallback text beside it.
-      await deliver(envelope('Back.'));
-      await expect.poll(view.cardText).toContain('Back.');
-      await deliver({
-        content: [{ type: 'text', text: 'Usable fallback text' }],
-        structuredContent: { version: 2, question: 'q', answer: 'a' },
-      });
-      await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
-      expect(await view.cardText()).toBe('');
+      // Present but malformed structured content is rejected even with fallback text beside it,
+      // an empty answer included; each is followed by a valid result that recovers.
+      for (const malformed of [
+        { version: 2, question: 'q', answer: 'a' },
+        { version: 1, answer: 'a' },
+        { version: 1, question: 'q' },
+        { version: 1, question: 'q', answer: '' },
+        { version: 1, question: 7, answer: 'a' },
+        { version: 1, question: 'q', answer: 7 },
+        { unexpected: true },
+        {},
+      ]) {
+        await deliver(envelope('Back.'));
+        await expect.poll(view.cardText).toContain('Back.');
+        await deliver({
+          content: [{ type: 'text', text: 'Usable fallback text' }],
+          structuredContent: malformed,
+        });
+        await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
+        expect(await view.cardText()).toBe('');
+      }
 
-      // An error result reaches the application whole: it shows the content text, or rejects.
+      // An error result reaches the application whole, beside valid structured content: it is
+      // rejected carrying its own text, which is the problem shown, with no card. Without usable
+      // text the application's unsupported wording is shown instead.
+      await deliver(envelope('Shown before the error.'));
+      await expect.poll(view.cardText).toContain('Shown before the error.');
       await deliver({
-        content: [{ type: 'text', text: 'The service said no.' }],
+        content: [{ type: 'text', text: PROBE_ERROR_TEXT }],
         structuredContent: { version: 1, question: 'q', answer: 'valid' },
         isError: true,
       });
-      await expect.poll(view.cardText).toContain('The service said no.');
-      expect(await view.cardText()).not.toContain('valid');
+      await expect.poll(view.status).toBe(PROBE_ERROR_TEXT);
+      expect(PROBE_ERROR_TEXT).not.toBe(PROBE_UNSUPPORTED);
+      expect(PROBE_ERROR_TEXT).not.toBe(PROBE_TEXTS.problem);
+      expect(await view.cardText()).toBe('');
       await deliver({ content: [], isError: true });
       await expect.poll(view.status).toBe(PROBE_UNSUPPORTED);
+      expect(await view.cardText()).toBe('');
 
       // The next valid result recovers.
       await deliver(envelope('Recovered.'));

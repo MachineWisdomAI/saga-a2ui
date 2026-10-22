@@ -111,7 +111,7 @@ export const settle = (ms = 30): Promise<void> =>
 // Synthetic whole-result classification, standing in for an application's own protocol. The
 // wording and the envelope belong to this fixture; the stack knows neither.
 
-/** The wording an application supplies when it rejects a result. */
+/** The wording an application supplies when it rejects a result it cannot show. */
 export const UNSUPPORTED_WORDING = 'This answer cannot be shown by this view.';
 
 /** The text a result carries: its first `text` block, when that block's string is not empty. */
@@ -121,27 +121,34 @@ function usableText(result: ToolResult): string | undefined {
 }
 
 /**
- * Reads `{version: 1, question, answer}` from `structuredContent`; a result without structured
- * content shows its text; an error result shows its text when it has some. Anything else is
- * rejected with {@link UNSUPPORTED_WORDING}.
+ * Reads `{version: 1, question, answer}` from `structuredContent`, the answer a non-empty string.
+ * A result with absent or `null` structured content shows its text under an empty heading.
+ * Structured content that is present but is not that envelope is rejected, whatever text
+ * accompanies it. An error result is the application's own case: it is rejected with the error's
+ * text when it carries some, however valid its structured content. Every rejection carries
+ * wording: the error's text, else {@link UNSUPPORTED_WORDING}.
  */
 export function classifyEnvelopeOrText(result: ToolResult): CardResultOutcome {
-  const rejected = { kind: 'rejected', text: UNSUPPORTED_WORDING } as const;
   const text = usableText(result);
-  const textOnly: CardResultOutcome =
-    text === undefined
-      ? rejected
-      : { kind: 'content', content: { markdown: text, heading: '' } };
-  if (result.isError === true) return textOnly;
+  const unsupported = { kind: 'rejected', text: UNSUPPORTED_WORDING } as const;
+  if (result.isError === true) {
+    return text === undefined ? unsupported : { kind: 'rejected', text };
+  }
   const structured: unknown = result.structuredContent;
-  if (structured === undefined || structured === null) return textOnly;
+  if (structured === undefined || structured === null) {
+    return text === undefined
+      ? unsupported
+      : { kind: 'content', content: { markdown: text, heading: '' } };
+  }
+  if (typeof structured !== 'object') return unsupported;
   const envelope = structured as Record<string, unknown>;
   return envelope.version === 1 &&
     typeof envelope.question === 'string' &&
-    typeof envelope.answer === 'string'
+    typeof envelope.answer === 'string' &&
+    envelope.answer !== ''
     ? {
         kind: 'content',
         content: { markdown: envelope.answer, heading: envelope.question },
       }
-    : rejected;
+    : unsupported;
 }

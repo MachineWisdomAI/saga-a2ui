@@ -551,6 +551,7 @@ describe('startFaithfulCardApp', () => {
 // reported. The wording and the envelope below are the fixture's, never the stack's.
 describe('startFaithfulCardApp with an application result classification', () => {
   const FENCED = '```\nfirst line\n  second line\n```\n';
+  const ERROR_TEXT = 'The service could not answer.';
   const envelope = (overrides: Record<string, unknown> = {}) => ({
     version: 1,
     question: 'Is it so?',
@@ -644,38 +645,86 @@ describe('startFaithfulCardApp with an application result classification', () =>
 
   it('rejects present but malformed structured content even when fallback text exists', async () => {
     await startClassified();
-    await host!.bridge.sendToolResult(
-      withStructured(envelope({ version: 2 }), 'Usable fallback text'),
-    );
-    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
-    expect(cardText()).toBe('');
-    await host!.bridge.sendToolResult(
-      withStructured({ unexpected: true }, 'Usable fallback text'),
-    );
-    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
-    expect(cardText()).toBe('');
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+    for (const malformed of [
+      envelope({ version: 2 }),
+      envelope({ version: '1' }),
+      envelope({ version: undefined }),
+      envelope({ question: undefined }),
+      envelope({ question: 7 }),
+      envelope({ answer: undefined }),
+      envelope({ answer: 7 }),
+      envelope({ answer: '' }),
+      { unexpected: true },
+      {},
+      [],
+      'a string',
+      42,
+    ]) {
+      await host!.bridge.sendToolResult(
+        withStructured(malformed, 'Usable fallback text'),
+      );
+      await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+      expect(cardText()).toBe('');
+      expect(status()).not.toBe(TEXTS.problem);
+      // The next valid result recovers from each of them.
+      await host!.bridge.sendToolResult(withStructured(envelope()));
+      await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+      expect(status()).toBeUndefined();
+    }
   });
 
-  it('hands an error result to the application whole: it may show the content text even beside valid structured content', async () => {
+  it('hands an error result to the application whole: its text is the rejection wording, even beside valid structured content', async () => {
     await startClassified();
+    await host!.bridge.sendToolResult(withStructured(envelope()));
+    await vi.waitFor(() => expect(cardText()).toContain('It is so.'));
+
     await host!.bridge.sendToolResult({
-      ...withStructured(envelope(), 'The service said no.'),
+      ...withStructured(envelope(), ERROR_TEXT),
       isError: true,
     });
-    await vi.waitFor(() =>
-      expect(cardText()).toContain('The service said no.'),
-    );
-    expect(cardText()).not.toContain('It is so.');
+    // A rejection carrying the error's exact text: no card, the chrome told it as the problem.
+    await vi.waitFor(() => expect(status()).toBe(ERROR_TEXT));
+    expect(cardText()).toBe('');
+    expect(ERROR_TEXT).not.toBe(UNSUPPORTED_WORDING);
+    expect(ERROR_TEXT).not.toBe(TEXTS.problem);
 
-    await host!.bridge.sendToolResult({ content: [], isError: true });
+    // Without usable text the application's unsupported wording is shown instead.
+    await host!.bridge.sendToolResult({
+      ...withStructured(envelope()),
+      content: [],
+      isError: true,
+    });
     await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
     expect(cardText()).toBe('');
+
+    // Only the first text block counts, here empty: a later block is not a fallback.
+    await host!.bridge.sendToolResult({
+      content: [
+        { type: 'text' as const, text: '' },
+        { type: 'text' as const, text: ERROR_TEXT },
+      ],
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    expect(cardText()).toBe('');
+
+    // The error text keeps its whitespace and terminal newline.
+    await host!.bridge.sendToolResult({
+      ...text(`  ${ERROR_TEXT}\n`),
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(`  ${ERROR_TEXT}\n`));
   });
 
   it('recovers with a valid result after an error and after an unsupported result', async () => {
     await startClassified();
-    await host!.bridge.sendToolResult({ content: [], isError: true });
-    await vi.waitFor(() => expect(status()).toBe(UNSUPPORTED_WORDING));
+    await host!.bridge.sendToolResult({
+      ...text(ERROR_TEXT),
+      isError: true,
+    });
+    await vi.waitFor(() => expect(status()).toBe(ERROR_TEXT));
     await host!.bridge.sendToolResult(
       withStructured(envelope({ answer: 'Back.' })),
     );
@@ -688,6 +737,24 @@ describe('startFaithfulCardApp with an application result classification', () =>
       withStructured(envelope({ answer: 'Again.' })),
     );
     await vi.waitFor(() => expect(cardText()).toContain('Again.'));
+  });
+
+  it('tells the chrome an error result’s text as the problem, never as an answer', async () => {
+    const seen: CardViewState[] = [];
+    await startClassified({
+      chrome: (props: CardChromeProps) => {
+        seen.push(props.state);
+        return props.card;
+      },
+    });
+    await host!.bridge.sendToolResult({
+      ...withStructured(envelope(), ERROR_TEXT),
+      isError: true,
+    });
+    await vi.waitFor(() =>
+      expect(seen).toContainEqual({ kind: 'problem', text: ERROR_TEXT }),
+    );
+    expect(seen.some((state) => state.kind === 'answer')).toBe(false);
   });
 
   it('presents an equal answer again as a new presentation', async () => {

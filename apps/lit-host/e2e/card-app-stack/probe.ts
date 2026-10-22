@@ -86,25 +86,31 @@ export function runProbe(stack: ProbeStack): void {
     .build();
 
   /**
-   * The application's own protocol, for a page that asks for it: `{version: 1, question, answer}` in
-   * structured content, else the first text block's string when it is not empty. Anything else is
-   * rejected with the application's wording. The error flag reaches it like any other field.
+   * The application's own protocol, for a page that asks for it: `{version: 1, question, answer}`
+   * in structured content, the answer a non-empty string; absent or `null` structured content shows
+   * the first text block's string when it is not empty. Anything else is rejected with the
+   * application's wording. The error flag reaches it like any other field: an error result is
+   * rejected with its own text, else with the application's unsupported wording.
    */
   const classifyResult = (result: ToolResult): CardResultOutcome => {
-    const rejected = { kind: 'rejected', text: PROBE_UNSUPPORTED } as const;
+    const unsupported = { kind: 'rejected', text: PROBE_UNSUPPORTED } as const;
     const first = result.content.find((block) => block.type === 'text');
     const text = first?.type === 'text' && first.text !== '' ? first.text : '';
-    const fromText: CardResultOutcome =
-      text === ''
-        ? rejected
-        : { kind: 'content', content: { markdown: text, heading: '' } };
+    if (result.isError === true) {
+      return text === '' ? unsupported : { kind: 'rejected', text };
+    }
     const structured: unknown = result.structuredContent;
-    if (result.isError === true) return fromText;
-    if (structured === undefined || structured === null) return fromText;
+    if (structured === undefined || structured === null) {
+      return text === ''
+        ? unsupported
+        : { kind: 'content', content: { markdown: text, heading: '' } };
+    }
+    if (typeof structured !== 'object') return unsupported;
     const envelope = structured as Record<string, unknown>;
     if (
       envelope.version === 1 &&
       typeof envelope.answer === 'string' &&
+      envelope.answer !== '' &&
       typeof envelope.question === 'string'
     ) {
       line(`classified:${envelope.answer}`);
@@ -113,7 +119,7 @@ export function runProbe(stack: ProbeStack): void {
         content: { markdown: envelope.answer, heading: envelope.question },
       };
     }
-    return rejected;
+    return unsupported;
   };
   const classified =
     document.querySelector('meta[name="probe-classify"]') !== null;
