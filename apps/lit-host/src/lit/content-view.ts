@@ -1,4 +1,6 @@
 import {
+  CONTENT_POLICY_ELEMENT_ID,
+  contentPolicyFromEmbedded,
   createFaithfulCardReader,
   createImageConsentScope,
   establishImageEnforcement,
@@ -8,10 +10,6 @@ import {
   documentContentSecurityPolicies,
   type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
-import {
-  CONTENT_POLICY_ELEMENT_ID,
-  policyFromEmbedded,
-} from '../content/embedded-policy.js';
 
 /**
  * The episode consumer's trusted card settings: CommonMark, and a description bound of 2,000
@@ -36,7 +34,7 @@ export function contentViewFromDocument(
   doc: Document,
   hostLinks: HostLinks,
 ): DocumentContentView {
-  const created = policyFromEmbedded(
+  const created = contentPolicyFromEmbedded(
     doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
   );
   if (!created.ok) return { ok: false, message: created.failure.message };
