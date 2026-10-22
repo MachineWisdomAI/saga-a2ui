@@ -1,6 +1,9 @@
 # Installing saga a2ui
 
-Four packages are available from public npm at **`0.1.0-rc.1`**:
+Four packages are available from public npm at **`0.1.0-rc.1`**, the version this
+page's recipe pins and verifies. Later prereleases of these four also exist; this
+page does not inventory them, and a command that names `0.1.0-rc.1` installs that
+release, not the newest:
 
 | Package | Use |
 | --- | --- |
@@ -52,15 +55,15 @@ Public-registry installation, strict typechecking, application builds and a
 standalone container have been verified for this four-package recipe. Host
 behavior has its own [compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
 
-## The `0.7.0` release set: one stack plus framework peers
+## The planned `0.7.0` release set: one stack plus framework peers
 
-The next release set replaces the four-package recipe above with one stack package. An application installs `@saga-a2ui/react-mcp-stack` and the React peers, and imports from the stack only (`@saga-a2ui/react-mcp-stack` for its own catalog, `@saga-a2ui/react-mcp-stack/faithful-card` for a card application). The stack declares core, components, MCP and React as regular dependencies, so one install is enough under a strict layout, and it keeps `react` and `react-dom` as your declared singletons. Keep the Markdown override from the recipe above.
+The planned release set (the four packages above plus `@saga-a2ui/react-mcp-stack`; see [release preparation](release-packages.md)) replaces the four-package recipe above with one stack package. An application installs `@saga-a2ui/react-mcp-stack` and the React peers, and imports from the stack only (`@saga-a2ui/react-mcp-stack` for its own catalog, `@saga-a2ui/react-mcp-stack/faithful-card` for a card application). The stack declares core, components, MCP and React as regular dependencies, so one install is enough under a strict layout, and it keeps `react` and `react-dom` as your declared singletons. Keep the Markdown override from the recipe above.
 
 ```sh
 npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@RELEASE react@19.3.1 react-dom@19.3.1
 ```
 
-Replace `RELEASE` with the published `0.7.0` version. **That version is not published yet**, so this command cannot succeed today: the registry holds only the four `0.1.0-rc.1` packages above, and the source version `0.7.0-rc.1` on the integration branch is not a registry release. Until publication, qualification is source and packed-candidate evidence (`npm run test:pnpm-react`, `npm run candidate:verify`), not a registry installation. The [React integration guide](react-consumers.md#one-stack-plus-react) describes what the application imports and the two footprints (installed tree versus emitted bundle). The Lit stack, `@saga-a2ui/lit-mcp-stack`, stays private like `@saga-a2ui/lit`.
+Replace `RELEASE` with the published `0.7.0` version. **That version is not published yet**, so this command cannot succeed today: `@saga-a2ui/react-mcp-stack` has no registry release, no `0.7.0` of any package exists, and the source version `0.7.0-rc.1` on the integration branch is not a registry release. Until publication, qualification is source and packed-candidate evidence (`npm run test:pnpm-react`, `npm run candidate:verify`), which is a local source rehearsal and not an anonymous registry installation or a real-host acceptance. The [React integration guide](react-consumers.md#one-stack-plus-react) describes what the application imports and the two footprints: the installed tree includes `components`, `markdown-it` and the single `react` and `react-dom` peers, while the emitted browser bundle of an own-catalog application excludes components and Markdown and keeps the server entry separate. The Lit stack, `@saga-a2ui/lit-mcp-stack`, stays private like `@saga-a2ui/lit`.
 
 ## Run a demo or use a Lit starter
 
@@ -71,7 +74,7 @@ which is **not published on npm**. The CLI is also source tooling, not an npm
 package.
 
 Candidate versions such as `0.0.0-candidate.g<12 hex>` are distinct from the
-published `0.1.0-rc.1` release. See [candidate installation, updates and rollback](candidate-update-and-rollback.md).
+published releases such as `0.1.0-rc.1`; a candidate is not an upgrade of one. See [candidate installation, updates and rollback](candidate-update-and-rollback.md).
 Source package versions may advance ahead of npm; use the published versions
 above for a registry installation.
 
@@ -83,7 +86,7 @@ GitHub source visibility.
 ## Maintainer publication
 
 The [release-packages guide](release-packages.md) describes building and
-qualifying exact tarballs for a subsequent release. Source version changes and
+qualifying the exact tarballs of the five-package set for a subsequent release. Source version changes and
 passing CI do not publish them. Verify package contents, licenses, integrity,
 scope ownership and the approved versions and tag before publishing with public
 npm access. Verify the resulting exact versions through an anonymous clean

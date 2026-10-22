@@ -13,7 +13,7 @@ The main entry is for an application's own catalog; the `/faithful-card` entry s
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The package's `exports.test.ts` inspects the bundle; `npm run test:pnpm-react` and `npm run candidate:verify` check the install.
 
-The stack is part of the `0.7.0` release set. It is not on public npm yet, so no registry command here installs it; see [public installation](public-install.md) for the published `0.1.0-rc.1` recipe and for what changes at `0.7.0`. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
+The stack is part of the planned `0.7.0` release set. It has no registry release and no `0.7.0` package is published, so no registry command here installs it; see [public installation](public-install.md) for the published `0.1.0-rc.1` recipe and for what changes at `0.7.0`, and [release preparation](release-packages.md) for the sequence and the exact-artifact checks. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
 
 ## The React integration surface
 

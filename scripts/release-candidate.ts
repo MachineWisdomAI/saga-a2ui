@@ -714,6 +714,20 @@ export interface CandidateInputs {
   readonly generatedAt: string;
 }
 
+/** What a candidate says it is and how it relates to earlier artifacts; `candidate.json` stores it and `CANDIDATE.md` prints it. */
+export function candidateProvenance() {
+  return {
+    status: 'unreleased candidate',
+    statement:
+      'A candidate is a build of one revision for qualification. It is not a release: producing it publishes, tags and deploys nothing, its tarballs are private copies, and its version exists only in these artifacts.',
+    predecessor: {
+      registryUpgradeExercised: false,
+      statement:
+        'Public npm releases of SAGA packages already exist, including 0.1.0-rc.1 of core, components, mcp and react; this record does not list or inventory them. A candidate is a separate artifact with a candidate-only version and does not supersede or upgrade any of them. Update and rollback are rehearsed between candidate builds only (scripts/release-candidate.test.ts, candidate:rehearse); no upgrade from a registry release was exercised. Candidate qualification is a local source rehearsal: it is not a promoted artifact, an anonymous registry install or acceptance in a real host.',
+    },
+  };
+}
+
 export function candidateRecord(
   inputs: CandidateInputs,
 ): Record<string, unknown> {
@@ -758,17 +772,10 @@ export function candidateRecord(
   );
   return {
     format: 1,
-    status: 'unreleased candidate',
-    statement:
-      'A candidate is a build of one revision for qualification. It is not a release: nothing is published, tagged or deployed, the packages remain private, and the version below exists only in these artifacts.',
+    ...candidateProvenance(),
     generatedAt: inputs.generatedAt,
     source: inputs.revision,
     version,
-    predecessor: {
-      published: null,
-      statement:
-        'This is the first candidate. No SAGA package has ever been published, so no earlier release exists and no upgrade from one was tested. The update and rollback sequence is rehearsed between two candidate builds only (scripts/release-candidate.test.ts).',
-    },
     recipe: {
       node: {
         testedHere: process.version,

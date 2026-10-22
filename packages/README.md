@@ -12,7 +12,7 @@ Grouping belongs in the documentation and bundling belongs in CLI templates, so 
 
 ## Packages by group
 
-Core, components, MCP and React are available on public npm at `0.1.0-rc.1`. See the [installation recipe](../docs/public-install.md). Lit remains private and unversioned. Local candidate builds remain available for all five; source manifest versions can advance ahead of the published release.
+Core, components, MCP and React are available on public npm at `0.1.0-rc.1`. See the [installation recipe](../docs/public-install.md). Lit remains private and unversioned. Local candidate builds remain available for every package, including the private Lit packages; source manifest versions can advance ahead of the published release.
 
 ### Core
 
