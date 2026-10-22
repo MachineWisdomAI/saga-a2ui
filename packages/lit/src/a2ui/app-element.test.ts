@@ -99,9 +99,11 @@ function mount(
     .run(() => options.onClear?.())
     .build();
   const App = createA2uiAppElement({
-    createSession: () => {
+    catalog,
+    createSession: (given) => {
+      expect(given).toBe(catalog);
       const session = createMessageSession({
-        catalogs: [catalog],
+        catalogs: [given],
         decoder: a2uiV0_9Decoder,
       });
       sessions.push(session);

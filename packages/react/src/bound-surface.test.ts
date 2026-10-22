@@ -101,7 +101,10 @@ describe('a bound surface with an application’s own catalog', () => {
     const refused = update(surface, { label: 'Changed' } as never);
 
     expect(refused?.ok).toBe(false);
-    if (refused?.ok === false) expect(refused.message).toContain('status');
+    if (refused?.ok === false) {
+      expect(refused.failure.kind).toBe('invalid-data');
+      expect(refused.failure.message).toContain('status');
+    }
     const unknown = update(surface, {
       label: 'Changed',
       status: 'Saved',
@@ -148,7 +151,10 @@ describe('a bound surface with an application’s own catalog', () => {
     expect(mounted.container.textContent).toBe('');
     const late = update(surface, { label: 'Mark', status: 'Late' });
     expect(late?.ok).toBe(false);
-    if (late?.ok === false) expect(late.message).toContain('disposed');
+    if (late?.ok === false) {
+      expect(late.failure.kind).toBe('rejected');
+      expect(late.failure.message).toContain('disposed');
+    }
     expect(mounted.container.textContent).toBe('');
   });
 

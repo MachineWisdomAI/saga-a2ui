@@ -1,11 +1,13 @@
 import { A2uiSurface, type LitComponentApi } from '@a2ui/lit/v0_9';
-import type { Subscription, SurfaceModel } from '@a2ui/web_core/v0_9';
-import type {
-  IngestFailure,
-  IngestResult,
-  MessageSession,
-  SurfaceLayout,
-  SurfaceUpdateFailure,
+import type { Catalog, Subscription, SurfaceModel } from '@a2ui/web_core/v0_9';
+import {
+  a2uiV0_9Decoder,
+  createMessageSession,
+  type IngestFailure,
+  type IngestResult,
+  type MessageSession,
+  type SurfaceLayout,
+  type SurfaceUpdateFailure,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import { LitElement, html, nothing } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
@@ -47,12 +49,21 @@ export type A2uiUpdateResult =
   | { readonly ok: false; readonly failure: A2uiUpdateFailure };
 
 export interface A2uiAppDependencies<TData> {
-  /** Creates a fresh session on each connect. The element owns and disposes what it creates. */
-  readonly createSession: () => A2uiSession;
+  /**
+   * The catalog the surface's components come from. The element builds a fresh session over it
+   * on each connect, with the SDK's A2UI decoder, so an application never constructs one.
+   */
+  readonly catalog: Catalog<LitComponentApi>;
   /** The one surface this element presents: its identity, its data type and how it opens. */
   readonly layout: SurfaceLayout<TData>;
   /** Optional. Started per presented surface and ended with it, on every exit. */
   readonly actions?: A2uiActions;
+  /**
+   * Optional and advanced; an ordinary application leaves it out. Replaces the default session
+   * on each connect, for an application that must observe or wrap the session it is given
+   * `catalog`. The element owns and disposes what this returns.
+   */
+  readonly createSession?: (catalog: Catalog<LitComponentApi>) => A2uiSession;
 }
 
 // `a2ui-surface` is defined by importing upstream's A2uiSurface. This package renders it, so this
@@ -61,7 +72,7 @@ void A2uiSurface;
 
 /**
  * Builds a custom-element class that presents one A2UI surface from a core message session.
- * The application chooses the session (its catalog and decoder) and defines the tag; subclass
+ * The application supplies the catalog and the layout and defines the tag; subclass
  * the result to add application chrome or wiring.
  *
  * Lifecycle: connecting creates a session, subscribes, and opens the layout. Disconnecting
@@ -172,7 +183,12 @@ export function createA2uiAppElement<TData>(deps: A2uiAppDependencies<TData>) {
 
     connectedCallback() {
       super.connectedCallback();
-      const session = deps.createSession();
+      const session =
+        deps.createSession?.(deps.catalog) ??
+        createMessageSession({
+          catalogs: [deps.catalog],
+          decoder: a2uiV0_9Decoder,
+        });
       this.session = session;
       this.subscriptions = [
         session.onSurfaceCreated((surface) => {

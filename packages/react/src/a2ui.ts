@@ -13,5 +13,6 @@ export {
   Surface,
   type BoundSurface,
   type SurfaceHandle,
+  type UpdateFailure,
   type UpdateResult,
 } from './bound-surface.js';

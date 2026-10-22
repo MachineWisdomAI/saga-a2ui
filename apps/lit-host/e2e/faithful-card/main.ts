@@ -8,8 +8,6 @@ import {
 } from '@saga-a2ui/components/faithful-card';
 import { type LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 import {
-  a2uiV0_9Decoder,
-  createMessageSession,
   defineSurface,
   type IngestResult,
 } from '@saga-a2ui/core/protocols/a2ui/v0_9';
@@ -166,8 +164,7 @@ const catalogView = viewFor(
   [],
 );
 class CardApp extends createA2uiAppElement({
-  createSession: () =>
-    createMessageSession({ catalogs: [catalog], decoder: a2uiV0_9Decoder }),
+  catalog: catalog,
   layout: defineSurface({
     surfaceId: 'card',
     catalogId: CATALOG_ID,

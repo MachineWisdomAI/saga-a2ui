@@ -221,6 +221,7 @@ function createInstance(
   };
 
   class EpisodesApp extends createA2uiAppElement({
+    catalog,
     createSession: () => {
       const session = createMessageSession({
         catalogs: [catalog],
