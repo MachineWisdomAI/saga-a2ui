@@ -44,9 +44,11 @@ const VERSION_FIELD =
   /(?<![\w$])version\s*:\s*(["'`])v0\.9\1|(["'])version\2\s*\]?\s*:\s*(["'`])v0\.9\3/g;
 
 const IMPORT_FORM = String.raw`(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)`;
-// The bridge is the view side of MCP Apps: the package and its client subpaths. Its `/server`
-// subpath registers tools on a server and is not view glue, so it is not part of the rule.
-const FORBIDDEN_MODULE = String.raw`(?:@modelcontextprotocol/ext-apps(?:/(?!server\b)[^'"\`]*)?|@saga-a2ui/mcp/view|@a2ui/[^'"\`]+)`;
+// The approved rule names the whole `@modelcontextprotocol/ext-apps` package, every subpath
+// included. The backend entry a server consumer takes is `@saga-a2ui/mcp/server`; the package's own
+// `/server` subpath is not exempt by pattern. A server that registers a tool or resource with it
+// directly says so on that one line, with a reason, like every other reviewed exception.
+const FORBIDDEN_MODULE = String.raw`(?:@modelcontextprotocol/ext-apps(?:/[^'"\`]*)?|@saga-a2ui/mcp/view|@a2ui/[^'"\`]+)`;
 
 export const RULES: readonly Rule[] = [
   {
@@ -326,6 +328,11 @@ export interface ExcludeEntry {
 export const INCLUDE: readonly IncludeEntry[] = [
   { glob: 'templates/*/src/**/*.{ts,tsx}', kind: 'code' },
   { glob: 'examples/*/src/**/*.{ts,tsx}', kind: 'code' },
+  // Server consumers: the backend side of each maintained template, example and demonstration. The
+  // lit-host servers (`apps/lit-host/src/mcp`, `playback`) are covered by their view-module entries.
+  { glob: 'templates/*/server/**/*.ts', kind: 'code' },
+  { glob: 'examples/*/server/**/*.ts', kind: 'code' },
+  { glob: 'demo/*/server/**/*.ts', kind: 'code' },
   { glob: 'apps/lit-host/src/mcp/**/*.ts', kind: 'code' },
   { glob: 'apps/lit-host/src/answer-card/**/*.ts', kind: 'code' },
   { glob: 'apps/lit-host/src/playback/**/*.ts', kind: 'code' },
