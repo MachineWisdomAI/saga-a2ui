@@ -54,7 +54,7 @@ For an authorized user the synthetic media service issues a **media capability**
 
 The view accepts a payload only if it matches the current sign-in, selection and request, so a response from an earlier one cannot restore media after the view cleared it. The player fetches media under the service's checks and the host's declared resource policy. A successful Play response means access was granted. The view shows **playing** only once audio actually starts.
 
-User B requesting the same episode is refused at the entitlement check, before any capability or media fetch; the view clears prior media and explains the denial. Missing or expired sign-in leads to sign-in recovery instead. If A's access expires or media fails, the view stops, clears the source and offers a deliberate retry, which is a new Play request with fresh checks. It never refreshes a capability from saved view state.
+User B requesting the same episode is refused at the entitlement check, before any capability or media fetch; the view clears prior media and explains the denial. The server rejects missing or expired credentials before protected work; a rejected host call does not tell the view which authentication check failed. The view reports an unconfirmed outcome and requires a fresh opener. If A's access expires or media fails, the view stops, clears the source and offers a deliberate retry, which is a new Play request with fresh checks. It never refreshes a capability from saved view state.
 
 ![Playback and failure flow: an explicit Play request passes identity, entitlement and host-routing checks before capability delivery; every fresh media acquisition is checked, and failures clear the player.](../../diagrams/authorized-playback-flow.png)
 
@@ -84,11 +84,11 @@ The application decides who is asking, whether they may hear the episode and whe
 
 ## Failure and recovery
 
-Recovery depends on which check failed. Missing or expired identity leads to sign-in. An entitlement denial explains "Playback denied: this account does not have access to this episode"; signing in again does not grant a subscription.
+Recovery depends on evidence the view actually receives. The server rejects missing or expired identity before protected work. A host-call rejection is an unknown outcome in the view, not a sign-in diagnosis, and offers no blind retry. An entitlement denial explains "Playback denied: this account does not have access to this episode"; signing in again does not grant a subscription.
 
 | Trigger | Result and recovery |
 | --- | --- |
-| Missing, malformed, expired or service-only identity | Rejected before protected work, keeping the HTTP authentication status and challenge. The view clears protected state and media and offers sign-in. |
+| Missing, malformed, expired or service-only identity | Rejected before protected work with the applicable HTTP authentication response. If the host rejects the call, the view clears media and reports an unconfirmed outcome; it does not infer sign-in failure or invite retry. |
 | Forged account fields or invalid episode input | Arguments cannot choose the caller. Invalid business input is rejected before media acquisition. |
 | Capability used by another recipient or for another episode | The media service refuses and returns no bytes. |
 | Entitlement denied or revoked | A denied Play yields no capability; a denied acquisition yields no new bytes. The view clears the player and shows the denial. A later explicit request succeeds only if the server then permits it. |
@@ -98,7 +98,7 @@ Recovery depends on which check failed. Missing or expired identity leads to sig
 | Account or selection changes, authentication is lost, or the view is disposed | Pending results are invalidated, work cancelled where possible, playback stopped, source removed, resources and listeners released. New content needs a current authenticated result. |
 | Deadline expires or work is cancelled | The operation stops waiting within its deadline and the view shows a safe error; cancellation returns a safe outcome and late results are suppressed. Cancelling underlying work is best effort; application code owns its cleanup. |
 
-Protocol responses depend on where the failure occurs. A malformed MCP call or unknown tool is a JSON-RPC error. For a known Play operation, invalid arguments, entitlement denial, expected backend failures and missing host capabilities are safe tool failures with `isError: true`. Invalid output or projection data and unexpected contract faults are sanitized internal errors with no success data. The endpoint does not copy backend HTTP errors. Wire-level tests check these mappings against the pinned upstream schema and error behavior. After the response completes, a player failure changes view state rather than the server response.
+Protocol responses depend on where the failure occurs. A malformed MCP call or unknown tool is a JSON-RPC error. For a known Play operation, invalid arguments, entitlement denial, expected backend failures and missing host capabilities are safe tool failures with `isError: true`. Invalid output or projection data and unexpected contract faults become safe `isError` tool failures with no success payload or private diagnostics. The endpoint does not copy backend HTTP errors. Wire-level tests check these mappings against the pinned upstream schema and error behavior. After the response completes, a player failure changes view state rather than the server response.
 
 If a host exposes no observable account-change signal, the view cannot clear immediately after an invisible switch; the server still checks every request, and verification records this limit per host. The [rejected account/session proposal](account_session_isolation.blueprint.md) proposed retained-state limits and focus or resume revalidation; those are not requirements here. The [request and view lifetimes](request_view_lifetimes.blueprint.md#status) design owns remaining teardown policy, STATE2 prerequisites and host gates.
 
