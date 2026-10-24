@@ -399,7 +399,7 @@ for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
 }
 byTestId('source-identity').textContent =
   `Built from candidate ${build.candidateVersion}, source commit ${build.commit.slice(0, 12)}${build.dirty ? ' (the build had uncommitted changes, so these links may not match it)' : ''}. ` +
-  'The repository is private, so the links open for people who have access to it. The candidate is a local build of the unpublished packages; nothing here says they are on a public registry.';
+  'Source links point to that revision on GitHub. The candidate is a local, unpublished build of this source, not a package from the registry.';
 
 // Theme: the system's preference unless the reader chooses.
 radios(

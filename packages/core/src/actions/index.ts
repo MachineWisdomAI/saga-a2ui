@@ -2,17 +2,15 @@
 // attaches it to a rendered instance through the `InstanceView` its setup receives. A renderer
 // adapter opens instances on an `InstanceHost`. Nothing here imports a DOM, a renderer or MCP.
 //
-// Implemented so far: immutable local definitions (ACT1); in ACT4 their asynchronous execution:
-// `before` prerequisites with `proceed`/`refuse`, asynchronous handlers, the work deadline and the
-// hook budget, the four hooks, both busy policies, `observe`, and the optional `subject` reader; in
-// ACT5 the invocation scope: `atActivation`, `own`, `acquire`, `transfer`, and release of what the
-// invocation still holds; and in ACT6 server actions: `Action.server(label, transport)`, whose
-// handler also receives `call`. The transport is the application's seam, so no MCP package is
-// imported here. Both bounds are optional everywhere: each resolves from the action's `limits`
-// override, then the `limits` of the instance host that owns the binding, then the default
-// (30,000 ms of work, 5,000 ms per awaited hook or cleanup step). Failures carry an extensible
-// `category`, and `ActionError` lets an application state one. `eventTurn` is a later slice and
-// is not declared.
+// Local and server actions use immutable definitions. An action runs asynchronous `before`
+// prerequisites and its handler under one work deadline. Four hooks and resource cleanup have
+// separate bounds. Both busy policies, `observe` and an optional `subject` reader belong to the
+// binding. The invocation scope offers `atActivation`, `own`, `acquire` and `transfer`, and releases
+// whatever it still holds. `Action.server(label, transport)` also gives its handler `call`; the
+// transport is the application's seam, so no MCP package is imported here. Each bound resolves
+// from the action's `limits`, then the instance host's `limits`, then the default (30,000 ms of
+// work, 5,000 ms per awaited hook or cleanup step). Failures carry an extensible `category`, and
+// `ActionError` lets an application state one. `eventTurn` is not declared.
 export { Action } from './definition.js';
 export type {
   ActionDefinition,

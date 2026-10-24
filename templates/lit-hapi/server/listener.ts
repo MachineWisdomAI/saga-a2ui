@@ -99,7 +99,7 @@ export async function startListener(
       allowedHosts: ALLOWED_HOSTNAMES,
       // #region saga-snippet:identity-handoff
       // Hapi's authentication strategy snapshots the verified credential before the body wait.
-      // The bridge carries that request's auth to this factory and the Node transport; SAGA's
+      // The bridge carries that request's auth to this factory and the Node transport; saga a2ui's
       // identityOf hook reads only that auth. No argument or previous request names an account.
       createServer: ({ lifetime, authInfo }) => {
         if (authInfo === undefined)

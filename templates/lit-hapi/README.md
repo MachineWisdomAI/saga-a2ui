@@ -1,4 +1,4 @@
-# SAGA starter: Lit view, Hapi server
+# saga a2ui starter: Lit view, Hapi server
 
 Use the maintained [Hapi bridge](server/bridge.ts) in an existing application, or start
 with the complete Lit/MCP application. The bridge owns request admission, bounded JSON
@@ -60,7 +60,7 @@ payload parsing and timeouts.
 
 ## New application: use the complete starter
 
-From a SAGA checkout:
+From a saga a2ui checkout:
 
 ```sh
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hapi ./my-app
@@ -80,11 +80,16 @@ server/
 ├── listener.ts        view preparation, auth and endpoint registration
 ├── main.ts            starts/stops Hapi and handles termination signals
 ├── authenticate.ts    verifies and snapshots this request's credential
+├── verifier.ts        who a bearer credential belongs to (your identity provider)
+├── identity.ts        reads the verified auth for an operation
 ├── operations.ts      MCP tools, their view and backend calls
 └── authorization.ts   decides what the verified account may see
 src/
 ├── catalog.ts         components the A2UI view may use
-└── view.ts            renders results and owns view cleanup
+├── actions.ts         the local actions
+├── view.ts            renders results, binds actions and owns view cleanup
+├── surface.ts         the layout (names no action)
+└── contract.ts        the result shape the server and view share
 ```
 
 ## Ownership and request flow

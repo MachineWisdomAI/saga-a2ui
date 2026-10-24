@@ -58,7 +58,7 @@ export interface McpPluginOptions {
    * with this request. The application owns the tools and their data.
    */
   createServer: (context: McpRequestContext) => McpServer;
-  /** Limits apply from admission, before authentication. Omitted values use SAGA defaults. */
+  /** Limits apply from admission, before authentication. Omitted values use saga a2ui defaults. */
   budgets?: BudgetSettings;
   /** Maximum JSON request size in bytes. Defaults to 1 MiB. */
   maxRequestBytes?: number;
@@ -186,7 +186,7 @@ function captureErrorResponse(res: ServerResponse): {
  * ours: raw Node objects out of `request.raw`, `h.abandon` back to hapi, and
  * the DNS-rebinding guards the Express/Fastify/Hono packages apply for free.
  *
- * The bridge composes SAGA request budgets with the official MCP transport. The
+ * The bridge composes saga a2ui request budgets with the official MCP transport. The
  * application supplies authentication, limit values and the MCP server factory;
  * body parsing and socket choreography remain bridge implementation details.
  */

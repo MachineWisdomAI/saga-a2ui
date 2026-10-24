@@ -1,4 +1,4 @@
-# SAGA starter: Lit view, Node server
+# saga a2ui starter: Lit view, Node server
 
 A Lit view (A2UI rendered with your own catalog) served as an MCP App by a Node MCP server. It
 uses only the public `@saga-a2ui/*` exports and the official `@modelcontextprotocol/node`
@@ -28,7 +28,7 @@ deliberate: the starter ships no identity provider.
 | `server/verifier.ts` | Who a bearer credential belongs to (your identity provider). |
 | `server/authorization.ts` | What a verified account may see. Asked again for every request. |
 | `server/operations.ts` | Your operations and their backend calls. The handler's record is projected field by field. |
-| `server/listener.ts` | HTTP hosting. Add your ingress host name to `allowedHosts` when you deploy. |
+| `server/listener.ts` | HTTP hosting. When you deploy, replace `localhostHostValidation()` with `hostHeaderValidation([...])` naming your ingress host. If clients send a remote Origin, also replace `localhostOriginValidation()` with an explicit trusted-origin policy: allowing the Host does not allow that Origin. |
 | `src/catalog.ts` | Which components a layout may name. Nothing is registered globally. |
 | `src/actions.ts`, `src/view.ts` | Your actions, and which rendered control each one is attached to. |
 

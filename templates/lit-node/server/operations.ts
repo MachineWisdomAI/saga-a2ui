@@ -18,7 +18,7 @@ import {
 } from '../src/contract.js';
 import { identityOf, type AccountIdentity } from './identity.js';
 
-// The application's MCP operations, declared with SAGA's server export. The application owns the
+// The application's MCP operations, declared with saga a2ui's server export. The application owns the
 // listener (listener.ts), who is asking (authenticate.ts), what each account may see
 // (authorization.ts) and the built view it serves. Each request builds its own server.
 

@@ -1,9 +1,9 @@
-# SAGA demonstration: browse, descriptions, protected Play and notes
+# saga a2ui demonstration: browse, descriptions, protected Play and notes
 
 A synthetic, **local-only** application that shows one qualified pair end to end: the `lit-mcp`
 stack on the `node` server target (`templates/lit-node`, `@modelcontextprotocol/node` 2.1.1). It
 runs the full allowed, denied, expired and recovery workflow from a download that was built from the
-release candidate's packed SDK packages, outside the SAGA repository.
+release candidate's packed SDK packages, outside the saga a2ui repository.
 
 It is a demonstration, not a starter. Start from [`templates/lit-node`](../../templates/lit-node/README.md)
 to build your own application: that template contains no account, token, media or business record,
@@ -39,7 +39,8 @@ to type a credential into.
 
 A run against a real host uses that host's supported authentication instead. Give each protected
 endpoint your own `OAuthTokenVerifier` (see `templates/lit-node/server/verifier.ts`), do not ship
-`demo/lit-node/fixtures`, and put your own ingress host name in `allowedHosts`. This demonstration
+`demo/lit-node/fixtures`, and replace the template’s `localhostHostValidation()` with `hostHeaderValidation([...])`
+naming your ingress host. Configure trusted Origins separately when clients send an Origin header. This demonstration
 has not been run in ChatGPT, Claude or Alexa+, and a local loopback run says nothing about a
 remote host's authentication or audio.
 
@@ -62,7 +63,7 @@ controls to change the synthetic backend while a view is open.
   refused, and a new press is a brand-new Play that reuses nothing. An expired credential is
   *unconfirmed*, not a denial. If the host opens the player for a different sign-in, the player
   retires until a fresh view.
-- **Notes** (the small non-playback action example of PACK1, `examples/pack1-consumer`) behind the
+- **Notes** (a small action example that has nothing to do with playback, `examples/pack1-consumer`) behind the
   starter's own request authentication. See below.
 
 ## The notes example

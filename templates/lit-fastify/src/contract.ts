@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // The wire contract shared by the server and the view. It imports only `zod`, so a view bundle that
-// includes it carries no server code. Application-owned: nothing here is a SAGA export.
+// includes it carries no server code. Application-owned: nothing here is a saga a2ui export.
 
 /** Public: the view shows that the service is running. Needs no credential. */
 export const STATUS_TOOL = 'get_status';

@@ -443,7 +443,7 @@ describe('what the guide must explain', () => {
       'Identity and the evidence behind it',
       'Actions',
       'What is implemented and what is not',
-      'Friction recorded while writing this guide',
+      'Current limitations',
     ]) {
       expect(headings, required).toContain(required);
     }
@@ -592,7 +592,7 @@ describe('what the guide must explain', () => {
     for (const name of ['core', 'components', 'mcp', 'react']) {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
-    expect(guide).toContain('published on public npm at `0.1.0-rc.1`');
+    expect(guide).toMatch(/published on public npm as release candidates/);
     expect(guide).toContain('`@saga-a2ui/lit`, which is not published on npm');
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(

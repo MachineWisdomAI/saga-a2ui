@@ -1,8 +1,8 @@
 # Change a component and trace allowed and denied requests
 
-This guide is for a developer who has the [setup guide](getting-started.md) working and now wants to change what a control does: edit a component, attach or change its action, and follow one press through every step until the server answers and the application cleans up. It was written on 2026-10-20 against the repository's current source. Each quoted block is copied from the file named above it, and `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` runs every case the guide traces against the notes application installed from packed candidate tarballs.
+This guide is for a developer who has the [setup guide](getting-started.md) working and now wants to change what a control does: edit a component, attach or change its action, and follow one press through every step until the server answers and the application cleans up. Each quoted block is copied from the file named above it, and `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` runs every case the guide traces against the notes application installed from packed candidate tarballs.
 
-Core, components, MCP and React are [published on npm](public-install.md). This tutorial includes the unpublished Lit renderer, so it runs from a checkout against a *candidate*, a matched set of locally packed tarballs ([install and update](candidate-update-and-rollback.md)). Names such as `Action.server`, `before`, `onSuccess` and `scope.own` are the exports of that candidate, not a promise about a later public API, and the numbers below are the candidate's defaults, not recommended timeouts.
+Core, components, MCP, React and the React stack are [published on npm](public-install.md). This tutorial includes the unpublished Lit renderer, so it runs from a checkout against a *candidate*, a matched set of locally packed tarballs ([install and update](candidate-update-and-rollback.md)). Names such as `Action.server`, `before`, `onSuccess` and `scope.own` are the exports of that candidate, not a promise about a later public API, and the numbers below are the candidate's defaults, not recommended timeouts.
 
 The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
 
@@ -138,7 +138,7 @@ attach: (view) => {
 Three small changes show where each part of the design lives:
 
 1. **Change the label** (`text: 'Archive'` to `'Archive note'`). Only the layout changes. The binding finds the control by its ID, so it is untouched.
-2. **Change what Archive does.** Edit the action in `notes-actions.ts`. The layout and the renderer are untouched. [Add a prerequisite](#prerequisites-session-validity-confirmation-and-an-audit-entry) is the example below.
+2. **Change what Archive does.** Edit the action in `notes-actions.ts`. The layout and the renderer are untouched. [Adding a prerequisite](#prerequisites-session-validity-confirmation-and-an-audit-entry) is the example below.
 3. **Rename the ID** in the layout without renaming it in `watchById`. Setup finds no instance, so nothing is bound. The control still renders, a press does nothing, no error is raised and no request is sent. The traced test opens such an instance and gets `unbound` back from `activate`. Discovery runs at setup, once per presented surface, so this fails quietly: after renaming an ID, press the control.
 
 An ID selects handles at setup. It never routes a press: only the instance's own event reaches the callable bound to that instance. No registry or handler-name table exists to look an action up by a string.
@@ -257,7 +257,7 @@ The notes application answers a missing credential at the tool level, with a sen
 | A verifier that fails or never answers | `503`, no challenge | Not the caller's fault; cut off by the request's clock. |
 | A verified account the application's policy denies | A tool-level refusal, `This account may not see this.` | The policy was asked once, for this request's identity. |
 
-Each answer carries the challenge a client needs to recover, and none names an account, a credential or a backend message. The starter's [identity handoff](attach-to-existing-backend.md#hand-the-verified-identity-to-the-transport) is where the listener turns the verified result into the per-request context the tool reads.
+Authentication refusals carry the recovery challenge shown above; verifier failures return 503 without a challenge. None names an account, a credential or a backend message. The starter's [identity handoff](attach-to-existing-backend.md#hand-the-verified-identity-to-the-transport) is where the listener turns the verified result into the per-request context the tool reads.
 
 ## Prerequisites: session validity, confirmation and an audit entry
 
@@ -329,7 +329,7 @@ return Action.server<InstanceEvent<unknown>, Reply>(
   })
 ```
 
-`provided.auditId` reaches the handler and every later hook as a typed value, and the compiler rejects an ordering in which a prerequisite needs a value nothing provided yet. `parseArchived` is the application's own validation of the acknowledgement (the test passes the notes example's `ArchiveOutputSchema.parse`): a reply that is not an error is not yet proof that the archive happened, and a reply that fails validation fails the handler, so the audit entry settles as `unknown`, as for any other unreadable outcome, with no retry. The traced test runs this chain:
+`provided.auditId` reaches the handler and every later hook as a typed value, and the compiler rejects an ordering in which a prerequisite needs a value nothing provided yet. `parseArchived` is the application's own validation of the acknowledgement (the test passes the notes example's `ArchiveOutputSchema.parse`). A reply that is not an error is not yet proof that the archive happened. A reply that fails validation fails the handler, and the audit entry settles as `unknown`, as for any other unreadable outcome, with no retry. The traced test runs this chain:
 
 | Case | Observed |
 | --- | --- |
@@ -436,7 +436,7 @@ The `subject` reader is what makes a *recycled row* safe. A list renderer may ke
 
 ## Disposal, ownership and hand-off
 
-**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The application ends its own bindings (and the discovery that created them) when its view ends; the starter's `retire()` does it for a host teardown and for the page going away alike. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
+**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The stack's surface ends its discovery and bindings when the view ends, for host teardown and `pagehide` alike. It then calls the starter's `retire()` to update application-owned status. Applications composing below the stack must own that binding cleanup themselves. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
 
 **Ownership.** A resource is anything a press takes that someone must give back. The notes application's hold on a row is an application-owned resource, and it shows the whole contract:
 
@@ -499,7 +499,7 @@ attach: (view) => {
 
 For React surfaces and catalogs use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
 
-Servers have the same limits. `node`, `express`, `fastify` and `hono` are qualified with `lit-mcp`, and `saga init` offers only `node`. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
+Servers have the same limits. `node`, `express`, `fastify`, `hono` and `hapi` are qualified with `lit-mcp`, and `saga init` offers all five. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
 
 ### Hapi
 
@@ -530,6 +530,6 @@ by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 
 ## Where to go next
 
-- The setup, install and attach recipes: [Getting started](getting-started.md) and [Attach SAGA to an existing backend](attach-to-existing-backend.md).
+- The setup, install and attach recipes: [Getting started](getting-started.md) and [Attach saga a2ui to an existing backend](attach-to-existing-backend.md).
 - The design behind the vocabulary: [action binding](../blueprints/modules/action_binding.blueprint.md#authoring) and [request and view lifetimes](../blueprints/features/request_view_lifetimes.blueprint.md). The Blueprints' illustrative names and numbers are not promises of public API or recommended timeouts.
 - Updating or rolling back the candidate: [Candidates: contents, update, rollback](candidate-update-and-rollback.md).

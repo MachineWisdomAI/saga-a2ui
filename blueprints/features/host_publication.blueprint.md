@@ -8,123 +8,126 @@ date_added: 2026-10-16
 
 # Prepare an application for host publication
 
+
 ## Status
 
-- Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
-- Implementation: ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified. The resumable submission handoff (CLI5, [#68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68)) is implemented as `saga publish handoff` and independently verified through fixtures, as recorded below.
-- Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions.
+Design approved. ChatGPT preparation (CLI3), Claude connector materials (CLI4) and the resumable submission handoff (CLI5) are implemented and independently verified through fixtures. None of these tools establishes publication.
+
+| Design revision | Decision |
+| --- | --- |
+| [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md) | Approved 2026-10-16. |
+
+| Scope | Design implemented | Landed code | PR / issue | Review and checks | Limits and what it does not show |
+| --- | --- | --- | --- | --- | --- |
+| CLI3: ChatGPT preparation (SDK #66) | [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md) | [`373f467761251d34c621d5d83ba2a321c22308d7`](https://github.com/MachineWisdomAI/saga-a2ui/commit/373f467761251d34c621d5d83ba2a321c22308d7) | [#186](https://github.com/MachineWisdomAI/saga-a2ui/pull/186)<br>[#66](https://github.com/MachineWisdomAI/saga-a2ui/issues/66) | [review 5588900817](https://github.com/MachineWisdomAI/saga-a2ui/pull/186#pullrequestreview-5588900817)<br>[CI 39464761155](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761155)<br>[CI 39464761231](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761231)<br>reviewed head `9ccd7f70b133c03418c4f2b6dd7851d738a85c83` | Five SDK #66 criteria mapped in [Implemented scope and acceptance mapping](#implemented-scope-and-acceptance-mapping). |
+| CLI4: Claude connector materials | [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md) | [`63e857ea6ca9326735657caa0dc2b75622d1082a`](https://github.com/MachineWisdomAI/saga-a2ui/commit/63e857ea6ca9326735657caa0dc2b75622d1082a) | [#189](https://github.com/MachineWisdomAI/saga-a2ui/pull/189) | [review 5590281447](https://github.com/MachineWisdomAI/saga-a2ui/pull/189#pullrequestreview-5590281447)<br>[CI 39481128657](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128657)<br>[CI 39481128672](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128672)<br>reviewed head `0c149400c07b7c437fdc7938e3bcf895c55115d9` | Recorded in [Implemented scope and acceptance mapping](#implemented-scope-and-acceptance-mapping). |
+| CLI5: `saga publish handoff`, resumable handoff record (#68) | [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md) | [`260b475fdc457dd3d3ca45f7caa9c8b59dcf2bdb`](https://github.com/MachineWisdomAI/saga-a2ui/commit/260b475fdc457dd3d3ca45f7caa9c8b59dcf2bdb) | [#193](https://github.com/MachineWisdomAI/saga-a2ui/pull/193)<br>[#68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68) | [review 5591522127](https://github.com/MachineWisdomAI/saga-a2ui/pull/193#pullrequestreview-5591522127)<br>[CI 39494167535](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39494167535)<br>[CI 39494167594](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39494167594)<br>reviewed head `067e05a64eb58f0dc4a7ac9382922b404e056793` | Fixture-verified only. Recorded in [Implemented scope and acceptance mapping](#implemented-scope-and-acceptance-mapping). |
+
+**Acceptance still open.** Application-owner agreement, authorized submissions and each host's directory approval remain separate; design approval authorizes none of them.
+
+The [Implemented scope and acceptance mapping](#implemented-scope-and-acceptance-mapping) section keeps the CLI3, CLI4 and CLI5 criterion mappings.
 
 ## Problem and current behavior
 
-A working SAGA application still needs host-specific packaging, listing materials and submission evidence before people can discover it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service, and nothing in this proposal deploys it. A directory listing is the host's own review and publication of the application, which only the host can grant.
+A working saga a2ui application still needs host-specific packaging, listing materials and submission evidence before people can find it in ChatGPT or Claude. Publishing an npm library does not publish an application to either directory. Hosting is the application owner's deployed HTTPS MCP service; nothing here deploys it. A directory listing is the host's own review and publication decision.
 
-The existing single SAGA CLI provides init and demo commands. CLI3 now adds `saga publish check` and `saga publish prepare` through optional workspace publication tooling. It prepares ChatGPT artifacts or a Claude connector dossier with the shared evidence record; it does not deploy an application, submit it or establish a live directory listing. No separately published `@saga-a2ui/publish` package is claimed.
+The saga a2ui CLI already has init and demo commands. `saga publish check` and `saga publish prepare` (CLI3, CLI4) and `saga publish handoff` (CLI5) add optional workspace publication tooling. They prepare ChatGPT artifacts or a Claude connector dossier with a shared evidence record, and keep a resumable handoff record. They do not deploy, submit or establish a live listing. No separately published `@saga-a2ui/publish` package is claimed.
 
-## CLI3 implementation and acceptance — 20 October 2026
+## Behavior
 
-Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for the ChatGPT preparation slice at `MachineWisdomAI/saga-a2ui@373f467761251d34c621d5d83ba2a321c22308d7` ([PR186](https://github.com/MachineWisdomAI/saga-a2ui/pull/186)). Independent approval [5588900817](https://github.com/MachineWisdomAI/saga-a2ui/pull/186#pullrequestreview-5588900817) covers exact head `9ccd7f70b133c03418c4f2b6dd7851d738a85c83`; [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761155) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39464761231) passed.
+A maintainer supplies a built release, an already deployed HTTPS MCP endpoint, intended hosts and listing materials. The commands validate those inputs and produce host artifacts, a findings report and a resumable submission record ([CLI5 README](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5)). Missing information produces specific findings without stopping unrelated preparation.
 
-The five [SDK66 criteria](https://github.com/MachineWisdomAI/saga-a2ui/issues/66) map to the following accepted behavior:
-
-| Criterion | Accepted scope and evidence |
-| --- | --- |
-| Release inputs, records and supported validators | The implementation pins portable manifest schemas with source/license/digest attribution, records validator identities, and keeps the OpenAI authorization extension as an explicit portal handoff rather than silently accepting it under a closed schema. Official requirements were checked during independent review. |
-| Complete application and identity validation | Qualification reuses the existing packed starter build and listener, serves its actual built Lit resource, and records observed installed package versions separately from declarations. Build/resource correspondence, tool/resource definitions, assets and publisher/contributor attribution are checked. Declared endpoint name/version equality is bounded evidence, not proof of publisher or domain authority; unresolved deployment identity stays explicit. |
-| No-effect discovery and secret boundaries | Default discovery invokes no application tools; fixture invocation requires explicit opt-in. Sanitized output includes unexpected errors escaping assessment, with synthetic-token regressions covering stdout/stderr as well as artifacts. |
-| Readiness, determinism and interruption | Missing/invalid inputs, unavailable validators and truncated discovery prevent readiness. Contract metadata/instructions and validator changes invalidate affected freshness. Repeated unchanged inputs retain content digests. Directory identity checks preserve replacement user data and staged interruption tests prevent an apparently complete partial artifact. PNG structure and SVG XML validation reject malformed assets; unavailable XML validation remains unknown. |
-| Single optional CLI, preparation only | Commands reuse the existing parser and output-ownership safety. No deployment, directory submission, runtime extension implementation or package publication is performed. |
-
-Independent verification retained 81 passing publication/original-regression checks, then ran 18 affected checks for the final reporting/XML repairs. The final integration changed synchronized version values and prepared-version prose only; those accepted runtime checks were reused. The original broader run passed 137 of 139 cases; the two unrelated framework typechecks lacked adapters in the reused review dependency tree and were not represented as passing. Existing qualified framework evidence remains separate. No new host matrix or live application effects were needed for this preparation scope.
-
-CLI3 source acceptance and its reviewed lifecycle record are complete; SDK66 is closed. CLI4 and CLI5 retain their own acceptance criteria. Application-owner authority, authorized submission, platform review, actual listing installation and named-host evidence are not supplied by generating a ZIP or a ready preparation record.
-
-## CLI4 implementation and acceptance — 20 October 2026
-
-Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for Claude connector preparation at `MachineWisdomAI/saga-a2ui@63e857ea6ca9326735657caa0dc2b75622d1082a` ([PR189](https://github.com/MachineWisdomAI/saga-a2ui/pull/189)). Final head `0c149400c07b7c437fdc7938e3bcf895c55115d9` received [independent approval 5590281447](https://github.com/MachineWisdomAI/saga-a2ui/pull/189#pullrequestreview-5590281447); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128657) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39481128672) passed.
-
-| SDK67 criterion | Accepted scope and evidence |
-| --- | --- |
-| Shared records, validators and deterministic generation | `saga publish --target claude` reuses CLI3 release inputs, record identities, output ownership/interruption safety and target-aware prior-artifact checks. The locally available official Claude plugin validator passed; unavailable validation remains an explicit finding. |
-| Connector-specific identity without distribution claims | The dossier records the declared endpoint and exact tool/resource/release evidence, including the documented UI-domain calculation. Official submission/authentication/MCP Apps guidance was inspected during review. Local well-formedness and dossier preparation do not establish directory approval, Desktop/Code installation or web distribution. |
-| Optional bundle requires supplied scope | Bundle assembly uses only supplied skills, README and license scope and points to the declared endpoint. No sidebar, invented onboarding capability or runtime extension is created. Excess screenshot input is rejected explicitly rather than silently truncated; the independently checked official constraint was three to five screenshots. |
-| No effects, safe outputs and honest missing inputs | Default discovery against the qualified synthetic Node listener makes no application-tool calls. Supported bundled text, extensionless files and LICENSE content are scanned for recognized credentials; original public-command credential regressions pass after repair. Missing publisher authority, materials and validators remain explicit findings. |
-
-Independent verification passed 122 supplied Claude/shared publication checks and root TypeScript. After two verified output-validation repairs, 21 affected Claude/independent regression cases and 11 affected shared cases passed; unchanged evidence was reused. Final main integration imported only the accepted TOUR1 record and preserved the reviewed runtime and version outputs. No package installation, named-host tests, deployment, submission or publication was performed. SDK67 is closed after its reviewed lifecycle record; CLI5 retains the separate resumable-handoff scope.
-
-## CLI5 implementation and acceptance — 20 October 2026
-
-Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for the fixture-verified resumable-handoff scope at `MachineWisdomAI/saga-a2ui@260b475fdc457dd3d3ca45f7caa9c8b59dcf2bdb` ([PR193](https://github.com/MachineWisdomAI/saga-a2ui/pull/193)). Final head `067e05a64eb58f0dc4a7ac9382922b404e056793` received [independent approval 5591522127](https://github.com/MachineWisdomAI/saga-a2ui/pull/193#pullrequestreview-5591522127); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39494167535) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39494167594) passed.
-
-| SDK68 criterion | Accepted behavior and boundary |
-| --- | --- |
-| Durable identity, evidence and freshness | The local handoff record retains host-specific identity, release evidence, explicit unverified publisher-authority references and observed timestamps. Changed current preparation/deployment evidence invalidates affected readiness even when a historical live-listing observation exists. Review observations cannot supersede a newer observation with an older one. |
-| Uncertain outcomes and safe retry | Persisted attempt/submission/review/listing states remain distinct. Uncertain outcomes require inspecting the existing record before retry; fixtures cover interruption, concurrency and state transitions without duplicate upload or silent publication. Directory and staged-file ownership checks refuse replacement and preserve foreign files, including the native macOS non-`/proc` cleanup path. |
-| Supported handoff, no invented service | `saga publish handoff` supports local records for documented manual/native handoff. It makes no network submission, provides no undocumented submission API or hosting service, and bundles no credentials. |
-| Fixture verification versus actual publication | Implementation acceptance uses fixtures and public-command regressions. Recorded authority references are not independently verified publisher authority, and recording a listing is not named-host installation evidence. Actual submission, platform review and live installation require their own authorized evidence. |
-
-Independent verification passed 89 affected handoff/parser checks, then 27 focused checks after the first repairs and 11 focused ownership/cleanup/interruption/race/state checks after the final repair, with TypeScript and current-base version policy passing. The final independent macOS reproduction verified that a directory replaced after staging keeps its foreign file and the command refuses the write. Unchanged cases were reused; the Linux-only `/proc` branch was not newly qualified by that macOS run. Worker-reported broad-suite failures were assessed proportionately: 22 request-consumer/playback-budget checks passed in isolation, while a missing Lynx dependency prevented collection in the reused environment and was not a new CLI5 defect. No broad runtime or host matrix was repeated.
-
-All four scoped SDK68 criteria are supported by this evidence; the issue remains open until this lifecycle record is independently reviewed and merged. No actual upload, submission, installation, deployment or publication was performed. The implementation records observations and readiness boundaries; it cannot grant platform approval or establish a live listing by itself.
-
-## Proposed behavior
-
-An application maintainer supplies a built release, its already deployed HTTPS MCP endpoint, intended hosts and listing materials. Illustrative commands `saga publish check` and `saga publish prepare` validate those inputs and produce host artifacts, a concise findings report and a resumable submission record. ChatGPT preparation and the release-input format are implemented by CLI3, Claude artifacts by CLI4, and the resumable submission record by CLI5 (`saga publish handoff`, [its README](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5)). The record is fixture-verified; an actual submission needs the intended publisher's authority and access, and an actual listing needs named-host evidence, neither of which this implementation supplies.
-
-By default, checking reads local artifacts and performs read-only endpoint discovery. It does not invoke application tools, change remote state or fabricate host acceptance. Executing test cases requires an explicitly selected test fixture and authorized credentials. Preparation proceeds automatically through checks and generation; missing information produces specific findings without stopping unrelated preparation.
+By default, checking reads local artifacts and does read-only endpoint discovery. It invokes no application tools, changes no remote state and fabricates no host acceptance. Running test cases needs an explicitly selected fixture and authorized credentials.
 
 ![Application-owned build and endpoint enter publication checks; host artifacts and evidence support an authorized portal handoff, while platform review remains external.](../../diagrams/host-publication.svg)
 
 [Editable Mermaid](../../diagrams/host-publication.mmd) · [Editable Excalidraw](../../diagrams/host-publication.excalidraw) · [PNG](../../diagrams/host-publication.png)
 
-The proposed first targets are:
-
 | Target | Prepared output and distribution path |
 | --- | --- |
 | ChatGPT | A portable package with root `plugin.json` and `mcp.json`, assets and applicable `extensions.com.openai` metadata. The ZIP references the remote endpoint and follows the portal's **With MCP** flow. [Packaging](https://developers.openai.com/plugins/build/plugins), [submission](https://developers.openai.com/plugins/deploy/submission). |
-| Claude | A connector submission dossier for the remote endpoint and MCP App. An optional GitHub plugin bundle can add skills; its connector still requires a separate submission. Desktop `.mcpb` files and Code-only installation are not substitutes for web distribution. [Directory publishing](https://claude.com/docs/directory/publish), [surface support](https://claude.com/docs/plugins/platform-support). |
+| Claude | A connector submission dossier for the remote endpoint and MCP App. An optional GitHub plugin bundle can add skills; its connector still needs a separate submission. Desktop `.mcpb` files and Code-only installation do not replace web distribution. [Directory publishing](https://claude.com/docs/directory/publish), [surface support](https://claude.com/docs/plugins/platform-support). |
 
-The maintainer can resume an explicitly authorized portal operation with the prepared materials. The record distinguishes preparation, submission, approval and actual publication, with platform identifiers and observed timestamps. It never equates a generated ZIP or completed upload with a live listing. No undocumented submission API is assumed. Existing authorization can cover the workflow; this proposal introduces no mandatory confirmation at every step.
+The maintainer can resume an explicitly authorized portal operation with the prepared materials. The record separates preparation, submission, approval and publication, with platform identifiers and observed timestamps, and never equates a generated ZIP or finished upload with a live listing. No undocumented submission API is assumed. Existing authorization can cover the workflow; no confirmation is required at every step.
 
 ## Responsibilities and interfaces
 
-The proposed `@saga-a2ui/publish` module owns publication inputs, validation, host artifact generation and submission records behind the SAGA CLI. Two host adapters apply their respective formats and rules. Reuse official schemas and validators, including Claude's supported plugin validator, instead of maintaining competing manifest definitions. SAGA adds checks for application/resource consistency and evidence that upstream validators do not establish.
+The optional tooling in `scripts/publish/` owns publication inputs, validation, host artifact generation and submission records behind the saga a2ui CLI, with one adapter per host. The approved design called this responsibility `@saga-a2ui/publish`; no package with that name is shipped. It reuses official schemas and validators (including Claude's plugin validator) rather than competing manifest definitions, and adds checks for application and resource consistency that upstream validators do not make.
 
-The application owns deployment, hosting, identity, backend effects, listing claims and publisher authority. Publication consumes an endpoint; it does not introduce a hosting platform. Credentials remain in the authorized credential mechanism, with references in local records and no secrets in archives, reports or screenshots.
+The application owns deployment, hosting, identity, backend effects, listing claims and publisher authority. Credentials stay in the authorized credential mechanism; local records hold references only, and no secret enters an archive, report or screenshot. Inputs distinguish the application publisher from credited contributors and the SDK's npm publisher. Preparation never substitutes the tool operator for the intended listing owner, and the target publisher and its authority must be confirmed before submission.
 
-Publication inputs distinguish the application publisher from credited contributors and the SDK's npm publisher. Preparation preserves that attribution without substituting the tool operator's identity for the intended listing owner; the target publisher and its authority must be confirmed before submission.
+Runtime host negotiation and optional [OpenAI MCP extensions](https://developers.openai.com/plugins/build/extensions) belong in `@saga-a2ui/mcp` host adapters. Publication checks declared support and packages metadata; it implements no sidebar, transport or renderer logic. OpenAI's manifest namespace and runtime extension protocol are separate contracts.
 
-Runtime host negotiation and optional [OpenAI MCP extensions](https://developers.openai.com/plugins/build/extensions) belong in `@saga-a2ui/mcp` host adapters. The publication module checks declared support and packages its metadata; it does not implement sidebar behavior, transport or renderer logic. OpenAI's manifest namespace and runtime extension protocol remain separate contracts.
+A release record ties source revision, installed saga a2ui versions, build and archive digests, endpoint deployment identity, tool-definition snapshot, UI resource URIs and digests to host-test evidence. If an endpoint cannot establish its deployment identity, the report says so. OpenAI may pick up hosted-server changes independently of a new ZIP, so the record compares the deployed contract as well as packaged files. The application must keep live tool and resource compatibility or roll back. [Remote server review](https://developers.openai.com/plugins/deploy/app-review).
 
-A release record associates source revision, installed SAGA versions, build/archive digests, endpoint deployment identity, tool-definition snapshot, UI resource URIs and resource digests with host-test evidence. If an endpoint cannot establish its deployment identity, the report states that uncertainty. OpenAI may pick up hosted-server changes independently of a new ZIP; the record therefore compares the deployed contract as well as packaged files. The application must preserve live tool/resource compatibility or roll back its deployment. [Remote server review](https://developers.openai.com/plugins/deploy/app-review).
+## Implemented scope and acceptance mapping
+
+Each slice below was implemented against the approved design revision recorded in Status; PRs, reviewed heads, reviews and CI runs are in the Status implementation table. Per-slice test counts and chronology stay in the linked reviews and the pre-cleanup Status.
+
+**CLI3: ChatGPT preparation ([SDK #66](https://github.com/MachineWisdomAI/saga-a2ui/issues/66)).**
+
+| Criterion | Accepted scope |
+| --- | --- |
+| Release inputs, records, validators | Portable manifest schemas pinned with source, license and digest attribution; validator identities recorded; the OpenAI authorization extension stays an explicit portal handoff, not silently accepted under a closed schema. |
+| Application and identity validation | Reuses the packed starter build and listener, serves the built Lit resource, records observed installed package versions separately from declarations, and checks build/resource correspondence, tool and resource definitions, assets and attribution. Endpoint name and version equality is bounded evidence, not publisher or domain authority; unresolved deployment identity stays explicit. |
+| No-effect discovery, secrets | Default discovery invokes no application tools; fixture invocation needs opt-in. Output is sanitized, including unexpected errors, with synthetic-token regressions covering stdout, stderr and artifacts. |
+| Readiness, determinism, interruption | Missing or invalid input, unavailable validators and truncated discovery prevent readiness. Contract metadata and validator changes invalidate affected freshness. Unchanged inputs keep content digests. Directory identity checks preserve replaced user data; staged interruption cannot leave an apparently complete artifact. Malformed PNG or SVG XML is rejected; unavailable XML validation is unknown. |
+| One optional CLI, preparation only | Reuses the existing parser and output-ownership safety. No deployment, submission, runtime extension or package publication. |
+
+**CLI4: Claude connector materials ([SDK #67](https://github.com/MachineWisdomAI/saga-a2ui/issues/67)).**
+
+| Criterion | Accepted scope |
+| --- | --- |
+| Shared records and deterministic generation | `saga publish --target claude` reuses CLI3 inputs, record identities, ownership and interruption safety, and target-aware prior-artifact checks. The locally available official Claude plugin validator passed; unavailable validation stays a finding. |
+| Connector identity without distribution claims | The dossier records the declared endpoint and exact tool, resource and release evidence, including the documented UI-domain calculation. Local well-formedness does not establish directory approval, Desktop or Code installation, or web distribution. |
+| Optional bundle needs supplied scope | Assembles only supplied skills, README and license, pointing at the declared endpoint; no sidebar, invented onboarding or runtime extension. Excess screenshot input is rejected, not truncated (the checked official constraint was three to five). |
+| No effects, safe outputs, honest gaps | Default discovery against the synthetic Node listener makes no tool calls. Bundled text, extensionless files and LICENSE are scanned for recognized credentials. Missing publisher authority, materials and validators stay findings. |
+
+**CLI5: `saga publish handoff` ([SDK #68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68)).**
+
+| Criterion | Accepted behavior and boundary |
+| --- | --- |
+| Durable identity, evidence, freshness | The local record keeps host-specific identity, release evidence, explicitly unverified publisher-authority references and observed timestamps. Changed preparation or deployment evidence invalidates affected readiness even when a historical live-listing observation exists. An older observation cannot supersede a newer one. |
+| Uncertain outcomes, safe retry | Attempt, submission, review and listing states stay distinct. An uncertain outcome requires inspecting the existing record before retry. Fixtures cover interruption, concurrency and transitions without duplicate upload or silent publication. Ownership checks refuse replacement and preserve foreign files, including the macOS non-`/proc` cleanup path. |
+| Supported handoff, no invented service | Local records for documented manual or native handoff only. No network submission, undocumented API, hosting service or bundled credential. |
+| Fixture verification versus publication | Acceptance uses fixtures and public-command regressions. Authority references are not independently verified, and recording a listing is not named-host installation evidence. Actual submission, review and installation need their own authorized evidence. |
+
+CLI5 verification limits: the independent macOS run did not newly qualify the Linux-only `/proc` branch. A broad-suite collection failure from a missing Lynx dependency in the reused environment was not a CLI5 defect; no broad runtime or host matrix was repeated.
+
+Across all three: application-owner agreement, authorized submission, platform review, listing installation and named-host evidence are not supplied by a ZIP, a ready preparation record or a handoff record. No upload, submission, installation, deployment or publication was performed. The Status table records the reviewed lifecycle revisions for all three scopes.
 
 ## Failure and recovery
 
-Invalid manifests, missing assets or mismatched resources prevent a ready result for the affected target. Partial generation leaves no apparently complete archive; a rerun replaces generated output only after validation. A host rejection retains its reference and feedback. An uncertain upload outcome requires checking the existing portal record before retrying, preventing duplicate submissions.
+Invalid manifests, missing assets or mismatched resources prevent a ready result for the affected target. Partial generation leaves no apparently complete archive; a rerun replaces generated output only after validation. A host rejection keeps its reference and feedback. An uncertain upload outcome requires checking the existing portal record before retry.
 
-Changed tool definitions, deployment identity or resource bytes make affected evidence stale. Rechecking identifies what changed and which host checks need rerunning. A timeout, unavailable validator or changed platform rule produces an unknown or blocked finding, never a pass. Reports record the validator version and documentation date.
+Changed tool definitions, deployment identity or resource bytes make affected evidence stale, and rechecking says which host checks to rerun. A timeout, unavailable validator or changed platform rule yields unknown or blocked, never a pass; reports record validator version and documentation date.
 
-Missing publisher access, verification, reviewer credentials or platform approval leaves the handoff pending while other preparation continues. These are platform requirements, not failures to hide or bypass. Claude bundle submission, for example, checks GitHub push access; its publication mode determines whether passing updates can publish automatically. [Claude submission](https://claude.com/docs/plugins/submit).
+Missing publisher access, verification, reviewer credentials or platform approval leaves the handoff pending while other preparation continues. These are platform requirements to surface, not bypass. Claude bundle submission, for example, checks GitHub push access, and its publication mode decides whether passing updates publish automatically. [Claude submission](https://claude.com/docs/plugins/submit).
 
 ## Verification outcomes
 
-An accepted implementation would demonstrate these outcomes:
-
-- Given a built fixture and matching endpoint, each target produces valid artifacts referring to the same tools and UI resources. Unchanged inputs reproduce their content digests.
-- Default discovery causes zero application tool calls or domain effects. Opted-in fixture tests remain separately identified from real-host observations.
-- A missing asset, invalid manifest, secret in output or changed resource prevents a ready claim and identifies the repair.
-- Interruption and retry retain the existing submission identity and never duplicate an upload or silently publish.
-- Actual ChatGPT web and Claude web runs establish installation, card rendering and supported interactions using the recorded release. Local validators, protocol tests and directory approval do not replace these observations.
+- A built fixture and matching endpoint yield valid artifacts for each target that refer to the same tools and UI resources. Unchanged inputs reproduce content digests.
+- Default discovery makes zero tool calls and causes no domain effects. Opted-in fixture tests stay separate from real-host observations.
+- A missing asset, invalid manifest, secret in output or changed resource prevents a ready claim and names the repair.
+- Interruption and retry keep the existing submission identity and never duplicate an upload or silently publish.
+- Actual ChatGPT web and Claude web runs establish installation, card rendering and supported interactions for the recorded release. Local validators, protocol tests and directory approval do not replace them.
 
 ## Implementation sequence
 
-After design approval, reconcile additive coverage with CLI1 and CLI2 and consider a further CLI implementation slice, here called CLI3; no new issue is assigned to it. Establish the release-input and evidence interface, then exercise both host adapters with one application before adding portal handoff. Preserve init/demo and the full renderer matrix, including init's fail-closed behavior against overwrites, unsafe symlinks, implicit installs and remote hooks.
+CLI3 and CLI4 implement the release-input, evidence and target-preparation interfaces; CLI5 adds the local handoff record. Their landed revisions and qualification limits are recorded in Status. Preserve init and demo and the full renderer matrix, including init's fail-closed behavior against overwrites, unsafe symlinks, implicit installs and remote hooks.
 
-Publication tooling is optional developer tooling, and neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md). If the tooling is not ready, a first listing can be prepared through each platform's native flow. The migration's existing gate remains unchanged: the SAGA source must be public and the exact required package versions must install anonymously from public npm. Design approval creates no implementation tickets or publication authority.
+Publication tooling is optional developer tooling. Neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md); a first listing can use each platform's native flow. The migration's gate is unchanged: the saga a2ui source must be public and the exact package versions must install anonymously from public npm. Design approval creates no tickets or publication authority.
 
 ## Open decisions
 
-Design review must settle the smallest configuration and durable record format, the supported upstream validator versions, and how application deployment identity is supplied. Portal automation requires a supported interface or an explicitly authorized browser workflow; credentials, publisher ownership and platform review remain outside package generation.
+**Settled in the implemented tooling** ([publication tooling README](../../scripts/publish/README.md)):
+
+- **Configuration and record format.** The release input is `saga-publication/1`; the handoff record is a directory of numbered, hash-chained event files.
+- **Validator versions.** The ChatGPT package is checked against the official Agent Plugins 1.0.0 schemas, pinned by digest.
+- **Deployment identity.** The release input supplies `endpoint.expectedServer` (name and version), compared with what the endpoint reports in `initialize`; anything else stays `unknown`.
+
+**Still open.** Portal automation needs a supported interface or an explicitly authorized browser workflow; the tooling does not automate submission. Credentials, publisher ownership and platform review stay outside package generation.
 
 ## References
 
-The [reusable MCP connector](reusable_mcp_connector.blueprint.md), [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md), [package ownership](../../packages/README.md) and [coding standards](../../CODING_STANDARDS.md) define the runtime responsibilities this proposal preserves. Platform sources above were checked on 2026-10-16; implementation must recheck their contracts before fixing a supported recipe.
+[Reusable MCP connector](reusable_mcp_connector.blueprint.md), [application setup](https://github.com/MachineWisdomAI/saga-a2ui/blob/b10a8882fa5b15ad9a7243f592e5c3dc086d5340/blueprints/features/application_setup.blueprint.md), [package ownership](../../packages/README.md) and [coding standards](../../CODING_STANDARDS.md) define the runtime responsibilities this design preserves. Platform sources were checked on 2026-10-16; recheck them before fixing a supported recipe.
