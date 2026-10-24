@@ -8,9 +8,9 @@ five have a public npm release candidate, `0.7.6-rc.1`, published under the
 versions in applications.
 
 The reviewed source manifests and generated `release.json` determine the
-prepared versions. In this revision of the source all five manifests are
-at `0.7.6-rc.1`, the version the `v0.7.6-rc.1` tag names; source versions can
-later run ahead of npm. Changes follow the [version policy](version-policy.md).
+prepared versions. Source manifests can run ahead of npm; read their versions
+at the reviewed commit rather than inferring them from a registry tag. Changes
+follow the [version policy](version-policy.md).
 This procedure does not authorize publication, and changing a version or passing
 CI publishes nothing. Lit, `lit-mcp-stack`, the CLI, the workspace and the
 example applications are outside this publication set.
