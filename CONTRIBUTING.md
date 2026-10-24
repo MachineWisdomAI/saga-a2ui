@@ -20,6 +20,16 @@ mw-git-guard.sh install --repo .
 
 GitHub branch protections apply independently of these local hooks.
 
+## Before you open a pull request
+
+1. Work on a feature branch or dedicated worktree. Keep the default checkout clean.
+2. Install and verify the formatting hooks ([steps](docs/development-reference.md#formatting-and-hooks)). Continue only when `npm run hooks:check` prints `SAGA formatter hook verified`.
+3. Run the checks that match the change and record exactly what you ran: `npm run test:docs` for documentation, `npm run verify` for code ([commands](docs/development-reference.md#local-development); [what CI runs](docs/development-reference.md#ci-checks-and-release-qualification)).
+4. Run the version updater and checker against current `main` ([version policy](docs/version-policy.md)). Documentation, tests, CI and development checks alone need no bump.
+5. If the PR retains artifacts, store them through Git LFS and run `python3 scripts/check-lfs.py` ([change hygiene](docs/change-hygiene.md#store-retained-artifacts-with-git-lfs)).
+6. Write the PR title as a Conventional Commit and the description as [change hygiene](docs/change-hygiene.md#describe-the-change) directs.
+7. For a Blueprint-backed implementation, link the approved design revision and follow [Review](#review).
+
 ## Report a problem or propose a feature
 
 Use the [issue forms](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose). A bug report is most useful with a small reproduction, expected and actual behavior, the source commit or candidate version, and the host and renderer involved. Remove credentials and private user data from logs. Use [SECURITY.md](SECURITY.md) for vulnerabilities.

@@ -1,7 +1,7 @@
 {
   "name": "saga-lit-hono-starter",
   "private": true,
-  "description": "A SAGA A2UI starter: a Lit view served by a Hono MCP server.",
+  "description": "A saga a2ui starter: a Lit view served by a Hono MCP server.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

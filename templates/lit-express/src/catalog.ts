@@ -12,7 +12,7 @@ import { CATALOG_ID } from './surface.js';
 
 // The application-owned catalog: the components its layout may name, and nothing else. `Line` is
 // this application's own component; it shows supplied text as text, never as markup. Layout comes
-// from upstream's basic catalog, and `ActionButton` is SAGA's opt-in control. Choosing a component
+// from upstream's basic catalog, and `ActionButton` is saga a2ui's opt-in control. Choosing a component
 // is the application's decision: nothing here is registered globally by the SDK.
 
 const LineApi = {

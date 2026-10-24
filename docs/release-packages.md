@@ -1,25 +1,23 @@
 # Preparing a five-package release
 
 The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`,
-`@saga-a2ui/mcp`, `@saga-a2ui/react` and `@saga-a2ui/react-mcp-stack`. The first
-four already have public npm releases (`0.1.0-rc.1` and later prereleases);
-`react-mcp-stack` has none. See [public installation](public-install.md) for the
-verified registry recipe. Release candidates use the `next` tag; pin exact
+`@saga-a2ui/mcp`, `@saga-a2ui/react` and `@saga-a2ui/react-mcp-stack`. All
+five have a public npm release candidate, `0.7.6-rc.1`, published under the
+`next` tag; the first four also have `0.1.0-rc.1` and later prereleases. See
+[public installation](public-install.md) for the registry recipes. Pin exact
 versions in applications.
 
 The reviewed source manifests and generated `release.json` determine the
-prepared versions. Source versions run ahead of npm: `main` carries the five
-public packages at a `0.7.x-rc.n` version (`0.7.6-rc.1` when this guide was last
-reconciled), and none of those versions is a registry release. The integration
-branch that held every unit at `0.7.0-rc.1` has landed and its pin is retired;
-changes now follow the ordinary [version policy](version-policy.md). This
-procedure does not authorize publication, and nothing here has published a
-`0.7.x` package. Lit, `lit-mcp-stack`, the CLI, the workspace and the example
-applications are outside this publication set.
+prepared versions. In this revision of the source all five manifests are
+at `0.7.6-rc.1`, the version the `v0.7.6-rc.1` tag names; source versions can
+later run ahead of npm. Changes follow the [version policy](version-policy.md).
+This procedure does not authorize publication, and changing a version or passing
+CI publishes nothing. Lit, `lit-mcp-stack`, the CLI, the workspace and the
+example applications are outside this publication set.
 
 ## Build the exact artifacts
 
-From the reviewed commit, on Node >=22.12.0:
+From the reviewed commit, on Node 22.23.3 or newer (the repository minimum):
 
 ```sh
 npm ci
@@ -81,24 +79,28 @@ Verify the five tarballs that would be published, not a candidate or an earlier
 build of different source. Evidence from another source revision or version
 identity is context, not qualification of these bytes. Use React and React DOM
 **19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
-consumer-root override `@a2ui/markdown-it: 0.2.1`. SAGA owns A2UI **0.13.0** and its
-Zod **3.25.76** context; do not add direct application A2UI dependencies or force
+consumer-root override `@a2ui/markdown-it: 0.2.1`. The A2UI **0.13.0** dependency and its
+Zod **3.25.76** context belong to saga a2ui; do not add direct application A2UI dependencies or force
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
 
-The stack pins exact siblings that are not on the registry yet, so a local
-install supplies them from the tarballs through overrides. Keep two consumers
-apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
-neither stands in for the other:
+The stack pins exact siblings. For a release that is not yet published the
+registry cannot supply them, so a local install supplies them from the tarballs
+through overrides. Keep three consumer shapes separate.
+`npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) demonstrates these shapes
+using candidate tarballs, including a separate Lit stack fixture. It does not
+consume `release:pack` output: repeat the React and server checks with the five
+release tarballs to qualify the bytes for publication. None of these consumers
+stands in for another:
 
 - **Lower-level consumer** (availability of the five packages). It names every
-  SAGA tarball as a direct dependency and as an override, plus React, React DOM,
+  saga a2ui tarball as a direct dependency and as an override, plus React, React DOM,
   MCP Apps and Zod.
-- **Stack-only consumer** (the documented one-stack recipe, for React and for
-  Lit). Its direct dependencies are only the stack and its framework peers
-  (`react`, `react-dom`; `lit`), and its typed fixture imports every stack entry
+- **Stack-only consumer** (the documented React recipe). Its direct
+  dependencies are only the React stack and its framework peers
+  (`react`, `react-dom`), and its typed fixture imports every stack entry
   and nothing else: no upstream renderer or schema package, no Zod, no other
-  SAGA package. The unpublished siblings are supplied by overrides only. Direct
+  saga a2ui package. The unpublished siblings are supplied by overrides only. Direct
   declarations would mask a dependency or an export the stack failed to
   provide, so only this consumer shows that the recipe resolves. It also checks
   the exact sibling resolutions, the stack's full peer requirements and one

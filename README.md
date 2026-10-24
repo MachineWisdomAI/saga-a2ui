@@ -38,7 +38,7 @@ Your application chooses which links may open and which image hosts are allowed.
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
-From a source checkout, with Node 22.12.0 or newer and npm:
+From a source checkout, with Node 22.23.3 or newer (the repository's minimum) and npm:
 
 ```sh
 npm ci
@@ -58,8 +58,9 @@ Follow [Getting started](docs/getting-started.md) for a starter project or an ex
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 
-The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [components](https://www.npmjs.com/package/@saga-a2ui/components) packages are available on npm at `0.1.0-rc.1` (the source on `main` is at the `0.7.6-rc.1` release candidate, which is not published). They export TypeScript source for applications that use a bundler. See the [React integration guide](docs/react-consumers.md) for imports and dependency configuration.
+The [core](https://www.npmjs.com/package/@saga-a2ui/core), [components](https://www.npmjs.com/package/@saga-a2ui/components), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [React MCP stack](https://www.npmjs.com/package/@saga-a2ui/react-mcp-stack) packages are published on npm as release candidates; there is no stable release. [Installing saga a2ui](docs/public-install.md) gives the exact versions and commands. The packages export TypeScript source for applications that use a bundler. See the [React integration guide](docs/react-consumers.md) for imports and dependency configuration.
 
+- [Installing saga a2ui](docs/public-install.md): install the published packages.
 - [Action guide](docs/actions.md): connect interactions to application behavior.
 - [Development reference](docs/development-reference.md#local-development): build and test the SDK.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.

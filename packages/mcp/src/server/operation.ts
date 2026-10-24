@@ -25,7 +25,7 @@ import {
 // MCP server it created. This module validates the input before the handler runs, waits for the
 // handler only within its bound, projects the handler's record explicitly, validates that
 // projection against the declared output contract, and returns a safe failure for everything
-// else. Upstream tool registration stays here: there is no SAGA registry of operations.
+// else. Upstream tool registration stays here: there is no saga a2ui registry of operations.
 //
 // Time: the complete handler, projection included, runs as one `handler` operation inside the
 // request's lifetime (see `lifetime.ts`). Its limit is the declaration's `boundMs`, else the

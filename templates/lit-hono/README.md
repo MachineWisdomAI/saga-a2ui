@@ -1,4 +1,4 @@
-# SAGA starter: Lit view, Hono server
+# saga a2ui starter: Lit view, Hono server
 
 A Lit view (A2UI rendered with your own catalog) served as an MCP App by a Hono MCP server. It
 uses only the public `@saga-a2ui/*` exports and the official `@modelcontextprotocol/hono`
@@ -36,7 +36,7 @@ starter's build and your own checks again.
 | `server/verifier.ts` | Who a bearer credential belongs to (your identity provider). |
 | `server/authorization.ts` | What a verified account may see. Asked again for every request. |
 | `server/operations.ts` | Your operations and their backend calls. The handler's record is projected field by field. |
-| `server/listener.ts` | HTTP hosting. Add your ingress host name to `ALLOWED_HOSTNAMES` when you deploy. |
+| `server/listener.ts` | HTTP hosting. Add your ingress host name to `ALLOWED_HOSTNAMES` when you deploy, and replace `localhostOriginValidation()` with your trusted-origin policy if clients send a remote Origin. |
 | `src/catalog.ts` | Which components a layout may name. Nothing is registered globally. |
 | `src/actions.ts`, `src/view.ts` | Your actions, and which rendered control each one is attached to. |
 

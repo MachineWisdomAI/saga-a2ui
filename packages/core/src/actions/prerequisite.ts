@@ -4,7 +4,7 @@ import type { InvocationScope } from './scope.js';
 // A prerequisite is reusable application work that must finish before a handler runs, and it may
 // stop the handler. It is not authorization: whether it reads state, refreshes a token or asks a
 // server is the application's decision, and the server stays authoritative for every protected
-// operation. SAGA supplies the way to declare one and to attach it to an action.
+// operation. saga a2ui supplies the way to declare one and to attach it to an action.
 
 export interface PrerequisiteContext<Needs, Input> extends Freshness {
   /** Values provided by earlier prerequisites on this action. */

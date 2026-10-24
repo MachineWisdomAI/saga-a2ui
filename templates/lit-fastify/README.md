@@ -1,4 +1,4 @@
-# SAGA starter: Lit view, Fastify server
+# saga a2ui starter: Lit view, Fastify server
 
 A Lit view (A2UI rendered with your own catalog) served as an MCP App by a Fastify MCP server. It
 uses only the public `@saga-a2ui/*` exports and the official `@modelcontextprotocol/fastify`
@@ -36,7 +36,7 @@ deliberate: the starter ships no identity provider.
 Identity travels one way: `server/listener.ts` verifies the request in an `onRequest` hook of the
 protected route and hands the result to the transport as the request's `auth`, and `identityOf`
 (`server/identity.ts`) reads it in the operation. No tool argument can name an account, and a prior
-call authorizes nothing. SAGA adds no authentication or authorization layer to Fastify: if your
+call authorizes nothing. saga a2ui adds no authentication or authorization layer to Fastify: if your
 application already has one, call it from `server/verifier.ts` or `server/authorization.ts`.
 
 ## The Fastify adapter

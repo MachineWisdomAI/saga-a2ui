@@ -1,6 +1,6 @@
 # Coding standards
 
-SAGA code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning. Keep each interface small and coherent enough for a human to understand its concepts and obligations together.
+saga a2ui code must be clear, maintainable, and explainable. Each module should have a clear purpose, and its behavior and design decisions should be easy to trace. Optimize for explicit responsibilities, useful types, and local reasoning. Keep each interface small and coherent enough for a human to understand its concepts and obligations together.
 
 ## Blueprint review
 
@@ -8,7 +8,7 @@ Apply the [authoring guidance](blueprints/README.md#authoring). Each section sho
 
 ## Keep interfaces manageable and remove obsolete contracts and code
 
-Do not accumulate backward compatibility debt for internally written code that has never had a stable release. CORE1 and CORE3 are implementation slices, not releases. Change interfaces and migrate all owned callers and tests together. Do not add shims, legacy overloads, aliases, or a second implementation merely to preserve signatures from an earlier slice.
+Do not accumulate backward compatibility debt for internally written code that has never had a stable release. Implementation slices and release candidates are not stable releases. Change interfaces and migrate all owned callers and tests together. Do not add shims, legacy overloads, aliases, or a second implementation merely to preserve signatures from an earlier slice.
 
 Delete obsolete code as part of replacing it. Remove superseded implementations, unused exports and configuration, and obsolete documentation and tests. The replacement must retain required functionality, security guarantees, and protocol support, with behavioral tests covering those requirements. Do not leave old and new paths in parallel indefinitely.
 
@@ -18,21 +18,21 @@ For published stable public contracts, use semantic versioning and proportionate
 
 Application meaning, presentation protocols, renderers, and host delivery change for different reasons. Keep their implementations separate. Renderer-independent code is not necessarily protocol-independent: an A2UI decoder belongs to an A2UI module even when it lives in core.
 
-The following ownership is the target for SDK extraction. `@saga-a2ui/mcp`, `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/react`, `@saga-a2ui/lit` and the two stack packages, `@saga-a2ui/lit-mcp-stack` and `@saga-a2ui/react-mcp-stack`, are extracted. Components holds the FaithfulCard slice, React holds the action seam, the card slices and the named composition capabilities (not full React parity), and a stack connects one renderer to one delivery so an application installs one stack; Lit and the Lit stack are private, the rest are in the release set. Their consumers are the templates, the installed examples and the `apps/lit-host` view modules; the rest are planned. Create each with working consumers, not empty scaffolding. [Package layout](packages/README.md) records the intended dependencies.
+Package ownership follows the table below. [Package layout](packages/README.md) records the packages, their release state and their intended dependencies. Components holds the FaithfulCard slice, React holds the action seam, the card slices and the named composition capabilities (not full React parity), and a stack connects one renderer to one delivery so an application installs one stack. Lit and the Lit stack are private; the other five packages (`core`, `components`, `mcp`, `react` and `react-mcp-stack`) are in the release set. Their consumers are the templates, the installed examples and the `apps/lit-host` view modules. The Lynx renderer was retired on 2026-10-19: no `@saga-a2ui/lynx` package exists. Create each new package with working consumers, not empty scaffolding.
 
 | Owner | Responsibility | Keep out |
 | --- | --- | --- |
 | Consumer application | Domain values, backend calls, verified identity, authorization, and authoritative effects; composition of SDK implementations | Host quirks and duplicated protocol parsing |
 | `@saga-a2ui/core` | Renderer-independent value objects, processing interfaces, and shared behavior; protocol implementations in named protocol modules | Lit/React/Lynx, DOM access, MCP transport, application business rules |
 | `@saga-a2ui/mcp` | MCP/MCP Apps delivery, resource identity, host capability negotiation and lifecycle; separate server, view, and policy exports | Visual-tree interpretation and renderer selection |
-| `@saga-a2ui/lit`, `react`, `lynx` | Framework rendering, binding integration, events, accessibility, mounting, and disposal | Raw protocol parsing, backend authorization, and host-name branching |
+| `@saga-a2ui/lit`, `react` | Framework rendering, binding integration, events, accessibility, mounting, and disposal | Raw protocol parsing, backend authorization, and host-name branching |
 | `@saga-a2ui/components` | Optional renderer-neutral contracts and shared component behavior | Renderer implementations, MCP delivery, and application-specific branding |
 
 Consumer code holds application meaning only: domain values, its own catalog, what a result means, which action each control has and what ending the view takes with it. It does not write A2UI messages, import the MCP Apps bridge or `@saga-a2ui/mcp/view`, order a handshake, or build a session or decoder; the stack owns those, and `scripts/consumer-boundary.test.ts` enforces it. An application that installs a stack authors its catalog, layout and actions against the stack's exports and names no upstream renderer or schema package (`scripts/consumer-stack-imports.test.ts`). A lower-level use that a consumer legitimately needs carries one reviewed `// saga-boundary: <rule> <reason>` on that line, never a file-wide disable. When a consumer needs something the SDK does not export, the fix is the export in `packages/`, added first and kept limited to what the qualifying consumers use. Package dependency directions are separate: each package's `exports.test.ts` asserts its own, and the freedom to evolve a package's API never overrides them.
 
 Each component owns its specific contract and behavior. One component's requirements must not define the whole components package or become requirements for unrelated components.
 
-Core is not a miscellaneous utilities package. Put a reusable operation in its owning module; a function used by several files does not automatically belong in core. Application business meaning remains outside SAGA. A visual tree must not become the source of truth for entitlements, domain actions, or future voice interactions.
+Core is not a miscellaneous utilities package. Put a reusable operation in its owning module; a function used by several files does not automatically belong in core. Application business meaning remains outside saga a2ui. A visual tree must not become the source of truth for entitlements, domain actions, or future voice interactions.
 
 ## Organize files around coherent modules
 
@@ -66,11 +66,11 @@ Prefer interfaces describing operations over bags of getters, flags, or callback
 
 **DRY: give each rule one authoritative implementation.** Reuse the module that owns a validation rule, protocol interpretation, or state transition instead of copying it into each adapter. Consolidate repeated knowledge at the correct package and module. Similar-looking code with different responsibilities need not share an abstraction; avoid a flag-driven universal helper that couples unrelated behavior merely to remove a few repeated lines.
 
-Prefer standard platform APIs and official or widely used, maintained libraries to implementing established functionality ourselves. Check existing dependencies and supported upstream interfaces first. Choose for contract fit, TypeScript support, maintenance, licensing, and runtime/package compatibility. Keep required third-party registration inside its integration seam. When custom code is necessary, identify the concrete gap and implement only the missing behavior in its owning module. A wrapper should enforce a useful SAGA contract, not rename a library's methods.
+Prefer standard platform APIs and official or widely used, maintained libraries to implementing established functionality ourselves. Check existing dependencies and supported upstream interfaces first. Choose for contract fit, TypeScript support, maintenance, licensing, and runtime/package compatibility. Keep required third-party registration inside its integration seam. When custom code is necessary, identify the concrete gap and implement only the missing behavior in its owning module. A wrapper should enforce a useful saga a2ui contract, not rename a library's methods.
 
 ## Protocol input becomes a value object
 
-Treat unchecked input as `unknown`. The protocol decoder validates the supported version and envelope, then produces typed values or an explicit failure. Reuse public upstream schemas and validation where they meet the contract; add SAGA checks only for requirements they leave uncovered. Do not build a second general-purpose A2UI interpreter or generic binding engine.
+Treat unchecked input as `unknown`. The protocol decoder validates the supported version and envelope, then produces typed values or an explicit failure. Reuse public upstream schemas and validation where they meet the contract; add saga a2ui checks only for requirements they leave uncovered. Do not build a second general-purpose A2UI interpreter or generic binding engine.
 
 A protocol value object represents a meaningful validated value, not a convenient cast of a wire dictionary. Its factory or constructor establishes its invariants. Reuse validated upstream value types when they already express the contract; a second class hierarchy is not a goal. Expose readonly state and protect nested values from external mutation when mutation would break those guarantees. Keep mutable surface/session state in a separate module. Introduce distinct identifier types where confusing them would be consequential; do not wrap every primitive mechanically.
 
@@ -86,9 +86,9 @@ Use a typed **Visitor** when an operation must handle the cases of a structured 
 
 Traversal and case handling are separate responsibilities. For a genuine tree or graph operation, give traversal one owner and define child ordering, reference resolution, and cycle handling. A flat message batch does not need a tree walker. Reuse upstream traversal when it already supplies the needed behavior. A Visitor over visual nodes cannot infer business meaning or make a GUI suitable for voice.
 
-Do not route SAGA behavior through registries, service locators, string-keyed handler tables, reflection, or import-time self-registration. Use direct imports, typed dependencies, and named operations. A typed wrapper around `handlers[name]` is still the same routing design. Protocol decoding necessarily recognizes wire tags; confine that finite, checked selection to the codec and convert it into typed cases. Literal strings are valid data, not a substitute for behavioral interfaces.
+Do not route saga a2ui behavior through registries, service locators, string-keyed handler tables, reflection, or import-time self-registration. Use direct imports, typed dependencies, and named operations. A typed wrapper around `handlers[name]` is still the same routing design. Protocol decoding necessarily recognizes wire tags; confine that finite, checked selection to the codec and convert it into typed cases. Literal strings are valid data, not a substitute for behavioral interfaces.
 
-An upstream renderer may require a catalog or custom-element registration. Keep that required mapping at the renderer integration seam with explicit setup. It does not authorize a SAGA-wide registry or an action bus. Keep neutral catalog definitions with their neutral owner and concrete renderer implementations in their adapter. Extending SAGA should mean adding a value case, implementing a focused interface, or composing another implementation explicitly.
+An upstream renderer may require a catalog or custom-element registration. Keep that required mapping at the renderer integration seam with explicit setup. It does not authorize a saga a2ui-wide registry or an action bus. Keep neutral catalog definitions with their neutral owner and concrete renderer implementations in their adapter. Extending saga a2ui should mean adding a value case, implementing a focused interface, or composing another implementation explicitly.
 
 ## TypeScript should expose the design
 

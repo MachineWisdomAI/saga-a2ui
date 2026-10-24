@@ -7,6 +7,8 @@ dossier (CLI4). Both targets read the same release input, the same endpoint and 
 record. It deploys, uploads and submits nothing, and a prepared package is never reported as live.
 `saga publish handoff` (CLI5) then keeps the resumable record of the manual submission that follows.
 Design: [host publication Blueprint](../../blueprints/features/host_publication.blueprint.md).
+CLI3, CLI4 and CLI5 name the three deliverables below: the ChatGPT package, the Claude connector
+dossier and the handoff record.
 
 ```sh
 npx tsx scripts/saga.ts publish check   --target chatgpt --release path/to/saga-publication.json
@@ -167,9 +169,10 @@ digest in its record) and whose verdict is `ready`, and pins it: the host (targe
 guide and portal), the application and its publisher, the exact release evidence (source revision, release
 input and view digests, the tool definitions, served resources and contract digest, the deployment
 identity, the declared and installed `@saga-a2ui` packages, the validators and the package digest) and the
-references to the intended publisher's authority. Authority references are pointers (an agreement, a
-ticket, an owner's confirmation) that this tool does not verify, and every free-text field is refused when
-it looks like a credential. The handoff identity is derived from the host, the application, the publisher
+references to the intended publisher's authority. `--authority-ref` is required at least once. Authority
+references are pointers (an agreement, a ticket, an owner's confirmation) that this tool does not verify.
+Every free-text field must be one line of at most 500 characters, and is refused when it looks like a
+credential. The handoff identity is derived from the host, the application, the publisher
 and the package digest, so two hosts, or two releases, never share one.
 
 **Four states, each from its own events.** The record is a directory of numbered event files
@@ -178,7 +181,7 @@ and the package digest, so two hosts, or two releases, never share one.
 
 | State | Values | Set by |
 | --- | --- | --- |
-| Preparation | `ready`, or `stale` once the release changed | `begin`, and `--prepared` |
+| Preparation | `ready`, or `stale` once the release changed or the `--prepared` output cannot be used | `begin`, and `--prepared` |
 | Submission | `not submitted`, `UNRESOLVED attempt`, `submitted` (with the host's reference) | `attempt`, `confirm-submission`, `void-attempt` |
 | Review | `not started`, `in-review`, `changes-requested`, `approved`, `rejected` | `record-review` |
 | Live listing | `not verified`, `verified-live`, `not-listed` (each on a named host, with evidence) | `record-listing` |
@@ -186,8 +189,9 @@ and the package digest, so two hosts, or two releases, never share one.
 Each observation carries `observedAt`, the time the host showed it (ISO 8601 with an offset, never in the
 future; the time of the command when omitted), and the event carries `recordedAt`, when the tool wrote it.
 Later stages cannot predate earlier ones, and a review or listing observation cannot predate the newest
-review or listing observation already recorded: a delayed observation never supersedes a newer one. An approval is not a listing: `record-listing` is accepted only
-after an approval, with a named host and a reference to what was observed, and `status` keeps saying
+review or listing observation already recorded: a delayed observation never supersedes a newer one. Recording the same review state again changes nothing. `approved`, `changes-requested` and `rejected`
+end the review record: a changed submission is a new release and needs a new handoff. An approval is not a
+listing: `record-listing` is accepted only after an approval, with a named host and a reference to what was observed, and `status` keeps saying
 `not verified` until then. `record-listing` checks that the release is still current before it answers anything, including that a
 listing is already recorded as live: an earlier live observation stays in the record as made for the release
 the record pins, and does not excuse changed or unusable evidence.
@@ -212,8 +216,9 @@ never repaired.
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,
 a built view, a tool definition, a served resource and its metadata, the server instructions, the
 deployment identity, the packages, the validators, how much of the endpoint was read and the package
-content. A preparation that is not `ready` is never current. When stale, `status` lists what changed and
-exits 1, and `attempt` and `record-listing` are refused for the old release; begin a new handoff for the new
+content. A preparation that is not `ready` is never current. When stale, `status` lists what changed, and
+`attempt` and `record-listing` are refused for the old release. `status` exits 1 whenever it needs attention:
+the release is stale, the `--prepared` output cannot be used, or a submission attempt is unresolved. For a stale release, begin a new handoff for the new
 one. What the host already holds for the old release stays as recorded, and a verified listing is reported
 as observed for the earlier release. `attempt` and `record-listing` require `--prepared`, so readiness is
 never assumed.
