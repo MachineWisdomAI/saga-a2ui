@@ -33,7 +33,7 @@ A working saga a2ui application still needs host-specific packaging, listing mat
 
 The saga a2ui CLI already has init and demo commands. `saga publish check` and `saga publish prepare` (CLI3, CLI4) and `saga publish handoff` (CLI5) add optional workspace publication tooling. They prepare ChatGPT artifacts or a Claude connector dossier with a shared evidence record, and keep a resumable handoff record. They do not deploy, submit or establish a live listing. No separately published `@saga-a2ui/publish` package is claimed.
 
-## Proposed behavior
+## Behavior
 
 A maintainer supplies a built release, an already deployed HTTPS MCP endpoint, intended hosts and listing materials. The commands validate those inputs and produce host artifacts, a findings report and a resumable submission record ([CLI5 README](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5)). Missing information produces specific findings without stopping unrelated preparation.
 
@@ -94,7 +94,7 @@ Each slice below was implemented against the approved design revision recorded i
 
 CLI5 verification limits: the independent macOS run did not newly qualify the Linux-only `/proc` branch. A broad-suite collection failure from a missing Lynx dependency in the reused environment was not a CLI5 defect; no broad runtime or host matrix was repeated.
 
-Across all three: application-owner agreement, authorized submission, platform review, listing installation and named-host evidence are not supplied by a ZIP, a ready preparation record or a handoff record. No upload, submission, installation, deployment or publication was performed. SDK #66 and SDK #67 closed after their reviewed lifecycle records; SDK #68 remained open until its record was reviewed and merged.
+Across all three: application-owner agreement, authorized submission, platform review, listing installation and named-host evidence are not supplied by a ZIP, a ready preparation record or a handoff record. No upload, submission, installation, deployment or publication was performed. The Status table records the reviewed lifecycle revisions for all three scopes.
 
 ## Failure and recovery
 

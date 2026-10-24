@@ -38,7 +38,7 @@ Every versioned package shares one major.minor; patch may vary, and the version 
 
 The SDK owns the ordering between rendering and delivery; the application owns every domain schema and the whole-result logic. Dependencies point one way. Core imports no MCP, renderer or DOM. Components imports no DOM, MCP or renderer. Among SDK packages, MCP and components depend on core, not on one another or on the renderers; renderer packages consume core and components. `@saga-a2ui/react` and `@saga-a2ui/mcp` stay independent; only a stack connects a renderer to a delivery.
 
-The starter template becomes a minimal application like this one. The surface is defined once, and the stack mounts it and routes each tool result to the application's update. The id constants are application-owned; the clear-action binding is omitted here.
+The starter template uses this minimal application shape. The surface is defined once, and the stack mounts it and routes each tool result to the application's update. The id constants are application-owned; the clear-action binding is omitted here.
 
 ```ts
 const CLEAR_ID = 'clear';
@@ -125,7 +125,7 @@ Each stack's convenience entries export exactly these sets, re-exporting existin
 - `server`: `attachRequestLifetime`, `createServerBudgets`, `operationViewFromHtml`, `registerPublicOperation`, `viewUriForHtml`; types `OperationView`, `RequestLifetime`.
 - Card entry: `FaithfulCardApp`, `CardContent`, `CardResultOutcome`, `startFaithfulCardApp`, `RunningView`, `StartFailure`; React also exposes `/faithful-card.css` (Lit styles its card internally); React `useHostLink`, `HostLink`, `HostLinkOutcome`; Lit `bindHostLink`, `HostLinkBinding`, `HostLinkOutcome`; both `readingProfile` and `ReadingProfile`.
 
-The main entry exports `startA2uiView`, `defineSurface`, `SurfaceLayout`, `z`, the renderer's action helpers and catalog types, plus `readingProfile`, `ReadingProfile` and delivery callback types. It exports nothing card-specific and never depends on components.
+The main entry exports `startA2uiView`, `defineSurface`, `SurfaceLayout`, `z`, the renderer's action helpers and catalog types, plus `readingProfile`, `ReadingProfile` and delivery callback types. It exports nothing card-specific, and its emitted own-catalog graph excludes components.
 
 A stack connects the renderer and delivery, amending the [package layout](../../packages/README.md). `@saga-a2ui/components` and `@modelcontextprotocol/ext-apps` are regular stack dependencies so one install suffices under strict resolution. Components and markdown-it are expected in an installed full application, but the emitted browser graph of an own-catalog application excludes components, markdown-it and the server entry. Server-only consumers keep `@saga-a2ui/mcp/server` and install without a renderer. A renderer-named stack keeps its renderer install and peer obligations even for its `server` subpath, which makes no renderer-free promise; full applications such as Ansari may use it.
 

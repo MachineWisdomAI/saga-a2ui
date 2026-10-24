@@ -43,21 +43,21 @@ Design approved; implementation partial overall. POL1/POL2, the passive Faithful
 
 Design cells read "Not recorded" where no design revision is named for the entry; the approved revisions under Design are not paired with it.
 
-**Acceptance still open.** Authenticated-host acceptance outside the scopes above, REACT3 parity, registry publication and production deployment. [REACT3 #31](https://github.com/MachineWisdomAI/saga-a2ui/issues/31) remains the implementation owner of the artwork amendment for React.
+**Acceptance still open.** Authenticated-host acceptance outside the scopes above and REACT3 parity. The receipts above do not establish registry publication or production deployment; current registry installation guidance is in [public install](../../docs/public-install.md). [REACT3 #31](https://github.com/MachineWisdomAI/saga-a2ui/issues/31) remains the implementation owner of the artwork amendment for React.
 
 Pre-cleanup narrative, including verification counts and chronology: [content_safety_levels Status at the cleanup baseline](https://github.com/MachineWisdomAI/saga-a2ui/blob/2405c5d28f02a5b8d5fb70ed7a929e676cf78d43/blueprints/features/content_safety_levels.blueprint.md).
 ## Problem and current behavior
 
 Episode descriptions need ordinary Markdown formatting without letting supplied content execute code, navigate the assistant or fetch arbitrary images. The application owner also needs a stricter mode that can hide blocked fragments and lets the reader decide whether to load permitted images.
 
-At the design baseline, [`SagaPanelElement`](../../apps/lit-host/src/lit/integration.ts) showed descriptions through inert Lit text bindings. Its [catalog contract](../../apps/lit-host/src/saga-panel/contract.ts) accepted a bindable description string with no Markdown interpretation or selectable policy, and the [public resource](../../apps/lit-host/src/mcp/server.ts) declared empty connection and resource allowlists. This design adds formatting and controlled effects in that working application. FaithfulCard and the reusable packages were later work at that point; [Status](#status) records which scopes are now implemented.
+The shared `@saga-a2ui/components` policy and Markdown reader implement these rules. Lit and React render the restricted content with view-owned consent; stacks carry the same trusted policy into resource configuration and view startup. [Status](#status) separates source, local browser and named-host evidence.
 
-## Proposed behavior
+## Behavior
 
 The application resolves one trusted policy when it creates a view.
 
 - **Standard** (default): absolute HTTPS links may open through a supported host callback, and HTTPS images may load only from explicitly configured exact hosts under the image restrictions below. The image allowlist defaults to empty.
-- **Strict**: links stay inert and no content image loads automatically. Blocked fragments (links, image references, unsupported markup) appear by default as accessible placeholders in their original positions; the trusted application may instead choose readable inert text. Either way the reader can reveal or hide the source as text. Revealing changes visibility only: raw HTML, scripts, invalid URLs and unallowlisted images still cannot execute, navigate or fetch.
+- **Strict**: links stay inert and no content image loads automatically. Blocked fragments (links, image references, raw HTML) appear by default as accessible placeholders in their original positions; the trusted application may instead choose readable inert text. Either way the reader can reveal or hide the source as text. Revealing changes visibility only: raw HTML, scripts, invalid URLs and unallowlisted images still cannot execute, navigate or fetch.
 
 **Show images** and **Hide images** are local actions in the shared [action vocabulary](../README.md#action-vocabulary). The view owns them, and the consent they change is revocable view state. Show images lets the reader load otherwise-permitted images for the current description revision in the current live view; offer it only when the host path demonstrably qualifies, otherwise show blocked or unavailable feedback. It cannot widen the exact-host allowlist or bypass image restrictions. Content, policy or selection changes, view replacement or disposal, identity or session retirement (where the view receives such a signal; the public episode view has none today, see [Status](#status)) and any invalidation by the consent owner revoke consent. Revalidation cannot restore it. Hide images removes displayed images and revokes consent but cannot undo requests already sent. There is no extra content level or persistent trust setting, and the action module adds no second consent lifetime.
 
@@ -76,9 +76,9 @@ Two other decisions are separate. *Delivery policy* belongs to the [MCP connecto
 | Owner | Responsibility and boundary |
 | --- | --- |
 | Application composition | Select Standard or Strict, the exact-host HTTPS image allowlist and Strict's blocked-fragment presentation (hidden or readable inert text). Reject invalid configuration before rendering. |
-| Application-local policy module | Build one validated immutable policy value; decide link, image and resource-policy effects. Independent of any card, renderer or host name. API names are open. |
-| Application-local Markdown module | Keep the original string; use a maintained parser to produce restricted tokens in order. Raw HTML and unsupported markup stay source text. Reject over-limit input explicitly. |
-| Lit renderer | Map tokens to fixed templates and text bindings. Own accessible reveal and image controls, consent for the current description and view, events and cleanup. |
+| Shared SDK content-policy module | Build one validated immutable policy value; decide link, image and resource-policy effects. Independent of any card, renderer or host name. The public entry point is `createContentPolicy`. |
+| Shared SDK Markdown module | Keep the original string; use a maintained parser to produce restricted tokens in order. Raw HTML and unsupported markup stay source text. Reject over-limit input explicitly. |
+| Lit or React renderer | Map tokens to fixed templates and text bindings. Own accessible reveal and image controls, consent for the current description and view, events and cleanup. |
 | MCP resource and host adapter | Derive content-related resource restrictions from the same policy; expose only the supported link-opening callback. A host may be stricter; application policy cannot expand host permissions. |
 | Authored action/media flow | Keep the separate protected operation, capability routing, origin rules and server authorization from the playback design. Content policy neither creates nor authorizes business actions. |
 
@@ -90,11 +90,11 @@ Each view receives its immutable policy and callback explicitly. Consent is sepa
 
 URLs are parsed with platform APIs and validated before any effect; only absolute HTTPS destinations can activate. Exact-host image matching rejects suffix tricks, unlisted subdomains, credentials and malformed input; wildcards are outside the contract. If the host cannot enforce the image destination boundary, the image stays inert. Authored media permissions are derived separately and cannot be borrowed by content images.
 
-The Markdown and policy modules stay renderer independent. Lit registration, templates, styling and host callbacks stay at the existing integration boundary, so later extraction needs no placeholder packages and Markdown is not required of unrelated catalog components.
+The Markdown and policy modules stay renderer independent. Lit registration, templates, styling and host callbacks stay at the existing integration boundary, so unrelated catalogs do not need to import the Markdown reader.
 
 ## Trusted embedded artwork
 
-A self-contained card can carry application-owned artwork without an external fetch. The shared [FaithfulCard policy](../../packages/components/src/faithful-card/policy.ts), inspected at SDK revision `78820dfce3d119d4c82d3d12020af65bef1e2fb1`, derives `img-src 'none'` for an empty image host list, which blocks bundled raster artwork encoded as data URLs even when it belongs to the trusted template. The amendment fixes that without a new flag.
+A self-contained card can carry application-owned artwork without an external fetch. The [shared policy](../../packages/components/src/faithful-card/policy.ts) includes `data:` in both modes and `blob:` only in Standard. This replaces the empty-allowlist `img-src 'none'` behavior inspected at SDK revision `78820dfce3d119d4c82d3d12020af65bef1e2fb1`; the approved amendments and landed implementation are recorded in Status.
 
 **Images.** Build one `img-src` list from the mode's baseline plus the validated exact HTTPS origins, never emitting `'none'`. Configured origins extend the baseline and never replace it:
 
@@ -153,33 +153,15 @@ Image redirects follow the same destination discipline as the first request; a r
 
 ## Verification outcomes
 
-Use the same ordinary and hostile descriptions in both modes. Browser tests load the built resource and observe the actual host callback and network path, not source strings or declared CSP alone.
+The [full verification matrix](content_safety_levels.evidence.md#verification-outcomes) covers ordinary and hostile descriptions in both modes. Qualification must observe actual requests and callbacks through the built resource, including:
 
-| Condition | Required result |
-| --- | --- |
-| Ordinary text, formatting, blocked fragments | Original input and order preserved. Strict placeholders, optional inert text and keyboard-accessible reveal and hide cause no execution or network effect. |
-| Standard, default configuration | Empty allowlist, no content image loads. The parsed hostname is visible and accessible before a validated HTTPS link invokes the callback. |
-| Standard, one exact image host | Only permitted HTTPS destinations load; suffix tricks, unlisted subdomains, credentials and non-HTTPS are rejected. Image-only restriction and redirect enforcement shown without widening script, style, font or media. |
-| Host callback absent or denying | Explicit readable inert feedback, no direct navigation. |
-| Strict before and after Show images | Before consent, even after reveal: zero image requests and link callbacks. After consent only permitted images load; invalid destinations stay unfetched; links stay inert. With no qualifying image, show unavailable feedback instead of enabling the control. |
-| Hide images; stale consent | Hide removes images. Content, policy or selection change, replacement, disposal, observable identity or session retirement and consent-owner invalidation reject old controls and late results. Revalidation cannot restore consent; new content needs fresh consent; another view cannot inherit it. |
-| Content tries to inject HTML, scripts, policy or actions | Stays inert, including after reveal; configuration and action arguments unchanged. |
-| Standard and Strict views interleave updates and disposal | Each keeps its own policy and callback; one cannot enable effects or break the other's cleanup. |
-| Resources rebuilt, cached or replaced | Resource metadata and renderer behavior agree; test the built resource and its identity. |
-| Authored protected action under either level | Current authorization and applicable resource and delivery policy still apply (for Play: capability, recipient separation, media checks). Strict does not disable it, and content destinations do not inherit its permissions. |
-| Empty image host list | Standard `img-src data: blob:`, Strict `img-src data:`. Trusted data images display in both; trusted blob images only in Standard. Answer-supplied data, blob and HTTPS images stay inert, including after reveal and consent. |
-| One or several exact hosts, both modes | The mode baseline stays beside every normalized origin; data images display in both, blob images only in Standard. Exact-host, redirect and image-only rules apply; Strict needs current consent. |
-| Invalid trusted configuration; attempted answer configuration | Explicit failure. Answer data cannot mutate policy or reach template or CSS control. |
-| Policy round-trip; missing or mismatched document policy | Baseline and origins retained; Strict never gains `blob:`; missing enforcement leaves content images inert. |
-| Embedded and blob fonts | A data-URL WOFF2 loads in both modes; a trusted blob font only in Standard (Strict falls back readably); invalid font input falls back readably. |
-| Font source composition | Empty, one and several origins keep `data: blob:` (Standard) or `data:` (Strict) and add declared origins; normalization, deduplication and round trip preserve origins and ports; invalid entries fail explicitly. |
-| Remote font loading and isolation | With working CORS a font loads from its declared origin; unlisted origins and redirects are blocked. Image permission grants no font access and font permission no image, script or stylesheet access; fallback stays readable. |
-| Supplied content versus asset slots, every renderer | Content cannot reach template or CSS asset slots directly or by data/blob conversion. Verify with hostile input through real content binding; CSP alone does not prove it. |
-| Hostile answer text and font requests | Cannot inject `@font-face`, change font configuration or become a request path or query; application font URLs carry no answer, credential or private data. |
-| Attempted external runtime loads | Script, stylesheet, frame and connection restrictions unchanged; embedded assets create no external dependency. |
-| Artwork or policy change versus answer change | Artifact changes give a new resource identity; answer-only changes reuse it. |
+- inert source reveal, strict consent, stale controls and interleaved views;
+- exact image destinations, redirects and image-only permission;
+- separate image/font origins, embedded assets and readable font fallback;
+- invalid configuration, oversize content and content-to-template isolation;
+- resource identity, policy reconstruction and authored actions' separate authorization.
 
-Local checks establish policy and browser behavior. The authenticated ChatGPT web and Claude web runs still exercise both levels, Strict visibility and image-consent controls and authorized and denied playback with the built resource, recording exact policy, source and resource identity, host and observed callbacks and requests. Deferring final signoff does not defer these runs; failed or unavailable evidence stays an open acceptance result.
+Local browser checks and actual-host observations are separate evidence. Status names the accepted scopes, exact sources and limits; the matrix does not turn an unavailable observation into a pass.
 
 ## Implementation sequence
 
@@ -187,7 +169,7 @@ Local checks establish policy and browser behavior. The authenticated ChatGPT we
 2. [POL2](https://github.com/MachineWisdomAI/saga-a2ui/issues/7): Strict's blocked-fragment presentation and revocable Show images, interleaved-instance isolation and cleanup, authored Play's separate policy preserved, resource and renderer policy aligned.
 3. Exercise both modes with the lifetime behavior and playback in each required host. Review, observed host evidence and final signoff are separate outcomes.
 
-Content interpretation and policy can proceed independently. [Request and view lifetimes](request_view_lifetimes.blueprint.md) replaces the rejected account/session proposal; the replacement design is approved and breakdown approval was outstanding before integration. Existing authentication, isolation, cancellation and cleanup requirements remain.
+The delivered POL1/POL2 scopes and later artwork/font amendments are recorded in Status. View retirement follows the [request and view lifetime contract](request_view_lifetimes.blueprint.md); content consent does not replace authentication or server authorization.
 
 ## Open decisions
 

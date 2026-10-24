@@ -28,7 +28,7 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 | Stack packages, typed surfaces and the card application | [View composition](features/view_composition.blueprint.md) (its Status lists every landed revision) |
 | UI actions and rendering | [Action binding](modules/action_binding.blueprint.md) and [Lit adapter](features/reusable_lit_adapter.blueprint.md) |
 | Protected media | [Authorized playback](features/authorized_playback.blueprint.md) |
-| Project setup and future publishing | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
+| Project setup and publication preparation | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
 
 Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication has working ChatGPT and Claude preparation commands; a fixture-verified local resumable-handoff record is also implemented, and none of these tools establishes publication. For working setup instructions, use [Getting started](../docs/getting-started.md).
 
@@ -74,7 +74,7 @@ Blueprints describe user-initiated behavior with the vocabulary of the [action b
 - An **acquired resource** is something an invocation obtained that the application must release, such as a capability a server action issued or a player holding decoded media. It can outlive the invocation that acquired it; ending the invocation does not end every resource.
 - The **server request** is a separate lifetime outside the module. The application listener, handlers and resource service own it, and the reusable callback and deadline contract for it belongs to the connector work ([CORE3](https://github.com/MachineWisdomAI/saga-a2ui/issues/16)).
 - Each invocation ends once as `succeeded`, `failed` or `canceled`, and a failed or canceled outcome records the stage it was decided in. The stage says how far the handler got, which gives three states: the handler's request is known not to have been sent, the handler is known to have returned, or the effect is unknown. Aborting the client's wait does not show that the host forwarded cancellation or that the server stopped, and it does not undo a remote effect.
-- Two bounds exist: a work deadline over prerequisites and the handler, and a separate hook budget for each step after the handler settles. The module proposes no timer that covers the whole invocation.
+- Two bounds exist: a work deadline over prerequisites and the handler, and a separate hook budget for each step after the handler settles. The module defines no timer that covers the whole invocation.
 
 Use these terms in proposals, interface tables, failure tables and verification outcomes. Upstream protocol vocabulary describes how an action reaches the agent or the renderer. A2UI describes an `event` as dispatched to the agent and a `functionCall` as executed by the renderer, and in saga a2ui's MCP Apps delivery the server request travels as a call to the application's own server through `App.callServerTool`, which the host proxies. The server action is the locally callable definition and handler, not that transport request. These wire forms are not definitions of local and server actions, and no Blueprint infers where work executes from which form a message uses. Each renderer adapter states how an upstream wire form reaches a bound callable.
 
