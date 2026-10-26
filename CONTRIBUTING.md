@@ -33,7 +33,7 @@ A document is finished when its examples and links resolve, and the check that c
 
 ## Report a problem or propose a feature
 
-Use the [issue forms](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose). A bug report is most useful with a small reproduction, expected and actual behavior, the source commit or candidate version, and the host and renderer involved. Remove credentials and private user data from logs. Use [SECURITY.md](SECURITY.md) for vulnerabilities.
+Use the [issue forms](https://github.com/MachineWisdomAI/saga-a2ui/issues/new/choose). A bug report is most useful with a small reproduction, expected and actual behavior, the exact installed `@saga-a2ui/*` package versions (or source commit and candidate version for a checkout build), and the host and renderer involved. Report installed versions rather than only an npm tag such as `latest` or `next`, because tags can move. Remove credentials and private user data from logs. Use [SECURITY.md](SECURITY.md) for vulnerabilities.
 
 For a feature, describe the application problem and a concrete use case. Discuss larger changes before implementing them so maintainers can confirm scope. Documentation fixes and small bug fixes can go straight to a PR. No private planning tools or commercial relationship are required to contribute; maintainer responses depend on availability.
 

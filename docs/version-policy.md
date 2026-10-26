@@ -5,7 +5,11 @@ interpreter explicitly if the system `python3` is older (for example,
 `python3.13 scripts/mw-version.py ...` on macOS).
 
 Bump affected product versions in the original change PR. Documentation,
-tests, CI, repository metadata, and development checks alone do not need a bump.
+tests, CI, repository metadata, and development checks alone do not need a bump,
+unless their paths are explicitly classified as shipped product. In this repository,
+`release_paths` includes `templates/lit-*/**`: those exported starter files, including
+their READMEs, require the applicable version bump even when the change is prose only.
+The overview `templates/README.md` is outside that pattern.
 The updater determines this from changed paths, not the PR title; a mixed PR
 still bumps the affected product. Run it before review and after updating from main:
 
