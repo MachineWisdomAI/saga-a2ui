@@ -1,0 +1,9 @@
+graph TD
+  App["Build an MCP application UI"] --> React["React application"]
+  App --> Lit["Lit starter or local demo"]
+  React --> Registry["npm: React stack 0.7.6-rc.1 + peers"]
+  Lit --> Checkout["Source checkout: build matched candidates"]
+  Registry --> Meaning["Your catalog, data and actions"]
+  Checkout --> Meaning
+  Meaning --> Backend["Your backend verifies identity and authorizes"]
+  Backend --> Host["Qualify the application in its target host"]

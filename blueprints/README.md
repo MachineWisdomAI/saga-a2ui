@@ -36,7 +36,7 @@ Each design's Status section separates its approved scope, implemented slices an
 
 Write for a human deciding whether the design makes sense. Lead with a short before/after example, then explain responsibilities, interfaces, rationale, material failures, verification outcomes and open decisions. Distinguish existing behavior from the proposal. Finish when the reader can explain the change and assess its tradeoffs; detailed worker instructions belong in private implementation tickets. Use `mw-writing-tech-specs`, followed by `mw-writing-for-human-readers`.
 
-For a bounded feature, aim for 500–800 words. Above 1,000, review scope and repetition; retain necessary contract and safety details, and justify a larger design by its complexity. CI warns on changed feature/module Blueprints above 1,000 whitespace-separated words, excluding front matter and HTML comments. The warning is advisory. Run it locally with `python3 scripts/check-blueprint-length.py --base origin/main` after staging new files.
+Let the design determine the length. Do not set a word cap or percentage-reduction target: preserve explanations, rationale, examples and consequential behavior even when a Blueprint needs substantially more space. Remove repetition and delivery ceremony where they impede comprehension. Retain useful diagrams, correct outdated ones and add illustrations where they clarify a mechanism or ownership boundary. The existing length-check script emits an advisory count; that count is not an editorial acceptance criterion.
 
 Make verification outcomes concrete: state the input or condition, expected observable result and boundary being exercised. For example, an image-policy contract could require empty input to produce `img-src 'none'`, populated input to preserve permitted origins, and a mounted frame to load a permitted image while blocking an unlisted origin. The directive and browser behavior are separate claims requiring different evidence.
 
@@ -46,7 +46,7 @@ Blueprints, public PRs and their verification evidence must be usable without pr
 
 ## Lifecycle and revision records
 
-Feature and module front matter uses `status` for the design decision: `draft`, `approved`, `rejected` or `superseded`. A documentation merge or AI review does not change that decision. Keep a short **Status** section near the title; update it when human approval, implementation evidence or a successor changes what the reader can rely on.
+Feature and module front matter uses `status` for the design decision: `draft`, `approved`, `rejected` or `superseded`. A documentation merge or AI review does not change that decision. Keep a short **Status** section near the title; update it when human approval, implementation evidence or a successor changes what the reader can rely on. Detailed revision and acceptance history may live in a clearly linked lifecycle companion. Preserve the exact SHA roles, approval conditions and acceptance limits there; a companion must not replace the main document's explanation of current behavior.
 
 | Record | What to write |
 | --- | --- |

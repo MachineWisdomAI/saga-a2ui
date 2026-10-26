@@ -32,6 +32,8 @@ NON_RELEASE_PATHS += tuple(
     for prefix in ("assets/brand/", "diagrams/")
     for suffix in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".ico")
 )
+# Editable sources for documentation diagrams ship with their rendered images.
+NON_RELEASE_PATHS += ("diagrams/*.mmd", "diagrams/*.excalidraw")
 WORKFLOW = '''name: Version policy
 on:
   pull_request:
