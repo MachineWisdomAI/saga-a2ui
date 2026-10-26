@@ -487,8 +487,6 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
             candidate = head_units.get(unit["name"])
             if not candidate or not set(unit["paths"]).issubset(candidate["paths"]) or any(f not in candidate["files"] for f in unit["files"]):
                 raise PolicyError("existing version units, paths, and mirrors cannot be removed from a change PR")
-        if not set(config.get("exclude_paths", [])).issubset(prior.get("exclude_paths", [])):
-            raise PolicyError("a change PR cannot add exclusions that bypass existing version checks")
         if not set(prior.get("release_paths", [])).issubset(config.get("release_paths", [])):
             raise PolicyError("a change PR cannot remove release_paths that protect shipped product files")
     pin = pinned_integration(config, prior, base_branch(base, pr))

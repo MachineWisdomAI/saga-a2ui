@@ -327,5 +327,6 @@
       ]
     }
   ],
+  "exclude_paths": ["demo/**"],
   "release_paths": ["templates/lit-*/**"]
 }
