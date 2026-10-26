@@ -47,7 +47,7 @@ afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 const sha256 = (file: string): string =>
   createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-it('packs only the five enrolled releases, preserving exact sibling pins, exports and license files', () => {
+it('packs all seven SDK releases, preserving exact sibling pins, exports and license files', () => {
   const releases = packReleasePackages(
     path.join(work, 'release'),
     path.join(work, 'release-tarballs'),
@@ -58,6 +58,8 @@ it('packs only the five enrolled releases, preserving exact sibling pins, export
     'mcp',
     'react',
     'react-mcp-stack',
+    'lit',
+    'lit-mcp-stack',
   ]);
   const versions = Object.fromEntries(
     releases.map((one) => [`@saga-a2ui/${one.name}`, one.version]),

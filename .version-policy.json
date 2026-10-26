@@ -68,6 +68,31 @@
             "dependencies",
             "@saga-a2ui/core"
           ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit", "dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/core"
+          ]
         }
       ]
     },
@@ -128,6 +153,41 @@
             "dependencies",
             "@saga-a2ui/components"
           ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["peerDependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit",
+            "peerDependencies",
+            "@saga-a2ui/components"
+          ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["devDependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/components"
+          ]
         }
       ]
     },
@@ -155,6 +215,21 @@
           "key": [
             "packages",
             "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/mcp"
+          ]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/mcp"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
             "dependencies",
             "@saga-a2ui/mcp"
           ]
@@ -205,7 +280,94 @@
           "key": ["packages", "packages/react-mcp-stack", "version"]
         }
       ]
+    },
+    {
+      "name": "packages/lit",
+      "paths": ["packages/lit/**"],
+      "files": [
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json"
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit", "version"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/lit"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/lit"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "packages/lit-mcp-stack",
+      "paths": ["packages/lit-mcp-stack/**"],
+      "files": [
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json"
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit-mcp-stack", "version"]
+        }
+      ]
     }
   ],
-  "release_paths": ["templates/lit-*/**"]
+  "exclude_paths": [
+    "apps/**",
+    "assets/**",
+    "blueprints/**",
+    "demo/**",
+    "diagrams/**",
+    "examples/**",
+    "scripts/authored-tree.ts",
+    "scripts/build-answer-consumer.ts",
+    "scripts/build-demo.ts",
+    "scripts/build-installed-lit-host.ts",
+    "scripts/build-pack1-consumers.ts",
+    "scripts/build-react-card-consumer.ts",
+    "scripts/build-tour.ts",
+    "scripts/candidate-identity.ts",
+    "scripts/candidate-rehearsal.ts",
+    "scripts/check-react-pnpm.ts",
+    "scripts/ci-scope.py",
+    "scripts/consumer-boundary.ts",
+    "scripts/fixtures/**",
+    "scripts/format.mjs",
+    "scripts/git-hooks.mjs",
+    "scripts/guard-fixed-or.ts",
+    "scripts/guide-actions/**",
+    "scripts/guide-recipes.ts",
+    "scripts/lint.mjs",
+    "scripts/package-direction.ts",
+    "scripts/publish/**",
+    "scripts/request-consumer/**",
+    "scripts/starter-snippets.ts",
+    "scripts/verify.ts",
+    ".fava-trails.yaml",
+    ".nvmrc",
+    ".prettierignore",
+    ".prettierrc.json",
+    "eslint.config.mjs",
+    "lint-staged.config.mjs",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "vitest.config.ts"
+  ],
+  "release_paths": ["templates/lit-*/**", "THIRD_PARTY_NOTICES.md"]
 }

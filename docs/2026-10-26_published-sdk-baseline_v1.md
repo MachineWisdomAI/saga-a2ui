@@ -1,5 +1,7 @@
 # Published SDK baseline, 2026-10-26
 
+Historical snapshot for the first calibration revision. Superseded by the [0.7.7-rc.1 baseline](2026-10-26_published-sdk-baseline_v2.md).
+
 The documentation calibration describes npm release candidate `0.7.6-rc.1`. Registry metadata and tarballs were fetched on 2026-10-26. Every shipped `src/` file in the five packages below matches the corresponding file at repository commit `2405c5d28f02a5b8d5fb70ed7a929e676cf78d43` byte for byte (82 files total).
 
 This is a content comparison, not a claim that npm supplied a publication Git SHA: these package queries did not return `gitHead`. It establishes the source used for API explanations, not browser/host acceptance or a fresh full application run.
@@ -20,4 +22,4 @@ This is a content comparison, not a claim that npm supplied a publication Git SH
 - `@saga-a2ui/components@0.7.6-rc.1`: `sha512-nNEINbHUpvnpK7HoYkF5lsdjAH7SZ7VkhxNQBH3rCe4ZeuPrSY19QdaN6c7PpG+PNU/PDi42mc2Nkn9h1mRXgQ==`
 - `@saga-a2ui/react-mcp-stack@0.7.6-rc.1`: `sha512-Lg+Ev6rXya1zccpYaZRoJcdfLj70DDnA/S+dFo0CKo0mhDwnED2cMkAtluPJy+UQ2GlfHduCULiGhMKVszD/Bg==`
 
-Lit and the Lit stack remain private candidate packages. The source-based CLI and Lit templates are not npm-distributed starter commands. Dist-tags can change; the guide pins the exact release rather than relying on them.
+At this snapshot, Lit and the Lit stack had not yet been published. Both were subsequently published at `0.7.7-rc.1`. The source-based CLI and Lit templates are not npm-distributed starter commands. Dist-tags can change; the guide pins the exact release rather than relying on them.

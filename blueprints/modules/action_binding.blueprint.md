@@ -13,7 +13,7 @@ SAGA separates the reusable action from the particular button running it. Applic
 
 ## Status
 
-The action runtime and React attachment described here are shipped in the `0.7.6-rc.1` npm packages. Lit implements the same contract but remains available through private candidate packages. There is no production Lynx adapter. The [published-source comparison](../../docs/2026-10-26_published-sdk-baseline_v1.md) identifies the exact packages and inspected source; it does not establish acceptance in every host.
+The action runtime and Lit/React attachments described here are shipped in the `0.7.7-rc.1` npm release. Both renderers and both MCP stacks are published under `next`; source-based candidate builds remain a separate development workflow. There is no production Lynx adapter. The [published-source comparison](../../docs/2026-10-26_published-sdk-baseline_v2.md) identifies the exact packages and inspected source; it does not establish acceptance in every host.
 
 The approved design and defaults amendment remain unchanged. [Lifecycle records](action_binding.lifecycle.md) preserve their exact design, review and landed-code SHAs, scoped Lit/React implementation and named-host observations. This explanatory revision does not broaden those approvals.
 

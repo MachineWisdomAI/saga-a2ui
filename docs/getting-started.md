@@ -2,9 +2,9 @@
 
 SAGA connects an application's UI to an MCP host. Your application supplies the view, the meaning of its data and the actions its controls perform. A stack package connects the renderer to MCP delivery and manages the view's lifetime.
 
-For a React application, install the published `@saga-a2ui/react-mcp-stack` package. For a runnable Lit starter or local demonstration, use a source checkout and its matched candidate tarballs: Lit is not published on npm. These are separate setup paths.
+For an existing Lit or React application, install its published MCP stack and framework peers. For a runnable Lit starter or local demonstration, use the source checkout and its matched candidate tarballs. The source CLI is development tooling; both renderer stacks are available on npm.
 
-![Choose the published React package or the source-based Lit starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
+![Choose a published Lit or React stack, or a source-based Lit starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
 
 ## Start from the demo
 
@@ -26,11 +26,11 @@ The first block writes `apps/lit-host/dist/demo`; run the second inside it. Open
 
 See the [demonstration README](../demo/lit-node/README.md) for the controls, the environment variables and what each shows.
 
-## Install the published React stack
+## Install a published stack
 
-The newest published release-candidate set is `0.7.6-rc.1`, verified on 2026-10-26. Use the explicit version: `latest` still selects `0.5.6-rc.1` for core, components, MCP and React, while the React stack's `latest` is already `0.7.6-rc.1`. All five packages have `next` set to `0.7.6-rc.1`. The [published baseline](2026-10-26_published-sdk-baseline_v1.md) records package integrity and the corresponding source comparison.
+The seven-package release set is published at `0.7.7-rc.1` under `next`, including Lit and the Lit MCP stack. Pin the exact version rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records anonymous installation, integrity, compilation and build checks; the [published baseline](2026-10-26_published-sdk-baseline_v2.md) identifies the package and source revisions used here. See [public installation](public-install.md) for registry checks and package selection.
 
-Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This React path configures an existing application; the runnable local demo above is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
+Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This registry path configures an existing application; the runnable local demo above is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 
 ```json
 {"overrides": {"@a2ui/markdown-it": "0.2.1"}}
@@ -38,13 +38,19 @@ Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The pack
 
 A2UI 0.13.0 permits a newer Markdown package whose peer requirements target A2UI 0.14.0. The override keeps the supported combination together. It belongs at the consumer root; a dependency's own override is not inherited.
 
-Then install the stack and its React peers in that application:
+Choose one stack for that application. For Lit:
 
 ```sh
-npm install --save-exact @saga-a2ui/react-mcp-stack@0.7.6-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.7.7-rc.1 lit@3.3.3
 ```
 
-The stack brings core, components, MCP and React at the matching SDK version. Your application does not need to install those packages separately for the stack's API. Keep the resulting lockfile. Existing applications should reconcile their React version with these peer requirements before proceeding.
+For React:
+
+```sh
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.7.7-rc.1 react@19.3.1 react-dom@19.3.1
+```
+
+Each stack brings core, components, MCP and its renderer at the matching SDK version. Your application does not need to install those packages separately for the stack's API. Keep the resulting lockfile. Existing applications should reconcile their framework version with these peer requirements before proceeding.
 
 Use the main entry for an application-owned catalog, `/faithful-card` for the optional card application and `/server` for server integration. Import server code only in the server build. Installing the package does not create a project, start a backend or register an application with a host.
 
@@ -59,7 +65,7 @@ Package names are flat under `@saga-a2ui`. There are no aggregate packages: no `
 | Core | `@saga-a2ui/core` | Implemented. Renderer-independent action contract (`/actions`), the A2UI v0.9 message session (`/protocols/a2ui/v0_9`) and the Zod 3 alias for catalog schemas (`/protocols/a2ui/zod3`). |
 | Delivery | `@saga-a2ui/mcp` | Implemented. `/server` (protected operations, verified request identity, one request lifetime), `/view` (the view's connection) and `/policy`. |
 | GenUI renderers | `@saga-a2ui/lit`, `@saga-a2ui/react` | Lit is the full renderer. React has direct action attachment, the optional FaithfulCard slices and, through its stack, the named composition capabilities (typed surfaces, the card and the card application); that is not full React parity. A `@saga-a2ui/lynx` package does not exist; Lynx delivery is retired (see below). |
-| Stacks | `@saga-a2ui/lit-mcp-stack`, `@saga-a2ui/react-mcp-stack` | Implemented. A stack connects one renderer to MCP delivery, so an application installs one stack plus its framework peers and imports from it only: `startA2uiView` for an application's own catalog, and `startFaithfulCardApp` from the `/faithful-card` subpath for a card application. The React stack is published at `0.7.6-rc.1`; the Lit stack stays private with Lit. |
+| Stacks | `@saga-a2ui/lit-mcp-stack`, `@saga-a2ui/react-mcp-stack` | Implemented. A stack connects one renderer to MCP delivery, so an application installs one stack plus its framework peers and imports from it only: `startA2uiView` for an application's own catalog, and `startFaithfulCardApp` from the `/faithful-card` subpath for a card application. Both stacks are published at `0.7.7-rc.1`. |
 | Components | `@saga-a2ui/components` | Implemented, optional. The passive FaithfulCard slice. The React stack installs it transitively; an own-catalog application need not import it, and its main-entry browser bundle excludes it. |
 | Tooling | none | No tooling package is implemented. `@saga-a2ui/publish` is a proposal in the draft [host publication design](../blueprints/features/host_publication.blueprint.md); there is no such command. `saga init` is a script in this repository, not a package. |
 
@@ -96,7 +102,7 @@ npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hono ./my-app
 
 ### Install the packages from a candidate
 
-The Lit source path uses `@saga-a2ui/lit`, which is not published on npm, and its private stack. The project `saga init` creates depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` cannot resolve those commit-specific candidate versions from the public registry.
+This source workflow qualifies the checkout using candidate builds of Lit and the Lit stack. Both packages are also published on npm. The project `saga init` creates depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` cannot resolve those commit-specific candidate versions from the public registry.
 
 Build the candidate from the checkout that ran `saga init`, then install the tarballs the project uses in one command:
 
@@ -113,7 +119,7 @@ The second line is needed because the root build still builds the retained Lynx 
 npm install ./PATH/candidate-out/packages/saga-a2ui-core-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-components-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-lit-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-mcp-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-lit-mcp-stack-VERSION.tgz
 ```
 
-Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A plain `npm install` cannot retrieve these candidate versions from npm; install their tarballs instead. The published React release does not replace the matched Lit candidate set. A candidate is not a public registry release. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
+Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A plain `npm install` cannot retrieve these candidate versions from npm; install their tarballs instead. A public release does not replace the matched candidate set used by this source workflow. A candidate is not a public registry release. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
 
 After installing those tarballs inside `my-app`, build and start it:
 
@@ -255,7 +261,7 @@ The application authenticates the request and its server decides what the accoun
 | Authentication | A request with an accepted, refused or absent credential was admitted or refused | An OAuth or DCR flow, or any real identity provider |
 | Audio | The local audio clock advanced | Audio in a remote host |
 
-Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](2026-10-19_host-compatibility-observations_v1.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
+Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](host-compatibility.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
 
 ## Actions
 
@@ -279,7 +285,7 @@ Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 secon
 | Area | Implemented, qualified in source | Not done or not shown |
 | --- | --- | --- |
 | Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
-| Lit | The full renderer, installed from packed tarballs; the starter, demonstration and notes example | Windows |
+| Lit | The full renderer, available on npm; matched candidate tarballs qualify the starter, demonstration and notes example | Windows |
 | React | **Direct action attachment** (`@saga-a2ui/react/actions`, ACT2), the optional FaithfulCard text and image-consent slices and, through `@saga-a2ui/react-mcp-stack`, the named composition capabilities (typed bound surfaces, the card factory and the card application), from the same tarballs; the notes browse and Play run through React in a local fixture host | Full React parity and broad host coverage are not established. Bounded notes and protected-player Claude/ChatGPT observations are preserved in the [action lifecycle record](../blueprints/modules/action_binding.lifecycle.md); they do not supply a React starter, template, CLI pair or complete host matrix |
 | Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp` | No full matrix; `saga init` offers those five servers; the standalone demonstration is the Node application only |
 | Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |

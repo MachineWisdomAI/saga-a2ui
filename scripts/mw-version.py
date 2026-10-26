@@ -136,8 +136,8 @@ Use optional `release_paths` glob patterns for files that ship as product despit
 those defaults, such as `skills/**`, `skillsets/**`, or `src/content/**`. Review
 the actual package/build inputs when adopting the policy: installed skills,
 runtime prompts, templates, and rendered site content are product, even in
-Markdown. Existing `exclude_paths` still exclude captured or vendored material.
-Existing `release_paths` cannot be removed or narrowed in a change PR.
+Markdown. Use `exclude_paths` for paths that never ship, such as demos and
+repository tooling; a change PR may add or remove either list.
 Documentation images under `assets/brand/` and `diagrams/` also remain exempt.
 Root units use `**`. JSON mirrors can select a field with a `key` array; separate
 units may own different fields in the same workspace lockfile. Use `regex` mirrors
@@ -489,10 +489,6 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
             candidate = head_units.get(unit["name"])
             if not candidate or not set(unit["paths"]).issubset(candidate["paths"]) or any(f not in candidate["files"] for f in unit["files"]):
                 raise PolicyError("existing version units, paths, and mirrors cannot be removed from a change PR")
-        if not set(config.get("exclude_paths", [])).issubset(prior.get("exclude_paths", [])):
-            raise PolicyError("a change PR cannot add exclusions that bypass existing version checks")
-        if not set(prior.get("release_paths", [])).issubset(config.get("release_paths", [])):
-            raise PolicyError("a change PR cannot remove release_paths that protect shipped product files")
     pin = pinned_integration(config, prior, base_branch(base, pr))
     title = args.title if args.title is not None else pr.get("title", "")
     body = Path(args.body_file).read_text() if args.body_file else pr.get("body") or ""

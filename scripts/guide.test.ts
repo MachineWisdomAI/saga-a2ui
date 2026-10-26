@@ -594,11 +594,10 @@ describe('what the guide must explain', () => {
     for (const name of ['core', 'components', 'mcp', 'react']) {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
-    expect(guide).toContain(
-      'newest published release-candidate set is `0.7.6-rc.1`',
-    );
-    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.7.6-rc.1');
-    expect(guide).toContain('`@saga-a2ui/lit`, which is not published on npm');
+    expect(guide).toContain('seven-package release set');
+    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.7.7-rc.1');
+    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.7.7-rc.1');
+    expect(guide).toContain('public-install.md');
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(
       /there is no release|packages are private, unpublished and unversioned/i,
