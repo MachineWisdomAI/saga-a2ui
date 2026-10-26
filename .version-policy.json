@@ -68,6 +68,31 @@
             "dependencies",
             "@saga-a2ui/core"
           ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit", "dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/core"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/core"
+          ]
         }
       ]
     },
@@ -128,6 +153,41 @@
             "dependencies",
             "@saga-a2ui/components"
           ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["peerDependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit",
+            "peerDependencies",
+            "@saga-a2ui/components"
+          ]
+        },
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json",
+          "key": ["devDependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/components"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/components"
+          ]
         }
       ]
     },
@@ -155,6 +215,21 @@
           "key": [
             "packages",
             "packages/react-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/mcp"
+          ]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/mcp"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
             "dependencies",
             "@saga-a2ui/mcp"
           ]
@@ -203,6 +278,51 @@
           "path": "package-lock.json",
           "kind": "json",
           "key": ["packages", "packages/react-mcp-stack", "version"]
+        }
+      ]
+    },
+    {
+      "name": "packages/lit",
+      "paths": ["packages/lit/**"],
+      "files": [
+        {
+          "path": "packages/lit/package.json",
+          "kind": "json"
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit", "version"]
+        },
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json",
+          "key": ["dependencies", "@saga-a2ui/lit"]
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": [
+            "packages",
+            "packages/lit-mcp-stack",
+            "dependencies",
+            "@saga-a2ui/lit"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "packages/lit-mcp-stack",
+      "paths": ["packages/lit-mcp-stack/**"],
+      "files": [
+        {
+          "path": "packages/lit-mcp-stack/package.json",
+          "kind": "json"
+        },
+        {
+          "path": "package-lock.json",
+          "kind": "json",
+          "key": ["packages", "packages/lit-mcp-stack", "version"]
         }
       ]
     }
