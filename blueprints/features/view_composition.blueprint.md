@@ -12,25 +12,13 @@ The application states what its domain data means; the SDK composes how that dat
 
 ## Status
 
-**Design: approved.** The human owner approved the whole fourth revision at [`7a78e7e`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md) (commit [`7a78e7eae99285174a11c62d43c1f0035658ec96`](https://github.com/MachineWisdomAI/saga-a2ui/commit/7a78e7eae99285174a11c62d43c1f0035658ec96)). It was proposed in [PR #237](https://github.com/MachineWisdomAI/saga-a2ui/pull/237) and merged into `main` at `4d70df2d001511050d3dff578c3885ce2557058b`; that merge commit is not the reviewed revision. This one decision covers the entire E2 amendment: the definition-owned neutral whole-result reader, the `content-policy` and `server` subpaths and their exports, the `readingProfile` host and device aliases, the `strong`, `em` and `hr` styling additions, the named Lit construction API, and the server-only dependency trade-off in [Exports and installation](#exports-and-installation). It approves no code head. The earlier approvals stay in the history: the baseline ([`db83e84`](https://github.com/MachineWisdomAI/saga-a2ui/blob/db83e84a7d8d6d9527c5ab350472e82809afd609/blueprints/features/view_composition.blueprint.md)), the revision ([`4b1215a`](https://github.com/MachineWisdomAI/saga-a2ui/blob/4b1215a4d588f537e93e8a4099cdfc5268a26ab3/blueprints/features/view_composition.blueprint.md)) and the correction ([`49e39bd`](https://github.com/MachineWisdomAI/saga-a2ui/blob/49e39bdb434f5848ded9c042e425c5cefe735b31/blueprints/features/view_composition.blueprint.md)). An earlier delivery scope record for the E2 additions in [PR #229](https://github.com/MachineWisdomAI/saga-a2ui/pull/229) was never an approval; the decision above is the authority for that whole scope.
+**Approved and implemented in source.** The owner approved design revision [`7a78e7eae99285174a11c62d43c1f0035658ec96`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md); that design decision is distinct from its merge and later implementation heads. The [lifecycle records](view_composition.lifecycle.md#status) retain each approved revision, landed change and independent review.
 
-**Implementation: source implemented on `main`; acceptance open.** Each row records the Blueprint revision implemented at the landed `MachineWisdomAI/saga-a2ui` commit. The independent review links carry the exact verification.
+Both stacks are published at `0.7.7-rc.1`; Lit is no longer private or unversioned. Registry tarball integrity and included source bytes were checked against baseline `cdad54747dfbba756464676ac3b1b8c90148a566`: all 12 Lit-stack and 15 React-stack source files matched. This comparison establishes package/source identity, not a fresh installation or host run. The earlier “nothing published” statements belong to the historical receipts.
 
-| Scope | Revision | Landed at | PR, review and reviewed head |
-| --- | --- | --- | --- |
-| Layers A to E, both stacks, the five starters, the consumer migration and the boundary scan, plus the E2 subpaths, aliases and styling first landed by PR #229 | `49e39bd` (E2 additions: `7a78e7e`) | [`18153793795d4ecfc12d2785d96422d2e397a3b2`](https://github.com/MachineWisdomAI/saga-a2ui/commit/18153793795d4ecfc12d2785d96422d2e397a3b2) | [PR #234](https://github.com/MachineWisdomAI/saga-a2ui/pull/234), integrating children #221 to #229 |
-| Renderer update-failure parity and the Lit default session (layer B) | `7a78e7e` | [`6b2aabf8a73e47347f70ade99d7584227c6e943b`](https://github.com/MachineWisdomAI/saga-a2ui/commit/6b2aabf8a73e47347f70ade99d7584227c6e943b) | [PR #238](https://github.com/MachineWisdomAI/saga-a2ui/pull/238), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/238#pullrequestreview-5617059507), `cfdf45a1cf048d2034b6d445d13fbb39800b41fe` |
-| Definition-owned whole-result reader; `classifyResult` removed | `7a78e7e` | [`3a37b200e44ba36fa785202d1b63498a4ac70be1`](https://github.com/MachineWisdomAI/saga-a2ui/commit/3a37b200e44ba36fa785202d1b63498a4ac70be1) | [PR #240](https://github.com/MachineWisdomAI/saga-a2ui/pull/240), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/240#pullrequestreview-5618100272), `3d3cad3266e1eb0f96c26745411fc8893869c749` |
-| Stack-only public consumer recipe and the server-only entry | `7a78e7e` | [`d465ab394f801c8a6e800af738438b7dbf6133da`](https://github.com/MachineWisdomAI/saga-a2ui/commit/d465ab394f801c8a6e800af738438b7dbf6133da) | [PR #242](https://github.com/MachineWisdomAI/saga-a2ui/pull/242), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/242#pullrequestreview-5619017679), `1fc4aa41c02cb9b757531bab373e3e914c9af90c` |
-| Boundary scan on documentation-only changes and server consumers | `7a78e7e` | [`39777a6b81ff2a4757f58232686dc1e31b9c7080`](https://github.com/MachineWisdomAI/saga-a2ui/commit/39777a6b81ff2a4757f58232686dc1e31b9c7080) | [PR #244](https://github.com/MachineWisdomAI/saga-a2ui/pull/244), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/244#pullrequestreview-5620133622), `349fda2e24964408b2a7cc228c2bff30ee870955` |
-| Starting views retire and unmount before the connection closes; throwing cleanup | `7a78e7e` | [`d0f04f1ee213075c7c611eb9c1b348f6f0dcc0f7`](https://github.com/MachineWisdomAI/saga-a2ui/commit/d0f04f1ee213075c7c611eb9c1b348f6f0dcc0f7) | [PR #245](https://github.com/MachineWisdomAI/saga-a2ui/pull/245), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/245#pullrequestreview-5620594181), `a6a427915eb09450d3662c40d5279d0da710b836` |
-| Branded card qualified through both public stack starts; the Lit start forwards application stylesheets | `7a78e7e` | [`e62514504f7501ef20d9cfeed319ded6159f42b6`](https://github.com/MachineWisdomAI/saga-a2ui/commit/e62514504f7501ef20d9cfeed319ded6159f42b6) | [PR #248](https://github.com/MachineWisdomAI/saga-a2ui/pull/248), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/248#pullrequestreview-5621359008), `e3a04efdb07ba807723c18e6b865bba71f10ee8c` |
+Acceptance by the motivating application and named-host qualification remain separate from SDK source and package availability. This refresh makes no new claim about Arabic right-to-left rendering, image consent in a host, destination adoption or stable promotion. Earlier frozen-candidate observations do not establish final-revision acceptance.
 
-The landed-revision records themselves were separate status-only pull requests: #235, #239, #241, #243, #246, #247 and #249. This record was reconciled against `main` at `78223b5b26751e90ad86f83aa9b2c851411ae2b4`. The source versions advanced from `0.7.0-rc.1` at the first integration to `0.7.6-rc.1` for the five public packages (`core`, `components`, `mcp`, `react`, `react-mcp-stack`); Lit and `lit-mcp-stack` stay private and unversioned.
-
-**Acceptance still open.** Nothing here is published: no `0.7.x` package is on the registry, and `react-mcp-stack` has no registry release. Anonymous installation of the published candidate, adoption by the motivating application, and runs in the named assistant hosts (including Arabic right-to-left text and image consent) are separate evidence. An earlier first-load observation on a frozen earlier snapshot is not evidence for the final revision. Stable promotion is held. Two earlier records stay historical: the motivating application's rehearsal against a packed candidate from `20b370df`, and the SDK's own qualification of a packed candidate from `a4ec1ab`.
-
-**Known gaps, kept deliberate.** The two stacks hold the same lifecycle modules as copies. That duplication alone is not a defect and is not a gate for this design; each stack's own tests cover its copy. Reuse of the card application by a delivery other than MCP is unqualified, and nothing here claims full React parity.
+The stacks deliberately keep separate copies of their lifecycle modules, each with its own tests. Non-MCP delivery reuse of the card application remains unqualified, and this design does not establish full React parity.
 
 ## Ownership and example
 
@@ -38,7 +26,7 @@ Every versioned package shares one major.minor; patch may vary, and the version 
 
 The SDK owns the ordering between rendering and delivery; the application owns every domain schema and the whole-result logic. Dependencies point one way. Core imports no MCP, renderer or DOM. Components imports no DOM, MCP or renderer. Among SDK packages, MCP and components depend on core, not on one another or on the renderers; renderer packages consume core and components. `@saga-a2ui/react` and `@saga-a2ui/mcp` stay independent; only a stack connects a renderer to a delivery.
 
-The starter template becomes a minimal application like this one. The surface is defined once, and the stack mounts it and routes each tool result to the application's update. The id constants are application-owned; the clear-action binding is omitted here.
+The maintained starter is a minimal application like this one. The surface is defined once, and the stack mounts it and routes each tool result to the application's update. The id constants are application-owned; the clear-action binding is omitted here.
 
 ```ts
 const CLEAR_ID = 'clear';
@@ -59,13 +47,15 @@ const view = startA2uiView({
 await view.ready;
 ```
 
+For a delivered result that the application's `headlineFor` validates as “Your notes”, the headline changes in place while the Clear control and its binding retain identity. `headlineFor` owns invalid-result wording and domain validation. `surface.update` returns a structured failure if the layout rejects its data; it does not clear the old surface, so an application that requires fail-closed presentation must handle that return value or retire the view. The abbreviated callback above assumes `headlineFor` returns valid layout data. A card application's rejection behavior is different and is specified below.
+
 ## Layers
 
 **A. Surface authoring** (`@saga-a2ui/core/protocols/a2ui/v0_9`). `defineSurface({surfaceId, catalogId, data, root, components?, initial})` returns a `SurfaceLayout<TData>` holding the opening messages and typed, validated `update(data)` messages. `data` is a Zod 3 schema. `root` is one component object `{component, bind, props}` with no `id` and no top-level `children`; child ids go in `props`. `components` lists the rest. The root is never a string id and never repeats a root id.
 
 **B. Bound surface** (`@saga-a2ui/react/a2ui`, `@saga-a2ui/lit`). In React, `openSurface(layout, catalog)` returns a `BoundSurface<TData>` with `update(data)` and `dispose`, rendered by `<Surface of={handle}/>`. In Lit, `createA2uiAppElement({catalog, layout, actions?})` builds an element that exposes `updateData(data)`. Each connect creates a default session from catalog and layout using the SDK decoder; injecting a session is an optional advanced choice. An update validates against the layout schema and applies in place, so mounted controls, focus, component state and action bindings survive. A rejected update returns `{ok: false, failure}` in both renderers, with `failure` as `{kind, message}`, and changes nothing. Presenting an equal answer again is a selection, not an update (layer C).
 
-**C. Card conveniences** (`@saga-a2ui/{react,lit,components}/faithful-card`). Both renderers provide `createFaithfulCardView({dialect, maxLength, policy, contentSecurityPolicies, hostLinks})`, `openFaithfulCardSurface()` (a `CardSurface` with `present(content)` and `clear()`) and a host-link helper (React `useHostLink`, Lit `bindHostLink`). The stack reads the document, including the embedded policy and the CSP meta values, and passes them in; the renderer establishes image enforcement from them and takes no document.
+**C. Card conveniences** (`@saga-a2ui/{react,lit,components}/faithful-card`). Both renderers provide `createFaithfulCardView({dialect, maxLength, policy, contentSecurityPolicies, hostLinks})`, `openFaithfulCardSurface()` (a `CardSurface` with `present(content)` and `clear()`) and a host-link helper (React `useHostLink`, Lit `bindHostLink`). The stack reads the document, including the embedded policy and the CSP meta values, and passes them in; the renderer establishes image enforcement from them and takes no document. Lit also accepts application constructable stylesheets through the card start's `styles` option, because page selectors do not cross its shadow roots; custom properties inherit normally.
 
 `present` revokes image consent, retires late link and image outcomes of the previous presentation and advances a presentation token, even for equal text. `present` itself leaves the previous presentation untouched when it rejects content; the card-app stack handles that rejection by calling `clear()` before showing the problem.
 
@@ -92,9 +82,9 @@ await card.ready;
 
 ## Whole-result reading
 
-`DeliveredResult` is `{isError: boolean, content: ContentBlock[], structuredContent?: unknown}`. `content` keeps every block in delivered order. Each block keeps its `type`; a text block also keeps its `text`, and any other block is opaque and carried as supplied. `structuredContent` is unchecked, and an absent field, a present `null` and malformed data stay distinct. MCP view maps `ToolResult` to this value, and the stacks pass it unchanged to the definition's single `result` reader; there is no `classifyResult` override.
+`DeliveredResult` is `{isError: boolean, content: ContentBlock[], structuredContent?: unknown}`. `content` keeps every block in delivered order. Each block keeps its `type`; a text block also keeps its `text`, and any other block is opaque and carried as supplied. `structuredContent` is unchecked, and an absent field, a present `null` and malformed data stay distinct. MCP view maps `ToolResult` to this value, rejecting an invalid content list or a block without its required type/text rather than silently dropping it. Private result `_meta` is not part of `DeliveredResult`. The card stacks pass the neutral value unchanged to the definition's single `result` reader; there is no `classifyResult` override.
 
-Schema, fallback and wording belong to the application's reader, and the SDK enforces none of them. The motivating application's reader keeps these rules, in order of precedence:
+Schema, fallback and wording belong to the application's reader, and the SDK enforces none of them. The approved design uses the motivating application's reader rules below as an example, in order of precedence. These are application policy, not defaults supplied by either stack, and this document does not assert the current state of an external application's implementation:
 
 - An error result rejects with zero cards, even beside valid structured content. Its text is its first usable error text, otherwise the application's unsupported wording.
 - For any other result, the text comes from the first text block, which is then tested for a nonempty string; an empty first text block is not skipped.
@@ -105,27 +95,45 @@ The stack owns what follows: if the reader rejects or `present` rejects its cont
 
 ## Startup and failure
 
-After reading the policy and installing handlers, the stack starts the bridge handshake and `readyWhen` concurrently. Once both succeed, it applies the negotiated host context, then delivers held input and the latest result. Host context is applied before `ready` resolves and before anything is shown. The font gate receives an abort signal. A result that arrives before `ready` is held, a later one replaces it, and only the latest is shown, once, when the view is ready. Each failure rejects `ready` with its own kind:
+The card entry first reads the embedded policy; the own-catalog entry does not require card policy. With delivery handlers installed, the runner starts the bridge handshake and `readyWhen` concurrently. Once both succeed, it applies the negotiated host context, then delivers held input and the latest result, and resolves `ready`. This gates delivered-result handling, not every initial DOM node: card waiting chrome and an own-catalog layout's initial data may already be mounted. Applications should keep private result data out of their initial layout. Host context is applied before the first held result is shown. The font gate receives an abort signal. A result that arrives before `ready` is held, a later one replaces it, and only the latest is shown, once, when the view is ready. Each failure rejects `ready` with its own kind. The text choices below belong to the card entry; an own-catalog application handles the rejected readiness promise rather than receiving these card texts:
 
-- An absent policy means Standard with empty lists. A malformed or invalid policy gives kind `policy` and shows `texts.policyFailure`; no view mounts on a guessed policy.
+- An absent policy means Standard with empty lists. A malformed or invalid policy gives kind `policy` and shows `texts.policyFailure`; no card content is mounted on a guessed policy (the problem chrome can still render).
 - A connect rejection gives kind `connect` and shows `texts.connectFailure`.
 - A `readyWhen` rejection disposes the connection and gives kind `ready` and `texts.readyFailure`.
 - An application callback that throws during startup completes connection, listener and sizing cleanup, then gives kind `application`.
-- `dispose()`, teardown or `pagehide` during startup aborts the readiness signal, drops held results and gives kind `disposed`. It shows nothing, and a late readiness outcome never remounts, delivers or shows a failure.
+- `dispose()`, teardown or `pagehide` during startup aborts the readiness signal and drops held results. With successful teardown, it gives kind `disposed`, removes the initial view and shows no failure text. If the teardown callback throws, the startup failure becomes `application` unless an earlier specific startup failure already exists; that earlier kind is retained and the teardown error is reported separately. Cleanup still completes. A late readiness outcome never remounts or delivers a result.
 
-Teardown in any state retires consent, the host-context hook and the unmount once, before the connection closes. Cleanup runs even when `onTeardown`, the chrome unmount or the reporter throws, and never skips connection disposal. It releases the container and removes the `pagehide` listener, so a later `pagehide` calls no retired callback and a restart works.
+Teardown retires card consent or the own-catalog surface before the connection closes and stops later host-context/result delivery. Ordinary teardown unmounts and releases the container; a startup failure can retain card failure chrome until `dispose()` removes it. Cleanup runs even when `onTeardown`, the chrome unmount or the reporter throws, and never skips connection disposal. Disposal releases the container and removes the `pagehide` listener, so a later `pagehide` calls no retired callback and a restart works.
 
 After `ready`, a throwing callback is reported to `onError(error, phase)`, which defaults to `console.error`. The rest of that event's work is skipped and what the callback already changed stays, because the stack cannot roll back application side effects. A throwing ordinary host-context callback leaves the view running with its listeners in place.
 
+The startup flow separates initial presentation from result readiness:
+
+```mermaid
+flowchart TD
+  A[Claim container and prepare initial view] --> B[Install delivery handlers]
+  B --> C[Host handshake]
+  B --> D[Application readyWhen]
+  C --> E[Both succeed]
+  D --> E
+  E --> F[Apply host context]
+  F --> G[Deliver latest held input, then result]
+  G --> H[Resolve ready]
+  B --> I[Ending or startup failure]
+  I --> J[Retire surface or consent; stop delivery]
+  J --> K[Close connection and finish cleanup]
+  K --> L[Startup failure may retain card problem chrome until dispose]
+```
+
 ## Exports and installation
 
-Each stack's convenience entries export exactly these sets, re-exporting existing owners, so browser imports reach no server module and server imports reach no browser code:
+Each stack's convenience entries re-export their existing owners. The principal contracts are listed below; the [Lit exports](../../packages/lit-mcp-stack/src/faithful-card/index.ts) and [React exports](../../packages/react-mcp-stack/src/faithful-card/index.ts) also name the public option, chrome, reader and failure types. Browser imports reach no server module and server imports reach no browser code:
 
 - `content-policy`: `createContentPolicy`, `embedContentPolicy`; types `ContentPolicy`, `CreatePolicyResult`, `PolicyConfiguration`, `PolicyFailure`.
 - `server`: `attachRequestLifetime`, `createServerBudgets`, `operationViewFromHtml`, `registerPublicOperation`, `viewUriForHtml`; types `OperationView`, `RequestLifetime`.
 - Card entry: `FaithfulCardApp`, `CardContent`, `CardResultOutcome`, `startFaithfulCardApp`, `RunningView`, `StartFailure`; React also exposes `/faithful-card.css` (Lit styles its card internally); React `useHostLink`, `HostLink`, `HostLinkOutcome`; Lit `bindHostLink`, `HostLinkBinding`, `HostLinkOutcome`; both `readingProfile` and `ReadingProfile`.
 
-The main entry exports `startA2uiView`, `defineSurface`, `SurfaceLayout`, `z`, the renderer's action helpers and catalog types, plus `readingProfile`, `ReadingProfile` and delivery callback types. It exports nothing card-specific and never depends on components.
+The main entry exports `startA2uiView`, `defineSurface`, `SurfaceLayout`, `z`, the renderer's action helpers and catalog types, plus `readingProfile`, `ReadingProfile` and delivery callback types. Its module graph exports nothing card-specific and does not import components; the stack package's installed dependencies are broader, as described next.
 
 A stack connects the renderer and delivery, amending the [package layout](../../packages/README.md). `@saga-a2ui/components` and `@modelcontextprotocol/ext-apps` are regular stack dependencies so one install suffices under strict resolution. Components and markdown-it are expected in an installed full application, but the emitted browser graph of an own-catalog application excludes components, markdown-it and the server entry. Server-only consumers keep `@saga-a2ui/mcp/server` and install without a renderer. A renderer-named stack keeps its renderer install and peer obligations even for its `server` subpath, which makes no renderer-free promise; full applications such as Ansari may use it.
 
@@ -133,7 +141,7 @@ Host aliases cover `HTMLFragmentWrapper`, the retained Alexa and mobile reading 
 
 ## Acceptance
 
-Acceptance is a working Ansari build on the latest `0.7.x` release candidate, covering font gate, branding and attribution, consent reset, sizing, and failure and recovery. Its behavioral assertions stay, and mechanical selector changes are recorded as a before-and-after mapping. Stable promotion, publication and host acceptance need their own evidence. The checks below are separate; passing one does not stand in for another.
+The approved destination acceptance target is a working Ansari build on the selected `0.7.x` release candidate, covering font gate, branding and attribution, consent reset, sizing, and failure and recovery. Its behavioral assertions stay, and mechanical selector changes are recorded as a before-and-after mapping. Registry availability now has separate package evidence; it does not establish that destination build, stable promotion or host acceptance. The checks below are separate; passing one does not stand in for another.
 
 - **Boundary scan.** One known-bad consumer line per rule is reported, and the near-misses (a `before` fence, an excluded fixture, an exempted line naming its rule, a `pagehide` listener) are not. The include list covers consumer source, documentation and server code, with zero hits. Consumers may not import `@modelcontextprotocol/ext-apps` or `@saga-a2ui/mcp/view`, nor use A2UI wire literals, `createMessageSession`, `a2uiV0_9Decoder` or `IngestResult`. The supported `@saga-a2ui/mcp/server` is allowed, and blanket `@a2ui` imports are prohibited except qualified catalog authoring under justified, reviewed-line exemptions.
 - **Exports and directions.** Each stack subpath export set is tested individually in that stack's `exports.test.ts`, apart from the dependency-direction check. Every package's `exports.test.ts` also asserts its own row of `scripts/package-direction.ts` (core imports no delivery, renderer or DOM; MCP imports core only; components import core only; a stack alone joins a renderer to a delivery) and fails on a deliberate wrong-direction import and manifest dependency.
@@ -147,4 +155,4 @@ Acceptance is a working Ansari build on the latest `0.7.x` release candidate, co
 
 ## Replacement scope
 
-Revision `7a78e7e` replaced the previous text of this Blueprint and carried forward its unchanged obligations. It changed the definition-owned whole-result reader (replacing the stack override), the E2 exports, aliases and styling, and the Lit API (from required `createSession` to `catalog`/`layout`, with a default SDK session and optional advanced injection). `updateData` and the root example corrected earlier wording. Integration-branch mechanics and the historical per-consumer glue counts stay in the [record at `a4ec1ab`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a4ec1abfeb6a0c098e39bf86aaab3e0e299a3a78/blueprints/features/view_composition.blueprint.md), and the per-change delivery narration is in the linked pull requests. The five layers and their policy, lifecycle and export contracts need more than the usual single-feature length.
+The [historical replacement record](view_composition.lifecycle.md#replacement-scope) preserves the fourth revision's exact scope and predecessor permalink. Its approved mechanisms remain explained above; this documentation refresh adds no API or implementation authority.
