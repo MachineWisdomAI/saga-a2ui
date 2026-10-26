@@ -569,6 +569,14 @@ For Archive, a reply carrying `isError` is not automatically a no-effect guarant
 
 SAGA supplies no automatic retry. A second activation is a new operation chosen by the application or user. Even when the archive handler did not start, earlier prerequisites may have performed their own requests or audit writes; their repeatability remains application policy.
 
+### Error categories and safe presentation
+
+`failure.kind` identifies the runtime failure, such as `handler-error` or `success-hook-timeout`. The accompanying category describes the cause when evidence establishes one. Application code can throw `ActionError(category, message, { cause })` to preserve a known cause and its original error. Categories are extensible, so consumers must handle unfamiliar values; an unclassified cause remains `unknown` rather than being guessed to be an authentication problem.
+
+For example, the application may distinguish `authentication-required` from `permission-denied` when its response contract or typed cause establishes that distinction. The runtime does not infer it by searching an arbitrary exception's message or foreign status field. A known category supplements the outcome and stage; it neither changes the recorded result nor makes an uncertain server effect safe to retry.
+
+The application chooses safe user-facing wording separately. Raw server text, payloads, credentials and stack traces are not automatically displayed, and categories or original causes do not enter the observer's restricted telemetry. An action timeout also does not choose an HTTP response status for the application's server.
+
 ### Resources after a successful invocation
 
 A player illustrates why ending an action and ending everything it created are different operations. Once Play transfers its lease to the player owner, playback can continue while the action binding is idle. Pause and Resume act on that owner. Closing the view must also retire the owner if the application wants playback to end; disposing the finished Play binding cannot stand in for that responsibility.

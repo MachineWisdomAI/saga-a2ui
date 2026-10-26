@@ -308,7 +308,7 @@ describe('the commands the guide tells a reader to type', () => {
       .map((line) => line.trim());
     expect(shown.filter((line) => line !== 'npm run typecheck')).toEqual(
       printed
-        .filter((line) => line !== 'npm install')
+        .filter((line) => line !== 'npm install' && !line.startsWith('cd '))
         .map((line) => (line.startsWith('cd ') ? 'cd my-app' : line)),
     );
   });

@@ -22,7 +22,7 @@ npm install --omit=dev
 npm start
 ```
 
-The first block writes `apps/lit-host/dist/demo`; run the second inside it. Open the `Open the demo host page:` address it prints. Node 22.12.0 or newer is required. Choose Alice in the local host page, open Notes, and press Archive on a note. The row reports the archive result. End the notes session and try another Archive: the prerequisite refuses and no archive request is sent. These are synthetic local credentials, not a production identity flow.
+The first block writes `apps/lit-host/dist/demo`; run the second inside it. Open the `Open the demo host page:` address it prints. The generated demo itself requires Node 22.12.0 or newer. Choose Alice in the local host page, open Notes, and press Archive on a note. The row reports the archive result. End the notes session and try another Archive: the prerequisite refuses and no archive request is sent. These are synthetic local credentials, not a production identity flow.
 
 See the [demonstration README](../demo/lit-node/README.md) for the controls, the environment variables and what each shows.
 
@@ -30,7 +30,7 @@ See the [demonstration README](../demo/lit-node/README.md) for the controls, the
 
 The newest published release-candidate set is `0.7.6-rc.1`, verified on 2026-10-26. Use the explicit version: `latest` still selects `0.5.6-rc.1` for core, components, MCP and React, while the React stack's `latest` is already `0.7.6-rc.1`. All five packages have `next` set to `0.7.6-rc.1`. The [published baseline](2026-10-26_published-sdk-baseline_v1.md) records package integrity and the corresponding source comparison.
 
-Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This React path configures an existing application; the runnable local demo below is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
+Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This React path configures an existing application; the runnable local demo above is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 
 ```json
 {"overrides": {"@a2ui/markdown-it": "0.2.1"}}
@@ -118,7 +118,6 @@ Replace `PATH` and `VERSION` with your files; the version is the one in the proj
 After installing those tarballs inside `my-app`, build and start it:
 
 ```sh project
-cd my-app
 npm run build
 npm start
 ```
