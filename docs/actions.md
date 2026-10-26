@@ -523,7 +523,7 @@ by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 
 ## What this guide does not show
 
-- It traces a loopback run against synthetic data. It shows no real identity provider, OAuth or DCR flow, and no run in ChatGPT, Claude or Alexa+. Named-host receipts are in the [host compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
+- It traces a loopback run against synthetic data. It shows no real identity provider, OAuth or DCR flow, and no run in ChatGPT, Claude or Alexa+. Named-host receipts are in the [host compatibility observations](host-compatibility.md).
 - Cancellation forwarding, rollback and gesture behavior in an actual host stay unobserved.
 - The prerequisites above are guide qualification code, not part of the notes application or an SDK export. The SDK has no promise-combinator, registry or tutorial dispatcher, and this guide adds none.
 - Package publication, deployment and visibility are separate decisions this guide does not make.

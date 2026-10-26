@@ -63,7 +63,7 @@ The seven-package public release set includes the Lit and React renderers and th
 - [Action guide](docs/actions.md): connect interactions to application behavior.
 - [Development reference](docs/development-reference.md#local-development): build and test the SDK.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
-- [Host compatibility](docs/2026-10-19_host-compatibility-observations_v1.md): choose a host for your application.
+- [Host compatibility](docs/host-compatibility.md): choose a host for your application.
 - [Blueprints](blueprints/README.md#find-a-design): explore the architecture and component contracts.
 - [Building with saga a2ui](ADOPTERS.md): IASER's Ansari integration and how to share your application.
 

@@ -61,7 +61,7 @@ Applications that intentionally compose lower-level SDK APIs may install the pac
 
 [Getting started](getting-started.md) runs the synthetic demo, creates a Lit starter or attaches SAGA to an existing backend. Those source-tooling workflows build matched candidate tarballs from a checkout so contributors can test unpublished changes. Candidates have versions such as `0.0.0-candidate.g<12 hex>` and are distinct from public npm releases; see [candidate installation, updates and rollback](candidate-update-and-rollback.md). The source CLI, root workspace and example applications are not npm packages.
 
-Host behavior has separate [compatibility observations](2026-10-19_host-compatibility-observations_v1.md). Installing a package does not deploy an application or establish acceptance in an assistant host.
+SAGA views and actions run in ChatGPT, Claude and Alexa+; see [host compatibility](host-compatibility.md). Installing a package does not deploy an application or establish acceptance in an assistant host.
 
 ## Maintainer publication
 
