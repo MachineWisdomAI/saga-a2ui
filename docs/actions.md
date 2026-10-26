@@ -1,14 +1,14 @@
 # Change a component and trace allowed and denied requests
 
-This guide is for a developer who has the [setup guide](getting-started.md) working and now wants to change what a control does: edit a component, attach or change its action, and follow one press through every step until the server answers and the application cleans up. It was written on 2026-10-20 against the repository's current source. Each quoted block is copied from the file named above it, and `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` runs every case the guide traces against the notes application installed from packed candidate tarballs.
+This guide is for a developer who has the [setup guide](getting-started.md) working and now wants to change what a control does: edit a component, attach or change its action, and follow one press through every step until the server answers and the application cleans up. Each quoted block is copied from the file named above it, and `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` runs every case the guide traces against the notes application installed from packed candidate tarballs.
 
-Core, components, MCP and React are [published on npm](public-install.md). This tutorial includes the unpublished Lit renderer, so it runs from a checkout against a *candidate*, a matched set of locally packed tarballs ([install and update](candidate-update-and-rollback.md)). Names such as `Action.server`, `before`, `onSuccess` and `scope.own` are the exports of that candidate, not a promise about a later public API, and the numbers below are the candidate's defaults, not recommended timeouts.
+All seven SDK packages, including both renderers and their MCP stacks, have [public npm releases](public-install.md); version `0.7.7-rc.1` is available under `next`. This tutorial runs the repository's qualification example against a *candidate*: a matched set of locally packed tarballs ([install and update](candidate-update-and-rollback.md)). That keeps its source excerpts, tests and SDK build together. The action APIs described here are also present in the published `0.7.7-rc.1` packages. The timeout values below are defaults, not recommended settings for every application.
 
 The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
 
 ## Run it first
 
-From a checkout:
+From a checkout with Node 22.23.3 or newer:
 
 ```sh repository
 npm ci
@@ -233,7 +233,7 @@ The identity comes from `ctx.http.authInfo`, which only the application's listen
 
 ### What each case returns
 
-These are the cases `scripts/guide-actions.test.ts` runs, with what it observed. "Backend calls" counts calls that reached the application's backend; the session check is counted apart from the protected archive.
+These are the cases `scripts/guide-actions.test.ts` checks. "Backend calls" counts calls that reached the application's backend; the session check is counted apart from the protected archive.
 
 | Case | Who stops it | What the person sees | Backend calls (session check / archive) |
 | --- | --- | --- | --- |
@@ -257,7 +257,7 @@ The notes application answers a missing credential at the tool level, with a sen
 | A verifier that fails or never answers | `503`, no challenge | Not the caller's fault; cut off by the request's clock. |
 | A verified account the application's policy denies | A tool-level refusal, `This account may not see this.` | The policy was asked once, for this request's identity. |
 
-Each answer carries the challenge a client needs to recover, and none names an account, a credential or a backend message. The starter's [identity handoff](attach-to-existing-backend.md#hand-the-verified-identity-to-the-transport) is where the listener turns the verified result into the per-request context the tool reads.
+The authentication failures in the table carry the Bearer challenge a client needs to recover. A verifier failure returns `503` without a challenge, while application policy denial is a tool-level refusal. None of these replies names an account, a credential or a backend message. The starter's [identity handoff](attach-to-existing-backend.md#hand-the-verified-identity-to-the-transport) is where the listener turns the verified result into the per-request context the tool reads.
 
 ## Prerequisites: session validity, confirmation and an audit entry
 
@@ -430,13 +430,13 @@ view.watchById(
     }),
 ```
 
-The traced test presses the first row, holds the server open, and presses the second. Observed: the first binding is `running` while the second is `idle`; both holds are pending at once (`n-1`, `n-2`); when the server is released, both archives apply and both holds are handed to their owner. A pending press on one row never disables or cancels the other.
+The test holds archive requests at the server, then presses the first row. Its binding is `running`, the second binding is still `idle`, and only `n-1` has a pending hold. Pressing the second row while the first waits creates a second independent invocation: both holds are now pending (`n-1`, `n-2`). When the server is released, both archives apply and both holds are handed to their owner. A pending press on one row never disables or cancels the other.
 
 The `subject` reader is what makes a *recycled row* safe. A list renderer may keep a row's component and show another item in it. The component ID is not the item's identity, so the binding takes a subject, here `handle.read('id')`, reads it at activation, and compares a fresh read with `Object.is` at its own decision points and on every `current()`. A reader that throws at activation ends the press as invalid input; one that throws later counts as a change. Without a `subject`, a press targets the instance alone, which is right for a fixed control and wrong for a row.
 
 ## Disposal, ownership and hand-off
 
-**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The application ends its own bindings (and the discovery that created them) when its view ends; the starter's `retire()` does it for a host teardown and for the page going away alike. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
+**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The stack owns the action scope, discovery and bindings created through `createLitActions` or `createReactActions`, and ends them with the presentation. The starter's `retire()` callback updates the application's closed-status text; it does not manually dispose those bindings. Lower-level integrations that create their own scopes must arrange their disposal. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
 
 **Ownership.** A resource is anything a press takes that someone must give back. The notes application's hold on a row is an application-owned resource, and it shows the whole contract:
 
@@ -469,7 +469,7 @@ end(token: number): void {
 
 ## What each renderer and server has shown
 
-Claim only what the evidence supports. The runnable tutorial stays on the qualified pair.
+The runnable tutorial uses Lit with Node delivery. React shares the action contract, while its starter and host coverage remain narrower.
 
 | | Shown | Not shown |
 | --- | --- | --- |
@@ -477,7 +477,7 @@ Claim only what the evidence supports. The runnable tutorial stays on the qualif
 | **React** | Direct action attachment: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Installed parity: no React starter, template, CLI pair or authenticated recipe |
 | **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
 
-On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react/actions`. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
+On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` imported from `@saga-a2ui/react-mcp-stack`. The renderer package also exports that mechanism at `@saga-a2ui/react/actions` for lower-level integration. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
 
 ```ts examples/pack1-consumer/src/notes-react-view.tsx
 attach: (view) => {
@@ -497,9 +497,9 @@ attach: (view) => {
 },
 ```
 
-For React surfaces and catalogs use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
+An application normally imports its renderer-facing APIs from `@saga-a2ui/react-mcp-stack`, as the notes view does. Lower-level renderer integrations use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
 
-Servers have the same limits. `node`, `express`, `fastify` and `hono` are qualified with `lit-mcp`, and `saga init` offers only `node`. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
+Servers have the same limits. `node`, `express`, `fastify`, `hono` and `hapi` are qualified with `lit-mcp`, and the source `saga init` command offers all five. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
 
 ### Hapi
 
