@@ -1,6 +1,6 @@
 # Styling the FaithfulCard
 
-A branded application styles the card with ordinary CSS, against the surface this document commits to. Both renderers (`@saga-a2ui/react/faithful-card` and `@saga-a2ui/lit/faithful-card`) emit the same surface, so one stylesheet serves either. Anything not listed here is not contract and may change in any release: the markup a renderer wraps around content, the stylesheet's own selectors, and every `data-testid` or `data-annotation` attribute.
+A branded application styles FaithfulCard with ordinary CSS using the classes, elements and custom properties below. Both renderers emit the same styling surface, so the same brand rules work with either stack. A normal MCP application starts the card through `@saga-a2ui/react-mcp-stack/faithful-card` or `@saga-a2ui/lit-mcp-stack/faithful-card`; lower-level renderer integrations remain available through `@saga-a2ui/react/faithful-card` and `@saga-a2ui/lit/faithful-card`. Anything not listed here is not contract and may change in any release: the markup a renderer wraps around content, the stylesheet's own selectors, and every `data-testid` or `data-annotation` attribute.
 
 The names live in one list, `FAITHFUL_CARD_STYLING` in `@saga-a2ui/components/faithful-card`, which both renderers' tests read.
 
@@ -81,12 +81,34 @@ The marker is structural. The SDK recognises no attribution: whether a marked pa
 }
 ```
 
-Re-run the classifier each time the card shows new content; the marker moves with the content, and a previous answer's paragraph is gone.
+Re-run the classifier each time the card shows new content; the marker moves with the content, and a previous answer's paragraph is gone. The application supplies `data-app-footer`; the SDK never sets it.
+
+For a working integration, see [`classifyAttribution` in the branded fixture](../apps/lit-host/e2e/card-styling/branded.ts) and [the stack probe's observer setup](../apps/lit-host/e2e/card-app-stack/probe.ts). The classifier finds `[data-saga-closing="paragraph"]`, checks its text against the application's attribution sentence, and sets or removes its own attribute. That fixture calls the attribute `data-app-attribution`; use the same name in your classifier and CSS if adapting it. It recursively visits open shadow roots, so it also finds Lit's closing paragraph.
+
+The probe watches content changes (`childList` and `characterData` with `subtree`) and reruns classification after rendering. An observer on the page container cannot see changes inside a shadow root, so it discovers and watches each open shadow root as well. This is application-owned DOM integration, not a public SDK classifier hook. If you use an observer in a long-lived page, disconnect it when that application view ends; SDK stylesheet cleanup does not own your observer.
 
 ## Reaching the card from a stylesheet
 
-- **React** renders into the page's own tree, so a page or component stylesheet applies. Import `@saga-a2ui/react/faithful-card.css` for the SDK's presentation, then add rules after it.
+Use custom properties for inherited choices such as body size, colour and reading width. Use selectors for specific content treatments, such as a border on the application's closing attribution. The selector rules need to reach the tree containing the card:
+
+```mermaid
+flowchart TD
+    B["Application brand rules"] --> R["React: page stylesheet after SDK CSS"]
+    B --> L["Lit: constructable stylesheet in start options"]
+    R --> RP["Card in the page tree"]
+    L --> LS["Card inside a catalog or surface shadow root"]
+    T["Custom properties on an ancestor"] --> RP
+    T --> LS
+```
+
+React's card shares the page's styling scope. A Lit card renders in the tree provided by its catalog or surface, which can be inside a shadow root; page selectors cannot cross that boundary. Custom properties inherit across it, while the Lit `styles` option places selector rules in the root where the card lives.
+
+- **React** renders into the page's own tree, so a page or component stylesheet applies. Import `@saga-a2ui/react-mcp-stack/faithful-card.css` for the SDK's presentation, then add brand rules after it. A lower-level React integration can import `@saga-a2ui/react/faithful-card.css` directly.
 - **Lit** renders the card inside shadow roots that the catalog and the A2UI surface create, so a page stylesheet cannot select into it. Pass constructable stylesheets as `styles` to `startFaithfulCardApp` of the Lit stack (or to `createFaithfulCardView` when composing the card yourself); each connected card adopts them into the root it lives in. Custom properties inherit through shadow roots and need no sheet.
+
+For example, setting `--saga-card-font-size: 18px` on the application's view container changes the card's inherited body size in either renderer. A rule such as `.saga-card strong { font-weight: 700; }` must instead be in React's page stylesheet or a constructable stylesheet supplied through Lit's `styles`. Lit includes its neutral card presentation; it has no separate stack CSS import.
+
+Each connected Lit card holds its adopted styles for its connected lifetime. Disconnecting releases that hold; a shared sheet remains while another card uses it, and a sheet the root already owned is not removed. A root without stylesheet-adoption support is left unchanged. Missing or misplaced brand CSS does not relax content policy: links, image consent and refused-content behavior still follow the card's policy.
 
 ## Qualification
 
