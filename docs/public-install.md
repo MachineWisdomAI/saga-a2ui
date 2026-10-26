@@ -23,7 +23,7 @@ npm view @saga-a2ui/lit-mcp-stack dist-tags --json
 npm view @saga-a2ui/react-mcp-stack dist-tags --json
 ```
 
-Release candidates use `next`. Replace `VERSION` below with the exact published version you selected; confirm it with `npm view @saga-a2ui/lit-mcp-stack@VERSION version` (or the React stack). A version in a source manifest, a Git tag or a successful candidate build does not establish npm availability. The release set includes both renderers; a private candidate artifact is not a publication restriction on its source package.
+Use `next` to find the candidate release. Tags are mutable and may differ across packages; `latest` does not necessarily identify a matched seven-package release. Replace `VERSION` below with the exact published version you selected; confirm it with `npm view @saga-a2ui/lit-mcp-stack@VERSION version` (or the React stack). A version in a source manifest, a Git tag or a successful candidate build does not establish npm availability. The release set includes both renderers; a private candidate artifact is not a publication restriction on its source package.
 
 ## Install one stack plus framework peers
 
@@ -61,7 +61,7 @@ Applications that intentionally compose lower-level SDK APIs may install the pac
 
 [Getting started](getting-started.md) runs the synthetic demo, creates a Lit starter or attaches SAGA to an existing backend. Those source-tooling workflows build matched candidate tarballs from a checkout so contributors can test unpublished changes. Candidates have versions such as `0.0.0-candidate.g<12 hex>` and are distinct from public npm releases; see [candidate installation, updates and rollback](candidate-update-and-rollback.md). The source CLI, root workspace and example applications are not npm packages.
 
-SAGA views and actions run in ChatGPT, Claude and Alexa+; see [host compatibility](host-compatibility.md). Installing a package does not deploy an application or establish acceptance in an assistant host.
+Host capabilities differ: ChatGPT and Claude support in-card server actions, while Alexa+ interactions currently use the assistant's tool calls because in-card server responses do not update the card. See [host compatibility](host-compatibility.md) for supported flows and their evidence. Installing a package does not deploy an application or establish acceptance in an assistant host.
 
 ## Maintainer publication
 
