@@ -153,7 +153,7 @@ export function renderRecipes(): string {
     '',
     'This document is generated. Each snippet is the maintained starter template\u2019s own text, cut from the files CI builds and qualifies, so it cannot drift from a tested file. The [setup guide](getting-started.md) explains the concepts and the order to read them in.',
     '',
-    'Attaching SAGA to a backend you already run is an integration you make in your own source. No command edits an existing application: `saga init` creates one new directory and nothing else. The four React/MCP packages are [published on npm](public-install.md). These Lit-based snippets also need the unpublished `@saga-a2ui/lit` package, so install their matched packages from a local candidate (see [Install the packages from a candidate](getting-started.md#install-the-packages-from-a-candidate)).',
+    'Attaching SAGA to a backend you already run is an integration you make in your own source. No command edits an existing application: `saga init` creates one new directory and nothing else. The Lit and React stacks belong to the [public npm release set](public-install.md). These source-based snippets use matched local candidate packages so they can qualify unpublished changes (see [Install the packages from a candidate](getting-started.md#install-the-packages-from-a-candidate)).',
     '',
     '## Which pairs have a recipe',
     '',

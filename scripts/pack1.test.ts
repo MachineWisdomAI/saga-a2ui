@@ -100,13 +100,8 @@ describe('the seven owned packages, packed', () => {
         .sort(),
     ).toEqual([...ALL_PACKAGES].sort());
     for (const name of ALL_PACKAGES) {
-      if (name === 'lit' || name === 'lit-mcp-stack') {
-        expect(repoManifest(name).private, name).toBe(true);
-        expect(repoManifest(name).version, name).toBeUndefined();
-      } else {
-        expect(repoManifest(name).private, name).toBe(false);
-        expect(repoManifest(name).version, name).toMatch(/^\d+\.\d+\.\d+/);
-      }
+      expect(repoManifest(name).private, name).toBe(false);
+      expect(repoManifest(name).version, name).toMatch(/^\d+\.\d+\.\d+/);
       expect(sdk.manifests[name]?.name).toBe(`@saga-a2ui/${name}`);
       expect((sdk.manifests[name] as { license?: string }).license, name).toBe(
         'Apache-2.0',

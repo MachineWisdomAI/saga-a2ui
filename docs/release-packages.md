@@ -1,21 +1,8 @@
-# Preparing a five-package release
+# Preparing a seven-package release
 
-The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`,
-`@saga-a2ui/mcp`, `@saga-a2ui/react` and `@saga-a2ui/react-mcp-stack`. The first
-four already have public npm releases (`0.1.0-rc.1` and later prereleases);
-`react-mcp-stack` has none. See [public installation](public-install.md) for the
-verified registry recipe. Release candidates use the `next` tag; pin exact
-versions in applications.
+The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react`, `@saga-a2ui/react-mcp-stack`, `@saga-a2ui/lit` and `@saga-a2ui/lit-mcp-stack`. Both renderers and both stacks are enrolled in version policy and release packing. The source CLI, workspace root, templates and example applications are outside the publication set.
 
-The reviewed source manifests and generated `release.json` determine the
-prepared versions. Source versions run ahead of npm: `main` carries the five
-public packages at a `0.7.x-rc.n` version (`0.7.6-rc.1` when this guide was last
-reconciled), and none of those versions is a registry release. The integration
-branch that held every unit at `0.7.0-rc.1` has landed and its pin is retired;
-changes now follow the ordinary [version policy](version-policy.md). This
-procedure does not authorize publication, and nothing here has published a
-`0.7.x` package. Lit, `lit-mcp-stack`, the CLI, the workspace and the example
-applications are outside this publication set.
+Read exact prepared versions from the reviewed manifests and generated `release.json`; verify registry availability separately through [public installation](public-install.md). Release candidates use `next`. Existing publication authority remains required; a private candidate copy does not establish a continuing hold on the source package. The owner can authorize preparation, merge and publication together; carry that authorization through the verified release rather than asking again at each step.
 
 ## Build the exact artifacts
 
@@ -28,15 +15,14 @@ npm run release:pack -- release-out
 
 `release-out/release.json` identifies the source revision, dirty state, exact
 package manifests, file inventories, SHA-256 digests and npm SHA-512 integrity.
-The five tarballs are in `release-out/packages`. A dirty build is preparation
+The seven tarballs are in `release-out/packages`. A dirty build is preparation
 only: rebuild after committing and reviewing the final source. This command
 does not publish, tag, deploy or change repository visibility.
 
 Release packing retains the enrolled versions and exact sibling dependencies,
 ships Apache-2.0 `LICENSE` with every package, and includes the Markdown notices
 with components. Exports are TypeScript source and require a TypeScript-aware
-bundler. No precompiled JavaScript runtime is claimed. The release set has no
-dependency on `@saga-a2ui/lit` or `@saga-a2ui/lit-mcp-stack`.
+bundler. No precompiled JavaScript runtime is claimed. Both stacks pin their renderer and other SDK siblings to enrolled release versions.
 
 The existing `candidate:pack` remains a separate, nonpublishable qualification
 path: its copies always have `private: true`, commit-derived candidate versions
@@ -77,7 +63,7 @@ and stable promotion (step 6) is held and never implied by an earlier step.
 
 ## Qualify the exact artifacts before publishing
 
-Verify the five tarballs that would be published, not a candidate or an earlier
+Verify the seven tarballs that would be published, not a candidate or an earlier
 build of different source. Evidence from another source revision or version
 identity is context, not qualification of these bytes. Use React and React DOM
 **19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
@@ -91,7 +77,7 @@ install supplies them from the tarballs through overrides. Keep two consumers
 apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
 neither stands in for the other:
 
-- **Lower-level consumer** (availability of the five packages). It names every
+- **Lower-level consumer** (availability of the seven packages). It names every
   SAGA tarball as a direct dependency and as an override, plus React, React DOM,
   MCP Apps and Zod.
 - **Stack-only consumer** (the documented one-stack recipe, for React and for
@@ -135,8 +121,7 @@ The owner approves the exact source, package names, versions, tarball integrity
 and tag before publication. Verify publish rights for each package. A dry
 run, `npm publish TARFILE --dry-run --access public --tag next --ignore-scripts`,
 inspects publication metadata without uploading. Publish only the approved
-tarball bytes through the authorized account and public npm access, the four
-packages the stack pins before the stack itself.
+tarball bytes through the authorized account and public npm access, the foundational packages and renderers before the stacks that pin them.
 
 After publication, install the exact versions anonymously from the public
 registry in a clean consumer, compare registry integrity to the approved

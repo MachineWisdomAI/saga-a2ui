@@ -58,7 +58,7 @@ Follow [Getting started](docs/getting-started.md) for a starter project or an ex
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 
-The [core](https://www.npmjs.com/package/@saga-a2ui/core), [MCP](https://www.npmjs.com/package/@saga-a2ui/mcp), [React](https://www.npmjs.com/package/@saga-a2ui/react) and [components](https://www.npmjs.com/package/@saga-a2ui/components) packages are available on npm at `0.1.0-rc.1` (the source on `main` is at the `0.7.6-rc.1` release candidate, which is not published). They export TypeScript source for applications that use a bundler. See the [React integration guide](docs/react-consumers.md) for imports and dependency configuration.
+The seven-package public release set includes the Lit and React renderers and their MCP stacks. Applications install one stack plus framework peers; packages export TypeScript source for use with a bundler. See [public installation](docs/public-install.md) for registry availability and exact-version recipes, and the [React integration guide](docs/react-consumers.md) for React dependency configuration.
 
 - [Action guide](docs/actions.md): connect interactions to application behavior.
 - [Development reference](docs/development-reference.md#local-development): build and test the SDK.
