@@ -26,7 +26,7 @@ The [action guide](docs/actions.md) follows a notes application through these in
 
 Start with a Node, Express, Fastify, Hono or Hapi backend, or [add saga a2ui to an existing service](docs/attach-to-existing-backend.md). saga a2ui carries the verified request identity through to your application, where your server checks permissions and performs the operation.
 
-Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
+Application processing, MCP integration, components, and the Lit and React renderers have separate packages. Each renderer also has an MCP stack that joins rendering to delivery, so an application can install one stack plus its framework peers and review the dependencies it brings. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
 
 ### Content controls for the application you are building
 
@@ -38,7 +38,7 @@ Your application chooses which links may open and which image hosts are allowed.
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
-From a source checkout, with Node 22.12.0 or newer and npm:
+From a source checkout, with Node 22.23.3 or newer (`nvm use` selects the pinned version) and npm:
 
 ```sh
 npm ci
