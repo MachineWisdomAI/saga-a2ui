@@ -46,7 +46,7 @@ The download's `release.json` records the candidate version and tarball digests,
 ## How the local application fits together
 
 ```mermaid
-flowchart LR
+flowchart TD
     H["Demo host page: choose synthetic identity"] --> V["Sandboxed application views"]
     V -->|"Server calls through host"| S["Loopback MCP endpoints"]
     S --> A["Request authentication and application authorization"]

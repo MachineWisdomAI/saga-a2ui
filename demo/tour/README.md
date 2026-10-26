@@ -34,7 +34,7 @@ sequenceDiagram
     World-->>View: Simulated session valid
     View->>World: Archive note n-1
     World-->>View: Simulated confirmed archive
-    View-->>Reader: Archived at 1001; hold confirmed
+    View-->>Reader: Archived at 1001, hold confirmed
 ```
 
 The diagram separates real client behavior from the simulated answers that drive it. Switching to React uses the same action definitions and server contract through the React view; it does not turn the simulated server into a real service.
