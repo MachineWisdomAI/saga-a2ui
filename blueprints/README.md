@@ -16,7 +16,7 @@ blueprints/
   templates/
 ```
 
-Use stable `snake_case` capability and module names. Codebase paths mirror the implementation's repository-relative path. Blueprint filenames have no date or edition suffix; dated research follows the separate convention in [CONTRIBUTING.md](../CONTRIBUTING.md). Link related Blueprints and use stable headings so tickets can reference the relevant requirements.
+Use stable `snake_case` capability and module names. Codebase paths mirror the implementation's repository-relative path. Blueprint filenames have no date or edition suffix; where other material belongs, follow [CONTRIBUTING.md#documentation](../CONTRIBUTING.md#documentation). Link related Blueprints and use stable headings so tickets can reference the relevant requirements.
 
 ## Find a design
 

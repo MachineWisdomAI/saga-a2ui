@@ -13,7 +13,7 @@ The main entry is for an application's own catalog, and an application that inst
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack is published at `0.7.7-rc.1`. Follow [Getting started](getting-started.md#install-a-published-stack) for the exact install command and consumer-root override. The [published baseline](2026-10-26_published-sdk-baseline_v2.md) compares its shipped source with the inspected repository revision. Its composition capabilities do not by themselves establish full React parity or acceptance in every host.
+The stack is published at `0.7.7-rc.1`. Follow [Getting started](getting-started.md#install-a-published-stack) for the exact install command and consumer-root override. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records its published artifacts and source verification. Its composition capabilities do not by themselves establish full React parity or acceptance in every host.
 
 ## The React integration surface
 

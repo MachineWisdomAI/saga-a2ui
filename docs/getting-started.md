@@ -28,7 +28,7 @@ See the [demonstration README](../demo/lit-node/README.md) for the controls, the
 
 ## Install a published stack
 
-The seven-package release set is published at `0.7.7-rc.1` under `next`, including Lit and the Lit MCP stack. Pin the exact version rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records anonymous installation, integrity, compilation and build checks; the [published baseline](2026-10-26_published-sdk-baseline_v2.md) identifies the package and source revisions used here. See [public installation](public-install.md) for registry checks and package selection.
+The seven-package release set is published at `0.7.7-rc.1` under `next`, including Lit and the Lit MCP stack. Pin the exact version rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records anonymous installation, integrity, compilation and build checks. The receipt also identifies the package and source revisions used here. See [public installation](public-install.md) for registry checks and package selection.
 
 Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This registry path configures an existing application; the runnable local demo above is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 

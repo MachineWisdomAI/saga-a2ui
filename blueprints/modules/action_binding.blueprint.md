@@ -13,7 +13,10 @@ SAGA separates the reusable action from the particular button running it. Applic
 
 ## Status
 
-The action runtime and Lit/React attachments described here are shipped in the `0.7.7-rc.1` npm release. Both renderers and both MCP stacks are published under `next`; source-based candidate builds remain a separate development workflow. There is no production Lynx adapter. The [published-source comparison](../../docs/2026-10-26_published-sdk-baseline_v2.md) identifies the exact packages and inspected source; it does not establish acceptance in every host.
+The action runtime and Lit/React attachments described here are shipped in the `0.7.7-rc.1` npm release. Both renderers and both MCP stacks are published under `next`; source-based candidate builds remain a separate development workflow. There is no production Lynx adapter. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) identifies the published artifacts and source verification; it does not establish acceptance in every host.
+
+The React protected-player integration implements approved action design `a60acdaf002b8fcca57bcdbd88e30e9c96acfda8` and defaults amendment `564bcb2a13dd162515a80e7f491d2870990958ab` at `4d40761d14c563cb3b48648266594b1d70d8e918` ([PR #172](https://github.com/MachineWisdomAI/saga-a2ui/pull/172)). Independent source review covered `58199872cb25c3b8378fb679b6f33198e6f8d7b6`; final integration approval and CI covered `2bab6b8884af2ab42e4a40f5e782709079de1db2`. Its bounded Claude/ChatGPT observations and loopback, retry and cancellation limits remain in the [request/view Status](../features/request_view_lifetimes.blueprint.md#status) and [action lifecycle record](action_binding.lifecycle.md). This publication and editorial update adds no host acceptance.
+
 
 The approved design and defaults amendment remain unchanged. [Lifecycle records](action_binding.lifecycle.md) preserve their exact design, review and landed-code SHAs, scoped Lit/React implementation and named-host observations. This explanatory revision does not broaden those approvals.
 
