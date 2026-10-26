@@ -306,7 +306,7 @@ Modules in `apps/lit-host/src`:
 
 ### The MCP stacks and the card application (E1, E2)
 
-`@saga-a2ui/react-mcp-stack` (public, enrolled in `.version-policy.json`) and `@saga-a2ui/lit-mcp-stack` (private, like `@saga-a2ui/lit`) each connect one renderer to the MCP Apps bridge. An application installs one stack and the renderer's framework peers and imports from the stack only. The two have the same shape and the same lifecycle code, copied between them (`running-view`, `container-claim`, `host-connection`, `start-failure`, `faithful-card/document-policy`); a change to one is made in both, and each package's own tests (`stack.test-support.ts` runs a real `AppBridge` over an in-memory transport) check it.
+`@saga-a2ui/react-mcp-stack` and `@saga-a2ui/lit-mcp-stack` (both public and enrolled in `.version-policy.json`) each connect one renderer to the MCP Apps bridge. An application installs one stack and the renderer's framework peers and imports from the stack only. The two have the same shape and the same lifecycle code, copied between them (`running-view`, `container-claim`, `host-connection`, `start-failure`, `faithful-card/document-policy`); a change to one is made in both, and each package's own tests (`stack.test-support.ts` runs a real `AppBridge` over an in-memory transport) check it.
 
 | Entry | Holds |
 | --- | --- |
