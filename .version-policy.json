@@ -327,6 +327,25 @@
       ]
     }
   ],
-  "exclude_paths": ["demo/**"],
-  "release_paths": ["templates/lit-*/**"]
+  "exclude_paths": [
+    "apps/**",
+    "assets/**",
+    "blueprints/**",
+    "demo/**",
+    "diagrams/**",
+    "examples/**",
+    "scripts/**",
+    "templates/**",
+    ".fava-trails.yaml",
+    ".nvmrc",
+    ".prettierignore",
+    ".prettierrc.json",
+    "LICENSE",
+    "eslint.config.mjs",
+    "lint-staged.config.mjs",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "vitest.config.ts"
+  ]
 }
