@@ -221,6 +221,8 @@ export function packReleasePackages(
     'mcp',
     'react',
     'react-mcp-stack',
+    'lit',
+    'lit-mcp-stack',
   ];
   const versions = Object.fromEntries(
     packages.map((name) => {

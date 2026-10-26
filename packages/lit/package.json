@@ -1,6 +1,6 @@
 {
   "name": "@saga-a2ui/lit",
-  "private": true,
+  "private": false,
   "description": "Lit binding for SAGA A2UI: mounts a core message session's surface with an application's own catalog and owns its disposal, with the optional /actions control and instance host and the optional /faithful-card element",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,11 +20,11 @@
   "dependencies": {
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "*",
+    "@saga-a2ui/core": "0.7.7-rc.1",
     "lit": "^3.3.3"
   },
   "peerDependencies": {
-    "@saga-a2ui/components": "*"
+    "@saga-a2ui/components": "0.7.7-rc.1"
   },
   "peerDependenciesMeta": {
     "@saga-a2ui/components": {
@@ -32,8 +32,21 @@
     }
   },
   "devDependencies": {
-    "@saga-a2ui/components": "*",
+    "@saga-a2ui/components": "0.7.7-rc.1",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
+  },
+  "version": "0.7.7-rc.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MachineWisdomAI/saga-a2ui.git",
+    "directory": "packages/lit"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   }
 }

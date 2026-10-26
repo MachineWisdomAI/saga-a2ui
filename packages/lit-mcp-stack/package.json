@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/lit-mcp-stack",
-  "private": true,
-  "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition. A private workspace package, like @saga-a2ui/lit, until Lit is published",
+  "private": false,
+  "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -23,10 +23,10 @@
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
     "@modelcontextprotocol/ext-apps": "2.0.3",
-    "@saga-a2ui/components": "*",
-    "@saga-a2ui/core": "*",
-    "@saga-a2ui/lit": "*",
-    "@saga-a2ui/mcp": "*",
+    "@saga-a2ui/components": "0.7.7-rc.1",
+    "@saga-a2ui/core": "0.7.7-rc.1",
+    "@saga-a2ui/lit": "0.7.7-rc.1",
+    "@saga-a2ui/mcp": "0.7.7-rc.1",
     "zod": "4.6.7"
   },
   "peerDependencies": {
@@ -38,5 +38,18 @@
     "lit": "^3.3.3",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
+  },
+  "version": "0.7.7-rc.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MachineWisdomAI/saga-a2ui.git",
+    "directory": "packages/lit-mcp-stack"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   }
 }
