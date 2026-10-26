@@ -20,11 +20,11 @@
   "dependencies": {
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "0.7.7-rc.1",
+    "@saga-a2ui/core": "0.7.8-rc.1",
     "lit": "^3.3.3"
   },
   "peerDependencies": {
-    "@saga-a2ui/components": "0.7.7-rc.1"
+    "@saga-a2ui/components": "0.7.8-rc.1"
   },
   "peerDependenciesMeta": {
     "@saga-a2ui/components": {
@@ -32,11 +32,11 @@
     }
   },
   "devDependencies": {
-    "@saga-a2ui/components": "0.7.7-rc.1",
+    "@saga-a2ui/components": "0.7.8-rc.1",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.7.7-rc.1",
+  "version": "0.7.8-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },
