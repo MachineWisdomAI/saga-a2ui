@@ -19,15 +19,31 @@ Existing authentication, authorization and request isolation remain required, as
 - Implementation: no implementation of this rejected contract is claimed. Existing authentication and ordinary lifecycle safeguards have their own requirements.
 - Approved successor: [Request and view lifetimes at `7836c80345cec2aeb474d2eb026a1b9455819ef2`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7836c80345cec2aeb474d2eb026a1b9455819ef2/blueprints/features/request_view_lifetimes.blueprint.md), approved by the human owner on 2026-10-17 in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69). It replaces this proposal only with the narrower ordinary-lifetime scope. This proposal remains rejected; its earlier proposed successor at [`d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/request_view_lifetimes.blueprint.md) remains a historical draft record.
 
+## Current implementation boundary
+
+The approved [request and view lifetime design](request_view_lifetimes.blueprint.md#status) owns the narrower implemented safeguards and their exact delivery records. Ordinary request authentication, independent deadlines, selection retirement and cleanup are not acceptance of this rejected account-switching design.
+
+| Concern | Current boundary |
+| --- | --- |
+| Authentication and identity | Every protected request is authorized from its verified request context. An opaque view label is freshness information, not authority. |
+| Playback label loss | The application permanently retires that view instance, clears selection and disposes its bindings. It ignores later openers; a fresh authenticated opener in a new view can recover. Reload alone is not a recovery guarantee. |
+| Read recovery | The subscriptions controller keeps its correlated-read recovery rule. This does not supply the playback view with a generic account-switching or retained-state revalidation API. |
+| Cancellation and waiting | The action invocation and server request have independent bounds. Ending a view does not prove that a host forwarded cancellation or that a server rolled back work. |
+| Retained-state expiry and focus/resume revalidation | These remain rejected proposal mechanisms, not requirements newly imposed on current consumers or evidence of invisible account-change detection. |
+
+These boundaries were reconciled against source `cdad54747dfbba756464676ac3b1b8c90148a566`, including the current [playback controller](../../apps/lit-host/src/playback/playback-view.ts), [subscriptions controller](../../apps/lit-host/src/mcp/subscriptions-view.ts) and [request lifetime](../../packages/mcp/src/server/lifetime.ts). The affected core/MCP/Lit/React package source at this baseline matches all 69 shipped `src/` files in npm `0.7.7-rc.1`, with each tarball's registry integrity verified. That package-source check does not publish the application controllers, approve this design or add installation or named-host acceptance.
+
 ## Rejected proposal retained for reference
 
-The remaining text and diagram preserve the rejected design; their proposed requirements are not a current implementation contract.
+The remaining text and diagram preserve the rejected design at [`ff0f4da45c40cf2581d7f3198a2fceb04aba593b`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/blueprints/features/account_session_isolation.blueprint.md). “Current,” “missing,” “must” and future implementation steps below describe that historical proposal, not the shipped SDK or an active work queue. Its Alice/Bob scenario, proposed mechanisms, rationale, failure behavior and verification plan remain intact so the rejection can be understood. Historical source links point to that same revision.
 
 ## Problem and current behavior
 
+*Historical baseline of the rejected proposal; the successor has since implemented narrower request/view safeguards.*
+
 A listener can change accounts or episodes while a subscription read, Play request or media acquisition is still pending. Play is the app-only operation for starting playback of a selected episode; the [authorized playback design](authorized_playback.blueprint.md) defines it. The old response must never bring back the previous account's rows or audio. When the view cannot establish a current sign-in, it must clear private state before presenting a recovery action.
 
-The application already has two useful pieces. [`connectSubscriptionsView`](../../apps/lit-host/src/mcp/subscriptions-view.ts) pins an opaque sign-in label, correlates app-initiated reads and rejects late results after invalidation. [`connectPlaybackView`](../../apps/lit-host/src/playback/playback-view.ts) retires playback generations, aborts media acquisition and stops its player on replacement, failure and teardown.
+The application already has two useful pieces. [`connectSubscriptionsView`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/subscriptions-view.ts) pins an opaque sign-in label, correlates app-initiated reads and rejects late results after invalidation. [`connectPlaybackView`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/playback/playback-view.ts) retires playback generations, aborts media acquisition and stops its player on replacement, failure and teardown.
 
 What is missing is whole-request coverage. The subscription and playback entry points currently build separate resources; they do not yet establish a complete account-to-selection-to-player lifetime. The subscription read has a deadline, but that does not establish a single deadline across identity verification, authorization, handler and projection work.
 
@@ -45,7 +61,9 @@ If Bob replaces Alice while Alice's Play response is delayed, the first observed
 
 Selecting another subscription or episode follows the same ordering: retire the old selection, clear dependent content and media, then begin work for the new selection. A failed or cancelled request leaves a readable state with an explicit retry. Retry performs fresh checks and never reuses a saved media capability as authorization.
 
-![Account and selection changes retire pending work and clear private content before a fresh authenticated read can restore the view; late results are discarded.](../../diagrams/account-session-isolation.png)
+**Rejected historical diagram.** Retained-state expiry, focus/resume clearing and the generic fresh-read loop shown here are proposed mechanisms that were not approved. Use the successor for the current lifetime contract; this diagram is preserved to explain the rejected design.
+
+![Rejected historical proposal, not current behavior: account and selection changes retire pending work and clear private content before a fresh authenticated read can restore the view; late results are discarded.](../../diagrams/account-session-isolation.png)
 
 [Mermaid source](../../diagrams/account-session-isolation.mmd) · [Editable Excalidraw](../../diagrams/account-session-isolation.excalidraw) · [SVG](../../diagrams/account-session-isolation.svg)
 
@@ -81,6 +99,8 @@ Expiry and clearing limit retained application state. They do not erase historic
 
 ## Verification outcomes
 
+*Historical proposed checks, not executed acceptance evidence or current required account-switching runs. The successor owns its bounded verification and host observations.*
+
 The following checks extend the existing server, real `App`/`AppBridge`, controller and built-browser tests. Existing assertions remain useful where behavior is unchanged; tests added for this work must expose a missing outcome before the implementation changes.
 
 | Condition | Required observable result and boundary |
@@ -98,6 +118,8 @@ Required authenticated ChatGPT web and Claude web runs still exercise integrated
 
 ## Implementation sequence
 
+*Rejected breakdown retained for provenance. The issue links identify the original plan; their later implementations follow the approved successor and do not accept retained-state expiry or focus/resume revalidation here.*
+
 1. [STATE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/12) completes session invalidation, retained-state expiry and focus/resume revalidation across the existing browse and playback view boundaries. It builds on the merged browsing behavior and on [PLAY1](https://github.com/MachineWisdomAI/saga-a2ui/issues/10) (fresh entitlement and foreground playback), preserving request-scoped authorization.
 2. [STATE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/13) extends that lifetime to selection races and the complete asynchronous deadline/cancellation path, using the media behavior of [PLAY2](https://github.com/MachineWisdomAI/saga-a2ui/issues/11) (protected-media delivery constraints). It covers JSON/SSE response ownership and accessible recovery.
 3. Integrate these outcomes with the [content safety levels](content_safety_levels.blueprint.md) work and run the required host checks against the resulting build. Source implementation, actual-host evidence and final signoff remain distinct records.
@@ -106,13 +128,15 @@ The content-policy lane can proceed concurrently because it owns content interpr
 
 ## Open decisions
 
+*Unresolved choices within the rejected proposal, not decisions that block current SDK use. They are not reopened by this editorial reconciliation.*
+
 The implementation must choose and document the finite private-state retention interval and whole-request deadline, with controlled-clock tests showing their effect. Existing request bounds are starting evidence, not a promise that every stage is already covered. The exact supported focus/resume and account-change signals are verification questions for each host; no nonexistent event should be designed into the contract. The Ansari adoption design requires progress and delayed JSON/SSE completion to work within that single finite whole-request deadline. What remains unresolved is the supported callback interface that carries a cancellation request to application callbacks and carries progress and delayed completion inside that bound; the [reusable MCP connector design](reusable_mcp_connector.blueprint.md) assigns that interface to CORE3.
 
 ## References
 
 - [Authorized playback design](authorized_playback.blueprint.md)
 - [Content safety levels](content_safety_levels.blueprint.md)
-- [Subscription view and correlated reads](../../apps/lit-host/src/mcp/subscriptions-view.ts)
-- [Playback view and player lifetime](../../apps/lit-host/src/playback/playback-view.ts)
-- [Application listener and transport ownership](../../apps/lit-host/src/mcp/listener.ts)
+- [Subscription view and correlated reads](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/subscriptions-view.ts)
+- [Playback view and player lifetime](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/playback/playback-view.ts)
+- [Application listener and transport ownership](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/listener.ts)
 - [Coding standards](../../CODING_STANDARDS.md)
