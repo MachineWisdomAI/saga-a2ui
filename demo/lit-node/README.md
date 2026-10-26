@@ -2,14 +2,30 @@
 
 A synthetic, **local-only** application that shows one qualified pair end to end: the `lit-mcp`
 stack on the `node` server target (`templates/lit-node`, `@modelcontextprotocol/node` 2.1.1). It
-runs the full allowed, denied, expired and recovery workflow from a download that was built from the
-release candidate's packed SDK packages, outside the SAGA repository.
+lets you explore allowed, denied, expired and recovery outcomes with synthetic subscriptions, media
+and notes. The build installs packed SDK candidates outside the SAGA repository, then bundles them
+into a standalone download.
 
-It is a demonstration, not a starter. Start from [`templates/lit-node`](../../templates/lit-node/README.md)
+It is a demonstration, not a starter. Start from [the Lit/Node starter](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/templates/lit-node/README.md)
 to build your own application: that template contains no account, token, media or business record,
 and everything below stays out of it.
 
+## Build or obtain the download
+
+The commands in the next section run inside the **built download**, not this source directory. To build it from a SAGA checkout, install the repository dependencies with `npm ci` and run `npm run build:demo` from the repository root using Node 22.23.3 or newer. The output is `apps/lit-host/dist/demo`.
+
+The source CLI can instead export the same download into a new directory:
+
+```sh
+npx tsx scripts/saga.ts demo --a2ui-stack lit-mcp --server node ./my-demo
+```
+
+This builds and copies the download; it does not install its dependencies or start it. This is a source-checkout command, not an npm-distributed CLI.
+
 ## Run it
+
+Change into `apps/lit-host/dist/demo`, `my-demo`, or the directory containing a download's `server.mjs` and `package.json`.
+
 
 ```sh
 npm install --omit=dev    # the few third-party packages server.mjs still imports; the SDK is bundled in
@@ -25,9 +41,20 @@ Open the printed `Open the demo host page:` address. Node 22.12 or newer is requ
 | `SAGA_DEMO_IMAGE_HOST` | One HTTPS host whose images descriptions may show. Default none, so the demonstration fetches nothing outside this machine. |
 | `SAGA_DEMO_VIEWS_DIR` | Where the built pages are (default `views` beside `server.mjs`). |
 
-A build from the repository is `npm run build:demo`, which writes `apps/lit-host/dist/demo`. Its
-`release.json` ties the download to the candidate build (version and tarball digests), the source
-commit, the qualified pair, and the digest of every file.
+The download's `release.json` records the candidate version and tarball digests, source commit and dirty state, qualified pair, and digests of the bundled server and view pages. It describes the local build, not a registry release or a deployment.
+
+## How the local application fits together
+
+```mermaid
+flowchart LR
+    H["Demo host page: choose synthetic identity"] --> V["Sandboxed application views"]
+    V -->|"Server calls through host"| S["Loopback MCP endpoints"]
+    S --> A["Request authentication and application authorization"]
+    A --> F["In-memory synthetic fixtures"]
+    F -->|"Result or protected bytes"| V
+```
+
+The host page forwards calls using the selected public development credential. The server still makes its own decision for each protected request; a view's prerequisite check is only client-side preparation. The SDK supplies delivery, rendering and action lifecycle behavior, while the demonstration owns identity, entitlements, notes and media.
 
 ## Authentication is local-only
 
@@ -53,9 +80,7 @@ controls to change the synthetic backend while a view is open.
   refuses (expired, unknown, service-only, none) opens nothing and the log shows the HTTP status. A
   result for a different sign-in delivered to an open view clears it, and it stays cleared until a
   fresh view.
-- **Descriptions** at both content levels. Standard reads Markdown, sends links to the host and shows
-  an image from the one allowed host. Strict keeps every link, image and piece of markup inert until
-  the reader chooses **Show images**. A new result or closing the view revokes that consent.
+- **Descriptions** at both content levels. Standard renders Markdown, sends allowed HTTPS links to the host and permits images from the configured HTTPS host when the document enforces the required restrictions. Strict keeps links inactive and raw HTML inert. **Show images** permits only qualifying images for the current presentation; it does not activate links or HTML, expand the image allowlist, or compensate for missing enforcement. The control appears only when an image qualifies. A new result or closing the view revokes image consent. With the default empty image allowlist, no remote image loads.
 - **Play** the first episode as Alice: a fresh entitlement check, a capability bound to the view's
   key, then the protected bytes. Bob, and the second episode, are refused with one fixed sentence.
   *revoke play access after next grant* shows **expired**: the grant was issued, the bytes were
@@ -72,6 +97,8 @@ builder and binds that one definition directly to each rendered row (`notes-view
 names no action. Each binding keeps its own state, so two rows pending at once stay apart. It is not
 derived from Play: Play is the application's own controller, Archive uses the general action
 interface.
+
+For a successful path, sign in as Alice, open Notes, and press **Archive** on one of her rows. The session prerequisite runs first; then `archive_note` asks the server to authorize the change. A confirmed response updates that row with its archive time and confirms the application's hold. Other rows keep independent invocation state.
 
 What the controls let you see:
 
@@ -101,8 +128,9 @@ What the controls let you see:
 The protocol, transport and renderer behavior is the SDK's: the SDK is bundled into `server.mjs` from
 the installed packages, and the views are the application's installed views.
 
+Stop the process with Ctrl+C when finished. Its signal handler closes the demonstration listeners; restarting creates fresh in-memory fixtures. **Close all views** retires the client presentations without stopping the server or reversing an archive already sent.
+
 ## Limits
 
 Loopback only, in memory, one process. The local host fixture is not an assistant host. No OAuth
-flow or registry install is involved, nothing is published or deployed, and the packages are candidate builds of this source
-(`@saga-a2ui/lit` and `@saga-a2ui/lit-mcp-stack` are private and unpublished).
+flow or registry install is involved, nothing is published or deployed, and its bundled SDK comes from candidate builds of this source. The SDK packages, including Lit and its MCP stack, also have public npm releases; use [public installation](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/docs/public-install.md) for a registry-based application. Running this download does not test that installation path.

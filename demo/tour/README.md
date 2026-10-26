@@ -7,7 +7,7 @@ source it comes from.
 
 It is not the [demonstration](../lit-node/README.md). The demonstration runs a real local server
 and also shows browsing, descriptions and protected Play. The tour runs only the notes example, so
-it needs no process, port or credential.
+it needs no backend process, listening port or credential once built.
 
 ## Build and open it
 
@@ -17,10 +17,29 @@ npm run build:tour        # writes apps/lit-host/dist/tour (ignored)
 ```
 
 Open `apps/lit-host/dist/tour/index.html` in a browser, or serve that directory from any static
-host. Node 22.12 or newer builds it. `tour.json` ties the page to the candidate build and the source
-commit its links point at. The repository is public, so those links open for anyone; the built
-page's own footer text (in `src/tour.ts`) still says otherwise and is corrected with the next product
-change.
+host. Node 22.23.3 or newer builds it. `tour.json` ties the page to the candidate build and the source
+commit its links point at. Source links point to that build's commit in the public repository. A dirty build may contain changes those committed links cannot show. The current page footer incorrectly describes the repository as private and the SDK packages as unpublished; those labels do not control repository access or registry availability.
+
+## Follow an Archive interaction
+
+Choose **Allowed: Alice archives her own note**, keep the Lit renderer selected, and press **Archive** under Alpha. The real action runtime first runs the asynchronous session prerequisite and then asks the simulated server to archive the note. The row shows **Archived at 1001**, the backend panel shows `n-1` archived, and the application-owned hold moves from pending to confirmed.
+
+```mermaid
+sequenceDiagram
+    participant Reader
+    participant View as Real notes view and action runtime
+    participant World as Simulated server in the page
+    Reader->>View: Archive Alpha
+    View->>World: Check session prerequisite
+    World-->>View: Simulated session valid
+    View->>World: Archive note n-1
+    World-->>View: Simulated confirmed archive
+    View-->>Reader: Archived at 1001; hold confirmed
+```
+
+The diagram separates real client behavior from the simulated answers that drive it. Switching to React uses the same action definitions and server contract through the React view; it does not turn the simulated server into a real service.
+
+Try **Unknown outcome** next: the simulation applies the archive and then fails to return confirmation. The row says **Archive status unknown** and sends no automatic retry. In **Two rows**, hold both requests and release them to see independent state. In **Obsolete completion**, reorder and refresh the rows before releasing a held archive: the late response must not overwrite the new row's status. Closing a view cancels its local wait and releases its pending hold, but does not undo a simulated archive already in progress. Inspect the backend panel before deciding what happened; a real application would reconcile with its server.
 
 ## What is real and what is simulated
 
@@ -47,8 +66,7 @@ the example. It does not make a simulated answer evidence that any server enforc
   attachment and the notes application in a local fixture host); it is not renderer parity and there
   is no React starter, template or CLI pair. Lynx delivery was retired and is not offered. A renderer
   joins the list in `src/scenarios.ts` when its preview works.
-- The tour is built from packed candidate tarballs of this source, not from registry packages. Nothing
-  here says the stack packages are on a public registry.
+- The tour is built from packed candidate tarballs of this source, not from registry packages. The SDK also has public npm releases, including both stacks; see [public installation](../../docs/public-install.md) for that separate installation path. This tour does not qualify a registry install.
 
 ## Files
 
