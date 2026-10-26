@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readingProfile } from './reading-profile.js';
 
-// The hosts recorded in docs/2026-10-19_host-compatibility-observations_v1.md: ChatGPT web,
+// The hosts recorded in docs/host-compatibility.md: ChatGPT web,
 // Claude web and the Alexa+ web simulator. The record names the products, not the identity each
 // reports at initialization, so the names below are the products as they would identify
 // themselves; a host that reports something else falls back to the platform the host declares.

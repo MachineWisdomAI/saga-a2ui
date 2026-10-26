@@ -229,7 +229,7 @@ The application authenticates the request and its server decides what the accoun
 | Authentication | A request with an accepted, refused or absent credential was admitted or refused | An OAuth or DCR flow, or any real identity provider |
 | Audio | The local audio clock advanced | Audio in a remote host |
 
-Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](2026-10-19_host-compatibility-observations_v1.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
+SAGA views and actions run in ChatGPT, Claude and Alexa+; [host compatibility](host-compatibility.md) shows what each host supports. The starter, the demonstration and this guide have not been run in an actual assistant host.
 
 ## Actions
 

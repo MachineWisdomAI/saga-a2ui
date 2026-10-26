@@ -53,7 +53,7 @@ Markdown override keeps A2UI `0.13.0` on its compatible dependency combination.
 
 Public-registry installation, strict typechecking, application builds and a
 standalone container have been verified for this four-package recipe. Host
-behavior has its own [compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
+behavior is covered in [host compatibility](host-compatibility.md).
 
 ## The `0.7` release candidates: one stack plus framework peers
 

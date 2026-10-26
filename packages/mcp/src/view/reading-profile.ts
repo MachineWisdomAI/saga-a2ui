@@ -8,7 +8,7 @@ import type { HostContext } from './run-tool-result-view.js';
 export type ReadingProfile = 'device' | 'desktop';
 
 // The hosts read on a device. The Alexa+ simulator is the one the recorded observations
-// (docs/2026-10-19_host-compatibility-observations_v1.md) name; ChatGPT web and Claude web are the
+// (docs/host-compatibility.md) name; ChatGPT web and Claude web are the
 // recorded desktop readings. The record names the products, not the string each reports as its
 // `hostInfo.name`, so the match is deliberately by product word and no other host name is guessed
 // at. Two identities come from a consumer's fixtures instead: the historical `HTMLFragmentWrapper`
