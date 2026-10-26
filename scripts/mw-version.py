@@ -134,8 +134,8 @@ Use optional `release_paths` glob patterns for files that ship as product despit
 those defaults, such as `skills/**`, `skillsets/**`, or `src/content/**`. Review
 the actual package/build inputs when adopting the policy: installed skills,
 runtime prompts, templates, and rendered site content are product, even in
-Markdown. Use `exclude_paths` for paths that never ship, such as demos, starter
-templates and repository tooling; a change PR may add or remove either list.
+Markdown. Use `exclude_paths` for paths that never ship, such as demos and
+repository tooling; a change PR may add or remove either list.
 Documentation images under `assets/brand/` and `diagrams/` also remain exempt.
 Root units use `**`. JSON mirrors can select a field with a `key` array; separate
 units may own different fields in the same workspace lockfile. Use `regex` mirrors
