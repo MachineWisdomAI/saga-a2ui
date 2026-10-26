@@ -1,11 +1,20 @@
 # Starter templates
 
-Maintained, tested template sources for new SAGA applications and for attaching SAGA to an existing
-backend. A template is not an npm package. `saga init` (CLI1) and the developer guides take their output and
-their snippets from these directories; they do not keep copies. The existing-backend recipes
-([`docs/attach-to-existing-backend.md`](../docs/attach-to-existing-backend.md), GUIDE1) are
-generated from the qualified templates by `npm run guide:recipes`; adding a template to
-`scripts/qualified-starters.ts` fails `scripts/guide.test.ts` until they are regenerated.
+These directories are the maintained source for a new Lit/MCP application or an attachment to an existing backend. Each starter gives you a public status operation, a protected account operation, a Lit view and a local Clear action. It supplies no accounts or identity provider: protected requests are refused until you implement the verifier, and authorization remains your application's decision.
+
+A template is not an npm package or a runnable checkout directory. `saga init` exports a copy you own, pins its SDK dependencies to one source candidate and removes the authoring metadata. The exported README explains installation and operation. The same source files provide the snippets in [existing-backend recipes](../docs/attach-to-existing-backend.md); those recipes are generated, not maintained as a second implementation.
+
+```mermaid
+flowchart TD
+    T["Maintained template: view, server and README"] --> E["saga init exports a new application directory"]
+    T --> S["Extract marked source snippets"]
+    S --> G["Generated existing-backend guide"]
+    E --> C["Install matched candidate tarballs and build"]
+    C --> A["Application owner adds identity and domain behavior"]
+    T --> Q["Qualification checks exercise exported applications"]
+```
+
+The starter and guide share one source of truth. Fix a reusable recipe in its template, then regenerate the guide; do not edit the generated page directly. Qualification tests the exported application against packed SDK artifacts rather than relying on workspace imports.
 
 | Template | Stack | Server | Status |
 | --- | --- | --- | --- |
@@ -43,7 +52,9 @@ complete copy a developer can own, so the files a server framework does not chan
 - `// #region saga-snippet:<name>` … `// #endregion saga-snippet:<name>` marks lines an
   existing-backend recipe shows. The markers are not in the exported starter.
 
-## Using them
+## Export a starter or inspect a template
+
+Run these source tools from a SAGA checkout with the repository dependencies installed and Node 22.23.3 or newer. The exported applications require Node 22.12.0 or newer.
 
 ```sh
 npx tsx scripts/build-starter.ts                      # export, install packed candidate tarballs, build every qualified template; apps/lit-host/dist/starters/<template>
@@ -65,6 +76,10 @@ yields to the event loop between files, which a synchronous copy cannot do.
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
 ```
 
+The CLI does not install the output. Its default SDK pins have the form `0.0.0-candidate.g<revision>` and cannot be fetched from npm. Before building the new application, install the five SDK tarballs named by that template from the matching candidate; follow [candidate installation](../docs/candidate-update-and-rollback.md). Do not run `npm install` in these raw template directories, whose SDK dependency placeholders are still `*`.
+
+Both renderer stacks are also published on npm. For a registry-based application, use [public installation](../docs/public-install.md) instead of substituting a published version for one part of a source candidate. The source CLI is not an npm-distributed command, and React has no qualified starter template here.
+
 `scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all five
 templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`, `lit-hapi`) are offered, each with `--a2ui-stack lit-mcp` and its
 own `--server`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
@@ -72,3 +87,9 @@ own `--server`. When a pair is qualified, its owner adds one row there; while it
 `saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the
 standalone demonstration (`demo/lit-node`, DEMO1) of the pair `DEMO_TEMPLATE` names. Its synthetic accounts and
 data stay in that output and never enter a template or the starter above.
+
+## Maintain the shared source
+
+`QUALIFIED_STARTERS` in `scripts/qualified-starters.ts` is the qualification inventory; `SUPPORTED_PAIRS` in `scripts/saga.ts` controls what `init` offers. A directory alone enables neither qualification nor a CLI pair. Update those owners only with the corresponding implementation and qualification.
+
+When changing a template, preserve framework-independent files across the maintained variants. Regenerate the existing-backend guide with `npm run guide:recipes` after changing its snippet sources. The shared template checks, the framework's starter specification and `scripts/guide.test.ts` verify source/export consistency; `apps/lit-host/e2e/starter.spec.ts` exercises the built view. Passing these checks is source qualification, not deployment or acceptance in every assistant host.
