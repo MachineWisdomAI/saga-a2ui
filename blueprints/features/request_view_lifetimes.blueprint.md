@@ -153,6 +153,22 @@ For example, a handler entered with 800 ms remaining gets at most 800 ms even wh
 
 **Finite JSON and resource responses finish within the request budget.** The terminal owner races disconnect and deadline throughout authentication, body processing, handler/projection, serialization and delivery until the transport reports response `finish` or its documented equivalent. Calling `end` or producing a result does not finish the request. Preparing a response selects it once; it cannot be replaced after commitment. A slow reader cannot hold finite-response delivery beyond the remaining request budget: the adapter closes/destroys that response on expiry, clears its listeners/timers and never writes another status. `finish` means the transport accepted the response, not that the peer consumed every byte. Already buffered bytes cannot be recalled. An adapter may configure a narrower finite-response drain limit, but it cannot extend the enclosing request deadline. This bounds delivery without adding another SDK-wide timeout default.
 
+For a finite response, one admitted request budget covers both work and delivery:
+
+```mermaid
+flowchart TD
+  A["Admit request: start absolute deadline"] --> B["Route admission checks and body where applicable"]
+  B --> C["Run route work and nested operations"]
+  C --> D["Prepare and commit one response"]
+  D --> E["Deliver bytes under remaining budget"]
+  E --> F["Undestroyed transport finish: complete and clean up"]
+  T["Deadline or disconnect at any unfinished stage"] --> G["Retire request: no later owned work"]
+  G -->|Expiry, usable and uncommitted| H["Attempt safe answer without renewing budget"]
+  G -->|Disconnect or already committed| I["Close without a replacement answer"]
+```
+
+The lower path races every unfinished stage of the upper path. Calling `end` does not win the race: only `finish` while the response is not destroyed completes finite delivery. A resource GET has no person-authentication or incoming-body step; the diagram follows each route’s applicable checks. An expiry answer gets no renewed budget; buffered bytes cannot be recalled. This diagram covers finite responses, not established streams.
+
 **Streaming has a different endpoint.** The request budget bounds admission, authentication and setup through establishment of a streaming response; it is not a blanket ten-second lifetime for a legitimate long-lived stream. Each subsequent finite operation still has its operation bound. The adapter exposes and documents a configurable finite idle/backpressure policy for ongoing streaming and closes stalled streams through transport-supported cleanup. Its policy must be supplied or selected by the adapter before streaming is enabled; absence of a safe finite policy is a configuration failure, not an unlimited fallback. Idle resets require actual transport activity, not an application retry or a progress callback that delivered nothing. CORE3 retains the full SSE/progress and delayed-completion matrix; STATE2 introduces no cross-POST registry. This amendment's completion rule supersedes the earlier server diagram's application-result endpoint for finite responses; the diagram remains the pinned historical design artifact, not evidence that delivery is already bounded.
 
 ### Safe terminal outcomes
@@ -261,6 +277,21 @@ Short audio that ends before start is confirmed presents `ended`, not `playing`.
 The read is started by the host's `toolinput`, not by an event on a rendered instance, so it is not an instance-bound action, and this feature does not make it one. The controller keeps its generation, its timer and its correlated-recovery rule. `retry` and `select` are user controls and could later adopt the module as a bound server action and a bound local action. That would be a separate decision with its own conflict to resolve: an invocation's result and the controller's read generation would both claim to settle the same state. No such change is proposed here. The read view registers `onTeardown` with the same view runner: it marks itself ended, retires its reads and drops private state before the runner closes the connection. If the host tears the view down while a filtered read is in flight, nothing is presented when that read's answer arrives or its timer fires, `retry()` and `select()` do nothing, and later disposal is idempotent.
 
 ### Teardown, disposal and four things called dispose
+
+The current view runner orders teardown as follows. Application cleanup retires bindings, leases and consent; it does not prove that remote work stopped.
+
+```mermaid
+flowchart TD
+  A["Host teardown, disposal, pagehide or startup failure"] --> B["End view once: stop delivery and abort readiness"]
+  B --> C["Run application teardown once"]
+  C --> D{"Host teardown request?"}
+  D -->|Yes| E["Answer host before closing"]
+  D -->|No| F["Close connection"]
+  E --> F
+  F --> G["Later disposal shares the settled ending"]
+```
+
+Cleanup proceeds even if the application teardown callback throws. A host request is answered before the runner closes; other endings require no host answer.
 
 Keep four owners distinct:
 
