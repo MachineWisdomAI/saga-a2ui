@@ -13,6 +13,12 @@ SAGA uses MCP Apps to deliver a rendered view and its data through an assistant.
 
 These are observations of particular artifacts and flows, not a complete renderer, device or host-version matrix. The runnable starter and standalone demo have local qualification; that alone does not establish their operation in an assistant host.
 
+## Renderer support and application evidence
+
+React and Lit both provide an MCP stack for typed surfaces, actions and FaithfulCard applications. React is used by Ansari Faithful Answers; its [public destination candidate](https://github.com/iaser-ai/ansari/pull/323) records the application’s React stack recipe and local validation. The earlier [React integration record](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) reports answer cards in ChatGPT web, Claude web and the Alexa+ development simulator. Keep those earlier host artifacts separate from the later application candidate and package versions.
+
+Lit supplies the generated starters and standalone demo, and has its own bounded host observations. React has its own application and host evidence. Neither set establishes a complete host matrix or a universal maturity ranking. The missing React starter is a tooling gap; host limitations below must be evaluated for the actual flow and built resource, whichever renderer the application chooses.
+
 ## ChatGPT and Claude
 
 The notes application has been exercised in both hosts with a React view and the shared action runtime. Local Mark read changed application state without a backend call. Archive used the authenticated server, displayed the successful result and refused before the archive request when its session prerequisite failed. A fresh list reflected the applied archives. The [action binding Status](../blueprints/modules/action_binding.blueprint.md#status) records the source revision, review and limits of that integration.

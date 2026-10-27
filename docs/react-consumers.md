@@ -1,5 +1,7 @@
 # Installing the React renderer with MCP
 
+React and its MCP stack are a supported application path for both custom A2UI catalogs and FaithfulCard applications. The stack owns MCP connection ordering and the React view lifecycle; application code supplies its data interpretation, actions and presentation.
+
 ## One stack, plus React
 
 An application installs one stack package, `@saga-a2ui/react-mcp-stack`, plus its framework peers (`react` and `react-dom`, singletons at the version SAGA supports), and imports from the stack only:
@@ -13,7 +15,13 @@ The main entry is for an application's own catalog. An application that installs
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
+The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the absence of a generated React starter does not mean the React stack lacks a working application path.
+
+## React in Ansari Faithful Answers
+
+Ansari Faithful Answers uses the React MCP stack for its answer-card application. The public [destination integration PR](https://github.com/iaser-ai/ansari/pull/323) records a candidate using `@saga-a2ui/react-mcp-stack@0.7.6-rc.1` and React/React DOM `19.3.1`, with clean public-package installation, application checks and browser validation. Its [view source](https://github.com/timeleft--/ansari/blob/e4ded0ec3e39afb33292e311c8fe3a0669c1bb41/apps/ansari-faithful-answers/src/view/main.tsx) uses the stack’s FaithfulCard application entry. This is a concrete application consumer alongside the SDK examples; it does not depend on a generated React starter.
+
+A prior React integration was also exercised in ChatGPT web, Claude web and the Alexa+ development simulator; [the recorded SDK integration](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) identifies that earlier candidate. Those observations are separate from the current destination PR, which remains a candidate, and from its version-specific installation and browser checks. The [host compatibility guide](host-compatibility.md) separately identifies demonstrated assistant-host flows and their limits. Neither adoption by Ansari nor a local browser pass establishes every host or all renderer features.
 
 ## Follow a complete React application
 
