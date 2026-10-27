@@ -1,0 +1,10 @@
+graph LR
+  APP["Application action<br/>(onSuccess hook)"]
+  C["Conversation contract<br/>@saga-a2ui/core/conversation<br/>appendMessage(text, role: user)"]
+  ST["ViewHost.conversation<br/>React and Lit stacks"]
+  M["MCP Apps implementation<br/>@saga-a2ui/mcp/view"]
+  UI["ui/message, role user<br/>only if the host advertises message"]
+  A2A["A2A delivery (not proposed)<br/>message/send, role user, current contextId"]
+  APP --> ST --> C
+  C --> M --> UI
+  C -.-> A2A

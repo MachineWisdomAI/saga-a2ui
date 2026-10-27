@@ -14,6 +14,8 @@ date_added: 2026-10-16
 
 Hapi's direct-registration lifecycle amendment, [`6ac09eb2e7790179fc7e01ec561462e795b90469`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6ac09eb2e7790179fc7e01ec561462e795b90469/blueprints/features/application_setup.blueprint.md), is implemented at `MachineWisdomAI/saga-a2ui@00e23b080493432250c9ae84c90385f5e5acc4f9` ([PR #215](https://github.com/MachineWisdomAI/saga-a2ui/pull/215)); [independent review](https://github.com/MachineWisdomAI/saga-a2ui/pull/215#pullrequestreview-5605193916) covered `072b3c2b1478cdbbb4c551a1fd2fc380e2e5cd6a`.
 
+Successor (draft, not approved): [getting-started tracks](getting_started_tracks.blueprint.md) proposes to amend two parts of this design. It would add a qualified React/Hono starter pair (`templates/react-hono`, offered as `--a2ui-stack react-mcp --server hono`), and split the setup guide into a common guide plus Lit and React build tracks. Until it is approved, this design stays current, including its statement that no React pair is offered.
+
 The seven SDK packages are published at [`0.7.7-rc.1`](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1). Templates, the source CLI, demo and tour are development tooling, not npm packages or hosted services. Qualification of these outputs is local/installed evidence; it does not establish new OAuth, production or assistant-host acceptance. [Design and delivery history](#design-and-delivery-history) preserves the exact earlier scope and revisions.
 
 ## Problem and current behavior
