@@ -13,9 +13,11 @@ date_added: YYYY-MM-DD
 - Design: draft awaiting human approval.
 - Implementation: not started.
 
-<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination feature directory). On approval, update status above and pin the reviewed design revision. Record completed scope as Blueprint <design SHA> implemented at <code repository>@<landed code SHA>, with review/verification links and remaining acceptance gaps. Preserve that record when adding a draft or approved successor and its replacement scope. -->
+<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination feature directory). On approval, update status above and pin the reviewed design revision. In Status or its linked lifecycle companion, record completed scope as Blueprint <design SHA> implemented at <code repository>@<landed code SHA>, with review/verification links and remaining acceptance gaps. Preserve that record when adding a draft or approved successor and its replacement scope. -->
 
-<!-- Copy to features/<capability>.blueprint.md. Follow ../README.md#authoring for the reader budget; replace prompts with prose and use real references. -->
+<!-- Keep Status a brief statement of what the reader can rely on. Link a lifecycle companion when detailed revision or acceptance history needs its own record; preserve exact design, review and landed implementation SHA roles and remaining acceptance limits there. Keep the substantive contract, rationale, examples and consequential behavior in this Blueprint. -->
+
+<!-- Copy to features/<capability>.blueprint.md. Follow ../README.md#authoring; replace prompts with complete prose and real references. Let the subject determine length without a word cap or reduction target. -->
 
 ## Problem and current behavior
 
