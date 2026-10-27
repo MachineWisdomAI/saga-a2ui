@@ -35,6 +35,43 @@ Every required server target has a qualified template above.
 5. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address preserves its filename and fingerprints its final bytes, so rebuild the view and restart the server together.
 6. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
 
+## Place authentication before protected work
+
+The snippets show the integration seams, not complete replacement listeners. Keep the surrounding route and request-lifetime setup from the linked template when adapting it to your backend. Authentication establishes who is asking; the operation handler separately decides whether that identity may perform the operation. Neither a tool argument nor a previous request supplies that identity.
+
+```mermaid
+flowchart TD
+    A[Incoming protected request] --> B[Create request lifetime]
+    B --> C{Application authenticates}
+    C -->|Refused| D[Return refusal without projecting a record]
+    C -->|Unavailable| I[Return availability failure without projecting a record]
+    C -->|Verified identity| E[Transport carries this request auth]
+    E --> F{Application authorizes operation?}
+    F -->|Refused| D
+    F -->|Allowed| G[Project permitted result fields]
+    G --> H[Complete request and release its work]
+```
+
+This flow describes the protected route. The public route establishes its own request lifetime but does not read credentials or receive an identity. The lifetime starts before authentication and body waiting so those stages share the request’s limits. An authorization refusal also ends protected work without projecting a record.
+
+- **Node:** the protected route calls `authenticate` before `serve(account, ...)`, then attaches the accepted context to that request. See the complete [Node listener](../templates/lit-node/server/listener.ts).
+- **Express:** mount `identify` before the protected endpoint handler, as in `app.all(ACCOUNT_PATH, identify, ...)`. Preserve the listener’s body-handling order rather than adding a parser ahead of its request guards. See the [Express listener](../templates/lit-express/server/listener.ts).
+- **Fastify:** attach `identityHandoff` as the protected route’s `onRequest` hook, before parsing and protected work. See the [Fastify listener](../templates/lit-fastify/server/listener.ts).
+- **Hono:** the protected route authenticates the authorization header and passes `decision.authInfo` to `serve`; the public route calls `serve` without it. See the [Hono listener](../templates/lit-hono/server/listener.ts).
+- **Hapi:** register the application authentication scheme and strategy, then register the maintained `mcpPlugin` with `auth: 'account'` for the protected endpoint and `auth: false` for the public endpoint. The displayed `createServer` factory receives identity already established by that strategy; it does not authenticate by itself. The [Hapi listener](../templates/lit-hapi/server/listener.ts) shows registration, and the template’s [bridge](../templates/lit-hapi/server/bridge.ts) carries the authenticated credentials into that request’s factory and Node transport.
+
+The starter verifier refuses every credential until you implement your identity provider. Its example authorization callback returns true for any identity that has passed verification; replace that placeholder with your application’s policy before exposing protected operations. A missing or rejected credential and insufficient scope produce authentication refusals. A verifier failure or exhausted authentication budget is an availability failure; it does not acquire a challenge header merely because it happened during authentication.
+
+## Keep request and application cleanup connected
+
+Each incoming HTTP exchange owns one request lifetime. Preserve the listener or bridge code that creates it before authentication/body waiting and connects it to response completion, disconnects, deadlines and server shutdown. Reuse the prepared immutable view and endpoint registration; do not reuse a previous request’s identity or lifetime for another request.
+
+The protected-operation example runs authorization through `request.within`. Pass its signal through to cancellable backend work, as the example passes it to `authorize`. When the request ends, that boundary stops waiting; application code that ignores cancellation can still continue. Cancellation does not undo a remote effect. Test the behavior of your own dependencies and avoid reporting an interrupted operation as definitely unapplied.
+
+Connect endpoint cleanup to your existing server’s shutdown lifecycle. The starter’s `listener.close()` closes its MCP endpoint work and HTTP exchanges; [Node main](../templates/lit-node/server/main.ts) shows how the standalone starter calls it on process termination. Adapt that ownership to your server instead of installing a second competing signal handler. Hapi’s plugin and server stop path own the corresponding cleanup.
+
+Read the complete listener, including its refusal paths and close method, before lifting an excerpt into your application. The recipe does not make your existing backend inherit the starter’s deadline, body-limit or cleanup behavior automatically.
+
 CI qualifies the starter’s listener and operations against real MCP clients. That qualification belongs to the starter: attaching the same lines to your application does not inherit it. Test your own authentication, authorization and refusal paths in your application.
 
 <!-- recipe:lit-node -->
