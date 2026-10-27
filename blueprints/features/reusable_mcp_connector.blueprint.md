@@ -118,7 +118,7 @@ CORE3's retained qualification includes real JSON/SSE delivery, progress and del
 
 CORE1 extracted browse/public-answer delivery. STATE1/STATE2 established retirement and bounded requests; CORE2 then migrated Play to one action work interval and acquisition-scoped leases. CORE3 qualified the complete consumer request/failure path. PACK1/PACK2 joined installed consumers and rehearsed coherent replacement/rollback. View composition later made the stacks own view startup and moved neutral result interpretation to one application reader. These are completed source stages with their own acceptance records, not a queue to dispatch again.
 
-Application adoption, new host qualification and publication are separate actions. The [Ansari adoption design](ansari_adoption.blueprint.md) retains its destination and exact-package requirements; this connector Blueprint does not grant destination merge or deployment authority.
+Application adoption, new host qualification and publication are separate actions. Installed-package qualification applies to the exact SDK versions tested; adopting applications own their migration, merge and deployment decisions.
 
 ## Open decisions
 
