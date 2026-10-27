@@ -97,21 +97,9 @@ The original demo choice and Hapi identity-handoff questions are resolved: the d
 
 The dated records below preserve the design decisions, exact reviewed and landed revisions, and the limits of each observation. Statements about unpublished packages or work still pending describe that delivery, not the current package baseline. The current scope is summarized in [Status](#status).
 
-## TOUR1 static tour acceptance — 20 October 2026
+### Earlier design and delivery records
 
-Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for the static-tour scope at `MachineWisdomAI/saga-a2ui@c15a21319fdfc6fe8b7a5098c4b15b89a515a4b4` ([PR187](https://github.com/MachineWisdomAI/saga-a2ui/pull/187)), reusing the approved action and lifetime contracts. Final head `748e721ebff656b27ba375864b66fdf80cd3b7e4` received [independent approval 5589581122](https://github.com/MachineWisdomAI/saga-a2ui/pull/187#pullrequestreview-5589581122); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473242147) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473250142) passed.
-
-| SDK32 criterion | Accepted behavior and boundary |
-| --- | --- |
-| Real presentations and prominent synthetic warning | Packed installed own-catalog Lit and React presentations reuse notes definitions, direct bindings and holds. “Synthetic example — server checks simulated” is first in DOM/accessibility reading order. Release-matched candidate identities are recorded; no public registry availability is claimed. |
-| Matching source and setup explanations | Source excerpts are located from the exact candidate revision and link to matching definitions and guides. Allowed/refused outcomes and action/binding relationships are explained. Archive digests and installed identities are retained in `tour.json`, including a dirty-source warning. |
-| Working preview choices and honest media scope | Only functioning Lit and React previews are offered. No Lynx, media, protected playback, real Patreon, universal React or named-host support is claimed. |
-| Accessible local operation and alignment | Keyboard/focus/navigation, 320px layout, system/chosen themes, names/headings/live regions and sandboxed frames are checked. Direct local-file opening works without an application backend, production credentials or a new service. Fixture parity compares the real notes server through MCP with supported simulated outcomes. |
-| Same non-playback action and instance behavior | Nine scenarios in both renderers use real notes presentations/runtime and local synthetic outcomes: allowed/refused/denied/missing identity, unknown writes, independent rows, obsolete completion and teardown. Source links explain the existing fluent action, asynchronous prerequisite, direct attachment and cleanup; no second action engine is introduced. |
-| Visible simulation limits | Synthetic checks do not authenticate or establish server enforcement; local cancellation does not prove remote rollback. Local stand-in transport, signal/timeout omissions and iframe styling/theme limits remain explicit. |
-
-Independent verification passed 18 focused headless checks, 32 new tour browser checks, two additional close-during-reopening/local-file checks, tour TypeScript and 16 LFS pointer checks. Final repairs integrated current main and synchronized versions/prose only; accepted tour source and evidence were unchanged and reused. Broader worker-reported totals are not substituted for these independent affected checks. Existing demo/runtime/host evidence remains separate; no named-host matrix, deployment or publication was performed for this static tour. SDK32 remains open until this final record is independently reviewed and merged.
-
+These records preserve their original checkpoints. The partial-implementation and remaining-work labels are historical; [Status](#status) states the current implemented scope. The Hapi lifecycle amendment below is already implemented in PR #215.
 
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/application_setup.blueprint.md).
 - Partial amendment by the [view composition](view_composition.blueprint.md) design, implemented on `main`: the setup surface moves from a hand-composed view to the stack package. Approved revisions: [`49e39bd`](https://github.com/MachineWisdomAI/saga-a2ui/blob/49e39bdb434f5848ded9c042e425c5cefe735b31/blueprints/features/view_composition.blueprint.md) and the fourth revision [`7a78e7e`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md), approved by the human owner as one decision (PR #237).
@@ -132,7 +120,22 @@ Independent verification passed 18 focused headless checks, 32 new tour browser 
 
 - Remaining application-setup work: the Hapi lifecycle follow-up is implemented in PR215; the original Hapi identity/starter slice landed in PR213. Later CLI publication tooling remains a separate delivery scope. GUIDE1 and GUIDE2 are accepted below. The Express/Fastify/Hono template qualification below did not itself register additional CLI pairs; the explicit registration record below and the Hapi starter did. No actual-assistant-host run, OAuth flow, public registry release or deployment is claimed for these starters.
 
-## CLI2 acceptance — separate demo output
+### TOUR1 static tour acceptance — 20 October 2026
+
+Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for the static-tour scope at `MachineWisdomAI/saga-a2ui@c15a21319fdfc6fe8b7a5098c4b15b89a515a4b4` ([PR187](https://github.com/MachineWisdomAI/saga-a2ui/pull/187)), reusing the approved action and lifetime contracts. Final head `748e721ebff656b27ba375864b66fdf80cd3b7e4` received [independent approval 5589581122](https://github.com/MachineWisdomAI/saga-a2ui/pull/187#pullrequestreview-5589581122); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473242147) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473250142) passed.
+
+| SDK32 criterion | Accepted behavior and boundary |
+| --- | --- |
+| Real presentations and prominent synthetic warning | Packed installed own-catalog Lit and React presentations reuse notes definitions, direct bindings and holds. “Synthetic example — server checks simulated” is first in DOM/accessibility reading order. Release-matched candidate identities are recorded; no public registry availability is claimed. |
+| Matching source and setup explanations | Source excerpts are located from the exact candidate revision and link to matching definitions and guides. Allowed/refused outcomes and action/binding relationships are explained. Archive digests and installed identities are retained in `tour.json`, including a dirty-source warning. |
+| Working preview choices and honest media scope | Only functioning Lit and React previews are offered. No Lynx, media, protected playback, real Patreon, universal React or named-host support is claimed. |
+| Accessible local operation and alignment | Keyboard/focus/navigation, 320px layout, system/chosen themes, names/headings/live regions and sandboxed frames are checked. Direct local-file opening works without an application backend, production credentials or a new service. Fixture parity compares the real notes server through MCP with supported simulated outcomes. |
+| Same non-playback action and instance behavior | Nine scenarios in both renderers use real notes presentations/runtime and local synthetic outcomes: allowed/refused/denied/missing identity, unknown writes, independent rows, obsolete completion and teardown. Source links explain the existing fluent action, asynchronous prerequisite, direct attachment and cleanup; no second action engine is introduced. |
+| Visible simulation limits | Synthetic checks do not authenticate or establish server enforcement; local cancellation does not prove remote rollback. Local stand-in transport, signal/timeout omissions and iframe styling/theme limits remain explicit. |
+
+Independent verification passed 18 focused headless checks, 32 new tour browser checks, two additional close-during-reopening/local-file checks, tour TypeScript and 16 LFS pointer checks. Final repairs integrated current main and synchronized versions/prose only; accepted tour source and evidence were unchanged and reused. Broader worker-reported totals are not substituted for these independent affected checks. Existing demo/runtime/host evidence remains separate; no named-host matrix, deployment or publication was performed for this static tour. SDK32 remains open until this final record is independently reviewed and merged.
+
+### CLI2 acceptance — separate demo output
 
 [PR175](https://github.com/MachineWisdomAI/saga-a2ui/pull/175) implements `saga demo --a2ui-stack lit-mcp --server node DIR` through the single CLI and existing DEMO1 staging/export path. Actual code: [`37b243fa75cc5abcad19ceac7d70c9fab7bbd864`](https://github.com/MachineWisdomAI/saga-a2ui/commit/37b243fa75cc5abcad19ceac7d70c9fab7bbd864). Final head `936dbfd5ee7ebc8528d3a97357c576477189b45d` received [independent approval 5586975730](https://github.com/MachineWisdomAI/saga-a2ui/pull/175#pullrequestreview-5586975730); [CI 39444310725](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39444310725) passed. Both scoped SDK29 criteria are supported; coordinator closeout follows this reviewed record.
 
@@ -143,7 +146,7 @@ Independent verification passed 18 focused headless checks, 32 new tour browser 
 
 Independent verification passed 98 affected CLI/demo/template cases, including actual packed staging, download file/release identities, declared output startup and real OS signals. Candidate package creation may invoke `npm pack`/version tooling; it does not install dependencies or execute output hooks. A separate browser-test readiness repair added visible React-control readiness before real Tab without weakening focus/Enter/authority assertions; the original 12× CPU reproduction passed 3/3 after the repair. Final GUIDE1 caller integration passed root TypeScript and two affected command checks. These are distinct boundaries, not a repeated application/host matrix. Unchanged DEMO1 and CLI1 runtime/host evidence is retained. Hard-kill and adjacent filesystem-race limits remain documented; no public registry release or deployment is claimed. SDK29 stays open until this record is reviewed and merged.
 
-## GUIDE1 acceptance
+### GUIDE1 acceptance
 
 [PR174](https://github.com/MachineWisdomAI/saga-a2ui/pull/174) provides the setup guide and generated existing-backend recipes. Actual landed code: [`1a29c4233d18db6ee5e2383f655ff77ee1ebaf4b`](https://github.com/MachineWisdomAI/saga-a2ui/commit/1a29c4233d18db6ee5e2383f655ff77ee1ebaf4b). Reviewed head `b3da24eabfa5aa3d6a3409d7795cd6288c8c313d` received [independent approval 5586480228](https://github.com/MachineWisdomAI/saga-a2ui/pull/174#pullrequestreview-5586480228); [required CI 39439075537](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39439075537) passed. All seven scoped SDK25 criteria map below; coordinator issue closeout follows this reviewed record.
 
@@ -159,7 +162,7 @@ Independent verification passed 98 affected CLI/demo/template cases, including a
 
 Independent verification passed the documented packed demo build, 19 focused guide checks, generated recipe freshness, root TypeScript and documentation/version/LFS checks. Hono integration refreshed generated snippets and current prose; the repaired head again passed 19 focused checks and recipe/type checks. The latter reused the unchanged built demo manifest rather than claiming a new runtime build. Accepted CLI process/ownership safety and candidate installation/runtime/host evidence were retained; no broad listener, browser or host matrix was repeated. Worker-reported complete candidate/cold-install execution is separate from independent command/script/link validation. These instructions target unpublished matched candidates, not public registry installation or deployment. SDK25 remains open until this record is reviewed and merged.
 
-## GUIDE2 acceptance — trace actions through ordinary source
+### GUIDE2 acceptance — trace actions through ordinary source
 
 [PR180](https://github.com/MachineWisdomAI/saga-a2ui/pull/180) supplies `docs/actions.md` and its qualified guarded-archive example. Actual code: [`90d85f9f48321adcf27b43290e89b1a73799b1ba`](https://github.com/MachineWisdomAI/saga-a2ui/commit/90d85f9f48321adcf27b43290e89b1a73799b1ba). Repaired head `ff7d03ea50411c3bc444dc555a5d7020cf4d0b63` received [independent approval 5587743670](https://github.com/MachineWisdomAI/saga-a2ui/pull/180#pullrequestreview-5587743670); [CI 39451477229](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39451477229) passed. All seven scoped SDK27 criteria map below; coordinator closeout follows this reviewed record.
 
@@ -177,7 +180,7 @@ The initial example incorrectly treated a non-error reply without an archive ack
 
 Independent repaired verification passed 36 affected document/action checks and the original malformed-response reproduction, including missing/malformed acknowledgements, one protected request only, success and prerequisite/server refusals. Prior 46-test notes/guide evidence and unchanged PACK1/host qualification were retained. Typecheck and diff checks passed; no broad runtime or host matrix was rerun for this record. Hapi's conditional follow-on, public package release and deployment remain outside this completion. SDK27 stays open until this record is reviewed and merged.
 
-## Additional server starter acceptance
+### Additional server starter acceptance
 
 The approved application-setup design remains unchanged. The three framework slices implement the same Lit/MCP application contract through their official adapters, with application-owned identity verification and authorization. Each clean template exports public SDK imports, ships no test identity/verifier, and supplies its own template-derived authentication, operation and action snippets. The installed listener, snippet and browser evidence below covers criteria 1–4 for SDK62, SDK64 and SDK63. The subsequent explicit CLI registration and generated-guide record completes criterion 5; qualification alone did not expose those pairs. Coordinator closeout of these issues and SDK179 follows the reviewed actual-SHA record.
 
@@ -194,7 +197,7 @@ Express pins official adapter 2.0.2 and Express 5.3.0; Fastify pins adapter 2.0.
 - **Shared qualification integration:** Express owns the common harness extraction. Fastify and Hono integrate through `QUALIFIED_STARTERS`, `starter-qualification.ts`, the generic builder and browser specification; pair-specific adapter assertions remain with each pair. Independent integration checks passed 17 metadata/snippet cases and 6 generic browser cases for each initial repair, then 20 combined metadata/snippet cases and all four packed builds/typechecks with Node/Express/Fastify/Hono retained. Later documentation-only conflict resolution reuses unchanged evidence; counts are not additional independent runtime scenarios.
 - **Evidence limits and consumers:** all three built Lit views matched SHA-256 `1a9898b1c8a9227246aab6e40a9c6448281437f2309611371842d6fbc8341748`; server artifacts and dependencies remain distinct. Local browser/transport observations are not assistant-host, OAuth, remote audio or production deployment acceptance. Unchanged action/runtime and host evidence is reused without new host experiments. Public React peer boundaries and separate consumer ownership are unchanged. CLI1 initially offered only Node; the subsequent explicit registration below adds the three qualified frameworks without widening demo or renderer scope.
 
-## Qualified framework init registration
+### Qualified framework init registration
 
 [PR181](https://github.com/MachineWisdomAI/saga-a2ui/pull/181) completes the shared registration work tracked by SDK179 and criterion 5 of SDK62/63/64. Actual code: [`0347895742ab89fd64b0e612600cbfff4fdad838`](https://github.com/MachineWisdomAI/saga-a2ui/commit/0347895742ab89fd64b0e612600cbfff4fdad838). Exact head `08d735a3dd6d590a84d2cb6866669790af6a880a` received [independent approval 5587681938](https://github.com/MachineWisdomAI/saga-a2ui/pull/181#pullrequestreview-5587681938); [CI 39450887287](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39450887287) passed before merge.
 
@@ -204,7 +207,7 @@ All five SDK179 criteria map to the accepted implementation and this record: act
 
 Existing framework listener, host and unchanged signal/ownership evidence is retained without repeating those matrices. This closes the identified registration acceptance gap, not a publication, deployment or broader renderer-parity gate. SDK179 and the three framework issues remain open until this reviewed record lands and the coordinator reconciles their live criteria.
 
-## CLI1 acceptance — scoped init command
+### CLI1 acceptance — scoped init command
 
 | SDK26 criterion | Accepted implementation and evidence |
 | --- | --- |
@@ -217,9 +220,9 @@ Independent review reproduced and repaired both initial safety defects: a real O
 
 This record does not claim public registry installation, package publication, deployment, a CLI demo command or host-publication tooling. Hard process termination can leave partial output, and adjacent filesystem check/write races are documented limits rather than adversarial-filesystem immunity. SDK26 remains open until this record is reviewed and merged.
 
-### Original starter and demo acceptance
+#### Original starter and demo acceptance
 
-### STARTER1 first-pair acceptance
+#### STARTER1 first-pair acceptance
 
 | SDK23 criterion | Accepted implementation and bounded evidence |
 | --- | --- |
@@ -237,7 +240,7 @@ The template uses the existing3s operation/10s total server budgets, starting be
 
 This first-pair result reuses PACK1/PACK2 package provenance and existing CORE/VIEW runtime qualification. The new starter HTML is qualified in the local host fixture, not claimed to be the previously observed ChatGPT/Claude playback bytes. Previous named-host receipts remain valid for their unchanged shared behavior; no additional host gate is introduced here. No actual-host audio, OAuth/DCR, public registry install or production deployment is asserted.
 
-### DEMO1 standalone acceptance
+#### DEMO1 standalone acceptance
 
 | SDK24 criterion | Implementation and evidence |
 | --- | --- |
@@ -253,6 +256,6 @@ The automated harness links declared third-party dependencies for repeated local
 
 The exact repaired installed playback HTML remains CARD2's accepted `7ea1d8d0d696a20921896d1df45905cd22455f5f17fa20cd1d41243591224afd`. Production player/card/browser-facing bytes are unchanged; existing named-host evidence is reused for its established scope. The new page and forwarding surface are a local stand-in host, so its17 browser cases do not claim ChatGPT/Claude/Alexa acceptance. Local audio-clock progress is not remote-host audio success. No new host matrix or runtime retest was performed for this record.
 
-### Remaining broader setup verification
+#### Remaining broader setup verification
 
 Each additional offered stack/server pair must still pass allowed/denied/missing-auth/public/concurrent-identity qualification; Hapi additionally proves authenticated identity reaches its hook. CLI1 and CLI2 now qualify overwrite, unsafe-symlink, implicit-install, remote-hook, unsupported-pair and interrupted-copy behavior through their actual command paths as recorded above. GUIDE1 validates its current template snippets; framework offered-pair registration is accepted below, and GUIDE2 is accepted below. DEMO1 has qualified the scoped synthetic allowed/denied/expired/recovery download above. These scopes remain open independently of STARTER1.
