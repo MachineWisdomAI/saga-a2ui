@@ -14,9 +14,9 @@ TypeScript middleware for connecting existing services to assistant experiences,
 
 The seven SDK packages belong to the public release set, including both renderers and both MCP stacks. See [public installation](public-install.md) for registry availability and exact-version recipes, and [release preparation](release-packages.md) for artifact qualification. Local development uses private candidate artifacts to exercise unpublished source changes; later dated slices preserve their original qualification state.
 
-The workspace has seven owned packages: `packages/core`, `packages/mcp`, `packages/components` (the passive FaithfulCard preparation slice), `packages/react` (direct action attachment, the optional FaithfulCard text and image-consent slices and the typed bound surface), `packages/lit`, and the two stack packages `packages/react-mcp-stack` and `packages/lit-mcp-stack` (see "The MCP stacks and the card application (E1, E2)"). A minimal private Lit application (`apps/lit-host`) builds and renders locally, and a retained Lynx Web qualification fixture (`apps/lynx-fixture`, see ACT3; not an adapter, and the owner retired the Lynx delivery chain on 2026-10-19, so it is history and not a requirement) runs ACT1's action runtime on ReactLynx. The shared action contract (`@saga-a2ui/core/actions`, with the opt-in Lit and React controls) is implemented as local and server actions, and the Lit application's Play runs on it; "The action contract across the current codebase (ACT7)" below says what it supports, what retained owners keep and what is unqualified. The repository is public; publication of a package version is a separate owner decision.
+The workspace has seven owned packages: `packages/core`, `packages/mcp`, `packages/components` (shared FaithfulCard reading, policy and application definitions), `packages/react` (typed surfaces, action integration and optional FaithfulCard rendering), `packages/lit`, and the two stack packages `packages/react-mcp-stack` and `packages/lit-mcp-stack` (see "The MCP stacks and the card application (E1, E2)"). A minimal private Lit application (`apps/lit-host`) builds and renders locally, and a retained Lynx Web qualification fixture (`apps/lynx-fixture`, see ACT3; not an adapter, and the owner retired the Lynx delivery chain on 2026-10-19, so it is history and not a requirement) runs ACT1's action runtime on ReactLynx. The shared action contract (`@saga-a2ui/core/actions`, with the opt-in Lit and React controls) is implemented as local and server actions, and the Lit application's Play runs on it; "The action contract across the current codebase (ACT7)" below says what it supports, what retained owners keep and what is unqualified. The repository is public; publication of a package version is a separate owner decision.
 
-SAGA views and actions run in ChatGPT, Claude and Alexa+; [host compatibility](host-compatibility.md) shows what each host supports. The notes browse and its row actions also run through a React consumer of the same contract, server and actions (see "Browsing the notes workflow through React (REACT1)"; experimental, local fixture host only), and the protected Play through a React control of the same controller and actions (see "Playing through React (REACT2)"; also experimental and local). The installed SAGA React card is qualified separately, as a minimal passive card from packed packages in a local fixture host (see "The installed React card as one self-contained resource"); that is not actual-host acceptance, the authenticated browse/Play recipe or a package release.
+SAGA views and actions run in ChatGPT, Claude and Alexa+; [host compatibility](host-compatibility.md) shows what each host supports. The notes browse and its row actions also run through a React consumer of the same contract, server and actions (see "Browsing the notes workflow through React (REACT1)"; qualified in the local fixture host), and the protected Play through a React control of the same controller and actions (see "Playing through React (REACT2)"; also qualified locally). Both React and Lit support the implemented surface, action and card composition described in [view composition](../blueprints/features/view_composition.blueprint.md). Their packed-consumer and local-fixture checks establish the behaviors they exercise; named-host observations remain tied to the exact application and resource in [host compatibility](host-compatibility.md).
 
 ## Packages
 
@@ -24,8 +24,8 @@ SAGA views and actions run in ChatGPT, Claude and Alexa+; [host compatibility](h
 | --- | --- |
 | `@saga-a2ui/core` | Renderer-independent value objects and processing interfaces, with protocol-specific implementations in separate modules (public) |
 | `@saga-a2ui/mcp` | MCP app integration, data and action boundaries, and protocol error mapping (public) |
-| `@saga-a2ui/components` | Optional renderer-neutral component contracts and shared component behavior (public; only the passive FaithfulCard preparation slice exists, see "The passive FaithfulCard and an installed second consumer") |
-| `@saga-a2ui/react` | React renderer integration (public; the optional `/actions` qualification slice, the `/faithful-card` text and image-consent slices and the `/a2ui` bound surface, not full React parity) |
+| `@saga-a2ui/components` | Optional renderer-neutral FaithfulCard contracts, reader, content policy, consent and application definition (public) |
+| `@saga-a2ui/react` | React renderer integration: typed `/a2ui` surfaces, `/actions` bindings and optional `/faithful-card` rendering (public) |
 | `@saga-a2ui/react-mcp-stack` | The React renderer joined to MCP delivery; an application installs it plus the React peers (public release set) |
 | `@saga-a2ui/lit` | Lit renderer integration (public release set) |
 | `@saga-a2ui/lit-mcp-stack` | The Lit renderer joined to MCP delivery (public release set) |
@@ -41,7 +41,7 @@ The optional FaithfulCard component displays supplied Markdown without rewriting
 
 ## Development
 
-This is an npm workspace skeleton; the root is private and is never published. Build and test commands for the local Lit application are under Local development below. See [contributing](../CONTRIBUTING.md) and [package layout](../packages/README.md).
+This is an npm workspace; the root contains development tooling and is never published. Build and test commands for the local Lit application are under Local development below. See [contributing](../CONTRIBUTING.md) and [package layout](../packages/README.md).
 
 ## License
 
@@ -49,7 +49,7 @@ The SDK uses [Apache-2.0](../LICENSE). Preserve applicable third-party licenses 
 
 ## Local development
 
-Requires Node 22.12.0 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No global tools are needed.
+Requires Node 22.23.3 or newer (pinned in `.nvmrc`; `nvm use`) and npm. No global tools are needed.
 
     npm ci                              # install from the committed lockfile
     npm ci --prefix apps/lynx-fixture   # the Lynx fixture's own lockfile (see ACT3); verify and CI need it
@@ -265,7 +265,7 @@ Test discovery asks Vitest for its file list (`vitest list --filesOnly` against 
 
 Passing verify does not guarantee coverage, host compatibility, or architecture.
 
-The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private; `packages/core`, `packages/lit` and `packages/mcp` are the SDK packages so far (private, unreleased, no version).
+The workspace root and `apps/lit-host` are development tooling, not npm packages. The local host declares no application version. All seven SDK packages have enrolled release versions and public npm releases; [package layout](../packages/README.md), [public installation](public-install.md) and [version policy](version-policy.md) describe their ownership, available versions and update rules.
 
 ### Fixture rendering (A2UI v0.9)
 
