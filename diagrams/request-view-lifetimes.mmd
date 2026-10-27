@@ -1,15 +1,17 @@
 flowchart TD
-  D["Application definition"] --> B["Binding on one rendered instance"]
-  B -->|"accepted event"| I["Invocation: prerequisites and handler<br/>one work deadline"]
+  B["One definition bound to<br/>one rendered instance"] -->|"accepted event"| I["Invocation: prerequisites and handler<br/>one work deadline"]
   I -->|"may send"| S["Server request<br/>independent deadline and authority"]
-  I --> H["Required success work, then outcome<br/>cleanup hooks have separate budgets"]
-  H --> C{"Still current before<br/>a presentation write?"}
-  C -->|"yes"| W["Update this view"]
+  I -->|"handler returned"| H["Required success hook<br/>own hook budget"]
+  I -->|"failure or cancellation"| Q["Outcome decided once;<br/>outcome hook, token releases, final hook<br/>each step has its own budget"]
+  H --> Q
+  H -.->|"inside an eligible hook"| C{"After an await in this callback:<br/>current() still true?"}
+  Q -.->|"inside an eligible presenting hook"| C
+  C -->|"yes"| W["Synchronous presentation write<br/>before this callback ends"]
   C -->|"no"| X["Skip stale presentation<br/>retain the known outcome"]
   I -->|"acquires"| R["Resource token in invocation scope"]
   R -->|"explicit transfer"| O["Application resource owner<br/>player may outlive the invocation"]
-  R -->|"not transferred"| H
-  T["Selection change or binding disposal"] -->|"retire local work"| I
+  R -->|"not transferred: release in cleanup"| Q
+  T["Selection change or binding disposal"] -->|"retire undecided work"| I
   V["View teardown: stop delivery<br/>and abort the view signal"] --> T
   V -->|"application cleanup"| O
   V --> K["Answer host teardown first;<br/>then close connection once"]

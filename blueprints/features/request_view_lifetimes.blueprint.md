@@ -65,7 +65,7 @@ A signal asks work to stop; `scope.active` says whether the invocation's outcome
 
 [Editable Mermaid](../../diagrams/request-view-lifetimes.mmd) · [Editable Excalidraw](../../diagrams/request-view-lifetimes.excalidraw) · [PNG](../../diagrams/request-view-lifetimes.png)
 
-The work deadline starts after the synchronous activation prefix. Required success work and each cleanup step have their own hook budgets. A resource transferred to the application owner survives invocation settlement until that owner releases it; ending a binding is not a whole-owner stop.
+The dashed branches in the figure run inside an eligible callback, before it returns. A callback's `current()` becomes permanently false when that callback ends or the runtime stops waiting for it; it is not a check to perform after cleanup. The work deadline starts after the synchronous activation prefix. Required success work and each cleanup step have their own hook budgets. A resource transferred to the application owner survives invocation settlement until that owner releases it; ending a binding is not a whole-owner stop.
 
 ## The server request as its own lifetime
 
