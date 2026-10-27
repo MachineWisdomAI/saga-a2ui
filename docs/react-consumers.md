@@ -1,5 +1,7 @@
 # Installing the React renderer with MCP
 
+React and its MCP stack are a supported application path for both custom A2UI catalogs and FaithfulCard applications. The stack owns MCP connection ordering and the React view lifecycle; application code supplies its data interpretation, actions and presentation.
+
 ## One stack, plus React
 
 An application installs one stack package, `@saga-a2ui/react-mcp-stack`, plus its framework peers (`react` and `react-dom`, singletons at the version SAGA supports), and imports from the stack only:
@@ -9,11 +11,30 @@ import {startA2uiView, defineSurface, z, ActionButton, createReactActions} from 
 import {FaithfulCardApp, startFaithfulCardApp} from '@saga-a2ui/react-mcp-stack/faithful-card';
 ```
 
-The main entry is for an application's own catalog, and an application that installs the stack writes it against the stack's exports alone (`Catalog`, `CommonSchemas`, `createComponentImplementation`, `ReactCatalogComponent`, `defineSurface`, `z`, the action names and the failures it catches), declaring no `@a2ui/*` package, no Zod and no other SAGA package; the `/faithful-card` entry starts a card application from one validated definition. A server composes the same application from the stack's `/content-policy` entry (`createContentPolicy`, `embedContentPolicy`) and its Node-only `/server` entry (`createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`), so one install serves both sides without a browser bundle ever importing a server module. The definition's one `result` reader receives the whole delivered result (error flag, content blocks and structured content) and supplies its own rejection wording; `readingProfile` tells its `hostContext` callback whether the host is read on a device, and the application maps that onto its own tokens ([details](development-reference.md#reading-the-whole-result)). The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
+The main entry is for an application's own catalog. An application that installs the stack writes it against the stack's exports alone (`Catalog`, `CommonSchemas`, `createComponentImplementation`, `ReactCatalogComponent`, `defineSurface`, `z`, the action names and the failures it catches), declaring no `@a2ui/*` package, no Zod and no other SAGA package; the `/faithful-card` entry starts a card application from one validated definition. A server composes the same application from the stack's `/content-policy` entry (`createContentPolicy`, `embedContentPolicy`) and its Node-only `/server` entry (`createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`), so one install serves both sides without a browser bundle ever importing a server module. The definition's one `result` reader receives the whole delivered result (error flag, content blocks and structured content) and supplies its own rejection wording; `readingProfile` tells its `hostContext` callback whether the host is read on a device, and the application maps that onto its own tokens ([details](development-reference.md#reading-the-whole-result)). The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. What this page names for React is a set of composition capabilities (typed bound surfaces, the card and the card application). It does not claim full React parity or any named-host acceptance; those have their own evidence.
+The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the absence of a generated React starter does not mean the React stack lacks a working application path.
+
+## React in Ansari Faithful Answers
+
+Ansari Faithful Answers uses the React MCP stack for its answer-card application. The public [destination integration PR](https://github.com/iaser-ai/ansari/pull/323) records a candidate using `@saga-a2ui/react-mcp-stack@0.7.6-rc.1` and React/React DOM `19.3.1`, with clean public-package installation, application checks and browser validation. Its [view source](https://github.com/timeleft--/ansari/blob/e4ded0ec3e39afb33292e311c8fe3a0669c1bb41/apps/ansari-faithful-answers/src/view/main.tsx) uses the stack’s FaithfulCard application entry. This is a concrete application consumer alongside the SDK examples; it does not depend on a generated React starter.
+
+A prior React integration was also exercised in ChatGPT web, Claude web and the Alexa+ development simulator; [the recorded SDK integration](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) identifies that earlier candidate. Those observations are separate from the current destination PR, which remains a candidate, and from its version-specific installation and browser checks. The [host compatibility guide](host-compatibility.md) separately identifies demonstrated assistant-host flows and their limits. Neither adoption by Ansari nor a local browser pass establishes every host or all renderer features.
+
+## Follow a complete React application
+
+The [notes React view](../examples/pack1-consumer/src/notes-react-view.tsx) is a complete stack composition. It uses the [notes layout](../examples/pack1-consumer/src/notes-surface.ts) and [React catalog](../examples/pack1-consumer/src/notes-react-catalog.tsx), with the same controller and backend as the Lit application:
+
+1. The page supplies a `#root` container and calls `startNotesReactView()`. That function creates the application controller and starts the stack with the notes layout and catalog.
+2. Its `actions` callback receives the host transport. The controller builds the Archive and Mark read definitions, and `createReactActions` binds them to each rendered row. Archive reads the row's current note ID as its `subject`, so a reused row cannot receive an old note's completion message.
+3. `onToolResult` gives the delivered result to the controller. The controller validates the application data and updates the typed surface; rejected input is handled by the application instead of being cast into the view.
+4. When the view ends, the stack retires the surface, calls `onTeardown` to retire the application controller and its resources, and unmounts the React root. The action provider disposes its bindings during unmount; application cleanup must not depend on those bindings already being disposed inside `onTeardown`.
+
+Follow the [action guide](actions.md#trace-one-press-allowed-and-denied) for the complete server authorization and outcome trace. An expired session can stop Archive before its protected request; cancellation after sending that request leaves its effect uncertain. The application presents that uncertainty and does not retry the write automatically.
+
+This is an existing application example, not a React starter command. Use [public installation](public-install.md) for the stack and exact peers, and [Getting started](getting-started.md) for a runnable local demo.
 
 ## The React integration surface
 
@@ -29,7 +50,7 @@ The entry point forwards the supported upstream A2UI v0.9 APIs; it does not impl
 
 ## Open a typed surface
 
-Define the surface once with `defineSurface`, open it with your catalog and mount it:
+For a lower-level integration without MCP delivery, define the surface once with `defineSurface`, open it with your catalog and mount it. The following is the lifecycle outline: `layout`, `catalog` and `data` are your application's validated definition, component catalog and next value. The complete notes composition above uses `startA2uiView` to own this lifecycle for MCP delivery.
 
 ```tsx
 const bound = openSurface(layout, catalog); // throws, with the session's message, if the layout is not accepted

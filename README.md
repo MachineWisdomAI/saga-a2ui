@@ -26,7 +26,7 @@ The [action guide](docs/actions.md) follows a notes application through these in
 
 Start with a Node, Express, Fastify, Hono or Hapi backend, or [add saga a2ui to an existing service](docs/attach-to-existing-backend.md). saga a2ui carries the verified request identity through to your application, where your server checks permissions and performs the operation.
 
-Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
+Application processing, MCP integration, components and the React and Lit renderer integrations have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
 
 ### Content controls for the application you are building
 
@@ -38,7 +38,7 @@ Your application chooses which links may open and which image hosts are allowed.
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
-From a source checkout, with Node 22.12.0 or newer and npm:
+From a source checkout, with Node 22.23.3 or newer and npm:
 
 ```sh
 npm ci
@@ -54,7 +54,7 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 ## Build your application
 
-Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates; the React integration provides action controls and FaithfulCard.
+React and Lit are both supported application paths. Their MCP stacks provide typed surfaces, action controls and the optional FaithfulCard application, with framework-specific rendering and lifecycle integration. Choose the stack that matches your application. Follow the [React integration guide](docs/react-consumers.md) for React, or [Getting started](docs/getting-started.md) for either stack and the generated Lit starters. [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and generated starter templates currently use Lit; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 

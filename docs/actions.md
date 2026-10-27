@@ -1,8 +1,10 @@
 # Change a component and trace allowed and denied requests
 
-This guide is for a developer who has the [setup guide](getting-started.md) working and now wants to change what a control does: edit a component, attach or change its action, and follow one press through every step until the server answers and the application cleans up. It was written on 2026-10-20 against the repository's current source. Each quoted block is copied from the file named above it, and `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` runs every case the guide traces against the notes application installed from packed candidate tarballs.
+After running the [setup guide](getting-started.md), use the notes application to change a control and follow an Archive press from the row through prerequisites, server authorization, feedback and cleanup. The same action definition serves every row, while each row keeps its own pending state and current note identity.
 
-Core, components, MCP and React are [published on npm](public-install.md). This tutorial includes the unpublished Lit renderer, so it runs from a checkout against a *candidate*, a matched set of locally packed tarballs ([install and update](candidate-update-and-rollback.md)). Names such as `Action.server`, `before`, `onSuccess` and `scope.own` are the exports of that candidate, not a promise about a later public API, and the numbers below are the candidate's defaults, not recommended timeouts.
+Each quoted block is copied from the file named above it; `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` exercises the traces against the notes application installed from packed candidate tarballs.
+
+All seven SDK packages, including Lit and both stacks, are [published on npm](public-install.md). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](candidate-update-and-rollback.md)). The action APIs described here also ship in `0.7.7-rc.1`. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
 
 The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
 
@@ -145,7 +147,7 @@ An ID selects handles at setup. It never routes a press: only the instance's own
 
 ### A local action first
 
-A local action has no server and no prerequisite. It is the smallest complete action:
+Mark read is a local action with no prerequisite. It changes application state without a server call. Local actions can have prerequisites too; this example is the smallest complete action:
 
 ```ts examples/pack1-consumer/src/notes-actions.ts
 const markRead = Action.local<ActionButtonActivation>('mark-read')
@@ -412,7 +414,7 @@ The rules that connect them:
 - **No clock is a universal invocation timer.** The work deadline does not cover the hooks, and the hooks do not renew it. A new stage never resets its parent's bound, because every deadline is absolute from where its scope began.
 - **An invalid explicit limit fails** (`TypeError`) where it is supplied, even if another layer would have shadowed it. It is never replaced with a default. The traced test passes `0`, `NaN` and `-1`.
 - **There is no automatic retry**, and none is safe to assume. An uncertain write (a timeout, a lost connection, an unreadable reply) is reported as unknown.
-- **Cancellation and timeout do not establish rollback, and do not stop the server.** Aborting the signal ends the *client's wait*. The traced deadline case sets a 150 ms work deadline and holds the server's archive open: the person sees `Archive status unknown`, the hold is given back, and then, when the server's backend is let go, `n-1` is archived anyway. The outcome was unknown, and it was applied.
+- **Cancellation and timeout do not establish rollback or server cancellation.** Aborting the signal ends the *client's wait*; the host may or may not forward cancellation, and server work must cooperate with its own signal. The traced deadline case sets a 150 ms work deadline and holds the server's archive open: the person sees `Archive status unknown`, the hold is given back, and then, when the server's backend is let go, `n-1` is archived anyway. The outcome was unknown, and it was applied.
 
 The server side uses the same rule for its own waits: a stage that does not finish in time is dropped and its late answer discarded, but work that ignores its signal keeps running. The tool above answers such a case with `failure`, never `refusal`, because ending a wait undoes nothing.
 
@@ -436,7 +438,7 @@ The `subject` reader is what makes a *recycled row* safe. A list renderer may ke
 
 ## Disposal, ownership and hand-off
 
-**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The application ends its own bindings (and the discovery that created them) when its view ends; the starter's `retire()` does it for a host teardown and for the page going away alike. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
+**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The surface's action setup owns discovery and the bindings it creates. The stack cleans up that setup when the view ends. The application's `onTeardown` callback (`retire()` in the starter) releases application-owned resources; do not rely on it running after every renderer's binding cleanup. Host teardown, `dispose()` and page exit all use that path. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
 
 **Ownership.** A resource is anything a press takes that someone must give back. The notes application's hold on a row is an application-owned resource, and it shows the whole contract:
 
@@ -473,11 +475,11 @@ Claim only what the evidence supports. The runnable tutorial stays on the qualif
 
 | | Shown | Not shown |
 | --- | --- | --- |
-| **Lit** | The full renderer. `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs | A Windows run; an actual assistant host |
-| **React** | Direct action attachment: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Installed parity: no React starter, template, CLI pair or authenticated recipe |
+| **Lit** | Action controls and typed surfaces: `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs | A Windows run; this tutorial itself makes no actual-host claim |
+| **React** | Action controls and typed surfaces: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Generated tooling: no React starter, template, CLI pair or authenticated recipe. The application integration itself is implemented |
 | **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
 
-On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react/actions`. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
+On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react-mcp-stack`. The renderer package owns that implementation and the stack re-exports it. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
 
 ```ts examples/pack1-consumer/src/notes-react-view.tsx
 attach: (view) => {
@@ -497,9 +499,9 @@ attach: (view) => {
 },
 ```
 
-For React surfaces and catalogs use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
+A stack application imports its catalog, layout and action helpers from `@saga-a2ui/react-mcp-stack`. A deliberately lower-level integration uses `@saga-a2ui/react/a2ui` for surfaces and catalogs, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
 
-Servers have the same limits. `node`, `express`, `fastify` and `hono` are qualified with `lit-mcp`, and `saga init` offers only `node`. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
+The five server targets—`node`, `express`, `fastify`, `hono` and `hapi`—are qualified with `lit-mcp`, and `saga init` offers all five. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
 
 ### Hapi
 
@@ -531,5 +533,5 @@ by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 ## Where to go next
 
 - The setup, install and attach recipes: [Getting started](getting-started.md) and [Attach SAGA to an existing backend](attach-to-existing-backend.md).
-- The design behind the vocabulary: [action binding](../blueprints/modules/action_binding.blueprint.md#authoring) and [request and view lifetimes](../blueprints/features/request_view_lifetimes.blueprint.md). The Blueprints' illustrative names and numbers are not promises of public API or recommended timeouts.
+- The design behind the vocabulary: [action binding](../blueprints/modules/action_binding.blueprint.md#authoring) and [request and view lifetimes](../blueprints/features/request_view_lifetimes.blueprint.md). The Blueprints explain the approved contract, implemented scope and remaining proposals; the shipped exports and examples establish the API you can use.
 - Updating or rolling back the candidate: [Candidates: contents, update, rollback](candidate-update-and-rollback.md).
