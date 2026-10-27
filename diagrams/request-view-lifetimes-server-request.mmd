@@ -1,32 +1,15 @@
-graph TD
-  C1["Client invocation sends a request<br/>optional, through call"]
-  C2a["Response arrives: the transport wait ends. The handler<br/>continues, then required success work if still eligible"]
-  C2b["Cancel or work deadline while awaiting: the runtime stops<br/>waiting and starts no later success hook. Code already running may go on"]
-  L["Listener accepts and starts its own deadline,<br/>signal and terminal gate before any stage"]
-  A1["Protected POST: credential verifier,<br/>body, then dependent tool work"]
-  A2["Resource GET: capability, proof, replay,<br/>current entitlement, then storage. No person-auth or body"]
-  G{"First to reach the gate"}
-  R1["Work finishes:<br/>one response"]
-  R2["Server deadline expires: one safe answer<br/>before commit, end or close after commit"]
-  R3["Caller disconnects:<br/>no response"]
-  Z["Late results are dropped<br/>no later stage starts"]
-  K["Capability from an earlier request<br/>own expiry, not retracted"]
-  Q["Acquisition with it is a new request<br/>new deadline, new checks, fresh proof"]
-  N["Remote effects already made<br/>are not undone"]
-  C1 -->|request sent| L
-  L --> A1
-  L --> A2
-  A1 -->|each stage checks the gate| G
-  A2 -->|each stage checks the gate| G
-  G --> R1
-  G --> R2
-  G --> R3
-  R1 --> Z
-  R2 --> Z
-  R3 --> Z
-  C1 -.-> C2a
-  C1 -.-> C2b
-  C2b -.->|does not prove the server stopped| L
-  C2b -.-> N
-  K --> Q
-  Q -.->|starts its own lifetime| L
+flowchart TD
+  C["Client action sends request"] --> L["Listener admission<br/>one request deadline and signal"]
+  L --> A["Authenticate and read body,<br/>or check media capability and proof"]
+  A --> W["Bounded handler stages<br/>authorization, storage, projection"]
+  W -->|"valid result before deadline"| R["Choose one response"]
+  R --> F["Finish response within the<br/>remaining request budget"]
+  L -.->|"deadline"| D{"Response committed?"}
+  D -->|"no"| E["Safe failure if the transport<br/>still permits a response"]
+  D -->|"yes"| X["End or close the response"]
+  L -.->|"caller disconnects"| N["Retire without a response"]
+  E --> Z["Drop late results;<br/>start no later stage"]
+  X --> Z
+  N --> Z
+  C -.->|"client cancellation does not prove"| U["Server termination or<br/>rollback of prior effects"]
+  K["An issued media capability<br/>keeps its own expiry"] -->|"fresh acquisition"| L
