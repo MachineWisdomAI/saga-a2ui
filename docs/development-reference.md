@@ -271,40 +271,46 @@ The workspace root and `apps/lit-host` are private development packages, not npm
 
 ### Fixture rendering (A2UI v0.9)
 
-`apps/lit-host` renders a developer-authored A2UI v0.9 surface from synthetic public data. Tested, exactly pinned versions: `@a2ui/lit` 0.13.0, `@a2ui/web_core` 0.13.0 (both Apache-2.0), `zod` 3.25.76 (required by both; each installs its own nested copy, see "MCP Apps 2 recipe" below), `lit` 3.3.3, Node 22.12.0+. The optional peer `@a2ui/markdown-it` is deliberately not installed.
+The fixture page in `apps/lit-host` renders a developer-authored A2UI v0.9 surface from synthetic public data. It is a protocol and renderer qualification fixture, so its test hook accepts unchecked wire messages. Ordinary application views use the stack's typed surface updates instead; see [view composition](../blueprints/features/view_composition.blueprint.md).
 
-Modules in `apps/lit-host/src` (application-local; MCP delivery moved to `@saga-a2ui/mcp` later, see "Reusable MCP connector (CORE1)"):
+The current source uses `@a2ui/lit` and `@a2ui/web_core` 0.13.0 (Apache-2.0) through the SDK packages. A2UI schemas use Zod 3.25.76, exposed to catalog authors through core's `zod3` alias; the MCP application uses Zod 4.6.7. Lit's declared range is `^3.3.3`. Read exact resolved dependencies from `package-lock.json`, including the installed optional `@a2ui/markdown-it` peer pinned by the root override. The card's own Markdown parser belongs to `@saga-a2ui/components`. Use the repository's Node floor and setup in [Local development](#local-development), rather than the earlier fixture's Node 22.12.0 minimum.
 
-- `@saga-a2ui/core` (`packages/core`) owns the A2UI v0.9 message cases, `MessageDecoder` and `createMessageSession` that used to live here, plus the Zod 3 alias catalogs author schemas with. See "Core and Lit packages (VIEW1)".
-- `saga-panel/contract.ts`, `saga-panel/fixture.ts`: renderer-neutral `SagaPanel` contract and synthetic fixture data.
-- `lit/integration.ts`: Lit panel element, catalog, and the explicit `registerLitElements()` setup (nothing registers at import time).
-- `lit/saga-app.ts`: the application's `saga-app` element, built on `createA2uiAppElement` from `@saga-a2ui/lit`. The package owns the session, subscriptions, rejection fallback (failures as inert text) and disposal; the application adds the heading, its content policy and the `window.sagaSend` hook.
-- `main.ts`: composition root; constructs and connects the above.
+The implementation separates the fixture's application meaning from reusable processing:
 
-Call path: `window.sagaSend(unknown)` -> `saga-app` -> `session.ingest` -> decoder -> visitor -> upstream processor -> surface model -> Lit.
+- `@saga-a2ui/core` (`packages/core`) owns the A2UI v0.9 message cases, `MessageDecoder`, `createMessageSession`, validated surface layout and Zod 3 schema alias.
+- `apps/lit-host/src/saga-panel/contract.ts` and `fixture.ts` own the renderer-neutral `SagaPanel` contract, synthetic data and layout. The initial data displays “Sample title” and its synthetic description.
+- `apps/lit-host/src/lit/integration.ts` supplies the panel element and catalog. Its `registerLitElements()` explicitly registers the application's panel and optional card element; importing that module does not perform those registrations.
+- `apps/lit-host/src/lit/saga-app.ts` builds the application's `saga-app` on `createA2uiAppElement` from `@saga-a2ui/lit`. The SDK owns the session, subscriptions, safe fallback and disposal. The subclass adds its heading, content-policy provider and `window.sagaSend` test hook, which exists only while the element is connected.
+- `apps/lit-host/src/main.ts` selects the layout, catalog and trusted content policy and connects them. This standalone page has no host link opener; its default policy declares no image host.
 
-Invalid messages, unknown catalogs/components or wrongly typed properties produce a visible "Could not render this content" alert and clear the surface (see "Core and Lit packages (VIEW1)"). Values render only as Lit text bindings, so supplied markup stays inert text. The description is the one value read as Markdown, under a trusted content policy; see "Standard descriptions (POL1)" below.
+The test call path is `window.sagaSend(unknown)` → app element → session ingestion → decoder → validated message visitor → upstream processor → surface model → Lit. A rejected wire message shows the plain-text “Could not render this content” alert instead of the surface. It does not roll back messages already applied before the rejection; the next accepted input clears the fallback. A rejected typed `updateData` instead returns a failure and leaves the prior data and fallback unchanged. Keeping these paths distinct prevents a consumer from assuming that every invalid update clears stale content automatically.
 
-`npm run test:headless` (vitest, Node) covers decoding and processing through the public `@saga-a2ui/core` interface only (`packages/core/src/protocols/a2ui/v0_9/protocol.test.ts`). Browser tests cover rendering, binding, inert markup, recovery and mount/unmount.
+The title and failure text use Lit text bindings, so supplied markup stays inert. The description is the one value interpreted as restricted Markdown by the optional FaithfulCard element under the enclosing view's trusted policy; see [Standard descriptions](#standard-descriptions-pol1). Disconnecting unsubscribes and disposes the session, removes the test hook and ends the content provider; reconnecting starts a fresh session.
 
-`e2e/*.spec.ts` drive the real processor through the typed `window.sagaSend` entry point and assert rendered output. Recipe (same commands as above): `npm ci && npm run typecheck && npm run build && npx playwright install chromium && npm run test:browser`.
+`packages/core/src/protocols/a2ui/v0_9/protocol.test.ts` exercises decoding and processing through core's public interface. Browser fixtures exercise rendering, bindings, inert markup, recovery and mount/unmount through `window.sagaSend`. Follow [Local development](#local-development) for the complete install, build and browser-test prerequisites. These source checks do not establish actual-host compatibility. The [original fixture account](https://github.com/MachineWisdomAI/saga-a2ui/blob/cdad54747dfbba756464676ac3b1b8c90148a566/docs/development-reference.md#fixture-rendering-a2ui-v09) retains its earlier dependency and qualification snapshot; those pins are not the current setup recipe.
 
 ### MCP tool result in the view (MCP1)
 
-`apps/lit-host` also hosts an ordinary MCP server and renders one of its tool results through the same A2UI session. Public synthetic data only; no authentication, playback, SDK packages or actual-host (ChatGPT/Claude) acceptance.
+The public episode path delivers a real MCP tool result into the same panel contract through `@saga-a2ui/lit-mcp-stack`. For example, `get_episode` with `{ "episodeId": "ep-001" }` selects a synthetic catalog record. The server projects only `episodeId`, `title` and `description`; the application view validates that projection and updates the bound panel. The SDK supplies delivery and surface lifetime, while the application decides what an episode result means.
 
-Pinned additions (exact; the MCP packages are the MCPV2 recipe below): `@modelcontextprotocol/ext-apps` 2.0.3 (MIT; its optional `react` peers are not installed) with `client`, `core` and `server` 2.3.1 and `node` 2.1.1 (Apache-2.0), dev-only `vite-plugin-singlefile` 2.3.3, `tsx` 4.23.15, `@types/node` 22.20.5. No MCP-UI, CopilotKit, AG-UI or Ora packages are used; the only overlap is shared standards (MCP, MCP Apps, A2UI).
+The episode operation is public and read-only: it needs no identity and grants no playback. That scope does not describe the whole current development listener, which also hosts public answers and separately protected subscription and playback routes. `npm run serve:mcp` uses fixed development identities and synthetic data for those protected demonstrations; it is loopback tooling, not production authentication or actual-host acceptance.
 
-    npm run build         # app, the single-file view (dist/view/view.html) and the test-only host fixture
-    npm run serve:mcp     # MCP server at http://127.0.0.1:3001/mcp (PORT overrides); needs the build first
+After the root install described in [Local development](#local-development), build the application views before starting the listener:
 
-Modules in `apps/lit-host/src`:
+```sh
+npm run build -w @saga-a2ui/lit-host-app
+npm run serve:mcp  # http://127.0.0.1:3001/mcp; PORT overrides the port
+```
 
-- `mcp/episode.ts`: public contract shared with the view (input shape, bounded `PublicEpisode`); imports only `zod`.
-- `mcp/server.ts`: `createEpisodeServer` declares one explicitly public, read-only operation `get_episode` (runtime-validated `episodeId`) and the episode view resource (its `ui://views/<filename>.<fingerprint>.html` URI is derived from the served document, see Identity below) through `registerPublicOperation` from `@saga-a2ui/mcp/server`. Only `episodeId`, `title` and `description` are projected from a record. The resource is the built HTML served verbatim, so request data never enters cached HTML; its CSP metadata allows no network or external resources.
-- `mcp/listener.ts`: application-owned loopback Streamable HTTP hosting (`POST /mcp`, stateless, JSON responses, Host-header DNS-rebinding protection, no auth because the tool is public).
-- `mcp/view.ts`, `view-main.ts`, `view.html`: the view connects the MCP Apps `App` bridge, then turns each tool result into an A2UI data-model update and hands it to the existing session. Decoding stays in `protocols/a2ui`; rendering stays in `lit/`. `vite.view.config.ts` builds it to one HTML file with no server imports.
-- `e2e/host-fixture`, `e2e/mcp-view.spec.ts`: a test-only local host with a real `AppBridge` and a `sandbox="allow-scripts"` iframe. The spec makes real `tools/call` and `resources/read` requests over HTTP, delivers the result, and checks the wire result, rendered title, CSP and resource linkage. `e2e/view-bundle.spec.ts` checks the built artifacts for server code and credentials. The fixture is not evidence of compatibility with any actual host.
+The current MCP dependency pins live in `apps/lit-host/package.json`: `@modelcontextprotocol/ext-apps` 2.0.3, `client`, `core` and `server` 2.3.1, and `node` 2.1.1. The view build uses `vite-plugin-singlefile` 2.3.3; source serving uses `tsx` 4.23.15 and Node types 22.20.5. MCP Apps is MIT and the listed MCP SDK packages are Apache-2.0. MCP-UI, CopilotKit, AG-UI and Ora are not part of this integration; its common interfaces are MCP, MCP Apps and A2UI. The [original MCP1 account](https://github.com/MachineWisdomAI/saga-a2ui/blob/cdad54747dfbba756464676ac3b1b8c90148a566/docs/development-reference.md#mcp-tool-result-in-the-view-mcp1) describes the earlier milestone; its absent-SDK and absent-authentication statements are historical, not current repository limits.
+
+The source owners are:
+
+- `apps/lit-host/src/mcp/episode.ts` defines the input shape and bounded `PublicEpisode` schema with Zod, without server imports. The server's explicit field projection keeps extra backend fields out of the tool result.
+- `apps/lit-host/src/mcp/server.ts` declares `get_episode` and its immutable view resource through `registerPublicOperation` from `@saga-a2ui/mcp/server`. `content-resource.ts` embeds the trusted content policy before deriving `ui://views/<filename>.<fingerprint>.html` from the exact document. Request data never enters that cached HTML. The default policy declares no external origins; configured image or font origins come from trusted policy, not the result.
+- `apps/lit-host/src/mcp/listener.ts` owns loopback HTTP hosting, Host-header checks, request admission and transport lifetime. The public `/mcp` route uses stateless Streamable HTTP with JSON responses; the separate protected routes authenticate through their configured verifier.
+- `apps/lit-host/src/view-main.ts`, `view.html` and `mcp/view.ts` compose the episode view. `startA2uiView` owns bridge connection, early-result buffering, surface updates and teardown. The application's result callback revokes prior image consent before each result, validates `structuredContent`, updates title and description and clears any old problem. An error, invalid episode or rejected surface update empties the panel and displays a plain-text problem. This explicit clearing belongs to the application callback, not generic connector delivery. Teardown retires content consent and removes the browser-test update hook. `vite.view.config.ts` builds one HTML resource without server imports.
+- `apps/lit-host/e2e/host-fixture` and `e2e/mcp-view.spec.ts` supply a local host with a real `AppBridge` and a `sandbox="allow-scripts"` iframe. The spec makes real `tools/call` and `resources/read` requests over HTTP and checks the result, visible title, resource linkage and default empty-allowlist CSP. `e2e/view-bundle.spec.ts` checks the built artifacts for server code and credentials. These are local fixture checks, not ChatGPT or Claude acceptance.
 
 ### The MCP stacks and the card application (E1, E2)
 
