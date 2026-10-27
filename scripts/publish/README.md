@@ -1,4 +1,4 @@
-# Publication tooling (`saga publish`, CLI3, CLI4 and CLI5)
+# Prepare an application for host publication
 
 Optional developer tooling in the single `saga` CLI ([`scripts/saga.ts`](../saga.ts)). It checks a
 built application, its already deployed HTTPS MCP endpoint and a release input, and prepares one
@@ -8,12 +8,46 @@ record. It deploys, uploads and submits nothing, and a prepared package is never
 `saga publish handoff` (CLI5) then keeps the resumable record of the manual submission that follows.
 Design: [host publication Blueprint](../../blueprints/features/host_publication.blueprint.md).
 
+## Run the source CLI
+
+Run these commands from a SAGA source checkout with the root development dependencies installed
+(see [local development](../../docs/development-reference.md#local-development)). The CLI is
+`scripts/saga.ts`, not an executable installed by the published `@saga-a2ui` packages. The
+`npx tsx` prefix runs that local source entry point; installing an SDK stack in your application
+does not install a global `saga` command.
+
+Before checking a release, build the application, deploy its MCP endpoint through your own
+process, and write the release input described below. `check` reads those inputs and reports
+findings without writing output. `prepare` performs the checks and writes the findings and any
+ready submission materials. Both can contact the endpoint; neither deploys the application or
+submits it to a host. Fixture calls happen only when you explicitly add `--invoke-fixture`.
+
+```mermaid
+flowchart TD
+    A[Application owner builds and deploys] --> B{Release checks ready?}
+    B -->|No| C[Fix blocked or incomplete findings]
+    C --> B
+    B -->|Yes, after prepare| D[Ready materials and findings]
+    D --> E[handoff records the planned attempt]
+    E --> F[Publisher submits in host portal]
+    F --> G[Record observed submission and review]
+    G --> H[Record verified listing with evidence]
+```
+
+The owner performs deployment and portal work. The source CLI inspects the prepared application;
+`handoff` only records what the owner observes. A ready package, a confirmed submission, an
+approval and an observed live listing remain separate outcomes. If a submission's outcome is
+uncertain, inspect the host before retrying, as described under [resuming a handoff](#resuming-a-handoff-saga-publish-handoff-cli5).
+
 ```sh
 npx tsx scripts/saga.ts publish check   --target chatgpt --release path/to/saga-publication.json
-npx tsx scripts/saga.ts publish prepare --target chatgpt --release path/to/saga-publication.json --out ./publication
+npx tsx scripts/saga.ts publish prepare --target chatgpt --release path/to/saga-publication.json --out ./publication-chatgpt
 npx tsx scripts/saga.ts publish check   --target claude  --release path/to/saga-publication.json
-npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-publication.json --out ./publication
+npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-publication.json --out ./publication-claude
 ```
+
+Keep separate output directories when preparing both targets: a later preparation can replace
+an earlier tool-generated directory. The examples above preserve each host’s materials.
 
 Options: `--against DIR` compares with an earlier output and fails when its evidence is stale;
 `--invoke-fixture` calls the tools the release input declares under `fixture.calls`;
@@ -152,15 +186,24 @@ publisher submits by hand in the host's documented flow
 [Claude](https://claude.com/docs/connectors/building/submission), portal
 <https://claude.ai/directory/manage>).
 
+The following synopsis uses the ChatGPT output above and a separate `./handoff-chatgpt` record.
+For Claude, use `./publication-claude` and a different handoff directory, such as
+`./handoff-claude`. `./publication-chatgpt-now` denotes a new preparation of the current ChatGPT
+release for freshness comparison; create it with `prepare` before using it here.
+
 ```sh
-saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
-saga publish handoff status              --handoff DIR [--prepared ./publication-now]
-saga publish handoff attempt             --handoff DIR --prepared ./publication-now
-saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
-saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
-saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
-saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff begin               --handoff ./handoff-chatgpt --prepared ./publication-chatgpt --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff status              --handoff ./handoff-chatgpt [--prepared ./publication-chatgpt-now]
+npx tsx scripts/saga.ts publish handoff attempt             --handoff ./handoff-chatgpt --prepared ./publication-chatgpt-now
+npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff ./handoff-chatgpt --reference <the host's reference> [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff void-attempt        --handoff ./handoff-chatgpt --inspected "<what you looked at in the host>" [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-review       --handoff ./handoff-chatgpt --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-listing      --handoff ./handoff-chatgpt --prepared ./publication-chatgpt-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
+
+The handoff block is a command synopsis: replace placeholders, omit optional bracketed arguments
+and choose one value where alternatives are separated by `|`. Run only the command matching the
+observation or transition you intend to record.
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
 digest in its record) and whose verdict is `ready`, and pins it: the host (target, directory name,
