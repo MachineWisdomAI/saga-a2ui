@@ -1,0 +1,10 @@
+graph TD
+  Begin["Play begins: acquire a lease"] --> Scope["Invocation owns lease"]
+  Scope --> Started{"Player started?"}
+  Started -- "no / failure" --> Release["Scope releases this lease"]
+  Started -- "yes" --> Transfer["Synchronous transfer to player owner"]
+  Transfer --> Owner["Owner retains lease after invocation"]
+  Owner --> End["Owner teardown ends retained playback"]
+  Release --> Check["Release checks exact lease identity"]
+  End --> Check
+  Check --> Safe["Old cleanup cannot stop a newer lease"]
