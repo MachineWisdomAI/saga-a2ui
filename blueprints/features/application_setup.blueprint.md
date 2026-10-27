@@ -10,6 +10,109 @@ date_added: 2026-10-16
 
 ## Status
 
+**Approved; five Lit/MCP starter pairs, the separate Node demonstration, guides, init/demo commands and static tour are implemented.** The approved baseline is [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/application_setup.blueprint.md). The [view-composition amendment](view_composition.blueprint.md#status) makes the stack the application-facing entry; its stack-only recipe is implemented at `MachineWisdomAI/saga-a2ui@d465ab394f801c8a6e800af738438b7dbf6133da` ([PR #242 and review](https://github.com/MachineWisdomAI/saga-a2ui/pull/242#pullrequestreview-5619017679), reviewed head `1fc4aa41c02cb9b757531bab373e3e914c9af90c`).
+
+Hapi's direct-registration lifecycle amendment, [`6ac09eb2e7790179fc7e01ec561462e795b90469`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6ac09eb2e7790179fc7e01ec561462e795b90469/blueprints/features/application_setup.blueprint.md), is implemented at `MachineWisdomAI/saga-a2ui@00e23b080493432250c9ae84c90385f5e5acc4f9` ([PR #215](https://github.com/MachineWisdomAI/saga-a2ui/pull/215)); [independent review](https://github.com/MachineWisdomAI/saga-a2ui/pull/215#pullrequestreview-5605193916) covered `072b3c2b1478cdbbb4c551a1fd2fc380e2e5cd6a`.
+
+The seven SDK packages are published at [`0.7.7-rc.1`](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1). Templates, the source CLI, demo and tour are development tooling, not npm packages or hosted services. Qualification of these outputs is local/installed evidence; it does not establish new OAuth, production or assistant-host acceptance. [Design and delivery history](#design-and-delivery-history) preserves the exact earlier scope and revisions.
+
+## Problem and current behavior
+
+A developer adding SAGA to a backend needs a working composition, not a second implementation of MCP transport or view lifecycle. SAGA keeps one maintained template for each qualified server target. The new-project command exports that source; the existing-backend guide extracts its snippets from the same files. A fix to a template therefore reaches both paths and is checked against one owner.
+
+The current [supported-pair table](../../scripts/saga.ts) offers `lit-mcp` with Node, Express, Fastify, Hono and Hapi. A pair combines one renderer/delivery stack with one server integration. The published React stack can be integrated in an existing application, but there is no React or Lynx `saga init` pair. The [installation guide](../../docs/public-install.md) describes registry packages, and the [setup guide](../../docs/getting-started.md) gives the commands for these source-based outputs.
+
+The server targets use the following integration owners. Adapter source availability alone does not qualify a new version; the templates' manifests and tests identify the exact supported recipes.
+
+| Server target | Integration |
+| --- | --- |
+| `node` | Official `@modelcontextprotocol/node` adapter |
+| `express` | Official `@modelcontextprotocol/express` adapter |
+| `hono` | Official `@modelcontextprotocol/hono` adapter |
+| `fastify` | Official `@modelcontextprotocol/fastify` adapter |
+| `hapi` | No official adapter; SAGA maintains the Hapi bridge in its template over the official Node/server SDK |
+
+SAGA owns the Hapi integration in `templates/lit-hapi`, whose bridge (`server/bridge.ts`) was adapted from an earlier proof of concept. That proof of concept is not part of this repository, is not a production deployment, and creates no external repository, maintainer, package or runtime prerequisite. SAGA maintains the bridge and qualifies its request identity handoff and transport protections independently. The template is the single maintained source for exported applications and generated attach recipes. Route authentication alone does not show that identity reaches SAGA’s handlers. Framework adapters, HTTP handling and authentication remain application or template integration; none of them is a SAGA package.
+
+## Proposed behavior
+
+**New project.** From a prepared source checkout, a developer runs:
+
+```sh
+npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ../my-saga-app
+```
+
+The command creates `../my-saga-app` from `templates/lit-node`. Its view imports the published stack API, `@saga-a2ui/lit-mcp-stack`, while the source exporter stamps the matched candidate package recipe into its output. The stack value selects renderer plus delivery; the server value selects the maintained transport integration. Hapi uses SAGA's maintained template bridge over the official Node/server SDK, with no separate Hapi npm package.
+
+Init creates a new directory only. It refuses to overwrite existing files, follow unsafe symlinks, install dependencies implicitly or run remote hooks, and it never modifies an existing application. It offers only pairs that CI has qualified. For any other pair it refuses and prints the list of supported pairs. The generated starter is clean: it contains no demo content, synthetic identity or media, and no test verifier.
+
+**Existing backend.** A developer with a running server follows the attach-SAGA recipe in the developer guides, which also cover Hapi. The recipe's authentication and server snippets are not hand-written copies. They are generated from the same maintained, tested template files that init uses, and CI qualifies those templates. Both paths therefore use qualified stack and server pairs and share glue, but not business fixtures.
+
+**Identity handoff.** In both paths the application authenticates the request and gives SAGA its verified identity through the verified-identity contract in the [reusable MCP connector](reusable_mcp_connector.blueprint.md). The application keeps authentication and domain authorization. For Hapi, the application’s authentication strategy snapshots and freezes the verified identity before any body wait. The bridge starts and owns the admission lifetime before authentication, which accesses it through `mcpRequestLifetime(request)`. Its factory receives `{ authInfo, lifetime, request }`; the official Node transport carries request-local auth to SAGA’s verified-identity hook. The bridge owns bounded parsing, deadlines and connection cleanup, scoped to its registered endpoint. Identity stays per-request. A protected operation that receives no verified identity fails closed; a declared public operation needs none and receives no fabricated identity.
+
+**Demo.** `saga demo --a2ui-stack lit-mcp --server node DIR` exports the one qualified Lit/MCP/Node demonstration. It builds from matched packed candidates and keeps the allowed, denied, expired and recovery scenarios in `demo/lit-node/fixtures`. The output is local-only and visibly uses synthetic identity. A separate static tour runs the real Lit/React notes presentations over a simulated server: it can explain an action, but cannot establish authentication or backend enforcement.
+
+![Shared maintained templates are qualified by CI; both new-directory init and the existing-backend recipe use qualified pairs and hand identity to the verified-identity hook; the one separate demo reuses the shared glue with its own fixtures.](../../diagrams/application-setup.svg)
+
+[Editable Mermaid](../../diagrams/application-setup.mmd) · [Editable Excalidraw](../../diagrams/application-setup.excalidraw) · [PNG](../../diagrams/application-setup.png)
+
+## Responsibilities and interfaces
+
+The maintained template owns integration code; `scripts/saga.ts` owns command selection, and the shared exporter owns safe directory creation and interruption. `scripts/guide-recipes.ts` generates the existing-backend recipes. The application supplies real authentication, domain authorization and domain data. Test identities belong to the qualification harness, and the clean starter's verifier refuses credentials until the application configures it.
+
+For a complete interaction, configure the Node starter's verifier and authorization policy, build its view and start its listener. A public status call needs no identity. A protected account call must carry verified request identity and pass the application's authorization; the returned headline reaches the view through `startA2uiView`. The application parses the result and updates its typed surface. Pressing the view's Clear control runs the bound local action, empties the application's note input and returns focus to that input without a server request. Closing the view retires that binding and the surface. The [action guide](../../docs/actions.md) follows the larger notes example through asynchronous prerequisites, authoritative server refusal and uncertain write outcomes.
+
+## Failure and recovery
+
+| Trigger | Observable result and recovery |
+| --- | --- |
+| The requested pair is not qualified | Init exits without writing, names the pair as unsupported and lists supported pairs. |
+| The target directory exists, or contains an unsafe symlink | Init refuses and writes nothing; the developer chooses a new path. |
+| Init is interrupted while copying | Only output that this run newly created is cleaned up; nothing that existed before is touched, and the developer reruns with a clean path. |
+| A request to a protected operation carries no authentication | The request fails closed; no handler runs. A declared public operation is unaffected. |
+| Two requests with different identities overlap | Each handler sees only its own request's identity. |
+| A template changes and a pair fails CI | The pair is withdrawn from the supported list until it passes again. |
+
+## Verification outcomes
+
+The maintained qualification runs each offered pair through public calls, allowed/denied/missing identity, concurrent immutable identities and bounded request cleanup. Hapi additionally verifies that authentication and its handler factory receive the same admitted lifetime. The CLI checks actual process interruption, refusal of existing or unsafe destinations and absence of implicit installation. Generated-recipe checks compare the guide with the templates. Built browser tests exercise each exported view; they do not stand in for assistant-host observation.
+
+## Implementation sequence
+
+The clean Node starter established the first pair, then Express, Fastify, Hono and Hapi added independently qualified templates. Explicit rows in `SUPPORTED_PAIRS` made them available to init; merely adding a template never exposes a command. The separate demo list still selects only Node. Guides and their snippets followed the same maintained sources, and the stack amendment removed consumer-owned protocol and handshake glue.
+
+A future pair follows that same boundary: qualify its complete exported server/view recipe before adding its supported-pair row. Do not infer a React starter from a published React stack, or a new demonstration from a newly qualified server. [Host publication tooling](host_publication.blueprint.md) remains optional and does not change the source exporter's behavior.
+
+## Open decisions
+
+The original demo choice and Hapi identity-handoff questions are resolved: the demo is Lit/MCP/Node, and Hapi's maintained bridge delivers the authenticated request and admitted lifetime to the factory. Further renderer/server pairs and adapter-version changes require their own qualification. No additional pair or deployment is approved by this documentation refresh.
+
+## References
+
+- [Reusable MCP connector](reusable_mcp_connector.blueprint.md), [package layout](../../packages/README.md), [host publication](host_publication.blueprint.md), [coding standards](../../CODING_STANDARDS.md).
+- Issues: [PACK2 #22](https://github.com/MachineWisdomAI/saga-a2ui/issues/22), [STARTER1 #23](https://github.com/MachineWisdomAI/saga-a2ui/issues/23), [DEMO1 #24](https://github.com/MachineWisdomAI/saga-a2ui/issues/24), [GUIDE1 #25](https://github.com/MachineWisdomAI/saga-a2ui/issues/25), [CLI1 #26](https://github.com/MachineWisdomAI/saga-a2ui/issues/26), [GUIDE2 #27](https://github.com/MachineWisdomAI/saga-a2ui/issues/27), [CLI2 #29](https://github.com/MachineWisdomAI/saga-a2ui/issues/29).
+- Upstream [typescript-sdk middleware packages](https://github.com/modelcontextprotocol/typescript-sdk/tree/main/packages/middleware), checked 2026-10-16.
+
+## Design and delivery history
+
+The dated records below preserve the design decisions, exact reviewed and landed revisions, and the limits of each observation. Statements about unpublished packages or work still pending describe that delivery, not the current package baseline. The current scope is summarized in [Status](#status).
+
+## TOUR1 static tour acceptance — 20 October 2026
+
+Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for the static-tour scope at `MachineWisdomAI/saga-a2ui@c15a21319fdfc6fe8b7a5098c4b15b89a515a4b4` ([PR187](https://github.com/MachineWisdomAI/saga-a2ui/pull/187)), reusing the approved action and lifetime contracts. Final head `748e721ebff656b27ba375864b66fdf80cd3b7e4` received [independent approval 5589581122](https://github.com/MachineWisdomAI/saga-a2ui/pull/187#pullrequestreview-5589581122); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473242147) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473250142) passed.
+
+| SDK32 criterion | Accepted behavior and boundary |
+| --- | --- |
+| Real presentations and prominent synthetic warning | Packed installed own-catalog Lit and React presentations reuse notes definitions, direct bindings and holds. “Synthetic example — server checks simulated” is first in DOM/accessibility reading order. Release-matched candidate identities are recorded; no public registry availability is claimed. |
+| Matching source and setup explanations | Source excerpts are located from the exact candidate revision and link to matching definitions and guides. Allowed/refused outcomes and action/binding relationships are explained. Archive digests and installed identities are retained in `tour.json`, including a dirty-source warning. |
+| Working preview choices and honest media scope | Only functioning Lit and React previews are offered. No Lynx, media, protected playback, real Patreon, universal React or named-host support is claimed. |
+| Accessible local operation and alignment | Keyboard/focus/navigation, 320px layout, system/chosen themes, names/headings/live regions and sandboxed frames are checked. Direct local-file opening works without an application backend, production credentials or a new service. Fixture parity compares the real notes server through MCP with supported simulated outcomes. |
+| Same non-playback action and instance behavior | Nine scenarios in both renderers use real notes presentations/runtime and local synthetic outcomes: allowed/refused/denied/missing identity, unknown writes, independent rows, obsolete completion and teardown. Source links explain the existing fluent action, asynchronous prerequisite, direct attachment and cleanup; no second action engine is introduced. |
+| Visible simulation limits | Synthetic checks do not authenticate or establish server enforcement; local cancellation does not prove remote rollback. Local stand-in transport, signal/timeout omissions and iframe styling/theme limits remain explicit. |
+
+Independent verification passed 18 focused headless checks, 32 new tour browser checks, two additional close-during-reopening/local-file checks, tour TypeScript and 16 LFS pointer checks. Final repairs integrated current main and synchronized versions/prose only; accepted tour source and evidence were unchanged and reused. Broader worker-reported totals are not substituted for these independent affected checks. Existing demo/runtime/host evidence remains separate; no named-host matrix, deployment or publication was performed for this static tour. SDK32 remains open until this final record is independently reviewed and merged.
+
+
 - Design: approved on 2026-10-16 at [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/application_setup.blueprint.md).
 - Partial amendment by the [view composition](view_composition.blueprint.md) design, implemented on `main`: the setup surface moves from a hand-composed view to the stack package. Approved revisions: [`49e39bd`](https://github.com/MachineWisdomAI/saga-a2ui/blob/49e39bdb434f5848ded9c042e425c5cefe735b31/blueprints/features/view_composition.blueprint.md) and the fourth revision [`7a78e7e`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md), approved by the human owner as one decision (PR #237).
   - **Blueprint `49e39bd` implemented at `MachineWisdomAI/saga-a2ui@18153793795d4ecfc12d2785d96422d2e397a3b2`** ([PR #234](https://github.com/MachineWisdomAI/saga-a2ui/pull/234)), integrating the stack packages `@saga-a2ui/lit-mcp-stack` and `@saga-a2ui/react-mcp-stack`, which `--a2ui-stack lit-mcp` now maps to ([`0ebee1c`](https://github.com/MachineWisdomAI/saga-a2ui/commit/0ebee1c090cba49574d2c1f5b21d3c21588b9982), PR #225), and the consumer migration, boundary scan, guides and records ([`db63421`](https://github.com/MachineWisdomAI/saga-a2ui/commit/db63421693adf16c1658063390411cf1c033b3e0), PR #226, [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/226#pullrequestreview-5610715041)). The five maintained templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`, `lit-hapi`) start their view with `startA2uiView`, carry no A2UI wire message, bridge import or pre-ready and `pagehide` sequencing, and the generated existing-backend recipes are regenerated from them. The Hapi records around this entry were written by their own authors and are left as they are; this entry adds the stack mapping and does not alter the Hapi bridge or its lifecycle.
@@ -114,56 +217,7 @@ Independent review reproduced and repaired both initial safety defects: a real O
 
 This record does not claim public registry installation, package publication, deployment, a CLI demo command or host-publication tooling. Hard process termination can leave partial output, and adjacent filesystem check/write races are documented limits rather than adversarial-filesystem immunity. SDK26 remains open until this record is reviewed and merged.
 
-## Problem and current behavior
-
-A TypeScript developer who already runs a backend, and an SDK implementer who maintains the starting points, need one way to get SAGA's MCP delivery into an application without copying an unverified example. At design approval no SAGA CLI, template, starter or guide existed. STARTER1 now supplies the first maintained template; PACK1/PACK2 supply installed candidate qualification. CLI1 now exports the first qualified pair safely; GUIDE1 now documents the accepted source and generated recipes; GUIDE2 is accepted below and later publication commands remain downstream, and candidate artifacts are not a public package release.
-
-The planned work is already ticketed. [STARTER1](https://github.com/MachineWisdomAI/saga-a2ui/issues/23) is the clean starter, [DEMO1](https://github.com/MachineWisdomAI/saga-a2ui/issues/24) the demo, [GUIDE1](https://github.com/MachineWisdomAI/saga-a2ui/issues/25) and [GUIDE2](https://github.com/MachineWisdomAI/saga-a2ui/issues/27) the developer guides with their attach-to-an-existing-backend recipes, and [CLI1](https://github.com/MachineWisdomAI/saga-a2ui/issues/26) and [CLI2](https://github.com/MachineWisdomAI/saga-a2ui/issues/29) the CLI. This feature covers the scope of those four roles (starter, demo, developer guide, CLI) and adds the decisions below. The design is approved; implementation follows the accepted ticket breakdown and separate dispatch authority.
-
-The server side depends on official `@modelcontextprotocol` middleware. Package choices were checked against the upstream typescript-sdk `packages/middleware` source on 2026-10-16 and are compared below. Available source is not proof that an adapter installs or works with SAGA. The [reusable MCP connector](reusable_mcp_connector.blueprint.md) already selects Node integration 2.1.1, together with MCP Apps 2.0.3, split MCP SDK 2.3.1 and Zod 4.2+, and STARTER1 qualified the Node pair; the additional framework records above pin the tested Express, Fastify and Hono recipes. Hapi remains open. The approved design itself makes no broader version compatibility promise.
-
-| Server target | Integration |
-| --- | --- |
-| `node` | Official `@modelcontextprotocol/node` adapter |
-| `express` | Official `@modelcontextprotocol/express` adapter |
-| `hono` | Official `@modelcontextprotocol/hono` adapter |
-| `fastify` | Official `@modelcontextprotocol/fastify` adapter |
-| `hapi` | No official adapter; SAGA maintains the Hapi bridge in its template over the official Node/server SDK |
-
-SAGA owns the Hapi integration in `templates/lit-hapi`, whose bridge (`server/bridge.ts`) was adapted from an earlier proof of concept. That proof of concept is not part of this repository, is not a production deployment, and creates no external repository, maintainer, package or runtime prerequisite. SAGA maintains the bridge and qualifies its request identity handoff and transport protections independently. The template is the single maintained source for exported applications and generated attach recipes. Route authentication alone does not show that identity reaches SAGA’s handlers. Framework adapters, HTTP handling and authentication remain application or template integration; none of them is a SAGA package.
-
-## Proposed behavior
-
-**New project.** A developer runs `saga init --a2ui-stack <renderer>-mcp --server <target>`, for example `lynx-mcp` with `hono`. The stack value names a renderer plus MCP delivery, never a combined word such as `lymcp`. A stack is a template choice, not an npm package; the packages remain the flat `@saga-a2ui/*` names. Required server targets are the five in the table above. Hapi is required scope, not postponed because it lacks an official adapter. It uses the SAGA-maintained bridge as template source composing the SDK-owned transport, without inventing a Hapi npm package; this does not decide any later packaging of the bridge.
-
-Init creates a new directory only. It refuses to overwrite existing files, follow unsafe symlinks, install dependencies implicitly or run remote hooks, and it never modifies an existing application. It offers only pairs that CI has qualified. For any other pair it refuses and prints the list of supported pairs. The generated starter is clean: it contains no demo content, synthetic identity or media, and no test verifier.
-
-**Existing backend.** A developer with a running server follows the attach-SAGA recipe in the developer guides, which also cover Hapi. The recipe's authentication and server snippets are not hand-written copies. They are generated from the same maintained, tested template files that init uses, and CI qualifies those templates. Both paths therefore use qualified stack and server pairs and share glue, but not business fixtures.
-
-**Identity handoff.** In both paths the application authenticates the request and gives SAGA its verified identity through the verified-identity hook proposed in the [reusable MCP connector](reusable_mcp_connector.blueprint.md). The application keeps authentication and domain authorization. For Hapi, the application’s authentication strategy snapshots and freezes the verified identity before any body wait. The bridge starts and owns the admission lifetime before authentication, which accesses it through `mcpRequestLifetime(request)`. Its factory receives `{ authInfo, lifetime, request }`; the official Node transport carries request-local auth to SAGA’s verified-identity hook. The bridge owns bounded parsing, deadlines and connection cleanup, scoped to its registered endpoint. Identity stays per-request. A protected operation that receives no verified identity fails closed; a declared public operation needs none and receives no fabricated identity.
-
-**Demo.** One qualified stack and server pair serves as the demo. It matches the standalone release download and keeps the full synthetic allowed, denied, expired and recovery semantics. There is no demo for every pair. The demo reuses the shared glue but keeps its own fixtures, separate from the starter, and the choice of pair is open (below).
-
-![Shared maintained templates are qualified by CI; both new-directory init and the existing-backend recipe use qualified pairs and hand identity to the verified-identity hook; the one separate demo reuses the shared glue with its own fixtures.](../../diagrams/application-setup.svg)
-
-[Editable Mermaid](../../diagrams/application-setup.mmd) · [Editable Excalidraw](../../diagrams/application-setup.excalidraw) · [PNG](../../diagrams/application-setup.png)
-
-## Responsibilities and interfaces
-
-The shared template files are owned by the SDK, tested in CI, and are the single source for init output and guide snippets. The CLI tickets own the flags, the supported-pair list and the safety refusals. The starter ticket owns the clean starter and the demo ticket owns the demo. The guide tickets own the attach recipes. The application owns authentication, domain authorization and its business fixtures. No new runtime API is introduced here; the identity hook is the connector's existing proposal. The CI harness may supply a test identity from outside, but test verifiers are not placed in production starter output.
-
-## Failure and recovery
-
-| Trigger | Observable result and recovery |
-| --- | --- |
-| The requested pair is not qualified | Init exits without writing, names the pair as unsupported and lists supported pairs. |
-| The target directory exists, or contains an unsafe symlink | Init refuses and writes nothing; the developer chooses a new path. |
-| Init is interrupted while copying | Only output that this run newly created is cleaned up; nothing that existed before is touched, and the developer reruns with a clean path. |
-| A request to a protected operation carries no authentication | The request fails closed; no handler runs. A declared public operation is unaffected. |
-| Two requests with different identities overlap | Each handler sees only its own request's identity. |
-| A template changes and a pair fails CI | The pair is withdrawn from the supported list until it passes again. |
-
-## Verification outcomes
+### Original starter and demo acceptance
 
 ### STARTER1 first-pair acceptance
 
@@ -202,34 +256,3 @@ The exact repaired installed playback HTML remains CARD2's accepted `7ea1d8d0d69
 ### Remaining broader setup verification
 
 Each additional offered stack/server pair must still pass allowed/denied/missing-auth/public/concurrent-identity qualification; Hapi additionally proves authenticated identity reaches its hook. CLI1 and CLI2 now qualify overwrite, unsafe-symlink, implicit-install, remote-hook, unsupported-pair and interrupted-copy behavior through their actual command paths as recorded above. GUIDE1 validates its current template snippets; framework offered-pair registration is accepted below, and GUIDE2 is accepted below. DEMO1 has qualified the scoped synthetic allowed/denied/expired/recovery download above. These scopes remain open independently of STARTER1.
-
-## Implementation sequence
-
-Delivery keeps the existing dependency edges. Both the starter and the demo wait on PACK2 ([#22](https://github.com/MachineWisdomAI/saga-a2ui/issues/22)), the package release-readiness ticket. The developer guide GUIDE1 waits on the starter and the demo, and GUIDE2 waits on GUIDE1. The first CLI ticket waits on the starter, and the second CLI ticket waits on the first CLI ticket and the demo. The first supported pair needs only itself to be qualified; the other combinations are not a precondition, and Ansari adoption is not gated on React, Lynx or a complete matrix. The public source and npm gate, required host runs, deferred final signoff, ownership and license checks, and optional publish tooling (see [host publication](host_publication.blueprint.md)) are unchanged.
-
-## Open decisions
-
-1. **Which qualified pair is the demo?** Resolved by STARTER1 qualification and DEMO1: Lit/MCP on Node2.1.1. No other server pair is implied.
-2. **How is framework-authenticated identity wired through the Hapi bridge callback into the identity hook?** The bridge's callback does not yet receive identity; the design settles it with the Hapi qualification.
-3. **Which adapter versions are qualified?** The framework acceptance record above resolves Node, Express, Fastify and Hono for their scoped Lit/MCP pairs and exact tested recipes. Hapi remains open under #65, including verified identity handoff. No untested version or additional pair inherits this qualification.
-
-## References
-
-- [Reusable MCP connector](reusable_mcp_connector.blueprint.md), [package layout](../../packages/README.md), [host publication](host_publication.blueprint.md), [coding standards](../../CODING_STANDARDS.md).
-- Issues: [PACK2 #22](https://github.com/MachineWisdomAI/saga-a2ui/issues/22), [STARTER1 #23](https://github.com/MachineWisdomAI/saga-a2ui/issues/23), [DEMO1 #24](https://github.com/MachineWisdomAI/saga-a2ui/issues/24), [GUIDE1 #25](https://github.com/MachineWisdomAI/saga-a2ui/issues/25), [CLI1 #26](https://github.com/MachineWisdomAI/saga-a2ui/issues/26), [GUIDE2 #27](https://github.com/MachineWisdomAI/saga-a2ui/issues/27), [CLI2 #29](https://github.com/MachineWisdomAI/saga-a2ui/issues/29).
-- Upstream [typescript-sdk middleware packages](https://github.com/modelcontextprotocol/typescript-sdk/tree/main/packages/middleware), checked 2026-10-16.
-
-## TOUR1 static tour acceptance — 20 October 2026
-
-Blueprint `6785ae1d8205a45e668f478ea303fbdd7e474663` implemented for the static-tour scope at `MachineWisdomAI/saga-a2ui@c15a21319fdfc6fe8b7a5098c4b15b89a515a4b4` ([PR187](https://github.com/MachineWisdomAI/saga-a2ui/pull/187)), reusing the approved action and lifetime contracts. Final head `748e721ebff656b27ba375864b66fdf80cd3b7e4` received [independent approval 5589581122](https://github.com/MachineWisdomAI/saga-a2ui/pull/187#pullrequestreview-5589581122); [application CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473242147) and [version policy](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/39473250142) passed.
-
-| SDK32 criterion | Accepted behavior and boundary |
-| --- | --- |
-| Real presentations and prominent synthetic warning | Packed installed own-catalog Lit and React presentations reuse notes definitions, direct bindings and holds. “Synthetic example — server checks simulated” is first in DOM/accessibility reading order. Release-matched candidate identities are recorded; no public registry availability is claimed. |
-| Matching source and setup explanations | Source excerpts are located from the exact candidate revision and link to matching definitions and guides. Allowed/refused outcomes and action/binding relationships are explained. Archive digests and installed identities are retained in `tour.json`, including a dirty-source warning. |
-| Working preview choices and honest media scope | Only functioning Lit and React previews are offered. No Lynx, media, protected playback, real Patreon, universal React or named-host support is claimed. |
-| Accessible local operation and alignment | Keyboard/focus/navigation, 320px layout, system/chosen themes, names/headings/live regions and sandboxed frames are checked. Direct local-file opening works without an application backend, production credentials or a new service. Fixture parity compares the real notes server through MCP with supported simulated outcomes. |
-| Same non-playback action and instance behavior | Nine scenarios in both renderers use real notes presentations/runtime and local synthetic outcomes: allowed/refused/denied/missing identity, unknown writes, independent rows, obsolete completion and teardown. Source links explain the existing fluent action, asynchronous prerequisite, direct attachment and cleanup; no second action engine is introduced. |
-| Visible simulation limits | Synthetic checks do not authenticate or establish server enforcement; local cancellation does not prove remote rollback. Local stand-in transport, signal/timeout omissions and iframe styling/theme limits remain explicit. |
-
-Independent verification passed 18 focused headless checks, 32 new tour browser checks, two additional close-during-reopening/local-file checks, tour TypeScript and 16 LFS pointer checks. Final repairs integrated current main and synchronized versions/prose only; accepted tour source and evidence were unchanged and reused. Broader worker-reported totals are not substituted for these independent affected checks. Existing demo/runtime/host evidence remains separate; no named-host matrix, deployment or publication was performed for this static tour. SDK32 remains open until this final record is independently reviewed and merged.
