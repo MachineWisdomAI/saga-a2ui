@@ -12,7 +12,9 @@ status: draft
 - Design: draft awaiting human approval.
 - Implementation: not started.
 
-<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination module directory). On approval, update status above and pin the reviewed contract revision. Record Blueprint <design SHA> implemented at <code repository>@<landed code SHA> for each implementation, with covered scope, review/verification links and gaps. Preserve earlier mappings when adding a successor. -->
+<!-- Maintain this section using ../README.md#lifecycle-and-revision-records (../README.md from the destination module directory). On approval, update status above and pin the reviewed contract revision. In Status or its linked lifecycle companion, record Blueprint <design SHA> implemented at <code repository>@<landed code SHA> for each implementation, with covered scope, review/verification links and gaps. Preserve earlier mappings when adding a successor. -->
+
+<!-- Keep Status a brief statement of what the reader can rely on. Link a lifecycle companion when detailed revision or acceptance history needs its own record; preserve exact design, review and landed implementation SHA roles and remaining acceptance limits there. Keep the substantive contract, rationale, examples and consequential behavior in this Blueprint. -->
 
 <!-- Copy to modules/<module_name>.blueprint.md. Replace prompts with the module contract. -->
 
