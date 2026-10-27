@@ -38,7 +38,7 @@ Your application chooses which links may open and which image hosts are allowed.
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
-From a source checkout, with Node 22.12.0 or newer and npm:
+From a source checkout, with Node 22.23.3 or newer and npm:
 
 ```sh
 npm ci
@@ -54,7 +54,7 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 ## Build your application
 
-Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates; the React integration provides action controls and FaithfulCard.
+Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates. Both Lit and React stacks provide typed surfaces, action controls and the optional FaithfulCard; React integrates into an existing application rather than a generated starter.
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 

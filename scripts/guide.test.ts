@@ -272,7 +272,7 @@ describe('the commands the guide tells a reader to type', () => {
     expect(commandsOf(guide, 'repository').length).toBeGreaterThan(0);
   });
 
-  it('run in a created project only scripts that every qualified starter has, in the order `saga init` prints them', async () => {
+  it('run in a created project only scripts that every qualified starter has, after installing its matched candidate dependencies', async () => {
     const shown = commandsOf(guide, 'project');
     expect(shown.length).toBeGreaterThan(0);
     for (const name of QUALIFIED_STARTERS) {
@@ -307,7 +307,9 @@ describe('the commands the guide tells a reader to type', () => {
       .filter((line) => /^ {2}(cd |npm )/.test(line))
       .map((line) => line.trim());
     expect(shown.filter((line) => line !== 'npm run typecheck')).toEqual(
-      printed.map((line) => (line.startsWith('cd ') ? 'cd my-app' : line)),
+      printed.filter(
+        (line) => line !== 'npm install' && !line.startsWith('cd '),
+      ),
     );
   });
 
@@ -443,7 +445,7 @@ describe('what the guide must explain', () => {
       'Identity and the evidence behind it',
       'Actions',
       'What is implemented and what is not',
-      'Friction recorded while writing this guide',
+      'Troubleshooting setup',
     ]) {
       expect(headings, required).toContain(required);
     }
@@ -593,6 +595,8 @@ describe('what the guide must explain', () => {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
     expect(guide).toContain('seven-package release set');
+    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.7.7-rc.1');
+    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.7.7-rc.1');
     expect(guide).toContain('public-install.md');
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(

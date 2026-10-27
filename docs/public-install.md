@@ -23,7 +23,7 @@ npm view @saga-a2ui/lit-mcp-stack dist-tags --json
 npm view @saga-a2ui/react-mcp-stack dist-tags --json
 ```
 
-Release candidates use `next`. Replace `VERSION` below with the exact published version you selected; confirm it with `npm view @saga-a2ui/lit-mcp-stack@VERSION version` (or the React stack). A version in a source manifest, a Git tag or a successful candidate build does not establish npm availability. The release set includes both renderers; a private candidate artifact is not a publication restriction on its source package.
+All seven packages are available at `0.7.7-rc.1`, verified on 27 October 2026, and the recipes below pin that release. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records its installation and build qualification. `next` currently selects this version for every package; `latest` differs across the set, so use an exact version. For another release, confirm that version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
 
 ## Install one stack plus framework peers
 
@@ -40,13 +40,13 @@ At your application's root, preserve existing overrides and add:
 For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@VERSION lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.7.7-rc.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@VERSION react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.7.7-rc.1 react@19.3.1 react-dom@19.3.1
 ```
 
 Commit the application lockfile. Each stack declares its SAGA siblings as regular dependencies with exact pins, so the application does not declare those packages separately. Use the stack root for an application-owned catalog and `/faithful-card` for a card application; `/server` is composed separately and stays out of browser bundles. A stack's server entry requires the full application's framework peers.
@@ -61,7 +61,7 @@ Applications that intentionally compose lower-level SDK APIs may install the pac
 
 [Getting started](getting-started.md) runs the synthetic demo, creates a Lit starter or attaches SAGA to an existing backend. Those source-tooling workflows build matched candidate tarballs from a checkout so contributors can test unpublished changes. Candidates have versions such as `0.0.0-candidate.g<12 hex>` and are distinct from public npm releases; see [candidate installation, updates and rollback](candidate-update-and-rollback.md). The source CLI, root workspace and example applications are not npm packages.
 
-SAGA views and actions run in ChatGPT, Claude and Alexa+; see [host compatibility](host-compatibility.md). Installing a package does not deploy an application or establish acceptance in an assistant host.
+Continue with [Getting started](getting-started.md#compose-a-view-with-a-stack) to connect a view, then the [action guide](actions.md) to trace a complete interaction. [Host compatibility](host-compatibility.md) records the flows observed in ChatGPT, Claude and Alexa+. Installing a package does not deploy an application or establish acceptance in an assistant host.
 
 ## Maintainer publication
 
