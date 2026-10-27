@@ -6,7 +6,7 @@ Read exact prepared versions from the reviewed manifests and generated `release.
 
 ## Build the exact artifacts
 
-From the reviewed commit, on Node >=22.12.0:
+From the reviewed commit, on Node >=22.23.3 (the current source-tooling minimum):
 
 ```sh
 npm ci
@@ -30,6 +30,18 @@ and an invalid registry, even after source version enrollment. Candidate and
 local-CI rehearsal evidence is not evidence about release bytes (see
 [candidate installation, updates and rollback](candidate-update-and-rollback.md)).
 
+```mermaid
+flowchart TD
+    S["Reviewed source commit"] --> C["candidate:pack: commit-derived private copies"]
+    C --> Q["Installed behavior and update/rollback rehearsal"]
+    S --> R["release:pack: enrolled release versions"]
+    R --> V["Verify exact release tarballs and consumer installs"]
+    V --> A["Owner-authorized publication of approved bytes"]
+    A --> N["Anonymous exact-version registry verification"]
+```
+
+The two packing paths start from source but produce different package identities and bytes. Candidate behavior checks support the release decision; they do not replace validation of the release tarballs or the anonymous registry install after publication.
+
 ## Release sequence
 
 Each step is a separate, reviewed change or an owner action. Steps 1 to 3 are
@@ -38,7 +50,7 @@ and stable promotion (step 6) is held and never implied by an earlier step.
 
 1. Changes land on `main` through the ordinary [version policy](version-policy.md),
    so every unit shares one major.minor and the current prerelease advances
-   with product changes. Documentation-only changes leave the versions alone.
+   with product changes. Repository documentation alone leaves the versions alone; exported template files follow the explicit release-path exception in the version policy.
 2. Qualify the exact head as a candidate: from that commit run `candidate:pack`,
    `candidate:verify`, `candidate:rehearse` and the packed-consumer suites,
    including `test:pnpm-react` (see [candidate installation, updates and
@@ -72,10 +84,9 @@ Zod **3.25.76** context; do not add direct application A2UI dependencies or forc
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
 
-The stack pins exact siblings that are not on the registry yet, so a local
-install supplies them from the tarballs through overrides. Keep two consumers
+Qualify all exact sibling bytes locally, whether or not their version numbers already exist on the registry. A local install supplies them from the reviewed tarballs through overrides so a registry copy cannot substitute for the artifact under review. Keep the three consumer checks
 apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
-neither stands in for the other:
+none stands in for another:
 
 - **Lower-level consumer** (availability of the seven packages). It names every
   SAGA tarball as a direct dependency and as an override, plus React, React DOM,
@@ -84,7 +95,7 @@ neither stands in for the other:
   Lit). Its direct dependencies are only the stack and its framework peers
   (`react`, `react-dom`; `lit`), and its typed fixture imports every stack entry
   and nothing else: no upstream renderer or schema package, no Zod, no other
-  SAGA package. The unpublished siblings are supplied by overrides only. Direct
+  SAGA package. The sibling tarballs are supplied by overrides only. Direct
   declarations would mask a dependency or an export the stack failed to
   provide, so only this consumer shows that the recipe resolves. It also checks
   the exact sibling resolutions, the stack's full peer requirements and one
