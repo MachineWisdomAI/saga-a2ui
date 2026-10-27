@@ -152,14 +152,16 @@ publisher submits by hand in the host's documented flow
 [Claude](https://claude.com/docs/connectors/building/submission), portal
 <https://claude.ai/directory/manage>).
 
-```sh
-saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
-saga publish handoff status              --handoff DIR [--prepared ./publication-now]
-saga publish handoff attempt             --handoff DIR --prepared ./publication-now
-saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
-saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
-saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
-saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
+
+```text
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
+npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
+npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
