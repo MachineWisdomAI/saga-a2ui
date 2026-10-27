@@ -86,7 +86,7 @@ The implementation is qualified against the following outcomes; actual web insta
 
 CLI3 established the shared release input, discovery and ChatGPT package; CLI4 added Claude connector materials; CLI5 added the local hash-chained handoff record. Their checks preserve init/demo's output-ownership and interruption safety. They are source tooling, not a release of another SDK package.
 
-Publication tooling is optional, and neither it nor external directory approval is a new prerequisite for the [Ansari migration](ansari_adoption.blueprint.md). An owner can prepare a listing through the platform's native flow. The migration's public SDK/npm prerequisite and the destination maintainer's merge authority remain separate.
+Publication tooling is optional. An owner can prepare a listing through the platform's native flow. Application migrations define their own package-installation and destination-merge prerequisites; neither this tooling nor external directory approval adds a migration prerequisite.
 
 ## Open decisions
 
