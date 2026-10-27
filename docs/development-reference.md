@@ -1,14 +1,10 @@
 # Development reference
 
-Build, test and implementation notes accumulated as the SDK evolved. Dated slices describe their own evidence and limitations; use [Getting started](getting-started.md) for the current setup path and the [project overview](../README.md) for current scope.
+Use this reference to develop and verify the SDK workspace. For an application that consumes published packages, start with [Getting started](getting-started.md) and [public installation](public-install.md). Historical implementation sections retain the evidence and limitations of their own delivery; they are not new installation or host-acceptance claims.
 
-New here: [Getting started](../docs/getting-started.md) takes you to the demonstration, a new project from a qualified starter, or an attachment to an existing backend, with every command checked against the repository. [Public installation](public-install.md) covers Lit and React registry recipes; local qualification and Lit starters use separately built candidate packages. To change a component and trace allowed, denied and unauthenticated requests through an action, read [Change a component and trace allowed and denied requests](actions.md).
+Local qualification and Lit starters use separately built candidate packages. [The action guide](actions.md) traces a component change and allowed, denied and unauthenticated requests. [Release preparation](release-packages.md) owns the separate public artifact and publication workflow.
 
 React applications: follow [the React consumer dependency guide](../docs/react-consumers.md) for the public A2UI imports, separate Zod majors and required npm/pnpm Markdown pin.
-
-Safe AGentic Apps — by [Machine Wisdom](https://machine-wisdom.ai).
-
-TypeScript middleware for connecting existing services to assistant experiences, with renderer choice, explicit data-sharing rules, and server authorization hooks.
 
 ## Status
 
@@ -41,7 +37,7 @@ The optional FaithfulCard component displays supplied Markdown without rewriting
 
 ## Development
 
-This is an npm workspace skeleton; the root is private and is never published. Build and test commands for the local Lit application are under Local development below. See [contributing](../CONTRIBUTING.md) and [package layout](../packages/README.md).
+The npm workspace root is private and is never published. The seven SDK packages have their own manifests and public release recipe; applications, templates, examples and the source CLI are development and qualification consumers. See [contributing](../CONTRIBUTING.md) and [package layout](../packages/README.md).
 
 ## License
 
@@ -62,6 +58,12 @@ Requires Node 22.23.3 or newer (`.nvmrc` pins 22.23.3; run `nvm use`) and npm. N
     npm run verify                      # guards, typecheck, build, tests, LFS, and version enrollment
 
 `test:browser` expects `npm run build` to have run first. The browser suites exercise built views, actions, content policy, starters and lifecycle behavior in local host fixtures; they do not establish acceptance in an assistant host. The full CI route installs Chromium, then runs `npm run verify`. Verify includes typecheck, build, the headless tests and the browser check, so CI does not run that suite a second time.
+
+### Choose the affected check
+
+For prose, source quotes, guide commands or links, run `npm run test:docs`. If a qualified template changes an existing-backend recipe, run `npm run guide:recipes` and include the regenerated `docs/attach-to-existing-backend.md`; do not edit that generated file by hand. The generator reads the maintained templates through `scripts/qualified-starters.ts`. The document checks also scan consumer code fences and verify the quoted action-guide source.
+
+A runtime change needs its affected unit and browser checks and the repository’s required CI route. `npm run verify` is the full local application suite; `test:docs` does not replace it for changes that need runtime qualification. [CI checks and release qualification](#ci-checks-and-release-qualification) describes how paths select the required route. Neither route alone proves installation in an assistant host.
 
 ### Formatting and hooks
 
@@ -265,7 +267,7 @@ Test discovery asks Vitest for its file list (`vitest list --filesOnly` against 
 
 Passing verify does not guarantee coverage, host compatibility, or architecture.
 
-The only application is `apps/lit-host` (private, not published). It deliberately declares no `version`, so it introduces no owned version to enroll; add one only through the repository's version-policy bootstrap when that tooling exists. The workspace root stays private; `packages/core`, `packages/lit` and `packages/mcp` are the SDK packages so far (private, unreleased, no version).
+The workspace root and `apps/lit-host` are private development packages, not npm release artifacts. All seven SDK packages are versioned and enrolled; [version policy](version-policy.md) owns enrollment and bump rules. Documentation, tests, CI and development checks alone need no package bump. CI routing is a separate decision, so a version-exempt change can still require full application qualification.
 
 ### Fixture rendering (A2UI v0.9)
 
