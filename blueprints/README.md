@@ -22,7 +22,7 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 
 | If you are working on… | Start here |
 | --- | --- |
-| The Ansari FaithfulCard integration | [Ansari adoption](features/ansari_adoption.blueprint.md) and [content safety](features/content_safety_levels.blueprint.md) |
+| FaithfulCard content policies | [Content safety](features/content_safety_levels.blueprint.md) |
 | Server integration and request identity | [Reusable MCP connector](features/reusable_mcp_connector.blueprint.md) and [request/view lifetimes](features/request_view_lifetimes.blueprint.md) |
 | Application-owned outcome feedback and labels | [Application-owned feedback](features/application_owned_feedback.blueprint.md) (draft) |
 | Stack packages, typed surfaces and the card application | [View composition](features/view_composition.blueprint.md) (its Status lists every landed revision) |
