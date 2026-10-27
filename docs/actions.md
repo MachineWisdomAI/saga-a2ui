@@ -479,7 +479,7 @@ Claim only what the evidence supports. The runnable tutorial stays on the qualif
 | **React** | Direct action attachment: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Installed parity: no React starter, template, CLI pair or authenticated recipe |
 | **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
 
-On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react/actions`. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
+On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react-mcp-stack`. The renderer package owns that implementation and the stack re-exports it. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
 
 ```ts examples/pack1-consumer/src/notes-react-view.tsx
 attach: (view) => {
@@ -499,7 +499,7 @@ attach: (view) => {
 },
 ```
 
-For React surfaces and catalogs use `@saga-a2ui/react/a2ui`, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
+A stack application imports its catalog, layout and action helpers from `@saga-a2ui/react-mcp-stack`. A deliberately lower-level integration uses `@saga-a2ui/react/a2ui` for surfaces and catalogs, never `@a2ui/react` directly ([React consumer dependencies](react-consumers.md)). Any later React pair keeps its own renderer qualification.
 
 The five server targets—`node`, `express`, `fastify`, `hono` and `hapi`—are qualified with `lit-mcp`, and `saga init` offers all five. Everything in [the trace above](#trace-one-press-allowed-and-denied) is the same for each qualified server, because the identity handoff and the protected operation are the same two snippets in each recipe ([which pairs have a recipe](attach-to-existing-backend.md#which-pairs-have-a-recipe)).
 

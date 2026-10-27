@@ -69,7 +69,7 @@ Package names are flat under `@saga-a2ui`. There are no aggregate packages: no `
 | Components | `@saga-a2ui/components` | Implemented, optional. The passive FaithfulCard slice. Both stacks install it transitively; an own-catalog application need not import it, and its main-entry browser bundle excludes it. |
 | Tooling | none | The source CLI implements `saga init`, `saga demo` and optional `saga publish` preparation/handoff commands. The `@saga-a2ui/publish` package does not exist; the [publication tooling](../scripts/publish/README.md) runs from this checkout and does not submit or publish an application. |
 
-Renderer packages keep independent maturity and peers. The starter installs the Lit and MCP stack and the packages it depends on (`core`, `lit`, `components` and `mcp`), imports its view from `@saga-a2ui/lit-mcp-stack`, and keeps `@saga-a2ui/mcp/server` for its server.
+Renderer packages keep independent maturity and peers. The maintained source starter declares the Lit stack and its matching SDK packages explicitly, imports its view from `@saga-a2ui/lit-mcp-stack`, and uses the lower-level `@saga-a2ui/mcp/server` registration API on its server. This is the starter's existing source composition. For a new stack application, use the stack exports described above; you do not need to copy those direct SDK dependencies.
 
 ## Component, definition, template and instance
 
@@ -295,7 +295,7 @@ A renderer is qualified by running its own lifecycle, not by declaring that it c
 <!-- react -->
 ### React applications
 
-Use SAGA's React A2UI entry point for public surface and catalog APIs. Do not add direct dependencies on `@a2ui/react` or `@a2ui/web_core`, or import their catalog or surface APIs yourself:
+For MCP delivery, use `@saga-a2ui/react-mcp-stack` and its exports, as in the [complete React application](react-consumers.md#follow-a-complete-react-application). If you deliberately compose below the stack, use SAGA's React A2UI entry point for public surface and catalog APIs. Do not add direct dependencies on `@a2ui/react` or `@a2ui/web_core`, or import their catalog or surface APIs yourself:
 
 ```ts
 import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react/a2ui';
