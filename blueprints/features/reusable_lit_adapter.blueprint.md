@@ -10,6 +10,106 @@ date_added: 2026-10-15
 
 ## Status
 
+**Approved and implemented for the Lit adapter and its qualified consumers.** The original design is [`6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_lit_adapter.blueprint.md), with the approved [request/view lifetime amendment](https://github.com/MachineWisdomAI/saga-a2ui/blob/7836c80345cec2aeb474d2eb026a1b9455819ef2/blueprints/features/reusable_lit_adapter.blueprint.md). The later [view-composition design](view_composition.blueprint.md#status), revision `7a78e7eae99285174a11c62d43c1f0035658ec96`, replaces consumer-created sessions and raw ingestion with a typed layout, a default SDK session and in-place data updates.
+
+That amendment is implemented at `MachineWisdomAI/saga-a2ui@6b2aabf8a73e47347f70ade99d7584227c6e943b` ([PR #238 and independent review](https://github.com/MachineWisdomAI/saga-a2ui/pull/238#pullrequestreview-5617059507)); its reviewed head is `cfdf45a1cf048d2034b6d445d13fbb39800b41fe`. Lit and its MCP stack are published in the seven-package [`0.7.7-rc.1` release](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1), alongside the React renderer and stack. Both implement the [shared view-composition surface](view_composition.blueprint.md); this Blueprint owns Lit's integration details. Package publication does not extend the bounded ChatGPT/Claude observations to every consumer. [Earlier design-to-code records](#design-and-delivery-history) retain the installed-consumer, playback, card and rollback evidence and their limits.
+
+## Problem and current behavior
+
+A Lit application needs to render validated A2UI data with its own components while keeping focus, action bindings and cleanup correct. Before extraction, the demonstration owned its decoder, message visitor and mutable processor session beside its concrete elements. Core now owns the protocol implementation, and Lit owns the surface's mount and subscription lifetime. The application's catalog, note or episode schema, and business actions remain application code.
+
+The distinction matters when a result changes a title. Updating the title should preserve the mounted Archive button and its pending state. Replacing the selected note is a different event: the application and action subject reader must prevent an old operation from writing into the new note's presentation. Rendering validates and displays values; it does not choose a domain identity or authorize a server operation.
+
+## Proposed behavior
+
+The approved design is implemented through two levels. An MCP application normally calls `startA2uiView` from `@saga-a2ui/lit-mcp-stack`; that stack supplies delivery, readiness ordering and teardown. The lower-level Lit adapter, `createA2uiAppElement({catalog, layout, actions?})`, owns one typed surface. It creates its default core session from the supplied catalog and layout on every connection. An advanced session factory is optional; an ordinary consumer supplies no decoder or wire messages.
+
+For example, the [Node starter](../../templates/lit-node/src/view.ts) supplies its catalog and headline layout to `startA2uiView`. When a delivered status result passes the application's result reader, the application calls `surface.update({headline: ...})`. The layout validates the value, and the adapter applies it to the existing surface. Its Clear control keeps focus and the binding attached to that rendered instance. Calling `view.dispose()` ends the presentation and connection. A later start creates fresh owned state.
+
+Two failure paths deliberately differ. If the initial layout cannot open—perhaps its root component is absent from the catalog—the adapter renders a safe fallback. If `updateData(data)` rejects invalid data, disconnected input or a disposed session, it returns `{ok: false, failure: {kind, message}}` and changes nothing. The application must interpret that refusal; it must not present an old answer as the new successful result. The card-app stack has a separate content contract: it clears the previous card when its result reader or `present` rejects.
+
+![The application supplies a catalog, layout and result reader; the stack orders MCP delivery and Lit updates the typed surface. Rejected updates preserve the prior surface, while teardown retires bindings and disposes the session.](../../diagrams/reusable-lit-adapter.svg)
+
+[Editable Mermaid](../../diagrams/reusable-lit-adapter.mmd) · [Editable Excalidraw](../../diagrams/reusable-lit-adapter.excalidraw) · [PNG](../../diagrams/reusable-lit-adapter.png)
+
+The diagram separates domain interpretation from protocol work. An MCP tool result reaches the application's reader first; the SDK constructs and validates the surface update. Closing the view retires action bindings before releasing the session and connection, so a late result cannot revive a disconnected surface.
+
+## Responsibilities and interfaces
+
+Core owns renderer-independent contracts and processing. A2UI knowledge stays under a named protocol/version module. Its decoder treats input as `unknown`, uses upstream schemas, preserves supported fields and returns typed cases or an explicit failure. Its visitor handles every supported case; renderer code does not inspect raw wire tags again. Mutable session state remains separate from immutable validated values.
+
+Lit owns mounting, binding integration, events, accessibility and disposal. Its interface accepts the application's catalog and explicit integrations rather than discovering them through a registry. The application chooses its renderer, host and trusted content policy independently. Upstream custom-element/catalog registration stays at the Lit integration seam; importing SAGA does not configure an application globally.
+
+Within one `CustomElementRegistry`, catalog registration may reuse an existing definition only when both tag and constructor match. A tag already bound to a different constructor must fail explicitly, preserving the first definition; the adapter must not silently use the existing component. Distinct implementations need distinct tag names.
+
+In the [action binding](../modules/action_binding.blueprint.md) module's terms, the adapter owns the instance lifecycle and nothing about server authorization. It creates and retires instances, uses an installation identity to detach only the callable its own binding installed, limits `event.read` to synchronous event delivery, answers whether an instance is still live, and calls `dispose()` on its bindings when the surface is deleted, the host disconnects or setup fails. Undecided invocations are then canceled as disposed, and a decided outcome stays as decided.
+
+The shared action runtime decides outcomes and owns the module's work-deadline and per-step hook timers. Independent listener deadlines, current controller read bounds and any application-owned spanning bound keep their existing owners. Adapter retirement stays separate from server requests and application resources. A successful decode, a bound callable and a client-side prerequisite authorize nothing; the application server remains authoritative for protected work. Upstream A2UI action forms are wire semantics, and the adapter explains how one reaches a bound callable without implying where its work executes. This is the implemented Lit action seam. React has its own retirement integration; the historical Lynx investigation supplies no supported adapter or lifecycle guarantee.
+
+| Owner | Required behavior |
+| --- | --- |
+| `@saga-a2ui/core` | Validate supported A2UI input and apply typed message cases; import no MCP, renderer or DOM runtime. |
+| `@saga-a2ui/lit` | Connect validated surface state to Lit, expose clear mount/update/dispose ownership, and release subscriptions exactly once. |
+| `@saga-a2ui/mcp` | Deliver host results and lifecycle events through its public view contract; perform no protocol interpretation or renderer selection. |
+| Consumer application | Supply catalog, content rules, host-theme/resource hooks, local and server action definitions, prerequisites and handlers, and composition; retain domain authorization and protected-resource decisions. |
+
+The lower-level Lit own-catalog entry does not require `@saga-a2ui/components`, FaithfulCard or a Markdown parser. An application may supply its own parser and branded component. The stack package installs components to support its separate card entry, but its own-catalog browser graph excludes that code. Installed dependencies and code included in a browser bundle are different checks.
+
+The core session distinguishes schema validity, component support, reference integrity and state-dependent update validity. A successful decode does not authorize a server action. Supported partial updates and their data are preserved. A low-level batch may apply earlier messages before a later processor rejection; that is not an atomic rollback contract. The ordinary typed update path validates its data before applying it and reports rejection without changing the current view. [Adapter tests](../../packages/lit/src/a2ui/app-element.test.ts) cover these public lifecycle and update behaviors.
+
+The early Lynx Web investigation found that the default upstream module Worker path failed cross-origin in the two observed web hosts. It completed a bounded investigation, not Lynx implementation or host acceptance. Neutral contracts retain their own ownership; no supported Lynx consumer or delivery path is promised here.
+
+## Failure and recovery
+
+| Trigger | Visible result and cleanup |
+| --- | --- |
+| Initial layout cannot open or action integration cannot start | The adapter shows its safe fallback and does not expose an invalid surface. Application-owned components remain responsible for safely rendering their own content. |
+| A typed data update is rejected | Return a structured failure and leave the prior surface, data and fallback state unchanged. The application decides how to show the refusal; a card-app result rejection instead clears its stale card. |
+| A valid result replaces an earlier answer or item | The application selects the result to display. A typed update preserves the mounted controls and bindings; a new selection separately retires application-owned consent and resources. |
+| A result arrives during connection | It is handled once after the owning view is ready; initialization does not repeat the business request. |
+| Results arrive out of order after selection/account changes | The qualified application controller compares request/session identity before updating the surface and rejects retired work. The adapter validates data but has no selection identity; it cannot recognize a stale domain result on its own. |
+| Authentication is lost or a new sign-in is observed | The application controller clears private content and retires its consent/resources on the signals it observes. The adapter performs requested updates and disposes its own instances/session; it does not detect sign-in changes. Invisible host account changes remain unobservable. |
+| A callback fails, processing exceeds a configured bound, or the view disconnects | Safe failure or teardown retires work and releases owned listeners/sessions. Application-owned cleanup remains explicit. The [connector's failure contract](reusable_mcp_connector.blueprint.md#failure-and-recovery) covers the bounded request. |
+| Standard and Strict instances share one page | Trusted policy and callbacks remain instance-owned; changing one instance cannot permit another instance's links or images. |
+
+Host navigation uses only a supported advertised capability. When unavailable, supplied links remain readable and inert. Image requests obey trusted exact-host configuration and the host's Content Security Policy (CSP). Content cannot change the policy; an authored protected server action retains separate server authorization and resource rules under both content levels.
+
+## Verification outcomes
+
+| Condition | Observable result |
+| --- | --- |
+| Core is exercised without a DOM or renderer | Valid envelopes, message cases, field preservation and partial updates work; malformed, unsupported and state-invalid input returns explicit failure. |
+| The synthetic app uses installed public core/Lit exports | The read, content and protected server action retain their authorization, policy, disclosure and visible behavior with the application's catalog. |
+| Two independent catalogs and policy instances are mounted | Neither catalog, data, callbacks nor policy configuration changes the other instance. |
+| Two catalogs register the same tag in one `CustomElementRegistry` | Different constructors fail explicitly without changing the first definition; repeating the exact same tag and constructor is harmless. |
+| The qualified application controller receives early/repeated results, reversed selections, observable account changes and cancellation | Its correlation and retirement rules accept the current result once and prevent stale private data or retired work from returning. Verify this through the controller and adapter together; it is not an adapter-only guarantee. |
+| A mounted view is disposed and then reconnected | Old subscriptions and sessions are released; late results are ignored; the new instance starts fresh. |
+| The built resource loads under declared CSP | Bindings, actual host-navigation callbacks, allowed/blocked image requests, keyboard interaction and narrow layouts behave as required. |
+| Server and browser entry points are independently imported | Core has no renderer/MCP/DOM dependency; the browser artifact contains no server module or credentials. |
+| An own-catalog consumer installs packed artifacts | It uses public exports without optional FaithfulCard/components/parser dependencies, workspace aliases or copied SDK code. |
+
+Run the full VIEW2 lifecycle matrix and the complete connector CORE3 checks before claiming the joined SDK ready for packaging/release. Browser evidence proves the built adapter behavior; independent actual-host runs remain required for host claims and must run promptly on integrated candidates. A pending maintainer acceptance decision does not require idle implementation, but no missing observation is converted into a pass.
+
+## Implementation sequence
+
+The extraction proceeded through passive rendering (VIEW1), lifetime and installed-public-export qualification (VIEW2), protected-card composition (CARD1/CARD2), and complete installed server/view and rollback qualification (PACK1/PACK2). These were separate evidence boundaries: an installed browser artifact alone did not prove the external listener, and identical playback HTML allowed reuse only of the matching historical host observations. The [delivery history](#design-and-delivery-history) retains each design, reviewed head and landed revision rather than crediting the first slice with the later work.
+
+The stack amendment now owns the application-facing composition. New applications use the [public installation guide](../../docs/public-install.md) and [setup guide](../../docs/getting-started.md). A new renderer or host still requires its own qualification; the completed Lynx investigation and bounded React work do not supply it.
+
+## Open decisions
+
+The original extraction questions about the package recipe, public session ownership and the Lynx investigation have bounded answers in source and the delivery history. A future change to those contracts needs its own design; this editorial update adds none. Application-specific result interpretation, catalog contents and authorization remain deliberate extension points. Full renderer parity and any new actual-host claim remain separately qualified work.
+
+## References
+
+- [Coding standards](../../CODING_STANDARDS.md), [package direction](../../packages/README.md), and [reusable MCP connector](reusable_mcp_connector.blueprint.md).
+- [A2UI decoder](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/decoder.ts), [validated messages](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/message.ts), [processor session](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/session.ts), [Lit lifecycle](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/lit/saga-app.ts), and [catalog integration](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/lit/integration.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b` (linked at that revision; VIEW1 moved the decoder, messages and session to [`packages/core`](../../packages/core/src/protocols/a2ui/v0_9/) and the Lit lifecycle to [`packages/lit`](../../packages/lit/src/a2ui/app-element.ts)).
+- [Authorized playback](authorized_playback.blueprint.md), [request and view lifetimes](request_view_lifetimes.blueprint.md), [action binding](../modules/action_binding.blueprint.md), and [content safety](content_safety_levels.blueprint.md).
+
+## Design and delivery history
+
+The dated records below preserve the design decisions, exact reviewed and landed revisions, and the limits of each observation. Statements about unpublished packages or work still pending describe that delivery, not the current package baseline. The current scope is summarized in [Status](#status).
+
 - Partial amendment by the [view composition](view_composition.blueprint.md) design, implemented on `main`. Approved revisions: [`db83e84`](https://github.com/MachineWisdomAI/saga-a2ui/blob/db83e84a7d8d6d9527c5ab350472e82809afd609/blueprints/features/view_composition.blueprint.md), [`4b1215a`](https://github.com/MachineWisdomAI/saga-a2ui/blob/4b1215a4d588f537e93e8a4099cdfc5268a26ab3/blueprints/features/view_composition.blueprint.md), [`49e39bd`](https://github.com/MachineWisdomAI/saga-a2ui/blob/49e39bdb434f5848ded9c042e425c5cefe735b31/blueprints/features/view_composition.blueprint.md) and the fourth revision [`7a78e7e`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md), approved by the human owner as one decision (PR #237). The amendment replaces `initialInput: unknown` and `surfaceId` of `createA2uiAppElement` with a `SurfaceLayout`, adds the identity-preserving `updateData(data)`, and (in `7a78e7e`) replaces the required `createSession` with `catalog`/`layout` and a default SDK session; raw `ingest` leaves the consumer contract, and a rejected update returns `{ok: false, failure: {kind, message}}` as React does. Session ownership, subscriptions, the safe fallback, the action seam and disposal are unchanged. No compatibility alias exists.
   - **Blueprint `49e39bd` implemented at `MachineWisdomAI/saga-a2ui@18153793795d4ecfc12d2785d96422d2e397a3b2`** ([PR #234](https://github.com/MachineWisdomAI/saga-a2ui/pull/234)), which integrated the `SurfaceLayout` input and in-place `updateData` ([`b30b901`](https://github.com/MachineWisdomAI/saga-a2ui/commit/b30b901cd2f53855757b99af88d4360e3f95f047), PR #221), the Lit card conveniences ([`32f8f34`](https://github.com/MachineWisdomAI/saga-a2ui/commit/32f8f34a9be9d79b8adefc7672c4f083dc606f74), PR #224) and the consumer migration ([`db63421`](https://github.com/MachineWisdomAI/saga-a2ui/commit/db63421693adf16c1658063390411cf1c033b3e0), PR #226, [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/226#pullrequestreview-5610715041)).
   - **Blueprint `7a78e7e` implemented at `MachineWisdomAI/saga-a2ui@6b2aabf8a73e47347f70ade99d7584227c6e943b`** for the Lit construction API, the default session, the structured update failure and the inaccessible public `ingest` ([PR #238](https://github.com/MachineWisdomAI/saga-a2ui/pull/238), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/238#pullrequestreview-5617059507)). The Lit stack's forwarding of application stylesheets to the card landed at `MachineWisdomAI/saga-a2ui@e62514504f7501ef20d9cfeed319ded6159f42b6` ([PR #248](https://github.com/MachineWisdomAI/saga-a2ui/pull/248), [review](https://github.com/MachineWisdomAI/saga-a2ui/pull/248#pullrequestreview-5621359008)).
@@ -57,104 +157,3 @@ date_added: 2026-10-15
 - The approved 2026-10-17 sequencing amendment in [VIEW1 #17](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) permits passive-renderer preparation after CORE1, retaining existing lifecycle safeguards. VIEW2 still requires STATE2; full qualification remains required.
 - Historical draft: [this Blueprint at `d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7`](https://github.com/MachineWisdomAI/saga-a2ui/blob/d62c2232ecd8e100d90fe9dbffa072f6cd3dd4a7/blueprints/features/reusable_lit_adapter.blueprint.md) in [PR #69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69) was unapproved. The current amendment is the approved revision recorded above; the historical draft granted no authority.
 - Acceptance: full SDK qualification, required actual-host evidence and publication or destination acceptance remain separate gates.
-
-## Problem and current behavior
-
-A Lit application should be able to use SAGA's validated A2UI processing and view lifecycle while retaining its own components. At the original inspected revision, `31759fabb596f7d59921eb3f85095bc2a3aba73b`, the synthetic app kept a decoder, message visitor and mutable processor session under `apps/lit-host/src/protocols/a2ui/v0_9`, while `src/lit` supplied its concrete elements. No reusable core or Lit package existed then. VIEW1 has since moved the protocol code to `packages/core/src/protocols/a2ui/v0_9` and the surface lifecycle to `packages/lit/src/a2ui/app-element.ts`; the application composes those packages with the public MCP bridge and retains its catalogs and domain behavior. The partial implementation and remaining scope are recorded above.
-
-The protocol implementation delegates supported schema and state validation to upstream A2UI. It accepts unchecked input, returns validated message cases, and visits each case to update a processor session. The view subscribes to surface creation/deletion and disposes its session on disconnect. These responsibilities now belong to core and Lit respectively. The demo heading, global `window.sagaSend` test hook, episode schema and synthetic catalog remain application details.
-
-This feature introduces `@saga-a2ui/core` and `@saga-a2ui/lit` with a working own-catalog consumer. It preserves the example's complete read, content and protected action (Play) workflow (see the [action vocabulary](../README.md#action-vocabulary)), followed by the proposed [request and view lifetime verification](request_view_lifetimes.blueprint.md#verification-outcomes). Ansari supplies a second application-owned catalog; neither consumer is required to adopt SAGA's optional FaithfulCard.
-
-## Proposed behavior
-
-The application constructs an A2UI session with its catalog and an explicitly selected decoder. A result arrives through the public MCP view interface, and the application passes the corresponding presentation input to the adapter. Core validates the supported A2UI envelope and message cases. The upstream processor applies component support, references and partial updates. Lit binds the resulting surface to the application's components.
-
-When a title or answer changes, data-model updates change the visible text without replacing the application's architecture. Invalid current input clears the affected presentation and shows a safe fallback; it cannot leave an older success looking current. Valid replacement can recover. On disconnect, the adapter retires delivery, unsubscribes and disposes the owned session. Reconnection creates a fresh instance rather than restoring retired private state.
-
-![The application supplies its catalog and composition. Core validates and processes A2UI; Lit renders the surface; MCP owns delivery, and explicit disposal retires all owned resources.](../../diagrams/reusable-lit-adapter.svg)
-
-[Editable Mermaid](../../diagrams/reusable-lit-adapter.mmd) · [Editable Excalidraw](../../diagrams/reusable-lit-adapter.excalidraw) · [PNG](../../diagrams/reusable-lit-adapter.png)
-
-## Responsibilities and interfaces
-
-Core owns renderer-independent contracts and processing. A2UI knowledge stays under a named protocol/version module. Its decoder treats input as `unknown`, uses upstream schemas, preserves supported fields and returns typed cases or an explicit failure. Its visitor handles every supported case; renderer code does not inspect raw wire tags again. Mutable session state remains separate from immutable validated values.
-
-Lit owns mounting, binding integration, events, accessibility and disposal. Its interface accepts the application's catalog and explicit integrations rather than discovering them through a registry. The application chooses its renderer, host and trusted content policy independently. Upstream custom-element/catalog registration stays at the Lit integration seam; importing SAGA does not configure an application globally.
-
-Within one `CustomElementRegistry`, catalog registration may reuse an existing definition only when both tag and constructor match. A tag already bound to a different constructor must fail explicitly, preserving the first definition; the adapter must not silently use the existing component. Distinct implementations need distinct tag names.
-
-In the [action binding](../modules/action_binding.blueprint.md) module's terms, the adapter owns the instance lifecycle and nothing about server authorization. It creates and retires instances, stamps each admitted event with its installation epoch so a stale event is ignored, answers whether an instance is still the live one, detaches only the installation its own binding made, and calls `dispose()` on its bindings when the surface is deleted, the host disconnects or setup fails. Undecided invocations are then canceled as disposed, and a decided outcome stays as decided. The shared action runtime, not the adapter, decides outcomes and owns the module's work-deadline and per-step hook timers. Independent listener deadlines, current controller read bounds and any application-owned spanning bound that is still required keep their existing owners, and adapter retirement stays separate from server requests and from application resources. The adapter does not decide whether the server will honor a request: a successful decode, a bound callable and a client-side prerequisite authorize nothing, and the application server remains authoritative for protected work. Upstream A2UI action forms are wire semantics, and the adapter states how one reaches a bound callable without implying where that callable's work executes. This describes the module's Lit proposal. The React and Lynx adapters follow their own retirement rules, and a Lit mount is not a model for them.
-
-| Owner | Required behavior |
-| --- | --- |
-| `@saga-a2ui/core` | Validate supported A2UI input and apply typed message cases; import no MCP, renderer or DOM runtime. |
-| `@saga-a2ui/lit` | Connect validated surface state to Lit, expose clear mount/update/dispose ownership, and release subscriptions exactly once. |
-| `@saga-a2ui/mcp` | Deliver host results and lifecycle events through its public view contract; perform no protocol interpretation or renderer selection. |
-| Consumer application | Supply catalog, content rules, host-theme/resource hooks, local and server action definitions, prerequisites and handlers, and composition; retain domain authorization and protected-resource decisions. |
-
-The own-catalog import must not require `@saga-a2ui/components`, FaithfulCard or a Markdown parser. A consumer such as Ansari may use its own Markdown parser and branded component; that does not make those dependencies requirements of core or Lit.
-
-The session must distinguish schema validity, component support, reference integrity and state-dependent update validity. A successful decode does not authorize a server action. Preserve valid partial updates, supported action data, state and attribution; unsupported essential behavior requires an explicit failure. The current session can apply earlier messages before a later processor rejection. The public adapter must define and test how that rejection clears or replaces the affected display rather than claiming an atomic state rollback it does not implement.
-
-The early Lynx Web dependency/sandbox investigation is a prerequisite to VIEW1 interface finalization, not to the MCP connector's extraction. It identifies whether requirements such as workers, WASM or resource origins would expose a Lit-only assumption in the neutral contracts. A concrete supported path or documented infeasibility/access gap completes that bounded investigation. It does not require implementing Lynx, and it does not establish Lynx host support.
-
-## Failure and recovery
-
-| Trigger | Visible result and cleanup |
-| --- | --- |
-| Unsupported version, malformed envelope or rejected component/update | The affected current view clears and shows a safe SAGA fallback: supplied markup stays inert and no invalid server action is dispatched. Application-owned components remain responsible for safely rendering their own content. |
-| A valid result replaces an earlier answer or item | Only the current result is visible; old bindings and resources do not persist as another active view. |
-| A result arrives during connection | It is handled once after the owning view is ready; initialization does not repeat the business request. |
-| Results arrive out of order after selection/account changes | The current request/session generation wins; retired data and work started by a retired invocation (in the playback example, the player Play's client work started) cannot be restored. |
-| Authentication is lost or a new sign-in is observed | Private content clears immediately when observable; cleanup of acquired resources and requests follows the proposed lifetime contract. An invisible host account change is not claimed to be immediately detectable. |
-| A callback fails, processing exceeds a configured bound, or the view disconnects | Safe failure or teardown retires work and releases owned listeners/sessions. Application-owned cleanup remains explicit. The [connector's failure contract](reusable_mcp_connector.blueprint.md#failure-and-recovery) covers the bounded request. |
-| Standard and Strict instances share one page | Trusted policy and callbacks remain instance-owned; changing one instance cannot permit another instance's links or images. |
-
-Host navigation uses only a supported advertised capability. When unavailable, supplied links remain readable and inert. Image requests obey trusted exact-host configuration and the host's Content Security Policy (CSP). Content cannot change the policy; an authored protected server action retains separate server authorization and resource rules under both content levels.
-
-## Verification outcomes
-
-| Condition | Observable result |
-| --- | --- |
-| Core is exercised without a DOM or renderer | Valid envelopes, message cases, field preservation and partial updates work; malformed, unsupported and state-invalid input returns explicit failure. |
-| The synthetic app uses installed public core/Lit exports | The read, content and protected server action retain their authorization, policy, disclosure and visible behavior with the application's catalog. |
-| Two independent catalogs and policy instances are mounted | Neither catalog, data, callbacks nor policy configuration changes the other instance. |
-| Two catalogs register the same tag in one `CustomElementRegistry` | Different constructors fail explicitly without changing the first definition; repeating the exact same tag and constructor is harmless. |
-| Early/repeated results, reversed selections, account changes and cancellation occur | Each accepted result renders once; no duplicate operations or listeners, and no restoration of stale private data or work from a retired invocation. |
-| A mounted view is disposed and then reconnected | Old subscriptions and sessions are released; late results are ignored; the new instance starts fresh. |
-| The built resource loads under declared CSP | Bindings, actual host-navigation callbacks, allowed/blocked image requests, keyboard interaction and narrow layouts behave as required. |
-| Server and browser entry points are independently imported | Core has no renderer/MCP/DOM dependency; the browser artifact contains no server module or credentials. |
-| An own-catalog consumer installs packed artifacts | It uses public exports without optional FaithfulCard/components/parser dependencies, workspace aliases or copied SDK code. |
-
-Run the full VIEW2 lifecycle matrix and the complete connector CORE3 checks before claiming the joined SDK ready for packaging/release. Browser evidence proves the built adapter behavior; independent actual-host runs remain required for host claims and must run promptly on integrated candidates. A pending maintainer acceptance decision does not require idle implementation, but no missing observation is converted into a pass.
-
-## Implementation sequence
-
-After the shared dependency recipe and the CORE1 view contract (the first of the three [MCP connector](reusable_mcp_connector.blueprint.md#implementation-sequence) extraction steps) are established, [VIEW1](https://github.com/MachineWisdomAI/saga-a2ui/issues/17) extracts core and Lit together using the synthetic app's catalog. Complete the bounded Lynx Web investigation before freezing the renderer-neutral interfaces. There is no dependency on finished React or Lynx implementation.
-
-Sequencing amendment (approved 2026-10-17). The operator approved starting the preparation slices that do not need the proposed request/view lifetime or action-binding designs ([#69](https://github.com/MachineWisdomAI/saga-a2ui/pull/69), [#73](https://github.com/MachineWisdomAI/saga-a2ui/pull/73)): "don't wait on #69 or #73 for work that doesn't need them." The approval covers this bounded change of start order only. It does not approve either proposed design or its implementation, and no compatibility with them is added or claimed.
-
-Since that sequencing amendment, the action binding module and the request/view-lifetime amendment have each received their own design approval, as their Status records show. Those later decisions do not change what the sequencing amendment authorized and do not establish implementation of either design.
-
-VIEW1 can therefore proceed before CORE2 and CORE3. It establishes core/Lit consumption of the public MCP view contract and passive answer rendering, and it retains the application's existing Play operation and its current request, view, authentication, selection-correlation, cancellation and disposal behavior. Preparation acceptance additionally renders the public answer through installed core, Lit and MCP exports with an independent, synthetic, application-owned answer catalog: exact question and answer binding, early, repeated and late delivery, an invalid current result falling back safely, isolation from the other catalog, and disposal. Preparation candidates are unreleased and may change; owned consumers migrate together.
-
-Later slices keep their prerequisites. CORE2 explicitly waits for STATE2; when it lands, the working consumer must use the reusable action contract and rerun the affected integrated behavior, and the lifetime guarantees it adds are claimed only then. STATE1 and STATE2 are now implemented and accepted for their bounded scope, as recorded in [request/view lifetime Status](request_view_lifetimes.blueprint.md#status), including the reviewed [STATE2 acceptance PR #126](https://github.com/MachineWisdomAI/saga-a2ui/pull/126). The earlier preparation hold is historical; it is not a current human approval gate. CORE3 keeps its entire failure, deadline, callback, projection and transport matrix. This changes start order, not VIEW1's complete browse/description/Play and two-catalog obligations or CORE3's failure coverage.
-
-[VIEW2](https://github.com/MachineWisdomAI/saga-a2ui/issues/18) then moves the full account, selection, cancellation and teardown fixtures onto the public adapter; STATE2 remains an explicit prerequisite. It integrates the completed policy and session source behavior and documents application cleanup and theme/component/resource hooks that the consumer actually uses. Combined protected and lifetime qualification belongs to VIEW2 and CORE3. It is not a prerequisite for handing a pinned preparation candidate to the Ansari migration.
-
-The complete [PACK1](https://github.com/MachineWisdomAI/saga-a2ui/issues/21) and [PACK2](https://github.com/MachineWisdomAI/saga-a2ui/issues/22) obligations remain: own-catalog and optional FaithfulCard consumers, full protected behavior, external installation, matched resources and upgrade/rollback evidence. Full SDK qualification joins the completed CORE3 (the connector's complete failure and lifecycle contract) and VIEW2 outcomes with the optional components, and PACK1 and PACK2 (packaging and release) readiness follows; advancing VIEW1 does not remove that join, and neither do exact public source and npm installation, the required actual-host evidence or destination maintainer authority. The path to the destination merge then continues through public npm installation of the exact versions. The Ansari design does not make external directory approval or shared publishing tooling new prerequisites for that merge; its required host runs and the public SDK/npm prerequisite remain. [Ansari migration](ansari_adoption.blueprint.md) can develop against pinned candidates while its merge and publication prerequisites remain explicit.
-
-## Open decisions
-
-1. **Which core/Lit peer recipe preserves both catalogs?** SAGA currently pins A2UI 0.13.0 and Ansari 0.9.1; both use `/v0_9`. Compare the real catalogs and corpus before choosing versions. Package-version differences alone do not establish wire incompatibility.
-2. **How does the public lifecycle report processing failure and release resources?** Preserve the existing observable contract while resolving partial-application failures, callback exceptions and ownership of caller-held subscriptions. Demonstrate recovery and disposal through public imports.
-3. **What does the Lynx Web investigation require from neutral interfaces?** Use its concrete dependency/sandbox findings to avoid renderer-specific assumptions. Do not add speculative extension mechanisms or delay this design for Lynx parity implementation.
-
-The Lit-specific choices for action attachment (how much of the basic Button to reuse, how a Lit mount identifies its owner, where an action dependency enters `A2uiAppDependencies`, and what an unbound control shows) are recorded as adapter choices in the [action binding](../modules/action_binding.blueprint.md#open-decisions) module and are not decided here.
-
-## References
-
-- [Coding standards](../../CODING_STANDARDS.md), [package direction](../../packages/README.md), and [reusable MCP connector](reusable_mcp_connector.blueprint.md).
-- [A2UI decoder](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/decoder.ts), [validated messages](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/message.ts), [processor session](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/protocols/a2ui/v0_9/session.ts), [Lit lifecycle](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/lit/saga-app.ts), and [catalog integration](https://github.com/MachineWisdomAI/saga-a2ui/blob/31759fabb596f7d59921eb3f85095bc2a3aba73b/apps/lit-host/src/lit/integration.ts), inspected at `31759fabb596f7d59921eb3f85095bc2a3aba73b` (linked at that revision; VIEW1 moved the decoder, messages and session to [`packages/core`](../../packages/core/src/protocols/a2ui/v0_9/) and the Lit lifecycle to [`packages/lit`](../../packages/lit/src/a2ui/app-element.ts)).
-- [Authorized playback](authorized_playback.blueprint.md), [request and view lifetimes](request_view_lifetimes.blueprint.md), [action binding](../modules/action_binding.blueprint.md), [content safety](content_safety_levels.blueprint.md), and [Ansari adoption](ansari_adoption.blueprint.md).
