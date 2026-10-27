@@ -438,7 +438,7 @@ The `subject` reader is what makes a *recycled row* safe. A list renderer may ke
 
 ## Disposal, ownership and hand-off
 
-**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The surface's action setup owns discovery and the bindings it creates. The stack ends that setup when it unmounts the surface, then calls the application's `onTeardown` callback (`retire()` in the starter) for application-owned resources. Host teardown, `dispose()` and page exit all use that path. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
+**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The surface's action setup owns discovery and the bindings it creates. The stack cleans up that setup when the view ends. The application's `onTeardown` callback (`retire()` in the starter) releases application-owned resources; do not rely on it running after every renderer's binding cleanup. Host teardown, `dispose()` and page exit all use that path. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
 
 **Ownership.** A resource is anything a press takes that someone must give back. The notes application's hold on a row is an application-owned resource, and it shows the whole contract:
 

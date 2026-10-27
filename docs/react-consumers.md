@@ -22,7 +22,7 @@ The [notes React view](../examples/pack1-consumer/src/notes-react-view.tsx) is a
 1. The page supplies a `#root` container and calls `startNotesReactView()`. That function creates the application controller and starts the stack with the notes layout and catalog.
 2. Its `actions` callback receives the host transport. The controller builds the Archive and Mark read definitions, and `createReactActions` binds them to each rendered row. Archive reads the row's current note ID as its `subject`, so a reused row cannot receive an old note's completion message.
 3. `onToolResult` gives the delivered result to the controller. The controller validates the application data and updates the typed surface; rejected input is handled by the application instead of being cast into the view.
-4. The stack unmounts the surface and its action bindings when the view ends. `onTeardown` retires the controller and the resources it owns.
+4. When the view ends, the stack retires the surface, calls `onTeardown` to retire the application controller and its resources, and unmounts the React root. The action provider disposes its bindings during unmount; application cleanup must not depend on those bindings already being disposed inside `onTeardown`.
 
 Follow the [action guide](actions.md#trace-one-press-allowed-and-denied) for the complete server authorization and outcome trace. An expired session can stop Archive before its protected request; cancellation after sending that request leaves its effect uncertain. The application presents that uncertainty and does not retry the write automatically.
 
