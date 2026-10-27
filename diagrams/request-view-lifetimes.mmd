@@ -8,9 +8,8 @@ flowchart TD
   Q -.->|"inside an eligible presenting hook"| C
   C -->|"yes"| W["Synchronous presentation write<br/>before this callback ends"]
   C -->|"no"| X["Skip stale presentation<br/>retain the known outcome"]
-  I -->|"acquires"| R["Resource token in invocation scope"]
-  R -->|"explicit transfer"| O["Application resource owner<br/>player may outlive the invocation"]
-  R -->|"not transferred: release in cleanup"| Q
+  I -->|"acquires"| R["Invocation owns acquired token<br/>cleanup releases it unless transferred"]
+  R -->|"transfer"| O["Application resource owner<br/>player may outlive the invocation"]
   T["Selection change or binding disposal"] -->|"retire undecided work"| I
   V["View teardown: stop delivery<br/>and abort the view signal"] --> T
   V -->|"application cleanup"| O
