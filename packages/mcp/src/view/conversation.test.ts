@@ -299,6 +299,126 @@ describe('a view that has ended', () => {
     expect(recorded.map((r) => r.kind)).toEqual(['context']);
   });
 
+  // The view's end must settle the append while the host still holds its answer: nothing here
+  // releases the host before the result is read, so a result that waited for the host would hang.
+  const SETTLED = Symbol('settled');
+  const settlesWhileHeld = async (pending: Promise<unknown>) =>
+    Promise.race([
+      pending,
+      new Promise((resolve) => setTimeout(resolve, 200, SETTLED)),
+    ]);
+
+  it('settles unavailable at the context stage when the view ends while the host holds the context', async () => {
+    const { app, recorded, release } = await connected(BOTH, {
+      context: 'hold',
+    });
+    const lifetime = new AbortController();
+    const pending = conversationFromApp(app, lifetime.signal).appendMessage(
+      'Your move',
+      { context: CONTEXT },
+    );
+    await expect.poll(() => recorded.length).toBe(1);
+    lifetime.abort();
+    expect(await settlesWhileHeld(pending)).toEqual({
+      outcome: 'unavailable',
+      stage: 'context',
+    });
+    release();
+    expect(recorded.map((r) => r.kind)).toEqual(['context']);
+  });
+
+  it('settles unavailable at the message stage when the view ends while the host holds a best-effort context', async () => {
+    const { app, recorded, release } = await connected(BOTH, {
+      context: 'hold',
+    });
+    const lifetime = new AbortController();
+    const pending = conversationFromApp(app, lifetime.signal).appendMessage(
+      'Your move',
+      { context: { ...CONTEXT, bestEffort: true } },
+    );
+    await expect.poll(() => recorded.length).toBe(1);
+    lifetime.abort();
+    expect(await settlesWhileHeld(pending)).toEqual({
+      outcome: 'unavailable',
+      stage: 'message',
+    });
+    release();
+    // Releasing the held context afterwards sends no message and changes nothing.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(recorded.map((r) => r.kind)).toEqual(['context']);
+  });
+
+  it('settles unavailable at the message stage when the view ends while the host holds the message', async () => {
+    const { app, recorded, release } = await connected(BOTH, {
+      message: 'hold',
+    });
+    const lifetime = new AbortController();
+    const pending = conversationFromApp(app, lifetime.signal).appendMessage(
+      'Your move',
+    );
+    await expect.poll(() => recorded.length).toBe(1);
+    lifetime.abort();
+    expect(await settlesWhileHeld(pending)).toEqual({
+      outcome: 'unavailable',
+      stage: 'message',
+    });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(recorded.map((r) => r.kind)).toEqual(['message']);
+  });
+
+  it('settles when the view ends while the host holds a message that follows an answered context', async () => {
+    const { app, recorded, release } = await connected(BOTH, {
+      message: 'hold',
+    });
+    const lifetime = new AbortController();
+    const pending = conversationFromApp(app, lifetime.signal).appendMessage(
+      'Your move',
+      { context: CONTEXT },
+    );
+    await expect.poll(() => recorded.length).toBe(2);
+    lifetime.abort();
+    expect(await settlesWhileHeld(pending)).toEqual({
+      outcome: 'unavailable',
+      stage: 'message',
+    });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(recorded.map((r) => r.kind)).toEqual(['context', 'message']);
+  });
+
+  it('removes its listener from the signal once a request has settled', async () => {
+    const { app } = await connected(BOTH);
+    const lifetime = new AbortController();
+    const added: string[] = [];
+    const removed: string[] = [];
+    const { addEventListener, removeEventListener } = lifetime.signal;
+    lifetime.signal.addEventListener = ((type: string, ...rest: unknown[]) => {
+      added.push(type);
+      return (addEventListener as (...a: unknown[]) => void).call(
+        lifetime.signal,
+        type,
+        ...rest,
+      );
+    }) as typeof addEventListener;
+    lifetime.signal.removeEventListener = ((
+      type: string,
+      ...rest: unknown[]
+    ) => {
+      removed.push(type);
+      return (removeEventListener as (...a: unknown[]) => void).call(
+        lifetime.signal,
+        type,
+        ...rest,
+      );
+    }) as typeof removeEventListener;
+    await conversationFromApp(app, lifetime.signal).appendMessage('Hi', {
+      context: CONTEXT,
+    });
+    expect(added.length).toBeGreaterThan(0);
+    expect(removed).toEqual(added);
+  });
+
   it('ignores the late answer to an outstanding message', async () => {
     const { app, recorded, release } = await connected(BOTH, {
       message: 'hold',

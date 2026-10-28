@@ -6,6 +6,31 @@ import type {
 } from '@saga-a2ui/core/conversation';
 
 /**
+ * The request's own outcome, or a settlement as soon as `signal` aborts, whichever comes first.
+ * The request is not cancelled (the bridge offers no way to) and is not retried; its late result or
+ * rejection is dropped. The abort listener is removed once either side has settled.
+ */
+function untilEnded<T>(request: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal === undefined) return request;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => resolve(undefined as T);
+    // `once` alone would leave the listener behind when the request settles first.
+    signal.addEventListener('abort', onAbort, { once: true });
+    const settle = (): void => signal.removeEventListener('abort', onAbort);
+    request.then(
+      (value) => {
+        settle();
+        resolve(value);
+      },
+      (error: unknown) => {
+        settle();
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
  * Adds messages to the conversation through the upstream MCP Apps requests: `ui/update-model-context`
  * for a message's context, then `ui/message` with role `user`. Each is sent only when the host
  * advertised its capability (`updateModelContext`, `message`); the capabilities are read at call
@@ -39,7 +64,7 @@ export function conversationFromApp(
     if (ended() || app.getHostCapabilities()?.[capability] === undefined)
       return 'unavailable';
     try {
-      const result = await send();
+      const result = await untilEnded(send(), signal);
       if (ended()) return 'unavailable';
       // `ui/message` answers a refusal with `isError`. `ui/update-model-context` has an empty
       // result in the pinned bridge, which rejects any other key, so a host that refuses a context
