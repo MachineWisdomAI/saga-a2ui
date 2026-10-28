@@ -13,6 +13,7 @@ date_added: 2026-10-27
 - Design: draft awaiting human approval.
 - Implementation: not started.
 - This would partially amend [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
+- It would also make `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 
@@ -149,6 +150,14 @@ The example is generated with the React/Hono `saga init` and keeps the template'
 | `show_game` | Assistant or board | Yes | `gameId` | The current game |
 | `play_move` | Assistant or board | No | `gameId`, `square` 0–8, `player` X or O, `expectedMoveNumber` | The game after the move |
 
+All three are saga operations declared through `registerPublicOperation`. `play_move` simply omits `view` (see [operations without a view](#operations-without-a-view)):
+
+```diff
+ play_move:  input, output, handle, project, failures
+-            view: boardView
+ show_game:  input, output, handle, project, failures, view: boardView
+```
+
 Every result carries the whole game as structured content, plus a short text for the model. `play_move`'s description tells the model three things:
 - it plays O;
 - it may place X only when the person states their move in conversation;
@@ -171,6 +180,33 @@ Every result carries the whole game as structured content, plus a short text for
   - MCP Apps gives a server no way to push to an open view, so this is the mechanism available.
 - **`onToolResult`.** It presents the result that opened the card, and any later result a host does deliver to it.
 - **The guided change** adds a move list bound to the game's `history`. It changes the layout and catalog only.
+
+### Operations without a view
+
+An operation's execution guarantees should not depend on whether it presents a card. `@saga-a2ui/mcp/server` already keeps the two apart:
+
+- **`execute()`** owns the request and operation time limits, cancellation, output validation and failure projection.
+- **`register()`** declares the tool with its input and output contracts and annotations, so the MCP server validates input before the handler runs. It also attaches the view, which is the only view-specific step.
+
+So `view` becomes optional on operation declarations:
+
+```text
+saga operation
+  validate input
+  execute within request and operation limits
+  validate and project the result
+  return success or a declared failure
+    with view    → attach the UI resource
+    without view → return data and text
+```
+
+Three requirements govern it:
+
+1. **Identical execution guarantees.** Omitting `view` preserves input validation, budgets, cancellation handling and safe failures exactly. The tool is declared with the same input and output contracts and annotations, the same `execute()` path runs, and a protected operation still requires its identity resolver and sign-in failure text.
+2. **No UI association.** A viewless operation registers no view resource. It attaches no UI-resource metadata to its tool definition, or to any result, whether successful or failed.
+3. **One consumer interface.** The tutorial declares all three operations through saga. Any underlying plain MCP tool registration stays inside `@saga-a2ui/mcp`, and the example imports no MCP Apps server API.
+
+The change lands in step 2's SDK release. It amends the operation declaration described by the [reusable MCP connector](reusable_mcp_connector.blueprint.md), whose other guarantees are unchanged.
 
 ## Failure and recovery
 
@@ -195,6 +231,12 @@ Every result carries the whole game as structured content, plus a short text for
 - In Chromium, the operation's result reaches the React view, Clear the note works without a server call, and teardown leaves the container empty.
 - Destination refusal, interruption and no-implicit-install still hold, and the five Lit pairs are unchanged.
 
+**Operations without a view.** The same declaration is registered with and without `view`, and the two are compared:
+- Invalid input, refusal, an absent record, an over-budget handler, cancellation, an asynchronous or malformed projection and invalid output give the same failures from both.
+- The viewless tool's definition and every one of its results carry no `_meta.ui`, and the server lists no resource for it.
+- A protected declaration without `view` still refuses a missing identity.
+- The example's server and view import no `@modelcontextprotocol/ext-apps` module, and the boundary scan passes.
+
 **Rules.** Deterministic tests cover wins on every line, the draw, turn order, and refusal of occupied, out-of-turn and post-game moves without changing the stored game.
 
 **Game view.** In Chromium, on the local MCP Apps host fixture:
@@ -218,7 +260,7 @@ No test asserts which square an assistant chooses.
 ## Implementation sequence
 
 1. **React/Hono starter.** The template, qualification, CLI row and setup-guide corrections.
-2. **View conversation.** As specified in its own design.
+2. **View conversation and operations without a view.** One SDK release: `appendMessage` as its own design specifies, and an optional `view` on operation declarations as described above.
 3. **Tic-tac-toe example.** The game, its browser checks, and the guide's opening through the first click with a screenshot. The owner reviews this sample before the rest of the guide is written.
 4. **The guide.** The rest of the tic-tac-toe guide, the setup-guide split, the Lit notes track and the README's first steps.
 5. **The expansion change.** The current brand surfaces change to "Simple Agentic Apps", keeping lowercase framework naming, capitalised Saga for an app, and the existing artwork. Historical records keep their wording.
@@ -227,10 +269,9 @@ Steps 1 and 2 are independent. Step 3 needs both.
 
 ## Open decisions
 
-1. **How `play_move` opens no card.** An operation declaration requires a view today.
-   - **Recommended:** make `view` optional on public operation declarations in `@saga-a2ui/mcp/server`. An operation without one registers an ordinary tool with the same budgets, input contract and projection. This is part of step 2's SDK release.
-   - **Alternative:** register `play_move` with the MCP server's own `registerTool` in the example, which loses the operation budgets and failure projection.
-2. **The wait's cadence and limit.** The values above are proposals. Host runs decide them.
+1. **The wait's cadence and limit.** The values above are proposals. Host runs decide them.
+
+How `play_move` opens no card is settled: an optional `view` on saga operations, under the three requirements in [operations without a view](#operations-without-a-view).
 
 ## References
 
