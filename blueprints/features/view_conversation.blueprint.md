@@ -1,6 +1,6 @@
 ---
 feature_name: view_conversation
-status: draft
+status: approved
 module_blueprints: [action_binding]
 dependencies: [view_composition, reusable_mcp_connector]
 date_added: 2026-10-27
@@ -10,8 +10,9 @@ date_added: 2026-10-27
 
 ## Status
 
-- Design: draft awaiting human approval.
+- Design: approved by the owner on 2026-10-28 at [`6c3638b3f372c27d12b406a0c4800ea01f93cf24`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/blueprints/features/view_conversation.blueprint.md), including the reviewed diagram ([Mermaid](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.mmd), [SVG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.svg), [PNG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.png)).
 - Implementation: not started.
+- Acceptance: implementation qualification and the specified host runs remain outstanding. Design approval does not establish host support.
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 

@@ -14,6 +14,8 @@ For example, a subscription tool receives a filter, not an account ID. The appli
 
 ## Status
 
+Approved partial amendment: [operations without a view at `6c3638b3f372c27d12b406a0c4800ea01f93cf24`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/blueprints/features/getting_started_tracks.blueprint.md#operations-without-a-view), approved by the owner on 2026-10-28, makes `view` optional on operation declarations while preserving execution guarantees. Implementation has not started; the current SDK still requires a view. The unaffected contract and earlier implementation records remain current.
+
 The connector is published as `@saga-a2ui/mcp@0.7.7-rc.1`, with separate `server`, `view` and `policy` entries. All seven SDK packages have `0.7.7-rc.1` under npm's `next` tag. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) identifies the release; the implementation and acceptance records below concern their named scopes, not universal host support.
 
 The human-approved baseline is [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/reusable_mcp_connector.blueprint.md), with the [content-policy clarification at `6785ae1d8205a45e668f478ea303fbdd7e474663`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6785ae1d8205a45e668f478ea303fbdd7e474663/blueprints/features/reusable_mcp_connector.blueprint.md). The sequencing amendment recorded at `6c268cc924886d4f7dfeb1668d83d0e17324f00b` allowed preparation before the lifetime work; it did not waive the later acceptance gates.
