@@ -29,6 +29,7 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 | UI actions and rendering | [Action binding](modules/action_binding.blueprint.md) and [Lit adapter](features/reusable_lit_adapter.blueprint.md) |
 | Protected media | [Authorized playback](features/authorized_playback.blueprint.md) |
 | Project setup and host submission | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
+| A React starter, the tic-tac-toe guide and messages from a view to the conversation | [Getting-started tracks](features/getting_started_tracks.blueprint.md) and [view conversation](features/view_conversation.blueprint.md) (both draft) |
 
 Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication has working ChatGPT and Claude preparation commands; a fixture-verified local resumable-handoff record is also implemented, and none of these tools establishes publication. For working setup instructions, use [Getting started](../docs/getting-started.md).
 
