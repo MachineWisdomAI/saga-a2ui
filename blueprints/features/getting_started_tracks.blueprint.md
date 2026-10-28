@@ -1,6 +1,6 @@
 ---
 feature_name: getting_started_tracks
-status: draft
+status: approved
 module_blueprints: [action_binding]
 dependencies: [application_setup, view_conversation, view_composition, reusable_mcp_connector]
 date_added: 2026-10-27
@@ -10,10 +10,11 @@ date_added: 2026-10-27
 
 ## Status
 
-- Design: draft awaiting human approval.
+- Design: approved by the owner on 2026-10-28 at [`6c3638b3f372c27d12b406a0c4800ea01f93cf24`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/blueprints/features/getting_started_tracks.blueprint.md), including the reviewed diagram ([Mermaid](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.mmd), [SVG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.svg), [PNG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.png)).
 - Implementation: not started.
-- This would partially amend [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
-- It would also make `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
+- Acceptance: implementation qualification and the specified host runs remain outstanding. The wait cadence and limit remain open for host runs to settle; design approval does not establish host support.
+- This approved design partially amends [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
+- It also approves making `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 
