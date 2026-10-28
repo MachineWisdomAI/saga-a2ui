@@ -31,3 +31,9 @@ export const READ_ONLY = {
   idempotentHint: true,
   openWorldHint: false,
 } as const;
+
+/**
+ * What the built page must contain for the server to serve it: the element the view renders into.
+ * The server refuses to start with a page that lacks it, so a missing or wrong build fails early.
+ */
+export const VIEW_MARKER = '<starter-app';

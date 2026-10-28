@@ -50,8 +50,9 @@ export interface QualifiedPair {
  * removes it while that qualification fails. The rows follow `QUALIFIED_STARTERS`
  * (scripts/qualified-starters.ts), whose templates CI qualifies from packed artifacts: Node
  * (scripts/starter.test.ts), Express (starter-express.test.ts), Fastify (starter-fastify.test.ts) and
- * Hono (starter-hono.test.ts) and Hapi (starter-hapi.test.ts), each also in apps/lit-host/e2e/starter.spec.ts. No other pair is
- * offered: React has no qualified template.
+ * Hono (starter-hono.test.ts) and Hapi (starter-hapi.test.ts) for `lit-mcp`, and the React view on
+ * Hono (starter-react-hono.test.ts), each also in apps/lit-host/e2e/starter.spec.ts. No other pair
+ * is offered: `react-mcp` has a qualified template on Hono only.
  */
 export const SUPPORTED_PAIRS: readonly QualifiedPair[] = [
   { stack: 'lit-mcp', server: 'node', template: 'lit-node' },
@@ -59,6 +60,7 @@ export const SUPPORTED_PAIRS: readonly QualifiedPair[] = [
   { stack: 'lit-mcp', server: 'fastify', template: 'lit-fastify' },
   { stack: 'lit-mcp', server: 'hono', template: 'lit-hono' },
   { stack: 'lit-mcp', server: 'hapi', template: 'lit-hapi' },
+  { stack: 'react-mcp', server: 'hono', template: 'react-hono' },
 ];
 
 /**

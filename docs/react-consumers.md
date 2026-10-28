@@ -34,7 +34,7 @@ The [notes React view](../examples/pack1-consumer/src/notes-react-view.tsx) is a
 
 Follow the [action guide](actions.md#trace-one-press-allowed-and-denied) for the complete server authorization and outcome trace. An expired session can stop Archive before its protected request; cancellation after sending that request leaves its effect uncertain. The application presents that uncertainty and does not retry the write automatically.
 
-This is an existing application example, not a React starter command. Use [public installation](public-install.md) for the stack and exact peers, and [Getting started](getting-started.md) for a runnable local demo.
+This is an existing application example. To start a new React application on Hono, run `saga init --a2ui-stack react-mcp --server hono` as [Getting started](getting-started.md#create-a-new-project) describes; the starter holds the same public status, protected account and local Clear action as the Lit starters. Use [public installation](public-install.md) for the stack and exact peers.
 
 ## The React integration surface
 

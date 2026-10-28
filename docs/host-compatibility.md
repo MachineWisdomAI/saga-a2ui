@@ -17,7 +17,7 @@ These are observations of particular artifacts and flows, not a complete rendere
 
 React and Lit both provide an MCP stack for typed surfaces, actions and FaithfulCard applications. React is used by Ansari Faithful Answers; its [public destination candidate](https://github.com/iaser-ai/ansari/pull/323) records the application’s React stack recipe and local validation. The earlier [React integration record](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) reports answer cards in ChatGPT web, Claude web and the Alexa+ development simulator. Keep those earlier host artifacts separate from the later application candidate and package versions.
 
-Lit supplies the generated starters and standalone demo, and has its own bounded host observations. React has its own application and host evidence. Neither set establishes a complete host matrix or a universal maturity ranking. The missing React starter is a tooling gap; host limitations below must be evaluated for the actual flow and built resource, whichever renderer the application chooses.
+Lit supplies the generated starters and standalone demo, React supplies one generated starter (on Hono), and each has its own bounded host observations. React has its own application and host evidence. Neither set establishes a complete host matrix or a universal maturity ranking. A React starter on any server other than Hono is a tooling gap; host limitations below must be evaluated for the actual flow and built resource, whichever renderer the application chooses.
 
 ## ChatGPT and Claude
 
