@@ -2,9 +2,9 @@
 
 SAGA connects an application's UI to an MCP host. Your application supplies the view, the meaning of its data and the actions its controls perform. A stack package connects the renderer to MCP delivery and manages the view's lifetime.
 
-React and Lit are both supported renderer choices. Install the published MCP stack and peers for your application’s framework; both stacks provide custom typed surfaces, actions and FaithfulCard applications. For a generated Lit starter or local demonstration, use the source checkout and its matched candidate tarballs. The source CLI currently offers Lit templates; this is a tooling distinction, not a ranking of the two stacks.
+React and Lit are both supported renderer choices. Install the published MCP stack and peers for your application’s framework; both stacks provide custom typed surfaces, actions and FaithfulCard applications. For a generated starter or local demonstration, use the source checkout and its matched candidate tarballs. The source CLI offers Lit templates on five servers and one React template, on Hono; the local demonstration is Lit only. This is a tooling distinction, not a ranking of the two stacks.
 
-![Choose a published Lit or React stack, or a source-based Lit starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
+![Choose a published Lit or React stack, or a source-based Lit or React starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
 
 ## Install a published stack
 

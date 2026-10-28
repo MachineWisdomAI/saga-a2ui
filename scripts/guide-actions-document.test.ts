@@ -319,7 +319,7 @@ describe('what the guide must explain', () => {
       expect(line).toMatch(/retired|history/i);
     expect(guide).toMatch(/not shown/i);
     expect(guide).toMatch(
-      /one React starter, `react-mcp` on Hono[^|]*no other React pair and no authenticated React recipe/,
+      /one React starter, `react-mcp` on Hono, and its generated recipe[^|]*\|\s*No other React pair, no authenticated React recipe/,
     );
     expect(guide).not.toMatch(/\bhapi\b[^\n]*\bis qualified\b/i);
   });
