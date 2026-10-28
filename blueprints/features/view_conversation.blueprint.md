@@ -33,7 +33,7 @@ Neither kind of action can reach the conversation:
 
 The reply to a view-initiated call returns to the calling action. MCP Apps hosts do not add it to the conversation. The assistant also acts only when given a turn, so a view that changes shared state leaves the assistant unaware until the person types into the chat.
 
-The MCP Apps bridge the stacks depend on (`@modelcontextprotocol/ext-apps` 2.0.3) already supports this. `App.sendMessage` sends `ui/message`, a message with role `"user"` that the host adds to the conversation, and the host advertises it through its `message` capability. The stacks construct `App` privately, and the consumer boundary forbids applications from importing the bridge (`scripts/consumer-boundary.ts`). So an application has no supported way to add a message.
+The MCP Apps bridge the stacks depend on (`@modelcontextprotocol/ext-apps` 2.0.3) already supports this. `App.sendMessage` sends `ui/message`, a message with role `"user"` that the host adds to the conversation, and the host advertises it through its `message` capability. `App.updateModelContext` sends `ui/update-model-context`: information that the host passes to the model with the next user message, advertised as `updateModelContext`. The stacks construct `App` privately, and the consumer boundary forbids applications from importing the bridge (`scripts/consumer-boundary.ts`). So an application has no supported way to add a message.
 
 ## Proposed behavior
 
@@ -44,28 +44,37 @@ The MCP Apps bridge the stacks depend on (`@modelcontextprotocol/ext-apps` 2.0.3
      .run(({params, call}) => call('play_move', {...game.current(), ...params, player: 'X'}))
      .onSuccess(({result, current}) => {
        if (!current()) return;
-       game.present(result);
+       const game = board.present(result);
 -      // The assistant does not know the person moved.
-+      if (game.isAssistantsTurn())
-+        void host.conversation.appendMessage(game.describeLastMove()).then((outcome) => {
-+          if (outcome !== 'appended') game.say(TEXT.tellTheAssistant);
-+        });
++      const shown = {gameId: game.gameId, moveNumber: game.moveNumber};
++      const handOver =
++        game.status === 'playing'
++          ? host.conversation.appendMessage(TEXT.yourMove(game.gameId), {
++              // best effort: the move message tells the assistant to read get_game if the board is missing
++              context: {text: TEXT.boardForAssistant(game), data: {game}, bestEffort: true},
++            })
++          : host.conversation.appendMessage(TEXT.result(game)); // reports the result, asks for no move
++      void handOver.then((result) => {
++        if (!board.isShowing(shown)) return; // a newer game or move is on screen
++        if (result.outcome !== 'appended') board.say(TEXT.tellTheAssistant);
++      });
      })
      .build();
 ```
 
-The hook starts the append and does not wait for it. A host may wait for the person to confirm the message, and a success hook has a five-second budget ([action defaults](../../docs/actions.md)). The application handles the outcome when it arrives.
-
-The flow:
+**The flow:**
 
 1. The person clicks a square. The server accepts the move, and the action presents the new board.
-2. The action appends one message, such as "I played X in row 1, column 2. Your move."
-3. The host shows it in the conversation as if the person had typed it, and the assistant takes its turn.
-4. If the host cannot take an appended message, the outcome says so and the application tells the person what to type.
+2. **If the game is still in progress**, the action appends a short move message: "Your move in tic-tac-toe game `<gameId>`. The board is in your context; if it isn't, read it with get_game. Then play O with play_move." The accepted game travels as the message's `context`, which the assistant receives but the conversation does not show. The message names the game; it never restates the board, because the server owns the state.
+3. **If X's move ended the game**, the action instead appends the result, as the person: "I won our tic-tac-toe game." or "Our tic-tac-toe game ended in a draw." It asks for no move. Every draw ends on X's move, because X moves first on nine squares. An O win arrives through the assistant's own call and needs no message.
+4. The host shows the message as if the person had typed it, and the assistant takes its turn.
+5. If nothing was appended, the result says so, and the application tells the person what to type.
+
+**Why the action rechecks with its own identity.** The hook starts the append and does not wait for it. A host may wait for the person to confirm the message, and a success hook has a five-second budget ([action defaults](../../docs/actions.md)). The action's `current()` is true only while the runtime waits for this hook ([action guide](../../docs/actions.md)). It is already false when the append settles. So the application compares its own `{gameId, moveNumber}` with what the board shows. A late failure for an old game or move never appears on a newer one.
 
 The capability follows the shape of host links. A delivery-neutral contract lives in `@saga-a2ui/core`, the MCP Apps implementation lives in `@saga-a2ui/mcp/view`, and each stack places an instance on `ViewHost`.
 
-![The application's action calls appendMessage on the core contract; the MCP Apps implementation sends ui/message when the host advertises message support; a future A2A delivery would send message/send in the current context.](../../diagrams/view-conversation.svg)
+![The application's action calls appendMessage, optionally with context, on the core contract; the MCP Apps implementation sends ui/update-model-context and then ui/message when the host supports them; a future A2A delivery would send one message/send with the context as a data part.](../../diagrams/view-conversation.svg)
 
 [Editable Mermaid](../../diagrams/view-conversation.mmd) · [PNG](../../diagrams/view-conversation.png)
 
@@ -74,64 +83,104 @@ The capability follows the shape of host links. A delivery-neutral contract live
 **Contract (proposed, `@saga-a2ui/core/conversation`).**
 
 ```ts
-export type AppendOutcome = 'appended' | 'denied' | 'unavailable' | 'failed';
+export type RequestOutcome = 'denied' | 'unavailable' | 'failed';
+
+export type AppendResult =
+  | {readonly outcome: 'appended'; readonly context?: RequestOutcome} // context set only when best effort skipped it
+  | {readonly outcome: RequestOutcome; readonly stage: 'context' | 'message'}; // nothing appended
 
 export interface Conversation {
-  /** Adds a message to the conversation as the person, which gives the assistant its turn. */
-  appendMessage(text: string, options?: {readonly role?: 'user'}): Promise<AppendOutcome>;
+  /**
+   * Adds a message to the conversation as the person, which gives the assistant its turn.
+   * `context` is information for that turn that the conversation does not show. By default the
+   * message is sent only if the context was accepted; `bestEffort: true` sends it regardless.
+   */
+  appendMessage(
+    text: string,
+    options?: {
+      readonly role?: 'user';
+      readonly context?: {
+        readonly text: string;
+        readonly data?: Record<string, unknown>;
+        readonly bestEffort?: boolean; // default false
+      };
+    },
+  ): Promise<AppendResult>;
 }
 
-export const NO_CONVERSATION: Conversation; // every call resolves 'unavailable'
+export const NO_CONVERSATION: Conversation; // every call resolves {outcome: 'unavailable', stage: ...}
 ```
 
 | Outcome | Meaning |
 | --- | --- |
 | `appended` | The host accepted the message. It does not show that the assistant replied, or what it said. |
-| `denied` | The host refused it, for example because the person declined or a policy blocked it. |
-| `unavailable` | The host advertises no message capability, or the view has ended. Nothing was sent. |
+| `denied` | The host refused the request, for example because the person declined or a policy blocked it. |
+| `unavailable` | The host advertises no capability for the request, or the view has ended. That request was not sent. |
 | `failed` | The request could not complete, for example because the connection was lost or it timed out. |
+
+`stage` says which request stopped the append. `context` on an appended result says why a best-effort context was skipped.
+
+**Context blocks the message by default.** When `context` is present and cannot be delivered, because it is unsupported, refused, failed or the view ended, the message is not sent. The result is `{outcome, stage: 'context'}`, so the application knows nothing reached the conversation.
+
+With `bestEffort: true`, the application opts in to sending the message anyway. The result is `{outcome: 'appended', context: <why it was skipped>}`. An application should opt in only when the assistant has another way to get the information. The tic-tac-toe game opts in because its move message names `get_game`.
+
+**One verb, not two.** Context is a parameter of the message, not a separate request.
+- An MCP Apps host "will typically defer sending the context to the model until the next user message… Only the last update is sent" (`ext-apps` 2.0.3 `App.updateModelContext`).
+- So context without a following message has no effect the application can rely on.
+- A2A carries both in one `message/send`.
 
 The verbs describe the conversation, not one delivery protocol:
 
 | Delivery | `appendMessage` sends | Status |
 | --- | --- | --- |
-| MCP Apps | `ui/message` with role `"user"` and one text content block, only when `getHostCapabilities().message` is present | Proposed |
-| A2A | `message/send` with a `Message` of role `"user"` in the view's current `contextId` | Not proposed; the [A2A delivery issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/198) owns it |
+| MCP Apps | With `context`: `ui/update-model-context` first, `text` as a content block and `data` as `structuredContent`, only when `getHostCapabilities().updateModelContext` is present. Then `ui/message` with role `"user"` and one text content block, only when `getHostCapabilities().message` is present. | Proposed |
+| A2A | One `message/send` with a `Message` of role `"user"` in the view's current `contextId`. `context` would become a data part on that message. | Not proposed; the [A2A delivery issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/198) owns it |
+
+**Trust.** Context comes from the view. It is a snapshot that helps the assistant, not authority. The server still validates every move, including its `expectedMoveNumber`.
 
 `role` defaults to `'user'` and is the only accepted value. MCP Apps permits only that role. A2A's other role, `'agent'`, belongs to the agent, and the type widens only if a delivery needs it.
 
-The capability is read at call time, as host links do, so the instance can exist before the bridge has connected.
+Capabilities are read at call time, as host links do, so the instance can exist before the bridge has connected.
 
-**MCP Apps implementation (`@saga-a2ui/mcp/view`).** `conversationFromApp(app, signal)` sits beside `hostLinksFromApp`. It resolves `unavailable` once the view's lifetime signal has aborted, including while a request is outstanding, so an ended view hears no late outcome.
+**MCP Apps implementation (`@saga-a2ui/mcp/view`).** `conversationFromApp(app, signal)` sits beside `hostLinksFromApp`. It sends the context request, then the message, never in parallel. Once the view's lifetime signal has aborted, it resolves `unavailable`, including while a request is outstanding, so an ended view hears no late outcome.
 
 **Stacks.** `ViewHost` gains a readonly `conversation: Conversation` in both stacks, built from the same `App` and lifetime signal as the existing members. React and Lit get it in the same release.
 
 **Application.** It owns everything about the conversation:
 
-- whether to append and what the text says;
-- what the person sees when the outcome is not `appended`;
+- whether to append, what the text says, and what context goes with it;
+- whether a context failure may be skipped (`bestEffort`);
+- what the person sees when nothing was appended, shown only while the same state is on screen;
 - never treating `appended` as the assistant having acted.
 
 Its server stays authoritative over application state. An appended message is a prompt, not a command, and it authorizes nothing.
-
-**Not included.** `updateModelContext`, which updates the model's context without starting a turn, is not proposed. The current examples do not need it, and A2A has no equivalent. It can follow under a general name when an application needs it.
 
 ## Failure and recovery
 
 | Trigger | Observable result and recovery |
 | --- | --- |
-| The host does not advertise `message` | `unavailable`; nothing is sent. The application shows its own instruction, such as "Tell the assistant it's their move". |
-| The host refuses the message | `denied`; the application shows the same instruction. No retry, because a repeated message would ask the assistant twice. |
+| The host does not advertise `message` | `{outcome: 'unavailable', stage: 'message'}`. Nothing is sent. The application shows its own instruction, such as "Tell the assistant it's their move". |
+| The context cannot be delivered (unsupported, refused or failed) | By default, `{outcome, stage: 'context'}`: the message is not sent, and the application shows its instruction. With `bestEffort`, the message is sent and the result is `{outcome: 'appended', context}`. |
+| The host refuses the message | `denied` at the message stage; the application shows the same instruction. No retry, because a repeated message would ask the assistant twice. |
 | The request rejects or times out | `failed`; whether the host showed the message is unknown. The application shows the instruction and does not retry automatically. |
-| The view ends while the request is outstanding | `unavailable`; the action's currentness checks keep the outcome from reaching a retired view. |
+| The view ends while a request is outstanding | `unavailable`. No later request is sent. |
+| The outcome settles after the application moved on, for example to a new game | The application's own identity check finds different state on screen and ignores the outcome. |
 | The assistant does not respond, or responds without acting | Outside this capability. The application keeps its own state consistent and offers the person a way to continue. |
 
 ## Verification outcomes
 
-- **Capability present.** A host fixture that advertises `message` and accepts the request: one `ui/message` with role `user` and the exact text is recorded; the outcome is `appended`.
-- **Capability absent.** No request is sent; the outcome is `unavailable`.
-- **Host refusal.** An `isError` answer resolves `denied`; a rejected request resolves `failed`.
-- **Ended view.** Aborting the lifetime before or during the request resolves `unavailable`, and the late answer is ignored.
+- **Message only.**
+  - A fixture that advertises `message` and accepts the request records one `ui/message` with role `user` and the exact text, and the outcome is `appended`.
+  - No context request is made.
+- **With context.** The fixture records `ui/update-model-context` with `text` as content and `data` as `structuredContent`, and then `ui/message`, in that order.
+- **Context fails, default.** The context capability is withheld, refused (`isError`) or rejected.
+  - Nothing reaches `ui/message`.
+  - The result is `{outcome: 'unavailable' | 'denied' | 'failed', stage: 'context'}`.
+- **Context fails, best effort.** The same three cases.
+  - Only `ui/message` is recorded.
+  - The result is `{outcome: 'appended', context: <that outcome>}`.
+- **Message refused or failing.** An `isError` answer resolves `denied` and a rejected request resolves `failed`, both at the message stage. A missing `message` capability resolves `unavailable` at the message stage.
+- **Ended view.** Aborting the lifetime before or during either request resolves `unavailable`, sends nothing further and ignores the late answer.
 - **Parity.** The same cases pass through `ViewHost.conversation` from both stacks, in Chromium against the local MCP Apps host fixture (`apps/lit-host/e2e/host-fixture`).
 - **Exports and boundary.** Each package's `exports.test.ts` lists the new entries, and consumer code reaches the capability without importing the bridge.
 
@@ -140,7 +189,7 @@ These are local checks. Whether Claude, ChatGPT or Alexa+ show the message, and 
 ## Implementation sequence
 
 1. Add the contract to `@saga-a2ui/core` and the MCP Apps implementation with its unit tests.
-2. Add `ViewHost.conversation` to both stacks. Add a fixture handler that records messages and can withhold the capability, and add the browser cases.
+2. Add `ViewHost.conversation` to both stacks. Add fixture handlers that record context updates and messages in order, and that can withhold, refuse or fail each one. Add the browser cases.
 3. Document it in the [React integration guide](../../docs/react-consumers.md) and the development reference.
 
 This release bumps the package versions. The [getting-started tracks](getting_started_tracks.blueprint.md) design uses it for the tic-tac-toe example.
@@ -154,4 +203,4 @@ None in the design. Host behaviour is missing verification, not an open design c
 - [View composition](view_composition.blueprint.md) for the stacks and `startA2uiView`.
 - [Action binding](../modules/action_binding.blueprint.md) for actions, hooks and currentness.
 - `@saga-a2ui/core/host-links` and `@saga-a2ui/mcp/view` `hostLinksFromApp`: the pattern this follows.
-- MCP Apps `App.sendMessage` and the host `message` capability in `@modelcontextprotocol/ext-apps` 2.0.3. A2A `message/send` and `Message.role`.
+- MCP Apps `App.sendMessage`, `App.updateModelContext` and the host `message` and `updateModelContext` capabilities in `@modelcontextprotocol/ext-apps` 2.0.3. A2A `message/send`, `Message.role` and data parts.

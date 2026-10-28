@@ -7,20 +7,32 @@ sequenceDiagram
   P->>B: clicks row 1, column 2
   B->>H: play_move(X, expectedMoveNumber 0)
   H->>S: play_move
-  S-->>H: game, move 1, O to play
+  S-->>H: game, move 1
   H-->>B: result to the calling action (onSuccess)
   B->>B: show X, squares disabled
-  B->>H: appendMessage("I played X ... Your move.")
-  H->>A: the person's message
-  A->>H: play_move(O, expectedMoveNumber 1)
-  H->>S: play_move
-  S-->>H: game, move 2, X to play
-  H-->>A: result (no card opened)
-  loop bounded wait, about every 1.5 s
-    B->>H: show_game
-    H->>S: show_game
+  alt game in progress, O next
+    B->>H: appendMessage("Your move in game ...", context: game)
+    Note over B,H: ui/update-model-context, then ui/message
+    H->>A: the person's message, with the game as context
+    opt context missing
+      A->>H: get_game
+      H->>S: get_game
+      S-->>H: game, move 1
+      H-->>A: result
+    end
+    A->>H: play_move(O, expectedMoveNumber 1)
+    H->>S: play_move
     S-->>H: game, move 2
-    H-->>B: result to the waiting board
+    H-->>A: result (no card opened)
+    loop bounded wait, about every 1.5 s
+      B->>H: get_game
+      H->>S: get_game
+      S-->>H: game, move 2
+      H-->>B: result to the waiting board
+    end
+    B->>B: show O, squares enabled for X
+  else X won, or the board is full
+    B->>H: appendMessage("I won our tic-tac-toe game.")
+    H->>A: the person's message (no move asked)
   end
-  B->>B: show O, squares enabled for X
-  Note over B,S: A stale card or repeated request sends an old expectedMoveNumber.<br/>The server refuses it with no effect and returns the current game.
+  Note over B,S: A late append result is ignored unless the board still shows the same game and move.<br/>A stale card or repeated request sends an old expectedMoveNumber, which the server refuses with no effect.

@@ -1,10 +1,11 @@
 graph LR
   APP["Application action<br/>(onSuccess hook)"]
-  C["Conversation contract<br/>@saga-a2ui/core/conversation<br/>appendMessage(text, role: user)"]
   ST["ViewHost.conversation<br/>React and Lit stacks"]
+  C["Conversation contract<br/>@saga-a2ui/core/conversation<br/>appendMessage(text, role?, context?)"]
   M["MCP Apps implementation<br/>@saga-a2ui/mcp/view"]
-  UI["ui/message, role user<br/>only if the host advertises message"]
-  A2A["A2A delivery (not proposed)<br/>message/send, role user, current contextId"]
+  CTX["ui/update-model-context<br/>if context, when supported<br/>(failure blocks the message<br/>unless bestEffort)"]
+  UI["ui/message, role user<br/>when the host advertises message"]
+  A2A["A2A delivery (not proposed)<br/>one message/send, role user,<br/>context as a data part"]
   APP --> ST --> C
-  C --> M --> UI
+  C --> M --> CTX --> UI
   C -.-> A2A

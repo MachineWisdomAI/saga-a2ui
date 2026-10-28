@@ -53,9 +53,12 @@ The command creates a clean React starter on Hono from `templates/react-hono`. I
 
 1. The person asks the assistant for a game of tic-tac-toe. The assistant calls `new_game`, and the host shows the board.
 2. The person clicks a square. The board calls `play_move` for X. The server checks the move and stores it, and the board shows it and marks the assistant's turn.
-3. The board appends "I played X in row 1, column 2. Your move." to the conversation, using [view conversation](view_conversation.blueprint.md). The assistant takes its turn and calls `play_move` for O.
-4. The board was already waiting for the assistant's move. It reads the game with `show_game`, shows O's square and gives the turn back to the person.
-5. The game continues to a win or a draw. New game starts a separate game, and nothing from the old game can change it.
+3. If the game is still in progress, the board appends a short move message to the conversation, using [view conversation](view_conversation.blueprint.md). For example: "Your move in tic-tac-toe game `<gameId>`. The board is in your context; if it isn't, read it with get_game. Then play O with play_move."
+   - The accepted game travels as the message's `context`, which the assistant receives and the conversation does not show.
+   - The message names the game and never restates the board.
+   - The assistant takes its turn. It reads `get_game` only if the context is missing, then calls `play_move` for O.
+4. The board was already waiting for the assistant's move. It reads the game with `get_game`, shows O's square and gives the turn back to the person.
+5. If X's move ends the game, the board instead appends the result as the person, such as "I won our tic-tac-toe game." or "Our tic-tac-toe game ended in a draw.", and starts no wait. New game starts a separate game, and nothing from the old game can change it.
 
 ![The person's click and the assistant's tool call reach the same play_move operation; the board learns each move through its own server calls and hands the turn over by appending a message.](../../diagrams/tic-tac-toe-turn-loop.svg)
 
@@ -125,7 +128,7 @@ The arrangements it covers:
 - the same rules and state behind an MCP gateway on one server and an app API on another;
 - one A2UI layout rendered by React or Lit in the client;
 - a native A2UI host that needs no MCP;
-- A2A as a delivery, including `appendMessage` mapped to A2A `message/send`;
+- A2A as a delivery, including `appendMessage` mapped to A2A `message/send`, with its `context` as a data part on that message;
 - `GameStore` backed by Workers KV or a Durable Object when moving off a single Node process.
 
 ### Tic-tac-toe example (`examples/tic-tac-toe`)
@@ -147,21 +150,27 @@ The example is generated with the React/Hono `saga init` and keeps the template'
 | Name | Called by | Opens a card | Input | Returns |
 | --- | --- | --- | --- | --- |
 | `new_game` | Assistant | Yes | — | A new game |
-| `show_game` | Assistant or board | Yes | `gameId` | The current game |
+| `show_game` | Assistant | Yes | `gameId` | Opens or reopens a card with the current game |
+| `get_game` | Assistant or board | No | `gameId` | The current game |
 | `play_move` | Assistant or board | No | `gameId`, `square` 0–8, `player` X or O, `expectedMoveNumber` | The game after the move |
 
-All three are saga operations declared through `registerPublicOperation`. `play_move` simply omits `view` (see [operations without a view](#operations-without-a-view)):
+All four are saga operations declared through `registerPublicOperation`. `get_game` and `play_move` simply omit `view` (see [operations without a view](#operations-without-a-view)):
 
 ```diff
  play_move:  input, output, handle, project, failures
 -            view: boardView
+ get_game:   input, output, handle, project, failures
+-            view: boardView
  show_game:  input, output, handle, project, failures, view: boardView
 ```
 
-Every result carries the whole game as structured content, plus a short text for the model. `play_move`'s description tells the model three things:
+The assistant needs a server read that opens no card. A host delivers a model call's result to a card mounted for that call, so reading through `show_game` would add a board to the conversation on every turn. Neither the app nor its server can push a result to the model: `AppBridge.sendToolResult` is the host's own notification to its view.
+
+Every result carries the whole game as structured content, plus a short text for the model. `play_move`'s description tells the model four things:
 - it plays O;
 - it may place X only when the person states their move in conversation;
-- where a card cannot call the server, it should call `show_game` to display the board.
+- if the board is not in its context, it reads it with `get_game`;
+- where a card cannot call the server, it calls `show_game` to display the board.
 
 **Board view.**
 - **Layout.** One status line, three rows of three square buttons and a New game button, declared with `defineSurface`.
@@ -173,9 +182,12 @@ Every result carries the whole game as structured content, plus a short text for
 - **The square action.** One server action is bound to every square:
   - its subject is the game and move number, so an old completion cannot reach a newer board;
   - it calls `play_move` for X;
-  - on success it presents the game, appends the hand-over message, and starts the wait.
+  - on success it presents the game;
+  - while the game is in progress, it appends the move message with the game as best-effort `context`, and starts the wait;
+  - when X's move ended the game, it appends the result message only;
+  - it applies the append's result only while the board still shows the same game and move, because the action's `current()` ends with the hook ([view conversation](view_conversation.blueprint.md#proposed-behavior)).
 - **The wait.**
-  - The controller owns it. It is a bounded series of `show_game` calls, about every second and a half for up to a minute.
+  - The controller owns it. It is a bounded series of `get_game` calls, about every second and a half for up to a minute.
   - It ends on the assistant's move, a new game, teardown or its limit. At the limit, a "Check for the assistant's move" button replaces it.
   - MCP Apps gives a server no way to push to an open view, so this is the mechanism available.
 - **`onToolResult`.** It presents the result that opened the card, and any later result a host does deliver to it.
@@ -204,7 +216,7 @@ Three requirements govern it:
 
 1. **Identical execution guarantees.** Omitting `view` preserves input validation, budgets, cancellation handling and safe failures exactly. The tool is declared with the same input and output contracts and annotations, the same `execute()` path runs, and a protected operation still requires its identity resolver and sign-in failure text.
 2. **No UI association.** A viewless operation registers no view resource. It attaches no UI-resource metadata to its tool definition, or to any result, whether successful or failed.
-3. **One consumer interface.** The tutorial declares all three operations through saga. Any underlying plain MCP tool registration stays inside `@saga-a2ui/mcp`, and the example imports no MCP Apps server API.
+3. **One consumer interface.** The tutorial declares all four operations through saga. Any underlying plain MCP tool registration stays inside `@saga-a2ui/mcp`, and the example imports no MCP Apps server API.
 
 The change lands in step 2's SDK release. It amends the operation declaration described by the [reusable MCP connector](reusable_mcp_connector.blueprint.md), whose other guarantees are unchanged.
 
@@ -216,6 +228,9 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 | A stale card or a repeated request sends an old `expectedMoveNumber` | Refused with no effect. The card shows the current game, so no extra move is applied and a newer game is untouched. |
 | The `gameId` is unknown or expired | Refused. The card offers New game. |
 | The host cannot take an appended message, or refuses it | The status reads "Tell the assistant it's their move". The wait still runs. |
+| The host cannot take the context | The move message is still sent, because the game opts into best effort. The assistant reads `get_game` as the message tells it. |
+| X's move wins or fills the board | The board appends the result message, asks for no move and starts no wait. |
+| An append settles after New game or a newer move | Its result is ignored; nothing appears on the newer game. |
 | The assistant does not move before the wait ends | "Check for the assistant's move" appears. Nothing is retried on the assistant's behalf. |
 | A view call fails or times out | The move may or may not have been applied. The card reads the game again before offering the square. |
 | The host shows the assistant's move in a new card | Both cards read the same game. An older card refuses its stale moves and catches up. |
@@ -241,7 +256,10 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 
 **Game view.** In Chromium, on the local MCP Apps host fixture:
 - clicking and keyboard moves;
-- the recorded appended message;
+- an in-progress move records the context update, with the game in `structuredContent`, and then the move message, which names the game and contains no board;
+- with the context capability withheld, the move message is still recorded;
+- a winning X move and a drawing X move each record exactly one result message, no context, and start no wait;
+- a failed append that settles after New game shows nothing on the new game;
 - an O move made through the fixture and picked up by the wait;
 - stale and duplicate refusals;
 - a new game that an old request cannot change;
