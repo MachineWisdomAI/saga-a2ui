@@ -74,6 +74,7 @@ describe('package subpath exports', () => {
     ]);
     expect(Object.keys(view).sort()).toEqual([
       'ViewStartFailure',
+      'conversationFromApp',
       'deliveredResultFromToolResult',
       'hostLinksFromApp',
       'readingProfile',
@@ -143,7 +144,7 @@ describe('package subpath exports', () => {
         /\/packages\/(components|lit|react|lynx)\//.test(id),
       ),
     ).toEqual([]);
-    // The host link contract is a type here; the view supplies an implementation of it.
+    // The host link and conversation contracts are types here; the view supplies an implementation of it.
     expect(modules.filter((id) => id.includes('/packages/core/'))).toEqual([]);
   });
 

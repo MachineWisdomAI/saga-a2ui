@@ -7,8 +7,14 @@ import {
 } from '@saga-a2ui/react/a2ui';
 import { ActionsScope, type ReactActions } from '@saga-a2ui/react/actions';
 import type { ServerTransport } from '@saga-a2ui/core/actions';
+import type { Conversation } from '@saga-a2ui/core/conversation';
 import type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
-import type { HostContext, ToolInput, ToolResult } from '@saga-a2ui/mcp/view';
+import {
+  conversationFromApp,
+  type HostContext,
+  type ToolInput,
+  type ToolResult,
+} from '@saga-a2ui/mcp/view';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { watchActionSetup } from './action-setup.js';
 import {
@@ -35,6 +41,8 @@ import type { ErrorPhase } from './start-failure.js';
 export interface ViewHost {
   /** The way an action reaches the application’s server, through the host. */
   readonly server: ServerTransport<ServerReply>;
+  /** The one way to add a message to the conversation, optionally with context for the assistant. Ends with the view. */
+  readonly conversation: Conversation;
 }
 
 export interface StartA2uiViewOptions<TData> {
@@ -133,6 +141,7 @@ export function startA2uiViewOn<TData>(
     const opened = surface;
     const connection = connect();
     const { app } = connection;
+    const lifetime = new AbortController();
     const { actions: makeActions } = options;
     const actions =
       typeof makeActions === 'function'
@@ -142,6 +151,7 @@ export function startA2uiViewOn<TData>(
                 callServerTool: (request, requestOptions) =>
                   app.callServerTool(request, requestOptions),
               },
+              conversation: conversationFromApp(app, lifetime.signal),
             }),
           )
         : makeActions;
@@ -171,7 +181,7 @@ export function startA2uiViewOn<TData>(
 
     const running = runView({
       connection,
-      lifetime: new AbortController(),
+      lifetime,
       releaseContainer: claim.release,
       sizing: options.sizing ?? 'host',
       ...(readiness === undefined ? {} : { readyWhen: readiness }),
