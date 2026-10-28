@@ -1,6 +1,6 @@
 ---
 feature_name: view_conversation
-status: draft
+status: approved
 module_blueprints: [action_binding]
 dependencies: [view_composition, reusable_mcp_connector]
 date_added: 2026-10-27
@@ -10,7 +10,7 @@ date_added: 2026-10-27
 
 ## Status
 
-- Design: draft awaiting human approval.
+- Design: approved by the human owner on 2026-10-28 at [`92262ec8b706b238ef4302280d251514e6110124`](https://github.com/MachineWisdomAI/saga-a2ui/blob/92262ec8b706b238ef4302280d251514e6110124/blueprints/features/view_conversation.blueprint.md), including its diagrams. It landed through [PR #320](https://github.com/MachineWisdomAI/saga-a2ui/pull/320) at `MachineWisdomAI/saga-a2ui@b4cca5a747bdae622ffc10243ae2bd7724024be0`, with no design change after the approved revision.
 - Implementation: not started.
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->

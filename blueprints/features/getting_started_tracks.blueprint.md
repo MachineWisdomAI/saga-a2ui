@@ -1,6 +1,6 @@
 ---
 feature_name: getting_started_tracks
-status: draft
+status: approved
 module_blueprints: [action_binding]
 dependencies: [application_setup, view_conversation, view_composition, reusable_mcp_connector]
 date_added: 2026-10-27
@@ -10,10 +10,10 @@ date_added: 2026-10-27
 
 ## Status
 
-- Design: draft awaiting human approval.
+- Design: approved by the human owner on 2026-10-28 at [`92262ec8b706b238ef4302280d251514e6110124`](https://github.com/MachineWisdomAI/saga-a2ui/blob/92262ec8b706b238ef4302280d251514e6110124/blueprints/features/getting_started_tracks.blueprint.md), including its diagrams. It landed through [PR #320](https://github.com/MachineWisdomAI/saga-a2ui/pull/320) at `MachineWisdomAI/saga-a2ui@b4cca5a747bdae622ffc10243ae2bd7724024be0`, with no design change after the approved revision.
 - Implementation: not started.
-- This would partially amend [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
-- It would also make `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
+- This partially amends [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
+- It also makes `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 
