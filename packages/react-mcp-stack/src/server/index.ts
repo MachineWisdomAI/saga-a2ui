@@ -10,6 +10,9 @@ export {
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  type BudgetSettings,
+  type LifetimeCause,
+  type OperationOutcome,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';

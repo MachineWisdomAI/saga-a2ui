@@ -4,7 +4,7 @@ import {
   type McpHandlerRequestOptions,
   type McpServer,
 } from '@modelcontextprotocol/server';
-import type { RequestLifetime } from '@saga-a2ui/mcp/server';
+import type { RequestLifetime } from '@saga-a2ui/react-mcp-stack/server';
 
 /** One endpoint's persistent handler, admission association, notification bus and capacity. */
 export function createEndpoint(

@@ -36,7 +36,7 @@ The first command installs the repository's tools. The second packs the SDK, ins
 Tic-tac-toe MCP endpoint: http://127.0.0.1:3000/mcp
 ```
 
-This route builds the SDK packages from your checkout. The game needs that: adding a message to the conversation and operations that open no card come with the source packages (`0.8.0-rc.1`), and the `0.7.7-rc.1` release on npm does not have them. Nothing here is a published artifact.
+This route builds the SDK packages from your checkout. The game needs that: adding a message to the conversation and operations that open no card come with the source packages (React stack `0.8.1-rc.1`), and the `0.7.7-rc.1` release on npm does not have them. Nothing here is a published artifact.
 
 Add the address to an MCP host that can show an app, then ask the assistant for a game. [Connecting to Claude, ChatGPT and Alexa+](#connect-it-to-claude-chatgpt-and-alexa) below covers the three hosts. None of the three has been run against this game yet. The [host compatibility guide](host-compatibility.md) records what each host is known to support.
 

@@ -264,7 +264,7 @@ describe('the route from a checkout, and the release it needs', () => {
     ).version;
     expect(published).toBeDefined();
     expect(source).not.toBe(published);
-    expect(guide).toContain(`(\`${source}\`)`);
+    expect(guide).toContain(`(React stack \`${source}\`)`);
     expect(guide).toContain(
       `\`${published}\` release on npm does not have them`,
     );
