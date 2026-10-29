@@ -354,6 +354,6 @@ describe('the scenarios the tour offers', () => {
       (one) => one.id === 'react',
     ) as (typeof RENDERERS)[number];
     expect(react.evidence).toMatch(/not renderer parity/);
-    expect(react.evidence).toMatch(/no React starter/);
+    expect(react.evidence).toMatch(/not the React starter/);
   });
 });

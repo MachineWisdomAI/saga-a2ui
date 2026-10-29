@@ -1,0 +1,15 @@
+{
+  "stack": "react-mcp",
+  "server": "hono",
+  "serverAdapter": {
+    "package": "@modelcontextprotocol/hono",
+    "version": "2.0.2"
+  },
+  "sdkPackages": ["core", "react", "components", "mcp", "react-mcp-stack"],
+  "snippets": [
+    "prepare-view",
+    "register-protected-operation",
+    "identity-handoff",
+    "bind-action"
+  ]
+}
