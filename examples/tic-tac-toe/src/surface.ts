@@ -1,4 +1,5 @@
 import { defineSurface, z } from '@saga-a2ui/react-mcp-stack';
+import { VIEW_TEXT } from './text.js';
 
 // The layout of the board: its data and its components. The layout gives the markup its IDs and its
 // structure and nothing else: it names no action, no handler and no function. Which behavior a
@@ -26,6 +27,7 @@ const SquareDataSchema = z.object({
 });
 
 const BoardDataSchema = z.object({
+  gameId: z.string(),
   /** The one status line: whose turn it is, how the game ended, or what to do next. */
   status: z.string(),
   squares: z.array(SquareDataSchema),
@@ -39,13 +41,26 @@ export const boardSurface = defineSurface({
   surfaceId: 'board',
   catalogId: CATALOG_ID,
   data: BoardDataSchema,
-  initial: { status: '', squares: [], canCheck: '', history: [] },
+  initial: { gameId: '', status: '', squares: [], canCheck: '', history: [] },
   root: {
     component: 'Column',
     bind: {},
-    props: { children: ['status', 'board', 'controls'] },
+    props: {
+      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
+    },
   },
   components: [
+    {
+      id: 'send-hint',
+      component: 'Line',
+      kind: 'body',
+      text: VIEW_TEXT.sendHint,
+    },
+    {
+      id: 'game-details',
+      component: 'GameDetails',
+      gameId: { path: '/gameId' },
+    },
     {
       id: 'status',
       component: 'Line',

@@ -57,6 +57,20 @@ const Line: ReactCatalogComponent = createComponentImplementation(
   },
 );
 
+/** Native disclosure keeps the identifier available without crowding the board. */
+const GameDetails: ReactCatalogComponent = createComponentImplementation(
+  {
+    name: 'GameDetails',
+    schema: z.object({ gameId: CommonSchemas.DynamicString }).strict(),
+  },
+  ({ props }) => (
+    <details>
+      <summary>Show game ID</summary>
+      <code>{String(props.gameId ?? '')}</code>
+    </details>
+  ),
+);
+
 const Column: ReactCatalogComponent = createComponentImplementation(
   ColumnApi,
   ({ props, buildChild }) => (
@@ -132,6 +146,7 @@ export const boardEntries: readonly ReactCatalogComponent[] = [
   Line,
   SquareFace,
   Shown,
+  GameDetails,
   ActionButtonEntry,
 ];
 

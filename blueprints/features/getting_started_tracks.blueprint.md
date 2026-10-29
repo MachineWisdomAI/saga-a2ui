@@ -10,6 +10,8 @@ date_added: 2026-10-27
 
 ## Status
 
+- Message UX amendment: on 2026-10-29 the owner requested **Your turn** without an identifier or instructions in the visible message, explicit Send guidance, and a card control that reveals its game ID. The game and move instructions remain in hidden context, which must succeed before sending the short turn message. **New game** prepares **Let’s play a new game.** Implementation and host qualification of this amendment are pending; the earlier recovery approval alone does not qualify it.
+
 - Recovery amendment: the owner approved a fresh card for each **New game** on 2026-10-29. The amended behavior is recorded at [`49205a6b9342ebf3f1770bb9541386a13d623edd`](https://github.com/MachineWisdomAI/saga-a2ui/blob/49205a6b9342ebf3f1770bb9541386a13d623edd/blueprints/features/getting_started_tracks.blueprint.md): a prepared conversation request opens the new card; remounted cards read their current game; a confirmed move whose reply was lost gets its missing handoff. This is a bounded amendment to the approved tutorial, with host confirmations still permitted. Implementation review and the landed revision are pending; earlier verification below does not establish that the reported intermittent Claude Desktop Code messaging failure is resolved. The delivery coordinator will record the landed revision after merge.
 - Design: approved by the owner on 2026-10-28 at [`6c3638b3f372c27d12b406a0c4800ea01f93cf24`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/blueprints/features/getting_started_tracks.blueprint.md), including the reviewed diagram ([Mermaid](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.mmd), [SVG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.svg), [PNG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/tic-tac-toe-turn-loop.png)).
 - Implementation: source scope and integrated local qualification are complete in the revisions below; final human acceptance remains pending. Blueprint `6c3638b3f372c27d12b406a0c4800ea01f93cf24` implemented for the React/Hono starter scope at `MachineWisdomAI/saga-a2ui@0ad4acba45ea179031bf9d0071946b3d648b9297` ([PR #325](https://github.com/MachineWisdomAI/saga-a2ui/pull/325)). The maintained `templates/react-hono`, qualified CLI pair, stack-aware qualification and generated recipes are landed. [Independent review](https://github.com/MachineWisdomAI/saga-a2ui/pull/325#pullrequestreview-5691176422) covered final head `7085eebe5329e8a2f23604697e98a3ce7eb529e3`; [application qualification CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/40789828879) passed.
@@ -73,10 +75,10 @@ The qualified React/Hono source starter remains available through `saga init`; t
 
 1. The person asks the assistant for a game of tic-tac-toe. The assistant calls `new_game`, and the host shows the board.
 2. The person clicks a square. The board calls `play_move` for X. The server checks the move and stores it, and the board shows it and marks the assistant's turn.
-3. If the game is still in progress, the board appends a short move message to the conversation, using [view conversation](view_conversation.blueprint.md). For example: "Your move in tic-tac-toe game `<gameId>`. The board is in your context; if it isn't, read it with get_game. Then play O with play_move."
-   - The accepted game travels as the message's `context`, which the assistant receives and the conversation does not show.
-   - The message names the game and never restates the board.
-   - The assistant takes its turn. It reads `get_game` only if the context is missing, then calls `play_move` for O.
+3. If the game is still in progress, the board shares the game ID, board and move instructions as hidden `context` through [view conversation](view_conversation.blueprint.md). After that succeeds, it prepares **Your turn**. In Claude, the person clicks **Send** in the chat box; ChatGPT sends it automatically. The card explains what to do when a message waits in the chat box.
+   - The visible message contains no identifier or instructions. **Show game ID** reveals the identifier on the card when the person needs it.
+   - If the host cannot accept the context, the board reports the failure and sends no turn message.
+   - The assistant calls `play_move` for O in the game identified by that context. It can read `get_game` when it needs the current state.
 4. The board was already waiting for the assistant's move. It reads the game with `get_game`, shows O's square and gives the turn back to the person.
 5. If X's move ends the game, the board instead appends the result as the person, such as "I won our tic-tac-toe game." or "Our tic-tac-toe game ended in a draw.", and starts no wait. **New game** appends a prepared request for the assistant to call `new_game` and open a fresh card, subject to the host's confirmation. Each card retains its own game identity; the old game cannot replace the new one.
 
@@ -185,7 +187,7 @@ Every result carries the whole game as structured content, plus a short text for
   - its subject is the game and move number, so an old completion cannot reach a newer board;
   - it calls `play_move` for X;
   - on success it presents the game;
-  - while the game is in progress, it appends the move message with the game as best-effort `context`, and starts the wait;
+  - while the game is in progress, it shares the game as required hidden `context`, appends **Your turn**, and starts the wait;
   - when X's move ended the game, it appends the result message only;
   - it applies the append's result only while the board still shows the same game and move, because the action's `current()` ends with the hook ([view conversation](view_conversation.blueprint.md#proposed-behavior)).
 - **The wait.**
@@ -229,8 +231,8 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 | The square is occupied, it is not that player's turn, or the game has ended | `play_move` refuses with no effect and returns the current game. The board shows it and says why. |
 | A stale card or a repeated request sends an old `expectedMoveNumber` | Refused with no effect. The card shows the current game, so no extra move is applied and a newer game is untouched. |
 | The `gameId` is unknown or expired | Refused. The card offers New game. |
-| The host cannot take an appended message, refuses it, or does not confirm it | The status distinguishes unavailable messaging, refusal and an unconfirmed response, and includes the game identifier. The wait still runs. An uncertain message is not resent automatically. |
-| The host cannot take the context | The move message is still sent, because the game opts into best effort. The assistant reads `get_game` as the message tells it. |
+| The host cannot take an appended message, refuses it, or does not confirm it | The status distinguishes unavailable messaging, refusal and an unconfirmed response, and offers the game identifier through **Show game ID**. The wait still runs. An uncertain message is not resent automatically. |
+| The host cannot take the context | The card reports that it could not share the game. It does not send an ambiguous turn message; the wait can still observe a later server move. |
 | X's move wins or fills the board | The board appends the result message, asks for no move and starts no wait. |
 | An append settles after a newer move | Its result is ignored. An append on an old card cannot change a different card's game. |
 | Forty consecutive game reads fail | The board reports the connection failure and offers "Check for the assistant's move". It never repeats a move on the assistant's behalf. |
@@ -259,13 +261,13 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 
 **Game view.** In Chromium, on the local MCP Apps host fixture:
 - clicking and keyboard moves;
-- an in-progress move records the context update, with the game in `structuredContent`, and then the move message, which names the game and contains no board;
-- with the context capability withheld, the move message is still recorded;
+- an in-progress move records the context update, with the game in `structuredContent`, and then **Your turn**, with no identifier, board or instructions in the visible message;
+- with the context capability withheld, the card reports failure and sends no turn message;
 - a winning X move and a drawing X move each record exactly one result message, no context, and start no wait;
-- a failed append that settles after New game shows nothing on the new game;
+- New game prepares one request for a fresh card, even if clicked twice while confirmation is pending;
 - an O move made through the fixture and picked up by the wait;
 - stale and duplicate refusals;
-- a new game that an old request cannot change;
+- Send guidance is visible, and **Show game ID** reveals only the current card’s identifier without a server call;
 - distinct feedback for unavailable messaging, refusal and unconfirmed delivery;
 - restoration from a saved empty result, and no playable squares after a failed restoration read;
 - one missing handoff after a confirmed move's reply is lost, and no handoff when the move never reached the server;

@@ -1,8 +1,7 @@
 diff --git a/src/catalog.tsx b/src/catalog.tsx
-index d6fb8cc..9b741c0 100644
 --- a/src/catalog.tsx
 +++ b/src/catalog.tsx
-@@ -81,6 +81,18 @@ const Board: ReactCatalogComponent = createComponentImplementation(
+@@ -95,6 +95,18 @@
    ),
  );
  
@@ -21,7 +20,7 @@ index d6fb8cc..9b741c0 100644
  const SquareFaceApi = {
    name: 'SquareFace',
    schema: z
-@@ -129,6 +141,7 @@ export const boardEntries: readonly ReactCatalogComponent[] = [
+@@ -143,6 +155,7 @@
    Column,
    Row,
    Board,
@@ -30,19 +29,18 @@ index d6fb8cc..9b741c0 100644
    SquareFace,
    Shown,
 diff --git a/src/surface.ts b/src/surface.ts
-index 11d33c1..a1069a6 100644
 --- a/src/surface.ts
 +++ b/src/surface.ts
-@@ -46,7 +46,7 @@ export const boardSurface = defineSurface({
-   root: {
+@@ -46,7 +46,7 @@
      component: 'Column',
      bind: {},
--    props: { children: ['status', 'board', 'controls'] },
-+    props: { children: ['status', 'board', 'controls', 'history'] },
+     props: {
+-      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
++      children: ['status', 'send-hint', 'board', 'controls', 'game-details', 'history'],
+     },
    },
    components: [
-     {
-@@ -98,6 +98,12 @@ export const boardSurface = defineSurface({
+@@ -113,6 +113,12 @@
        when: { path: '/canCheck' },
        child: CHECK_ID,
      },

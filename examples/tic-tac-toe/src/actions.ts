@@ -111,12 +111,11 @@ export function createGameActions(host: ViewHost, game: GameController) {
     const shown = { gameId: played.gameId, moveNumber: played.moveNumber };
     const playing = played.status === 'playing';
     const appended = playing
-      ? host.conversation.appendMessage(CONVERSATION.yourMove(played.gameId), {
-          // Best effort: the message tells the assistant to read get_game if the board is missing.
+      ? host.conversation.appendMessage(CONVERSATION.yourMove, {
+          // The short message relies on this context to identify the right game.
           context: {
             text: CONVERSATION.boardForAssistant(played),
             data: { game: played },
-            bestEffort: true,
           },
         })
       : host.conversation.appendMessage(CONVERSATION.result(played));
@@ -124,7 +123,11 @@ export function createGameActions(host: ViewHost, game: GameController) {
     void appended.then((outcome) => {
       if (!game.isShowing(shown)) return; // a newer game or move is on screen
       if (outcome.outcome !== 'appended')
-        game.say(`${MESSAGE_FAILURE[outcome.outcome]} Game: ${played.gameId}.`);
+        game.say(
+          outcome.stage === 'context'
+            ? VIEW_TEXT.contextFailed
+            : MESSAGE_FAILURE[outcome.outcome],
+        );
     });
   }
 

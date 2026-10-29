@@ -355,12 +355,34 @@ test.describe('the board', () => {
     await board.button('New game').click();
     await board.button('New game').click();
     await expect.poll(async () => (await board.heard()).length).toBe(1);
-    expect(messageText((await board.heard())[0])).toContain('new_game');
+    expect(messageText((await board.heard())[0])).toBe(
+      "Let's play a new game.",
+    );
     expect(board.calls.filter((call) => call.name === 'new_game')).toHaveLength(
       0,
     );
     await expect(board.square(2, 2)).toBeEnabled();
     await page.evaluate(() => window.releaseConversation?.());
+  });
+
+  test('explains Send and reveals only this card’s game ID on request', async ({
+    page,
+  }) => {
+    const board = await open(page);
+    await expect(
+      board.view.getByText(
+        'When a message appears in the chat box, click Send to continue.',
+      ),
+    ).toBeVisible();
+    const id = board.view.getByText(board.gameId(), { exact: true });
+    await expect(id).not.toBeVisible();
+    const before = board.calls.length;
+    await board.view.getByText('Show game ID', { exact: true }).click();
+    await expect(id).toBeVisible();
+    await board.view.getByText('Show game ID', { exact: true }).click();
+    await expect(id).not.toBeVisible();
+    expect(board.calls).toHaveLength(before);
+    expect(await board.heard()).toEqual([]);
   });
 
   test('reads the current game when a remounted card receives its saved empty result', async ({
@@ -417,7 +439,7 @@ test.describe('the board', () => {
     ).toHaveLength(3);
   });
 
-  test('appends the context update with the game, then the move message, which names the game and shows no board', async ({
+  test('shares the game privately before appending only Your turn', async ({
     page,
   }) => {
     const board = await open(page);
@@ -438,24 +460,20 @@ test.describe('the board', () => {
     expect(data.game.board[2]).toBe('X');
     expect(message?.kind).toBe('message');
     expect(message?.params.role).toBe('user');
-    expect(messageText(message)).toBe(
-      `Your move in tic-tac-toe game ${gameId}. The board is in your context; if it isn't, read it with get_game. Then play O with play_move.`,
-    );
+    expect(messageText(message)).toBe('Your turn');
     expect(messageText(message)).not.toMatch(/[-XO]{3}\//);
   });
 
-  test('still sends the move message when the host cannot take the context', async ({
+  test('does not send an ambiguous turn when the host cannot receive game context', async ({
     page,
   }) => {
     const board = await open(page, { conversation: { context: 'withhold' } });
     await board.square(2, 1).click();
     await expect(board.square(2, 1, 'X')).toBeVisible();
-    await expect.poll(async () => (await board.heard()).length).toBe(1);
-    const [only] = await board.heard();
-    expect(only?.kind).toBe('message');
-    expect(messageText(only)).toContain('get_game');
-    // The assistant was told, so nothing needs saying; the wait runs.
-    await expect(board.status()).toHaveText(TEXT.assistantTurn);
+    await expect(board.status()).toContainText(
+      'The host could not share this game with the assistant.',
+    );
+    expect(await board.heard()).toEqual([]);
   });
 
   test('reports unavailable messaging and still observes a move made through the server', async ({
@@ -464,7 +482,7 @@ test.describe('the board', () => {
     const board = await open(page, { conversation: { message: 'withhold' } });
     await board.square(1, 1).click();
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.unavailable} Game: ${board.gameId()}.`,
+      `${TEXT.assistantTurn} ${TEXT.unavailable}`,
     );
     expect(await board.heard()).toEqual([
       expect.objectContaining({ kind: 'context' }),
@@ -474,7 +492,7 @@ test.describe('the board', () => {
     await expect(board.status()).toHaveText(TEXT.yourTurn);
   });
 
-  test('says the same when the host offers neither request', async ({
+  test('reports missing context when the host offers neither request', async ({
     page,
   }) => {
     const board = await open(page, {
@@ -482,7 +500,7 @@ test.describe('the board', () => {
     });
     await board.square(3, 2).click();
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.unavailable} Game: ${board.gameId()}.`,
+      `${TEXT.assistantTurn} The host could not share this game with the assistant.`,
     );
     expect(await board.heard()).toEqual([]);
   });
@@ -597,7 +615,7 @@ test.describe('the board', () => {
     await expect.poll(async () => (await board.heard()).length).toBe(2);
     await page.evaluate(() => window.releaseConversation?.());
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.denied} Game: ${board.gameId()}.`,
+      `${TEXT.assistantTurn} ${TEXT.denied}`,
     );
   });
 
@@ -639,7 +657,9 @@ test.describe('the board', () => {
       await expect(board.square(1, 1)).toBeDisabled();
       await board.button('New game').click();
       await expect.poll(async () => (await board.heard()).length).toBe(1);
-      expect(messageText((await board.heard())[0])).toContain('new_game');
+      expect(messageText((await board.heard())[0])).toBe(
+        "Let's play a new game.",
+      );
       await expect(board.status()).toHaveText(TEXT.gone);
     } finally {
       await other.close();

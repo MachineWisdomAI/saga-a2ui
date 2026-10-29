@@ -160,6 +160,7 @@ export function createGameController(server: GameServer): GameController {
               ? VIEW_TEXT.unconfirmed
               : [headline(game, assistant), note].filter(Boolean).join(' ');
     surface.update({
+      gameId: game?.gameId ?? '',
       status: text,
       canCheck:
         game !== undefined &&
