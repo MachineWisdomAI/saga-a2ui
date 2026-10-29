@@ -54,7 +54,12 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 ## Build your application
 
-React and Lit are both supported application paths. Their MCP stacks provide typed surfaces, action controls and the optional FaithfulCard application, with framework-specific rendering and lifecycle integration. Choose the stack that matches your application. Follow the [React integration guide](docs/react-consumers.md) for React, or [Getting started](docs/getting-started.md) for either stack and the generated Lit starters. [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and generated starter templates currently use Lit; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
+React and Lit are both supported application paths. Their MCP stacks provide typed surfaces, action controls and the optional FaithfulCard application, with framework-specific rendering and lifecycle integration. Choose the stack that matches your application. Start with [Getting started](docs/getting-started.md), which covers what every application needs, then follow one of two tracks:
+
+- [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md): a game that a person and an AI assistant play together. It reads in about ten minutes and is the quickest way to see what saga does.
+- [Build the notes application with Lit](docs/build-notes-with-lit.md): a view composed with the Lit stack, leading into the [action guide](docs/actions.md).
+
+To add the React stack to an application you already have, use the [React integration guide](docs/react-consumers.md). [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and five of the six generated starters use Lit, and one starter uses React on Hono; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 

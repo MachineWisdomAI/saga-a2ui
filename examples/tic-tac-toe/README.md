@@ -35,4 +35,4 @@ node apps/lit-host/dist/tic-tac-toe/server.mjs
 - `scripts/tic-tac-toe-rules.test.ts`: the rules and the store (every line, the draw, turn order, refusals that leave a game unchanged, one of two requests with the same move number).
 - `scripts/tic-tac-toe.test.ts`: the example keeps the template, imports no MCP Apps module, builds from the packed packages, starts, and takes the guided change.
 - `apps/lit-host/e2e/tic-tac-toe.spec.ts`: the board in Chromium on the local MCP Apps host fixture. No test asserts which square an assistant chooses.
-- `scripts/tic-tac-toe-document.test.ts`: the guide's opening against this example.
+- `scripts/tic-tac-toe-document.test.ts`: the guide's commands, quoted source, sentences and links against this example.
