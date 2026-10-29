@@ -21,6 +21,15 @@ const blocks = (info: string): string[] =>
     .filter((match) => match[1] === info)
     .map((match) => match[2]!);
 
+/** The text under one second-level heading, up to the next one. */
+function section(heading: string): string {
+  const start = guide.indexOf(`\n## ${heading}\n`);
+  if (start === -1) throw new Error(`no section "${heading}"`);
+  const body = guide.slice(start + 1);
+  const next = body.indexOf('\n## ', 1);
+  return next === -1 ? body : body.slice(0, next);
+}
+
 describe('the commands in the opening', () => {
   const commands = blocks('sh repository').flatMap((block) =>
     block.split('\n').filter((line) => line.trim() !== ''),
@@ -179,6 +188,20 @@ describe('the links and the screenshot', () => {
       'O at the top left',
     ])
       expect(alt, part).toContain(part);
+  });
+
+  it('presents the screenshot as a game in progress and starts the first click from an empty board', () => {
+    // The screenshot holds four marks, so its centre is taken: it cannot be the board a new game
+    // shows, and the walkthrough must not ask the reader to click the centre of it.
+    const alt = /!\[([^\]]*)\]/.exec(guide)?.[1] ?? '';
+    expect(alt).toContain('a few moves into a game');
+    const finished = section('The finished game');
+    expect(finished).toContain('a new board with nine empty squares');
+    expect(finished).toContain('a few moves into a game');
+    const firstClick = section('Your first click');
+    expect(firstClick).toContain('a new, empty board');
+    expect(firstClick).toContain('Click the centre square of the empty board');
+    expect(firstClick).not.toContain('the board above');
   });
 });
 

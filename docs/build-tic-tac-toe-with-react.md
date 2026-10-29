@@ -8,9 +8,9 @@ This guide builds that game with saga a2ui and React. It is a weekend-sized proj
 
 ## The finished game
 
-You ask the assistant for a game of tic-tac-toe. It starts one, and the chat shows this board:
+You ask the assistant for a game of tic-tac-toe. It starts one, and the chat shows a new board with nine empty squares. This is the same board a few moves into a game, with your turn again:
 
-![A tic-tac-toe board in a chat: the status line reads "Your move. You are X.", the squares hold O at the top left and top right and X in the middle and at the bottom right, and a New game button sits under the board.](images/tic-tac-toe-board.png)
+![A tic-tac-toe board in a chat, a few moves into a game: the status line reads "Your move. You are X.", the squares hold O at the top left and top right and X in the middle and at the bottom right, and a New game button sits under the board.](images/tic-tac-toe-board.png)
 
 You play X and move first. Each square is a button, so the keyboard works too. Squares you cannot play are switched off: one that is taken, any square while the assistant is thinking, and every square once the game is over.
 
@@ -42,9 +42,9 @@ You can also try the board without any host. The browser tests mount it in a sma
 
 ## Your first click
 
-Say "Let's play tic-tac-toe." The assistant calls the game's `new_game` operation, and the host shows the board above.
+Say "Let's play tic-tac-toe." The assistant calls the game's `new_game` operation, and the host shows a new, empty board. Its status line reads "Your move. You are X." and all nine squares are playable. The picture above shows a game that is further on, so start from the empty board here.
 
-Click the centre square. Three things happen, in this order:
+Click the centre square of the empty board. Three things happen, in this order:
 
 1. **The board asks the server to play your move.** It calls `play_move` for X, and says which move number it has on screen. If something else has changed the game since, the server refuses the move and changes nothing.
 2. **The server answers with the whole game.** The board shows your X and the status line changes to "Waiting for the assistant to play O…". The squares switch off, because it is not your turn.

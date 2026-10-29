@@ -702,6 +702,45 @@ test.describe('the board', () => {
     expect(board.reads()).toBeGreaterThan(0);
   });
 
+  test('does not let the recovery read of an old game disable a new game, before or after it settles', async ({
+    page,
+  }) => {
+    const board = await open(page);
+    // The move is applied on the server but its reply never reaches the view.
+    await page.evaluate(() => {
+      const original = window.handleToolCall;
+      let first = true;
+      window.handleToolCall = async (params) => {
+        const reply = await original?.(params);
+        if (params.name === 'play_move' && first) {
+          first = false;
+          throw new Error('the connection was lost');
+        }
+        return reply as never;
+      };
+    });
+    const release = board.hold('get_game'); // the recovery read
+    await board.square(1, 1).click();
+    await expect.poll(() => board.reads()).toBe(1);
+    await expect(board.square(1, 2)).toBeDisabled(); // the board waits for the read
+
+    // New game while the old game's read is outstanding: the new board is playable at once.
+    await board.button('New game').click();
+    await expect.poll(() => board.calls.at(-1)?.name).toBe('new_game');
+    await expect(board.status()).toHaveText(TEXT.yourTurn);
+    await expect(board.square(1, 1)).toBeEnabled();
+    await expect(board.square(3, 3)).toBeEnabled();
+
+    // The old read settles. It changes nothing, and the new board stays playable.
+    release();
+    await page.waitForTimeout(500);
+    await expect(board.status()).toHaveText(TEXT.yourTurn);
+    await expect(board.square(1, 1)).toBeEnabled();
+    await expect(board.square(3, 3)).toBeEnabled();
+    expect(board.reads()).toBe(1); // no wait was started for the old game
+    expect(await board.heard()).toEqual([]);
+  });
+
   test('ending the view stops the wait', async ({ page }) => {
     const board = await open(page);
     await board.square(1, 2).click();

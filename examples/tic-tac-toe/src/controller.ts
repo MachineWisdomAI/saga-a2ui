@@ -128,7 +128,9 @@ export function createGameController(server: GameServer): GameController {
   let note = '';
   let gone = false;
   let retired = false;
-  let reading = 0;
+  // Recovery reads in flight for the selected game. Selecting another game empties it, so an old
+  // read neither holds the new game's squares off nor, when it settles, changes anything.
+  const readings = new Set<object>();
   const locks = new Set<object>();
   let assistant: Assistant = 'idle';
   let wait: { readonly stop: () => void } | undefined;
@@ -141,7 +143,7 @@ export function createGameController(server: GameServer): GameController {
       !gone &&
       game.status === 'playing' &&
       game.turn === 'X' &&
-      reading === 0 &&
+      readings.size === 0 &&
       locks.size === 0;
     const text =
       game === undefined
@@ -192,6 +194,7 @@ export function createGameController(server: GameServer): GameController {
         assistant = 'idle';
         gone = false;
         note = '';
+        readings.clear(); // a read for the previous game no longer concerns the board
         game = next;
         render();
         return true;
@@ -244,11 +247,12 @@ export function createGameController(server: GameServer): GameController {
     async recover() {
       const shown = game;
       if (shown === undefined) return;
-      reading += 1;
+      const token = {};
+      readings.add(token);
       render();
       const result = await readGame(server, shown.gameId);
-      reading -= 1;
-      if (game?.gameId !== shown.gameId) return; // another game was selected meanwhile
+      // Selecting another game, or ending the view, drops the token: the answer is ignored.
+      if (!readings.delete(token) || retired) return;
       if (result.kind === 'game') {
         controller.present(result.game);
         // The move did land, and nobody told the assistant: it is O's turn and nothing has asked.
