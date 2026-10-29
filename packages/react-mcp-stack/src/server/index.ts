@@ -7,6 +7,7 @@ export {
   attachRequestLifetime,
   createServerBudgets,
   operationViewFromHtml,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
   type OperationView,

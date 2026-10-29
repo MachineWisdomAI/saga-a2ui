@@ -7,6 +7,7 @@
   "exports": {
     "./actions": "./src/actions/index.ts",
     "./actions/action-button-schema": "./src/actions/action-button-schema.ts",
+    "./conversation": "./src/conversation.ts",
     "./delivered-result": "./src/delivered-result.ts",
     "./host-links": "./src/host-links.ts",
     "./protocols/a2ui/v0_9": "./src/protocols/a2ui/v0_9/index.ts",
@@ -29,7 +30,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.7.8-rc.1",
+  "version": "0.8.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

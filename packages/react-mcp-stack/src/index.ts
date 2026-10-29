@@ -21,6 +21,12 @@ export {
   type StartMisuse,
 } from './start-failure.js';
 export type { RunningView } from './running-view.js';
+// The conversation a running view hands its actions, and the results of adding a message to it.
+export type {
+  AppendResult,
+  Conversation,
+  RequestOutcome,
+} from '@saga-a2ui/core/conversation';
 // The shapes of the two notifications an application's handlers receive.
 export type { ToolInput, ToolResult } from '@saga-a2ui/mcp/view';
 // How the reader meets the host (device or desktop), for an application that maps its own tokens.
