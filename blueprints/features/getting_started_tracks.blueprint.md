@@ -190,9 +190,9 @@ Every result carries the whole game as structured content, plus a short text for
   - it applies the append's result only while the board still shows the same game and move, because the action's `current()` ends with the hook ([view conversation](view_conversation.blueprint.md#proposed-behavior)).
 - **The wait.**
   - The controller owns it. It reads `get_game` every 1.5 seconds for the first 40 reads, then every 5 seconds while O has the turn.
-  - It ends on the assistant's move, game expiry, a new game or teardown. Forty consecutive failed reads stop the wait and offer "Check for the assistant's move". A successful read resets that failure count. A delayed host confirmation alone does not stop the wait.
+  - It ends on the assistant's move, game expiry or teardown. A new card owns a separate wait. Forty consecutive failed reads stop the wait and offer "Check for the assistant's move". A successful read resets that failure count. A delayed host confirmation alone does not stop the wait.
   - MCP Apps gives a server no way to push to an open view, so this is the mechanism available.
-- **`onToolResult`.** It presents the result that opened the card, and any later result a host does deliver to it.
+- **`onToolResult`.** It selects the game from the result and reads its current state before offering squares, including when the host replays an old result on remount.
 - **The guided change** adds a move list bound to the game's `history`. It changes the layout and catalog only.
 
 ### Operations without a view
@@ -229,12 +229,13 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 | The square is occupied, it is not that player's turn, or the game has ended | `play_move` refuses with no effect and returns the current game. The board shows it and says why. |
 | A stale card or a repeated request sends an old `expectedMoveNumber` | Refused with no effect. The card shows the current game, so no extra move is applied and a newer game is untouched. |
 | The `gameId` is unknown or expired | Refused. The card offers New game. |
-| The host cannot take an appended message, or refuses it | The status reads "Tell the assistant it's their move". The wait still runs. |
+| The host cannot take an appended message, refuses it, or does not confirm it | The status distinguishes unavailable messaging, refusal and an unconfirmed response, and includes the game identifier. The wait still runs. An uncertain message is not resent automatically. |
 | The host cannot take the context | The move message is still sent, because the game opts into best effort. The assistant reads `get_game` as the message tells it. |
 | X's move wins or fills the board | The board appends the result message, asks for no move and starts no wait. |
-| An append settles after New game or a newer move | Its result is ignored; nothing appears on the newer game. |
+| An append settles after a newer move | Its result is ignored. An append on an old card cannot change a different card's game. |
 | Forty consecutive game reads fail | The board reports the connection failure and offers "Check for the assistant's move". It never repeats a move on the assistant's behalf. |
-| A view call fails or times out | The move may or may not have been applied. The card reads the game again before offering the square. |
+| A move call fails or times out | The card reads the game without replaying the move. If the read confirms the clicked move, it sends its missing handoff. If the read fails, the squares remain disabled. |
+| The host remounts a card with an old result | The card reads that game's current state before enabling squares. New game opens a separate card, so each saved result identifies its own game. |
 | The host shows the assistant's move in a new card | Both cards read the same game. An older card refuses its stale moves and catches up. |
 | `react-mcp` on another server is requested | `saga init` refuses and lists the supported pairs, as today. |
 
@@ -265,7 +266,9 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 - an O move made through the fixture and picked up by the wait;
 - stale and duplicate refusals;
 - a new game that an old request cannot change;
-- the unsupported-message instruction;
+- distinct feedback for unavailable messaging, refusal and unconfirmed delivery;
+- restoration from a saved empty result, and no playable squares after a failed restoration read;
+- one missing handoff after a confirmed move's reply is lost, and no handoff when the move never reached the server;
 - a host confirmation delayed for several minutes, followed by O appearing in the existing board;
 - recovery after consecutive failed reads, and cancellation when the view retires.
 
