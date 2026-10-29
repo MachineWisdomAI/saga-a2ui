@@ -4,7 +4,7 @@
 
 **Bring your services to AI assistants and agents, including Alexa+, ChatGPT, Claude and more, with less engineering work.**
 
-saga a2ui combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom AI](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
+saga a2ui stands for Simple Agentic Apps. It combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom AI](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
 
 [Meet the adopters building with saga a2ui](ADOPTERS.md).
 
