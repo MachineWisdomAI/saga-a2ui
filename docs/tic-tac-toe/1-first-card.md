@@ -13,7 +13,7 @@ cd my-tic-tac-toe
 
 Accept npm's prompt to install `create-vite` if it appears. If you already have an empty app directory, run the same command there with `.` in place of `my-tic-tac-toe`, and skip `cd`.
 
-[Vite's React/TypeScript generator](https://vite.dev/guide/#scaffolding-your-first-vite-project) creates the package file, compiler configuration, React entry point and lint setup. Keep that configuration. We will replace its demo counter and add the parts that connect the app to an MCP host. All commands below run from this app directory.
+[Vite's React/TypeScript generator](https://vite.dev/guide/#scaffolding-your-first-vite-project) creates the package file, compiler configuration, React entry point and lint setup. Keep that configuration. We will replace its demo counter and add the parts that connect the app to an MCP host. All commands below run from this app directory. Continue with the installation commands below; the generator’s suggested `npm run dev` starts a standalone website, while this app opens in Claude or ChatGPT.
 
 SAGA's supported A2UI dependency combination needs one npm override. Set it before installing:
 
