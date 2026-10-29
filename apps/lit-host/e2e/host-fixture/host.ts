@@ -28,11 +28,13 @@ export interface HostedResource {
  * How the host treats one kind of conversation request (`ui/update-model-context`, `ui/message`):
  * `accept` answers it, `refuse` and `fail` reject or flag it, `withhold` does not advertise the
  * capability at all (so a correct view never sends it), and `hold` records the request and leaves
- * it unanswered until `releaseConversation`. The context update's result is empty in the bridge, so
- * `refuse` and `fail` both reject it; a message that is refused is answered with `isError`.
+ * it unanswered until `releaseConversation`, which then accepts it. `hold-then-refuse` holds the
+ * same way and refuses when released, which is how a test settles a failed append after the view
+ * has moved on. The context update's result is empty in the bridge, so `refuse` and `fail` both
+ * reject it; a message that is refused is answered with `isError`.
  */
 export type ConversationBehavior =
-  'accept' | 'refuse' | 'fail' | 'withhold' | 'hold';
+  'accept' | 'refuse' | 'fail' | 'withhold' | 'hold' | 'hold-then-refuse';
 
 /** One conversation request the view made, in the order the host received it. */
 export interface ConversationRequest {
@@ -166,12 +168,12 @@ window.mountView = async (resource, options) => {
   ): Promise<{ isError?: boolean }> => {
     conversations.get(slot)?.push({ kind, params });
     const behaviour = behaviourOf(kind);
-    if (behaviour === 'hold')
+    if (behaviour === 'hold' || behaviour === 'hold-then-refuse')
       await new Promise<void>((resolve) =>
         heldAnswers.get(slot)?.push(resolve),
       );
     if (behaviour === 'fail') throw new Error('the host failed the request');
-    if (behaviour === 'refuse') {
+    if (behaviour === 'refuse' || behaviour === 'hold-then-refuse') {
       // A context update cannot be answered with `isError`; the host rejects it.
       if (kind === 'context') throw new Error('the host refused the context');
       return { isError: true };

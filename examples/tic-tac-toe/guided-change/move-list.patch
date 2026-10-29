@@ -1,0 +1,57 @@
+diff --git a/src/catalog.tsx b/src/catalog.tsx
+index d6fb8cc..9b741c0 100644
+--- a/src/catalog.tsx
++++ b/src/catalog.tsx
+@@ -81,6 +81,18 @@ const Board: ReactCatalogComponent = createComponentImplementation(
+   ),
+ );
+ 
++/** The moves so far, one per line, in the order they were played. */
++const MoveList: ReactCatalogComponent = createComponentImplementation(
++  { ...ListApi, name: 'MoveList' },
++  ({ props, buildChild }) => (
++    <ol className="moves" aria-label="Moves so far">
++      {childrenOf(buildChild, props.children).map((move, at) => (
++        <li key={at}>{move}</li>
++      ))}
++    </ol>
++  ),
++);
++
+ const SquareFaceApi = {
+   name: 'SquareFace',
+   schema: z
+@@ -129,6 +141,7 @@ export const boardEntries: readonly ReactCatalogComponent[] = [
+   Column,
+   Row,
+   Board,
++  MoveList,
+   Line,
+   SquareFace,
+   Shown,
+diff --git a/src/surface.ts b/src/surface.ts
+index 11d33c1..a1069a6 100644
+--- a/src/surface.ts
++++ b/src/surface.ts
+@@ -46,7 +46,7 @@ export const boardSurface = defineSurface({
+   root: {
+     component: 'Column',
+     bind: {},
+-    props: { children: ['status', 'board', 'controls'] },
++    props: { children: ['status', 'board', 'controls', 'history'] },
+   },
+   components: [
+     {
+@@ -98,6 +98,12 @@ export const boardSurface = defineSurface({
+       when: { path: '/canCheck' },
+       child: CHECK_ID,
+     },
++    {
++      id: 'history',
++      component: 'MoveList',
++      children: { componentId: 'move', path: '/history' },
++    },
++    { id: 'move', component: 'Line', kind: 'body', text: { path: 'text' } },
+     { id: CHECK_ID, component: 'ActionButton', child: 'check-label' },
+     {
+       id: 'check-label',

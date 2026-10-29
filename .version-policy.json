@@ -340,6 +340,7 @@
     "scripts/build-installed-lit-host.ts",
     "scripts/build-pack1-consumers.ts",
     "scripts/build-react-card-consumer.ts",
+    "scripts/build-tic-tac-toe.ts",
     "scripts/build-tour.ts",
     "scripts/candidate-identity.ts",
     "scripts/candidate-rehearsal.ts",
