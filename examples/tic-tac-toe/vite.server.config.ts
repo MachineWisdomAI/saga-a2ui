@@ -2,10 +2,9 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 
 // The server is bundled for Node into dist/server.mjs. The SAGA packages ship TypeScript source,
-// which Node does not load from node_modules, so they are bundled in; every other dependency
-// stays external and resolves from node_modules at run time.
+// which Node does not load from node_modules. Bundle dependencies so the server is self-contained.
 export default defineConfig({
-  ssr: { noExternal: [/^@saga-a2ui\//] },
+  ssr: { noExternal: true },
   build: {
     ssr: path.resolve('server/main.ts'),
     outDir: 'dist',

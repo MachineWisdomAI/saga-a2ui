@@ -25,8 +25,8 @@ import {
 } from '../src/contract.js';
 import type { GameStore, PlayResult } from './game-store.js';
 
-// The game's MCP operations, declared with SAGA's server export. The application owns the listener
-// (listener.ts), the rules (rules.ts), the games (game-store.ts) and the built view it serves.
+// The game's MCP operations, declared with SAGA's server export. The application supplies the
+// rules, store and built view; the SDK's local listener handles HTTP and MCP delivery.
 // Each request builds its own server; the one store is shared by all of them.
 
 /** The built view is required before the server can claim to serve anything. */

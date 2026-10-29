@@ -14,6 +14,7 @@ const chapters = [
   '2-playable-game.md',
   '3-move-list.md',
 ].map((name) => read(`docs/tic-tac-toe/${name}`));
+const checkpoint = read('docs/tic-tac-toe/checkpoints/first-card.md');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-tutorial-'));
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
@@ -26,7 +27,11 @@ function files(markdown: string): Map<string, string> {
 }
 describe('the standalone React tutorial', () => {
   it('provides the complete maintained game, followed by the maintained move-list extension', () => {
-    const assembled = new Map([...files(chapters[0]!), ...files(chapters[1]!)]);
+    const assembled = new Map([...files(checkpoint), ...files(chapters[1]!)]);
+    // Generated project configuration differs from the repository's contributor harness.
+    // Application source must remain identical.
+    for (const name of assembled.keys())
+      if (!/^(src|server)\//.test(name)) assembled.delete(name);
     for (const [name, source] of assembled)
       expect(source.trim(), name).toBe(
         fs.readFileSync(path.join(ticTacToeSource, name), 'utf8').trim(),
@@ -43,8 +48,14 @@ describe('the standalone React tutorial', () => {
       );
   });
 
+  it('keeps the first lesson’s complete application and build files in the checkpoint', () => {
+    const reference = files(checkpoint);
+    for (const [name, source] of files(chapters[0]!))
+      expect(source.trim(), name).toBe(reference.get(name)?.trim());
+  });
+
   it('uses a registry-only manifest with exact versions and one SAGA stack', () => {
-    const manifest = JSON.parse(files(chapters[0]!).get('package.json')!);
+    const manifest = JSON.parse(files(checkpoint).get('package.json')!);
     const dependencies = {
       ...manifest.dependencies,
       ...manifest.devDependencies,
@@ -67,6 +78,7 @@ describe('the standalone React tutorial', () => {
   it('links complete steps and keeps relative documentation links valid', () => {
     const documents = new Map([
       ['docs/build-tic-tac-toe-with-react.md', guide],
+      ['docs/tic-tac-toe/checkpoints/first-card.md', checkpoint],
       [
         'docs/tic-tac-toe-architecture-options.md',
         read('docs/tic-tac-toe-architecture-options.md'),

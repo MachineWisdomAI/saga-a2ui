@@ -1,12 +1,23 @@
 # Build the playable game
 
-Add or replace the files below in `my-tic-tac-toe`. Keep the other files from the first step.
+The first card connected a server value to a React component. Now replace the welcome message with a game: the server decides which moves are legal, the view draws its state, and a click hands the next turn to the assistant.
 
-The server checks moves and stores games. The view draws the board, calls the same `play_move` operation as the assistant, and adds a conversation message after you play X. While O is thinking—or waiting for a host confirmation—the controller reads the game until the move arrives.
+Stop the game server and leave the tunnel running. Work through the four parts below in the same app directory. Each part explains the application files it adds or replaces; expand a file to copy or compare the complete code. Your Vite-generated configuration and installed dependencies stay in place.
 
-`expectedMoveNumber` prevents a double click or a late request from applying a move to a board that has changed. The controller also ignores old replies after you select another game.
+## 1. Describe a game and its legal moves
 
-### `src/contract.ts`
+The welcome card returned one string. A game needs a board, whose turn it is, and enough information to reject an old click. Add `src/contract.ts`, `server/rules.ts` and `server/game-store.ts` using the complete files below.
+
+`contract.ts` defines the shapes shared by the server and view. A board has nine entries, numbered 0–8 across rows; an entry is `null`, `X` or `O`. A game also carries `gameId`, `moveNumber`, `turn`, `status` and its history. The Zod schemas check tool inputs and results at runtime; TypeScript types help while editing.
+
+`rules.ts` implements `applyMove` without a server or clock. Before placing a mark, it checks that the game is still running, that the submitted move number matches, that the player has the turn, and that the square is empty. It then checks the eight winning lines and whether the board is full. A refused move returns a reason and leaves the board unchanged.
+
+Why send `expectedMoveNumber`? Suppose the view shows move 2, but another call has already applied move 3. The old click must not change the newer board. The server refuses it and returns the current game so the view can catch up.
+
+`game-store.ts` gives those rules somewhere to keep their result. Its memory store creates game identifiers, expires idle games after 30 minutes and bounds the number retained. Each request uses the same store. Restarting the process clears it.
+
+<details>
+<summary>Complete src/contract.ts</summary>
 
 ```ts file=src/contract.ts
 import { z } from 'zod';
@@ -112,7 +123,10 @@ export const WRITES = {
 export const VIEW_MARKER = '<div id="root"';
 ```
 
-### `server/rules.ts`
+</details>
+
+<details>
+<summary>Complete server/rules.ts</summary>
 
 ```ts file=server/rules.ts
 import type { Game, Player, Refusal } from '../src/contract.js';
@@ -209,7 +223,10 @@ export function applyMove(state: GameState, move: Move): MoveResult {
 }
 ```
 
-### `server/game-store.ts`
+</details>
+
+<details>
+<summary>Complete server/game-store.ts</summary>
 
 ```ts file=server/game-store.ts
 import { randomBytes } from 'node:crypto';
@@ -338,7 +355,22 @@ export function createMemoryGameStore(
 }
 ```
 
-### `server/operations.ts`
+</details>
+
+## 2. Expose the game as operations
+
+Replace `server/operations.ts`. The registration pattern is the one you used for the welcome message: input schema, handler, output schema and projection. The new handlers call the store.
+
+There are four tools. `new_game` creates a game and `show_game` opens an existing one; both attach the board view. `get_game` reads the state and `play_move` applies a move; these return data without opening another card. That distinction lets both players change the game while keeping the original board on screen.
+
+For a move, the input contains the game identifier, the expected move number, the player and the square. The projection returns the updated game as structured data and a short board description as text. The assistant can reason about the same state the view displays. Tool descriptions tell it that the person is X and it plays O.
+
+Add `server/listener.ts` and replace `server/main.ts`. The listener wrapper creates the store and prepares the view once, then closes over them in `createServer`. The SDK still creates the MCP server for each request. Moving the store into that callback would lose the game between calls.
+
+The startup file reads the built HTML, calls this wrapper, prints the endpoint and handles shutdown. No HTTP routing or transport implementation belongs in these app files.
+
+<details>
+<summary>Complete server/operations.ts</summary>
 
 ```ts file=server/operations.ts
 import { McpServer } from '@modelcontextprotocol/server';
@@ -368,8 +400,8 @@ import {
 } from '../src/contract.js';
 import type { GameStore, PlayResult } from './game-store.js';
 
-// The game's MCP operations, declared with SAGA's server export. The application owns the listener
-// (listener.ts), the rules (rules.ts), the games (game-store.ts) and the built view it serves.
+// The game's MCP operations, declared with SAGA's server export. The application supplies the
+// rules, store and built view; the SDK's local listener handles HTTP and MCP delivery.
 // Each request builds its own server; the one store is shared by all of them.
 
 /** The built view is required before the server can claim to serve anything. */
@@ -572,274 +604,89 @@ export function createGameServer({
 // #endregion saga-snippet:register-game-operations
 ```
 
-### `server/listener.ts`
+</details>
+
+<details>
+<summary>Complete server/listener.ts</summary>
 
 ```ts file=server/listener.ts
+import type { BudgetSettings } from '@saga-a2ui/react-mcp-stack/server';
 import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { getRequestListener, type HttpBindings } from '@hono/node-server';
-import {
-  hostHeaderValidation,
-  localhostOriginValidation,
-} from '@modelcontextprotocol/hono';
-import { readRequestBody } from '@modelcontextprotocol/server';
-import {
-  createServerBudgets,
-  type BudgetSettings,
-  type LifetimeCause,
-  type RequestLifetime,
-} from '@saga-a2ui/react-mcp-stack/server';
-import { Hono, type Context } from 'hono';
-import { createEndpoint } from './endpoint.js';
+  startLocalMcpServer,
+  type LocalMcpServer,
+} from '@saga-a2ui/react-mcp-stack/server/node';
 import { createMemoryGameStore, type GameStore } from './game-store.js';
 import { createGameServer, prepareBoardViews } from './operations.js';
 
-// APPLICATION-OWNED HTTP hosting for the MCP server: a Hono application on a loopback Node listener,
-// stateless Streamable HTTP (a persistent handler, a fresh server per request, modern auto responses) and
-// DNS-rebinding protection from the official `@modelcontextprotocol/hono` middleware (Host and Origin). Put
-// your own ingress (TLS, a public host name) in front of it, and add that host name to
-// `ALLOWED_HOSTNAMES`, when you deploy.
-//
-// The adapter's `createMcpHonoApp` is not used: it reads and parses the request body before your routes
-// run, so the application could not bound that wait by the request's lifetime. This file installs the
-// adapter's two validators and reads the body itself, as a bounded stage.
-//
-// Games: every request builds its own MCP server, and all of them share the one `GameStore`. The game has
-// no sign-in, so there is no identity to carry; the unguessable game identifier is the only thing a
-// caller needs.
-//
-// Time: each request's lifetime starts when the request is admitted, before any body wait. This file wires
-// that one deadline into the waits the application owns: the request body and delivery of the response. A
-// body that stalls is answered once with 408 and its connection is closed. A response the deadline
-// overtakes is destroyed, never replaced, so a committed response is not given a second status.
-
-const HOST = '127.0.0.1';
-const ALLOWED_HOSTNAMES = ['127.0.0.1', 'localhost'];
-const GAME_PATH = '/mcp';
-const MAX_REQUEST_BYTES = 1024 * 1024;
-
 export interface ListenerOptions {
-  /** The built page, read by the caller before the port opens. */
   readonly html: string;
-  /** Where the games live. Defaults to a bounded in-memory map. */
-  readonly store?: GameStore;
-  /** Use 0 for an ephemeral port. */
   readonly port: number;
-  /**
-   * 3,000 ms per operation and 10,000 ms per request unless stated. A field you leave out keeps
-   * its default, and an invalid value fails before the port opens.
-   */
+  readonly store?: GameStore;
   readonly budgets?: BudgetSettings;
 }
 
-export interface Listener {
-  /** The game's MCP endpoint. */
-  readonly url: string;
-  close(): Promise<void>;
-}
-
-/** `Bindings` are the Node request and response the Hono Node adapter hands to every request. */
-interface Environment {
-  Bindings: HttpBindings;
-  Variables: { lifetime: RequestLifetime };
-}
-
-type RequestContext = Context<Environment>;
-
-export async function startListener(
+export function startListener(
   options: ListenerOptions,
-): Promise<Listener> {
-  // Prepare and validate deployment inputs once, before opening the port. Each request
-  // reuses the same HTML, URI and store while owning its server and lifetime.
-  const budgets = createServerBudgets(options.budgets);
+): Promise<LocalMcpServer> {
   const views = prepareBoardViews(options.html);
   const store = options.store ?? createMemoryGameStore();
-  const game = createEndpoint(
-    (lifetime) => createGameServer({ views, lifetime, store }),
-    { maxRequestBodySize: MAX_REQUEST_BYTES },
-  );
-  const active = new Set<RequestLifetime>();
-  let stopping = false;
-  let closing: Promise<void> | undefined;
-  function track(
-    req: IncomingMessage,
-    res: ServerResponse,
-    lifetime: RequestLifetime,
-  ): void {
-    active.add(lifetime);
-    res.once('close', () => active.delete(lifetime));
-    bindResponseToLifetime(req, res, lifetime);
-  }
-
-  const app = new Hono<Environment>();
-
-  // The request's clock starts at admission, before any body wait.
-  app.use('*', async (c, next) => {
-    if (stopping) return c.json({ error: 'shutting_down' }, 503);
-    const lifetime = budgets.startRequest();
-    track(c.env.incoming, c.env.outgoing, lifetime);
-    c.set('lifetime', lifetime);
-    await next();
+  return startLocalMcpServer({
+    port: options.port,
+    budgets: options.budgets,
+    createServer: (lifetime) => createGameServer({ views, store, lifetime }),
   });
-  app.use('*', hostHeaderValidation(ALLOWED_HOSTNAMES));
-  app.use('*', localhostOriginValidation());
-
-  /** One safe answer, and only while nothing is committed and the caller has not gone. */
-  function mayAnswer(lifetime: RequestLifetime, res: ServerResponse): boolean {
-    if (res.headersSent || res.destroyed) return false;
-    const cause = lifetime.cause;
-    return cause === undefined || cause.kind === 'request-timeout';
-  }
-
-  /** What a handler returns when nothing may be written: the caller has gone, or the connection is being destroyed. */
-  const unanswered = (): Response => new Response(null, { status: 408 });
-
-  /** Answers, then drops the connection: the rest of the request body is not wanted. */
-  function refuseAndClose(
-    c: RequestContext,
-    status: 408 | 413,
-    body: object,
-  ): Response {
-    const { incoming, outgoing } = c.env;
-    if (outgoing.writableFinished) incoming.destroy();
-    else outgoing.once('finish', () => incoming.destroy());
-    return c.json(body, status, { connection: 'close' });
-  }
-
-  /** A body stage that did not finish. An expiry is answered once; a disconnect writes nothing. */
-  function bodyFailed(c: RequestContext, cause: LifetimeCause): Response {
-    const lifetime = c.get('lifetime');
-    // The lifetime recorded its own expiry, disconnect and completion; the rest are this stage's.
-    if (
-      cause.kind !== 'request-timeout' &&
-      cause.kind !== 'disconnected' &&
-      cause.kind !== 'completed'
-    )
-      lifetime.record(cause);
-    if (
-      cause.kind === 'disconnected' ||
-      cause.kind === 'cancelled' ||
-      cause.kind === 'completed'
-    )
-      return unanswered();
-    return mayAnswer(lifetime, c.env.outgoing)
-      ? refuseAndClose(c, 408, { error: 'request_timeout' })
-      : unanswered();
-  }
-
-  /**
-   * Reads and parses a POST body as one bounded stage of the request. A `Response` means the
-   * request has been dealt with (or the caller has gone) and nothing may be built for it.
-   */
-  async function readJsonBody(
-    c: RequestContext,
-  ): Promise<{ readonly value: unknown } | Response> {
-    const lifetime = c.get('lifetime');
-    // The adapter's own bounded reader (it refuses a declared or observed size over the limit); the
-    // stage stops waiting when the budget ends, and the connection is closed behind it.
-    const read = await lifetime.run('body', () =>
-      readRequestBody(c.req.raw, MAX_REQUEST_BYTES),
-    );
-    if (!read.ok) return bodyFailed(c, read.cause);
-    if (!mayAnswer(lifetime, c.env.outgoing)) return unanswered();
-    if (read.value.tooLarge)
-      return refuseAndClose(c, 413, { error: 'payload_too_large' });
-    try {
-      return { value: JSON.parse(read.value.text) as unknown };
-    } catch {
-      return c.json(
-        {
-          jsonrpc: '2.0',
-          id: null,
-          error: { code: -32700, message: 'Parse error' },
-        },
-        400,
-      );
-    }
-  }
-
-  app.all(GAME_PATH, async (c) => {
-    // The body is the application's wait, so it runs under the request's lifetime and is bounded
-    // before any server or transport exists. Nothing is built for a request that has ended.
-    const body = c.req.method === 'POST' ? await readJsonBody(c) : undefined;
-    if (body instanceof Response) return body;
-    if (c.get('lifetime').check() !== undefined) return unanswered();
-    return game.fetch(c.req.raw, c.get('lifetime'), {
-      ...(body === undefined ? {} : { parsedBody: body.value }),
-    });
-  });
-
-  app.notFound(() => new Response(null, { status: 404 }));
-  app.onError(() => new Response(null, { status: 500 }));
-
-  const http = createServer(getRequestListener(app.fetch));
-  await new Promise<void>((resolve, reject) => {
-    http.once('error', reject);
-    http.listen(options.port, HOST, resolve);
-  });
-  const { port } = http.address() as AddressInfo; // listen() on a TCP port yields AddressInfo
-
-  return {
-    url: `http://${HOST}:${port}${GAME_PATH}`,
-    close: () =>
-      (closing ??= (async () => {
-        stopping = true;
-        for (const lifetime of active) lifetime.disconnect();
-        await game.close();
-        await new Promise<void>((resolve, reject) => {
-          http.close((error) => (error ? reject(error) : resolve()));
-          http.closeAllConnections();
-        });
-      })()),
-  };
-}
-
-/**
- * Connects one request's lifetime to its response when the request is admitted. The transport
- * finishing the response ends the lifetime; the caller going away does too. In the other direction,
- * a request deadline that passes before the response is delivered destroys the response, which
- * releases the connection and the transport's listeners. A response is never given a second status.
- */
-function bindResponseToLifetime(
-  req: IncomingMessage,
-  res: ServerResponse,
-  lifetime: RequestLifetime,
-): void {
-  // A write to a response this listener destroyed must not escape as an unhandled error.
-  res.on('error', () => undefined);
-  req.on('error', () => undefined);
-
-  // Destroying a response also emits `finish` on current Node, with `destroyed` already true, so
-  // neither the event nor `writableFinished` says the peer received the whole response.
-  let delivered = false;
-  res.once('finish', () => {
-    if (res.destroyed) return;
-    delivered = true;
-    lifetime.finish();
-  });
-  res.once('close', () => {
-    if (!delivered) lifetime.disconnect();
-  });
-  lifetime.signal.addEventListener(
-    'abort',
-    () => {
-      if (lifetime.cause?.kind !== 'request-timeout') return;
-      // The stage that owns the response may write one safe answer in this turn of the event loop;
-      // delivering it gets no extra time.
-      setImmediate(() => {
-        if (!res.writableFinished && !res.destroyed) res.destroy();
-      });
-    },
-    { once: true },
-  );
 }
 ```
 
-### `src/text.ts`
+</details>
+
+<details>
+<summary>Complete server/main.ts</summary>
+
+```ts file=server/main.ts
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { startListener } from './listener.js';
+
+// The server entry. It reads the built view before it opens a port, so a missing build stops the
+// process instead of serving a listener without its view. `npm run build` writes the view beside
+// this file; `npm start` runs it.
+const html = await readFile(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.html'),
+  'utf8',
+);
+const listener = await startListener({
+  html,
+  port: Number(process.env.PORT ?? 3000),
+});
+
+console.log(`Tic-tac-toe MCP endpoint: ${listener.url}`);
+
+// Stop the MCP handler and every HTTP exchange before allowing Node to exit.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    void listener.close().catch(() => {
+      process.exitCode = 1;
+    });
+  });
+}
+```
+
+</details>
+
+## 3. Draw the board from data
+
+The welcome view kept its component and layout together. Separate them now so you can change the board's appearance without changing its data flow. Add `src/text.ts`, `src/catalog.tsx` and `src/surface.ts`; replace `src/index.css` with the styles below. Keep the generated HTML and the `src/main.tsx` entry from the first lesson.
+
+`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. The catalog identifier matches the one in `surface.ts`.
+
+`surface.ts` defines the data and connects it to those components. The `Board` repeats its child over `/squares`. Each square binds its mark and label from that row of data. The `playable` check disables a square when it is occupied, O has the turn, or the game has ended. The layout describes what appears; application code attaches its actions in the next section.
+
+`text.ts` turns game state into status messages, accessible square labels, move descriptions and the message asking the assistant to play. `index.css` controls the grid, focus indicators and colours. Try changing a border or the grid gap after the game is running; that should change its appearance without affecting a move.
+
+<details>
+<summary>Complete src/text.ts</summary>
 
 ```ts file=src/text.ts
 import type { Game, Refusal } from './contract.js';
@@ -931,7 +778,10 @@ export const CONVERSATION = {
 } as const;
 ```
 
-### `src/catalog.tsx`
+</details>
+
+<details>
+<summary>Complete src/catalog.tsx</summary>
 
 ```tsx file=src/catalog.tsx
 import {
@@ -1093,7 +943,10 @@ export const boardCatalog = new Catalog<ReactCatalogComponent>(
 );
 ```
 
-### `src/surface.ts`
+</details>
+
+<details>
+<summary>Complete src/surface.ts</summary>
 
 ```ts file=src/surface.ts
 import { defineSurface, z } from '@saga-a2ui/react-mcp-stack';
@@ -1210,7 +1063,106 @@ export const boardSurface = defineSurface({
 export type BoardData = z.infer<typeof BoardDataSchema>;
 ```
 
-### `src/controller.ts`
+</details>
+
+<details>
+<summary>Complete src/index.css</summary>
+
+```css file=src/index.css
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  padding: 1rem;
+}
+.column {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.status {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 1.05rem;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 5rem);
+  gap: 0.4rem;
+}
+.board button {
+  width: 5rem;
+  height: 5rem;
+  padding: 0;
+  font-size: 2.25rem;
+  font-weight: 600;
+  border: 2px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.board button:disabled {
+  cursor: default;
+}
+.board button:not(:disabled):hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.board button:focus-visible,
+.row button:focus-visible {
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+}
+.square.winning {
+  text-decoration: underline;
+  text-decoration-thickness: 0.2rem;
+}
+.row button {
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  border: 2px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+```
+
+</details>
+
+## 4. Connect a click to the next turn
+
+Add `src/controller.ts` and `src/actions.ts`, then replace `src/view.tsx`. These files connect the server and board you have just defined. Trace one click through them before running the game:
+
+1. `view.tsx` attaches `playSquare` to each rendered square. The repeated button supplies its square index.
+2. In `actions.ts`, `playSquare` reads that index and the displayed game's identifier and move number. It locks the board while calling `play_move` as X.
+3. On success, `game.present` displays the returned state. If the server refused the move, the board explains why and uses the server's current game.
+4. After an accepted move, `handOver` appends a conversation message asking the assistant to play O, with the game as context. The host may ask the person to send or confirm it.
+5. While O has the turn, the controller reads `get_game`. When O's tool call changes the state, it presents the newer board and enables the available squares.
+
+The controller owns the displayed game, pending click and wait for O. It ignores older replies and cancels the old wait when you select another game or leave the view. A failed move request is uncertain: the server may have applied it before the connection failed. `recover` reads the game before offering another click instead of submitting the move again.
+
+The complete controller also slows its reads after about a minute while continuing to wait for a host confirmation. This is why a delayed confirmation does not require a typed turn prompt or a page refresh. The optional “Check for the assistant's move” control is for recovering a failed read.
+
+In `view.tsx`, `onToolResult` now reads a game instead of a message. `createReactActions` binds the three actions to the controls. Each square binding has a subject containing the game and move number; a late action result for an old subject cannot overwrite the current board. `onTeardown` stops the application's wait when the host closes the view.
+
+<details>
+<summary>Complete src/controller.ts</summary>
 
 ```ts file=src/controller.ts
 import {
@@ -1550,7 +1502,10 @@ export function createGameController(server: GameServer): GameController {
 }
 ```
 
-### `src/actions.ts`
+</details>
+
+<details>
+<summary>Complete src/actions.ts</summary>
 
 ```ts file=src/actions.ts
 import {
@@ -1724,7 +1679,10 @@ export function createGameActions(host: ViewHost, game: GameController) {
 }
 ```
 
-### `src/view.tsx`
+</details>
+
+<details>
+<summary>Complete src/view.tsx</summary>
 
 ```tsx file=src/view.tsx
 import {
@@ -1818,3 +1776,14 @@ export async function startView(): Promise<void> {
 }
 ```
 
+</details>
+
+## Play and check the flow
+
+Run `npm run typecheck`, `npm run build`, then `npm start`. Return to [Build and play the game](../build-tic-tac-toe-with-react.md#3-build-and-play-the-game) to refresh the host's tools and open the board in a new chat.
+
+Click the centre square. X should appear there and the board should disable its empty squares while O has the turn. Confirm the generated message if the host asks. O's move should appear in this same board, then the remaining squares should become available. Finish a game and use **New game** to start another.
+
+To check your understanding, find the two places that prevent a move on an occupied square: the layout disables the control, and the server rules refuse the move. The server check is still needed because an assistant or another client can call the tool without using your board.
+
+When this works, [add a move list](3-move-list.md) by extending the catalog and layout.

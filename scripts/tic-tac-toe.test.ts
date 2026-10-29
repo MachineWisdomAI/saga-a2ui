@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -18,14 +18,8 @@ import {
   buildConsumerFromConfig,
   createWorkDirectory,
 } from './packed-consumer.js';
-import { templateDirectory } from './starter-template.js';
 
-// examples/tic-tac-toe: generated with the React/Hono `saga init`, keeping the template's
-// structure, and built from packed SDK packages. The rules and the store are checked by
-// tic-tac-toe-rules.test.ts, the page by apps/lit-host/e2e/tic-tac-toe.spec.ts, and the
-// guide by tic-tac-toe-document.test.ts.
-
-const template = templateDirectory('react-hono');
+// The example owns game behavior; the SDK owns the local HTTP/MCP listener.
 const work = createWorkDirectory('saga-tic-tac-toe-test-');
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
@@ -48,23 +42,7 @@ const specifiersOf = (file: string): string[] => {
   ].map((match) => match[2]!);
 };
 
-describe('the example keeps the template it was generated from', () => {
-  it('has the template’s build files and its server wiring, importing the server types through the stack', () => {
-    for (const file of [
-      'vite.config.ts',
-      'vite.server.config.ts',
-      'tsconfig.json',
-      'tsconfig.server.json',
-      'server/endpoint.ts',
-    ])
-      expect(read(ticTacToeSource, file), file).toBe(
-        read(template, file).replace(
-          "'@saga-a2ui/mcp/server'",
-          "'@saga-a2ui/react-mcp-stack/server'",
-        ),
-      );
-  });
-
+describe('the example uses the public stack', () => {
   it('installs one SAGA stack with exact package versions', () => {
     const own = JSON.parse(read(ticTacToeSource, 'package.json'));
     expect(
@@ -80,16 +58,15 @@ describe('the example keeps the template it was generated from', () => {
     expect(own.dependencies['@modelcontextprotocol/client']).toBeUndefined();
   });
 
-  it('keeps the template’s server files that carry no sign-in, and the layout of src', () => {
+  it('keeps application files without HTTP transport or sign-in plumbing', () => {
     for (const file of [
-      'server/endpoint.ts',
       'server/listener.ts',
       'server/main.ts',
       'server/operations.ts',
       'src/actions.ts',
       'src/catalog.tsx',
       'src/contract.ts',
-      'src/main.ts',
+      'src/main.tsx',
       'src/surface.ts',
       'src/view.tsx',
       'index.html',
@@ -97,6 +74,7 @@ describe('the example keeps the template it was generated from', () => {
       expect(fs.existsSync(path.join(ticTacToeSource, file)), file).toBe(true);
     // The game has no sign-in, so the starter's identity files are gone, not stubbed.
     for (const file of [
+      'server/endpoint.ts',
       'server/verifier.ts',
       'server/authenticate.ts',
       'server/identity.ts',
@@ -131,7 +109,7 @@ describe('what the example imports', () => {
         if (specifier.startsWith('.') || specifier.startsWith('node:'))
           continue;
         expect(specifier, file).toMatch(
-          /^(@saga-a2ui\/react-mcp-stack\/server|@modelcontextprotocol\/(server|hono)|@hono\/node-server|hono|zod)$/,
+          /^(@saga-a2ui\/react-mcp-stack\/server(?:\/node)?|@modelcontextprotocol\/server|zod)$/,
         );
       }
   });
@@ -257,8 +235,16 @@ describe('the tutorial built from complete files', () => {
       if (entry !== 'node_modules')
         fs.rmSync(path.join(consumer, entry), { recursive: true, force: true });
     }
+    fs.mkdirSync(path.join(consumer, 'node_modules/@vitejs'), {
+      recursive: true,
+    });
+    fs.symlinkSync(
+      path.join(repoRoot, 'node_modules/@vitejs/plugin-react'),
+      path.join(consumer, 'node_modules/@vitejs/plugin-react'),
+      'dir',
+    );
     for (const name of [
-      '1-first-card.md',
+      'checkpoints/first-card.md',
       '2-playable-game.md',
       '3-move-list.md',
     ]) {
@@ -271,7 +257,11 @@ describe('the tutorial built from complete files', () => {
         fs.writeFileSync(target, match[2]!);
       }
       try {
-        typecheckTicTacToe(consumer);
+        execFileSync(
+          process.execPath,
+          [path.join(consumer, 'node_modules/typescript/bin/tsc'), '-b'],
+          { cwd: consumer, stdio: 'pipe' },
+        );
       } catch (error) {
         const output = (error as { stdout?: Buffer }).stdout?.toString();
         throw new Error(output ?? String(error));
