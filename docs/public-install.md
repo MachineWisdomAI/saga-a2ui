@@ -23,7 +23,7 @@ npm view @saga-a2ui/lit-mcp-stack dist-tags --json
 npm view @saga-a2ui/react-mcp-stack dist-tags --json
 ```
 
-The current RC is `0.8.1-rc.1` for `@saga-a2ui/react-mcp-stack` and `0.8.0-rc.1` for the other six packages, verified on 29 October 2026. The recipes below pin those versions. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/340) records the source revision, registry integrity and anonymous installation checks. `next` selects these versions; `latest` was not changed by this release.
+The current RC is `0.9.0-rc.1` for all seven packages, verified on 29 October 2026. The recipes below pin those versions. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/343) records the source revision, registry integrity and anonymous installation checks. `next` selects these versions; `latest` was not changed by this release.
 
 A stack pins its SDK siblings, so its patch version can differ from theirs. For another release, confirm the stack version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
 
@@ -42,13 +42,13 @@ At your application's root, preserve existing overrides and add:
 For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.8.0-rc.1 lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.9.0-rc.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.8.1-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.9.0-rc.1 react@19.3.1 react-dom@19.3.1
 ```
 
 Commit the application lockfile. Each stack declares its SAGA siblings as regular dependencies with exact pins, so the application does not declare those packages separately. Use the stack root for an application-owned catalog and `/faithful-card` for a card application; `/server` is composed separately and stays out of browser bundles. A stack's server entry requires the full application's framework peers.
