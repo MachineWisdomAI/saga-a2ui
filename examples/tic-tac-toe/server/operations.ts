@@ -4,7 +4,6 @@ import {
   operationViewFromHtml,
   type OperationOutcome,
   type OperationView,
-  type RequestLifetime,
 } from '@saga-a2ui/react-mcp-stack/server';
 import { z } from 'zod';
 import {
@@ -98,8 +97,6 @@ const gameFound = (game: Game | undefined) =>
 export interface GameServerOptions {
   /** The immutable views prepared before the listener opened. */
   readonly views: BoardViews;
-  /** The request this server was built for, started by the listener at admission. */
-  readonly lifetime: RequestLifetime;
   /** Every request's server shares this one store. */
   readonly store: GameStore;
 }
@@ -118,7 +115,6 @@ const failures = {
  */
 export function createGameServer({
   views,
-  lifetime,
   store,
 }: GameServerOptions): McpServer {
   const server = new McpServer({ name: 'saga-tic-tac-toe', version: '0.0.0' });
@@ -127,103 +123,85 @@ export function createGameServer({
     data: { game },
   });
 
-  registerPublicOperation(
-    server,
-    {
-      name: NEW_GAME_TOOL,
-      title: 'Start a new game',
-      description:
-        'Starts a new game of tic-tac-toe and shows the board. The person plays X and moves first; you play O.',
-      annotations: WRITES,
-      input: z.strictObject({}),
-      output: GameOutputSchema,
-      view: views.newGame,
-      failures,
-      handle: async () => ({ kind: 'record', record: await store.create() }),
-      project,
-    },
-    { lifetime },
-  );
+  registerPublicOperation(server, {
+    name: NEW_GAME_TOOL,
+    title: 'Start a new game',
+    description:
+      'Starts a new game of tic-tac-toe and shows the board. The person plays X and moves first; you play O.',
+    annotations: WRITES,
+    input: z.strictObject({}),
+    output: GameOutputSchema,
+    view: views.newGame,
+    failures,
+    handle: async () => ({ kind: 'record', record: await store.create() }),
+    project,
+  });
 
-  registerPublicOperation(
-    server,
-    {
-      name: SHOW_GAME_TOOL,
-      title: 'Show a game',
-      description:
-        'Shows the board of an existing game, as it is now. Use it to display a game again; use get_game to read one.',
-      annotations: READS,
-      input: GameIdInputSchema,
-      output: GameOutputSchema,
-      view: views.showGame,
-      failures,
-      handle: async ({ gameId }) => gameFound(await store.get(gameId)),
-      project,
-    },
-    { lifetime },
-  );
+  registerPublicOperation(server, {
+    name: SHOW_GAME_TOOL,
+    title: 'Show a game',
+    description:
+      'Shows the board of an existing game, as it is now. Use it to display a game again; use get_game to read one.',
+    annotations: READS,
+    input: GameIdInputSchema,
+    output: GameOutputSchema,
+    view: views.showGame,
+    failures,
+    handle: async ({ gameId }) => gameFound(await store.get(gameId)),
+    project,
+  });
 
-  registerPublicOperation(
-    server,
-    {
-      name: GET_GAME_TOOL,
-      title: 'Read a game',
-      description:
-        'Reads the current state of a game, without showing a board: the squares, whose turn it is, the move number and how the game stands.',
-      annotations: READS,
-      input: GameIdInputSchema,
-      output: GameOutputSchema,
-      failures,
-      handle: async ({ gameId }) => gameFound(await store.get(gameId)),
-      project,
-    },
-    { lifetime },
-  );
+  registerPublicOperation(server, {
+    name: GET_GAME_TOOL,
+    title: 'Read a game',
+    description:
+      'Reads the current state of a game, without showing a board: the squares, whose turn it is, the move number and how the game stands.',
+    annotations: READS,
+    input: GameIdInputSchema,
+    output: GameOutputSchema,
+    failures,
+    handle: async ({ gameId }) => gameFound(await store.get(gameId)),
+    project,
+  });
 
-  registerPublicOperation(
-    server,
-    {
-      name: PLAY_MOVE_TOOL,
-      title: 'Play a move',
-      description: [
-        'Plays one square (0 to 8, row by row from the top left) for X or O and returns the game afterwards.',
-        'You play O. Place X only when the person tells you their move in the conversation; their own clicks on the board place X for them.',
-        'Give expectedMoveNumber as the moveNumber of the game you are answering. A move for an older board, a taken square, the wrong turn or a finished game is refused with no effect, and the result carries the current game.',
-        'If the board is not in your context, read it with get_game first.',
-        'If the board card cannot call the server, call show_game to display the board.',
-      ].join(' '),
-      annotations: WRITES,
-      input: MoveInputSchema,
-      output: MoveOutputSchema,
-      failures,
-      handle: async ({
-        gameId,
-        ...move
-      }): Promise<
-        OperationOutcome<Exclude<PlayResult, { kind: 'unknown' }>>
-      > => {
-        const result = await store.play(gameId, move);
-        return result.kind === 'unknown'
-          ? ({ kind: 'absent' } as const)
-          : ({ kind: 'record', record: result } as const);
-      },
-      project: (result) =>
-        result.kind === 'refused'
-          ? {
-              text: `Refused, and nothing changed: ${REFUSAL_TEXT[result.reason]} ${describeGame(result.game)}`,
-              data: {
-                game: result.game,
-                outcome: 'refused' as const,
-                reason: result.reason,
-              },
-            }
-          : {
-              text: describeGame(result.game),
-              data: { game: result.game, outcome: 'played' as const },
+  registerPublicOperation(server, {
+    name: PLAY_MOVE_TOOL,
+    title: 'Play a move',
+    description: [
+      'Plays one square (0 to 8, row by row from the top left) for X or O and returns the game afterwards.',
+      'You play O. Place X only when the person tells you their move in the conversation; their own clicks on the board place X for them.',
+      'Give expectedMoveNumber as the moveNumber of the game you are answering. A move for an older board, a taken square, the wrong turn or a finished game is refused with no effect, and the result carries the current game.',
+      'If the board is not in your context, read it with get_game first.',
+      'If the board card cannot call the server, call show_game to display the board.',
+    ].join(' '),
+    annotations: WRITES,
+    input: MoveInputSchema,
+    output: MoveOutputSchema,
+    failures,
+    handle: async ({
+      gameId,
+      ...move
+    }): Promise<OperationOutcome<Exclude<PlayResult, { kind: 'unknown' }>>> => {
+      const result = await store.play(gameId, move);
+      return result.kind === 'unknown'
+        ? ({ kind: 'absent' } as const)
+        : ({ kind: 'record', record: result } as const);
+    },
+    project: (result) =>
+      result.kind === 'refused'
+        ? {
+            text: `Refused, and nothing changed: ${REFUSAL_TEXT[result.reason]} ${describeGame(result.game)}`,
+            data: {
+              game: result.game,
+              outcome: 'refused' as const,
+              reason: result.reason,
             },
-    },
-    { lifetime },
-  );
+          }
+        : {
+            text: describeGame(result.game),
+            data: { game: result.game, outcome: 'played' as const },
+          },
+  });
   return server;
 }
 // #endregion saga-snippet:register-game-operations

@@ -1,4 +1,3 @@
-import type { BudgetSettings } from '@saga-a2ui/react-mcp-stack/server';
 import {
   startLocalMcpServer,
   type LocalMcpServer,
@@ -10,7 +9,6 @@ export interface ListenerOptions {
   readonly html: string;
   readonly port: number;
   readonly store?: GameStore;
-  readonly budgets?: BudgetSettings;
 }
 
 export function startListener(
@@ -20,7 +18,6 @@ export function startListener(
   const store = options.store ?? createMemoryGameStore();
   return startLocalMcpServer({
     port: options.port,
-    budgets: options.budgets,
-    createServer: (lifetime) => createGameServer({ views, store, lifetime }),
+    createServer: () => createGameServer({ views, store }),
   });
 }

@@ -279,7 +279,6 @@ import {
   operationViewFromHtml,
   registerPublicOperation,
   type OperationView,
-  type RequestLifetime,
 } from '@saga-a2ui/react-mcp-stack/server';
 import { z } from 'zod';
 
@@ -295,41 +294,35 @@ export function prepareBoardViews(html: string): OperationView {
 
 export function createGameServer({
   views,
-  lifetime,
 }: {
   views: OperationView;
-  lifetime: RequestLifetime;
 }): McpServer {
   const server = new McpServer({ name: 'saga-tic-tac-toe', version: '0.0.0' });
-  registerPublicOperation(
-    server,
-    {
-      name: 'new_game',
-      title: 'Open tic-tac-toe',
-      description:
-        'Opens the tic-tac-toe welcome card. The game is not implemented yet.',
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-      input: z.strictObject({}),
-      output: z.strictObject({ message: z.string() }),
-      view: views,
-      failures: {
-        absent: 'No welcome message was found.',
-        unavailable: 'The welcome card is unavailable.',
-        invalidOutput: 'The welcome message is invalid.',
-      },
-      handle: async () => ({
-        kind: 'record',
-        record: 'Your React app is connected. Next, build the board.',
-      }),
-      project: (message) => ({ text: message, data: { message } }),
+  registerPublicOperation(server, {
+    name: 'new_game',
+    title: 'Open tic-tac-toe',
+    description:
+      'Opens the tic-tac-toe welcome card. The game is not implemented yet.',
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
-    { lifetime },
-  );
+    input: z.strictObject({}),
+    output: z.strictObject({ message: z.string() }),
+    view: views,
+    failures: {
+      absent: 'No welcome message was found.',
+      unavailable: 'The welcome card is unavailable.',
+      invalidOutput: 'The welcome message is invalid.',
+    },
+    handle: async () => ({
+      kind: 'record',
+      record: 'Your React app is connected. Next, build the board.',
+    }),
+    project: (message) => ({ text: message, data: { message } }),
+  });
   return server;
 }
 ```
@@ -345,7 +338,7 @@ const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 const views = prepareBoardViews(html);
 const listener = await startLocalMcpServer({
   port: Number(process.env.PORT ?? 3000),
-  createServer: (lifetime) => createGameServer({ views, lifetime }),
+  createServer: () => createGameServer({ views }),
 });
 
 console.log(`Tic-tac-toe MCP endpoint: ${listener.url}`);
