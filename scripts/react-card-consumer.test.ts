@@ -160,6 +160,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
       './faithful-card',
       './faithful-card.css',
       './server',
+      './server/node',
     ]);
     for (const [subpath, target] of Object.entries(stackExports))
       expect(sdk.files['react-mcp-stack'], subpath).toContain(
