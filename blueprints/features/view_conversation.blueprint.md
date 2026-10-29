@@ -11,8 +11,8 @@ date_added: 2026-10-27
 ## Status
 
 - Design: approved by the owner on 2026-10-28 at [`6c3638b3f372c27d12b406a0c4800ea01f93cf24`](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/blueprints/features/view_conversation.blueprint.md), including the reviewed diagram ([Mermaid](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.mmd), [SVG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.svg), [PNG](https://github.com/MachineWisdomAI/saga-a2ui/blob/6c3638b3f372c27d12b406a0c4800ea01f93cf24/diagrams/view-conversation.png)).
-- Implementation: not started.
-- Acceptance: implementation qualification and the specified host runs remain outstanding. Design approval does not establish host support.
+- Implementation: Blueprint `6c3638b3f372c27d12b406a0c4800ea01f93cf24` implemented for the core conversation contract, MCP Apps adapter and both stack hosts at `MachineWisdomAI/saga-a2ui@c6cecdfb502f43360010b720d2a63b87c45b6466` ([PR #326](https://github.com/MachineWisdomAI/saga-a2ui/pull/326)). [Independent review](https://github.com/MachineWisdomAI/saga-a2ui/pull/326#pullrequestreview-5696385580) approved integrated head `6df6a44b08d28b3131abaf0c6179049fc9a1d6b7`; [application qualification CI](https://github.com/MachineWisdomAI/saga-a2ui/actions/runs/40859198727) passed.
+- Acceptance: local qualification covers capability outcomes, optional context, abort settlement before a held host reply, late answers and view teardown. Independent checks include 262 affected tests on the integrated head; unchanged library evidence includes 242 focused checks, 28 Chromium cases through both stacks, affected typechecks and strict packed-consumer qualification. Claude, ChatGPT and Alexa+ runs remain outstanding. Source implementation does not establish real-host support, package publication or deployment.
 
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 

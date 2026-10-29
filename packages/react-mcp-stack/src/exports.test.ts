@@ -81,6 +81,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'attachRequestLifetime',
       'createServerBudgets',
       'operationViewFromHtml',
+      'registerProtectedOperation',
       'registerPublicOperation',
       'viewUriForHtml',
     ]);

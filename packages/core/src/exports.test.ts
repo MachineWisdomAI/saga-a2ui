@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as actions from '@saga-a2ui/core/actions';
+import * as conversation from '@saga-a2ui/core/conversation';
 import * as deliveredResult from '@saga-a2ui/core/delivered-result';
 import type {
   ContentBlock,
@@ -110,6 +111,13 @@ describe('@saga-a2ui/core exports', () => {
       'describeLinkOutcome',
     ]);
     const { modules } = await bundledModules('@saga-a2ui/core/host-links');
+    expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]);
+  });
+
+  it('expose exactly the supported names for the conversation contract, which imports nothing', async () => {
+    expect(Object.keys(conversation)).toEqual(['NO_CONVERSATION']);
+    const { modules } = await bundledModules('@saga-a2ui/core/conversation');
+    expect(modules.some((id) => id.endsWith('/conversation.ts'))).toBe(true); // the graph was really walked
     expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]);
   });
 
