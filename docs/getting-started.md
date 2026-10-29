@@ -8,11 +8,11 @@ React and Lit are both supported renderer choices. Install the published MCP sta
 
 ## Choose a track
 
-Setup is the same for every app. What you build next is not. Each track builds one application from start to finish; neither is a ranking of renderers, so choose by the framework you will write in.
+Choose the application you want to build. Each track includes its own setup steps.
 
 | Track | You build | Read it for |
 | --- | --- | --- |
-| [Build tic-tac-toe with React](build-tic-tac-toe-with-react.md) | A game played by a person and an AI assistant, in the chat | The shortest path to what saga does. It reads in about ten minutes and ends with what else the design allows. |
+| [Build tic-tac-toe with React](build-tic-tac-toe-with-react.md) | A game played by a person and an AI assistant, in the chat | Build an app in your own directory with npm packages, then play it in Claude or ChatGPT. |
 | [Build the notes application with Lit](build-notes-with-lit.md) | A list of notes with a protected Archive action | Composing a view with the Lit stack, identity, evidence boundaries, and a lead into the [action guide](actions.md). |
 
 If you are unsure, read the React track first. Its ideas carry over: the layout, the operations and the conversation message do not depend on the renderer.
@@ -22,7 +22,7 @@ If you are unsure, read the React track first. Its ideas carry over: the layout,
 - **Node and npm.** An application that installs the published packages needs Node 22.12.0 or newer. This repository's checkout needs 22.23.3 or newer (`.nvmrc`).
 - **A bundler that handles TypeScript source.** The packages export source rather than precompiled JavaScript.
 - **A checkout of this repository** for `saga init`, the candidate tarballs and the examples. Run `npm ci` in its root.
-- **An MCP host is optional while you build.** The demonstration and the examples have local stand-ins for one. Connecting a real host comes afterwards and is covered by each track and by [host compatibility](host-compatibility.md).
+- **An MCP host is optional while you build.** The demonstration and the examples have local stand-ins for one. The React tutorial uses Claude or ChatGPT from its first UI step; the Lit demonstration can run locally. See [host compatibility](host-compatibility.md) for other host behavior.
 
 ## Install a published stack
 
@@ -97,7 +97,7 @@ npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hono ./my-app
 npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server hono ./my-react-app
 ```
 
-`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The commands create `my-app` (a Lit view) and `my-react-app` (a React view on `@saga-a2ui/react-mcp-stack` with React 19.3.1); both serve it from Hono and install nothing. The steps below use the Lit project, and what differs for React is noted where it matters. The [React track](build-tic-tac-toe-with-react.md) plays a finished game that was generated from the second command's output, and ends by returning to that command for your own app. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
+`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The commands create `my-app` (a Lit view) and `my-react-app` (a React view on `@saga-a2ui/react-mcp-stack` with React 19.3.1); both serve it from Hono and install nothing. The steps below use the Lit project, and what differs for React is noted where it matters. The [React track](build-tic-tac-toe-with-react.md) creates a separate app directly from npm packages and does not require this source workflow. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
 
 ### Install the packages from a candidate
 

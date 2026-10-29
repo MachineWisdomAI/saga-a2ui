@@ -486,7 +486,7 @@ describe('what the setup guide must explain', () => {
     expect(guide).not.toContain('startA2uiView({');
   });
 
-  it('offers the two tracks, and each of them exists and says it comes after setup', () => {
+  it('links both application tracks and their setup instructions', () => {
     const choice = guide.slice(
       guide.indexOf('## Choose a track'),
       guide.indexOf('## Prerequisites'),
@@ -494,7 +494,7 @@ describe('what the setup guide must explain', () => {
     expect(choice).toContain('(build-tic-tac-toe-with-react.md)');
     expect(choice).toContain('(build-notes-with-lit.md)');
     expect(choice).toContain('(actions.md)');
-    expect(headingsOf(read(REACT_TRACK))).toContain('Where to go next');
+    expect(read(REACT_TRACK)).toContain('(tic-tac-toe/1-first-card.md)');
     expect(litTrack).toContain('(getting-started.md)');
   });
 });

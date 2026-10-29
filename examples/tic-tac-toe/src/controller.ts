@@ -38,11 +38,13 @@ export interface Shown {
   readonly moveNumber: number;
 }
 
-/**
- * About every second and a half for up to a minute. These are proposals; a host run decides them
- * (MCP Apps gives a server no way to push to an open view, so the board reads instead).
- */
-export const WAIT = { everyMs: 1_500, reads: 40 } as const;
+/** Keep watching while the game exists, including time spent confirming a host message. */
+export const WAIT = {
+  everyMs: 1_500,
+  slowMs: 5_000,
+  fastReads: 40,
+  failures: 40,
+} as const;
 
 export type ReadResult =
   | { readonly kind: 'game'; readonly game: Game }
@@ -116,7 +118,7 @@ export interface GameController {
   unlock(token: object): void;
   /** Reads the game again, with the squares off until the answer arrives. */
   recover(): Promise<void>;
-  /** Starts the bounded wait for the assistant's move on the game on screen. */
+  /** Starts the wait for the assistant's move on the game on screen. */
   startWait(): void;
   /** Ends the view: nothing is drawn or read afterwards. */
   retire(): void;
@@ -280,6 +282,7 @@ export function createGameController(server: GameServer): GameController {
       const ended = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let reads = 0;
+      let failures = 0;
       const mine = {
         stop: () => {
           ended.abort();
@@ -291,7 +294,10 @@ export function createGameController(server: GameServer): GameController {
       render();
 
       const schedule = (): void => {
-        timer = setTimeout(() => void tick(), WAIT.everyMs);
+        timer = setTimeout(
+          () => void tick(),
+          reads < WAIT.fastReads ? WAIT.everyMs : WAIT.slowMs,
+        );
       };
       const tick = async (): Promise<void> => {
         if (wait !== mine) return;
@@ -299,13 +305,15 @@ export function createGameController(server: GameServer): GameController {
         const result = await readGame(server, waiting.gameId, ended.signal);
         if (wait !== mine) return; // another game, the assistant's move, the limit or the end of the view
         if (result.kind === 'game') {
+          failures = 0;
           controller.present(result.game);
           if (wait !== mine) return; // `present` ended the wait: the assistant moved
         } else if (result.kind === 'gone') {
           controller.markGone();
           return;
         }
-        if (reads >= WAIT.reads) {
+        if (result.kind === 'failed') failures += 1;
+        if (failures >= WAIT.failures) {
           wait = undefined;
           assistant = 'expired';
           render();

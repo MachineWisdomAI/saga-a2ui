@@ -10,7 +10,7 @@ index d6fb8cc..9b741c0 100644
 +const MoveList: ReactCatalogComponent = createComponentImplementation(
 +  { ...ListApi, name: 'MoveList' },
 +  ({ props, buildChild }) => (
-+    <ol className="moves" aria-label="Moves so far">
++    <ol className="moves" aria-label="Moves so far" style={{ listStyle: 'none', padding: 0 }}>
 +      {childrenOf(buildChild, props.children).map((move, at) => (
 +        <li key={at}>{move}</li>
 +      ))}

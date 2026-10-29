@@ -21,6 +21,10 @@ date_added: 2026-10-27
 - This approved design partially amends [application setup](application_setup.blueprint.md) in two places: a qualified React/Hono starter pair, and the split of the setup guide into a short common guide plus two build tracks. The approved application-setup contract stays in force for everything else, including the five Lit pairs, the demo, the CLI's safety behaviour and the generated existing-backend recipes.
 - It also approves making `view` optional on [reusable MCP connector](reusable_mcp_connector.blueprint.md) operation declarations, keeping every execution guarantee ([operations without a view](#operations-without-a-view)).
 
+- On 2026-10-29, the owner approved replacing the tutorial's checkout-based walkthrough with a progressive npm/Vite app, complete files, and Claude or ChatGPT from the first card. The approved scope includes exact RC versions under `next`, a local unauthenticated server through a Quick Tunnel, a prerequisite glossary, and a separate explanation of alternative architectures. Host confirmations are allowed; manual turn prompts and board refreshes are not. This amendment also replaces the one-minute wait limit with continued reads while the assistant has the turn. The owner approved these requirements before delegating the final writing and autonomous delivery; the coordinator recorded them in [`c093f9cd62a37819dfe0a5be0e221f8f6f60e171`](https://github.com/MachineWisdomAI/saga-a2ui/blob/c093f9cd62a37819dfe0a5be0e221f8f6f60e171/blueprints/features/getting_started_tracks.blueprint.md). This is an attestation of the approved scope, not a claim that the owner inspected that later commit. The earlier design-to-code records remain historical. The tutorial candidate is not yet merged, and public installation remains pending.
+
+- Tutorial candidate qualification on 2026-10-29: the complete-file chapters build the first card, game and move-list extension without filling gaps from repository source. All 135 documentation checks, 14 controller/game checks and the repository typecheck passed. The 23 game browser cases passed across the full run and focused delayed-confirmation repair; the move-list case passed again after its numbering correction. A local app installed the exact public-release tarballs (React stack `0.8.1-rc.1`, SDK siblings `0.8.0-rc.1`) with strict peers and built with `@hono/node-server` `2.1.5`. Through a Cloudflare Quick Tunnel, both Claude and ChatGPT rendered the first card and completed nine-move draws on their original boards, with move history. Claude required Send confirmations for generated messages; ChatGPT sent them automatically. Neither required typed turn prompts or board refreshes. A delayed Claude confirmation exceeded the old one-minute limit and still resumed automatically. Both hosts required one initial display retry, so this establishes recovered rendering, not first-load reliability. The final numbering correction and connection-error wording do not change the demonstrated successful turn path. Registry publication and an independent public-npm cold read remain separate checks.
+
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 
 ## Problem and current behavior
@@ -44,16 +48,12 @@ The brand expansion is changing from "Safe Agentic Apps" to "Simple Agentic Apps
  docs/getting-started.md      install, init, run, attach, troubleshoot
 -                              + Lit composition, actions, React caveats, evidence
 +docs/build-notes-with-lit.md         the Lit composition material, leading into actions.md
-+docs/build-tic-tac-toe-with-react.md a ten-minute guide that opens with the finished game
++docs/build-tic-tac-toe-with-react.md a progressive npm/Vite tutorial played in Claude or ChatGPT
 ```
 
-The new path for a React developer:
+The reader creates a new app directory and installs the pinned packages from npm. The guide supplies complete files for three milestones: a welcome card, a playable game, and a move list. The first card opens in Claude or ChatGPT through a local server and a Cloudflare Quick Tunnel. No SDK checkout is needed.
 
-```sh
-npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server hono ../my-saga
-```
-
-The command creates a clean React starter on Hono from `templates/react-hono`. It installs nothing and runs nothing. The tic-tac-toe guide starts from that output.
+The qualified React/Hono source starter remains available through `saga init`; the tutorial does not depend on the source CLI.
 
 **One game, from the guide.**
 
@@ -111,35 +111,15 @@ The generated existing-backend guide gains a React/Hono recipe by regeneration. 
 
 The README's first steps point to the two tracks. The repository-wide documentation cleanup is separate work. Where both touch the same file, they coordinate, and neither waits for the other.
 
-**The tic-tac-toe guide.** It is written for someone building a weekend project or a small product, and readable in about ten minutes. This is a reading goal, not a promise about install or host setup times. In order, it shows:
+**The tic-tac-toe guide.** A reader builds and plays the app in their own directory. A prerequisite glossary gives each tool or library a one-sentence explanation and an official learning link. npm installs exact published versions, and Vite builds the React view and Node server. Each milestone provides complete files and commands with a named working directory.
 
-1. the finished game in an assistant;
-2. the shortest way to start it;
-3. the layout and the operations;
-4. one guided change;
-5. connecting it to Claude, ChatGPT and Alexa+.
+The reader connects either Claude or ChatGPT at the first milestone, then adds the game and plays through a result. The guide explains the architecture they are using: the server owns the game, both players call the same move operation, and the board reads the game while waiting for O. A final change adds the move list. Host setup and confirmation instructions are checked in both products. A host's initial display retry is reported separately from turn behavior.
 
-Optional setup detail sits behind links. New terms are explained where they first appear.
-
-Its last section shows what the separation of A2UI, rendering and delivery allows, without a protocol course. It labels each arrangement as one of three kinds:
-
-| Kind | What it means |
-| --- | --- |
-| Runnable | The guide's own app runs this way. |
-| Straightforward composition | Built from existing packages. |
-| Architectural sketch | Needs adapters that do not exist yet. |
-
-The arrangements it covers:
-
-- the same rules and state behind an MCP gateway on one server and an app API on another;
-- one A2UI layout rendered by React or Lit in the client;
-- a native A2UI host that needs no MCP;
-- A2A as a delivery, including `appendMessage` mapped to A2A `message/send`, with its `context` as a data part on that message;
-- `GameStore` backed by Workers KV or a Durable Object when moving off a single Node process.
+[Alternative architectures](../../docs/tic-tac-toe-architecture-options.md) explains a separate backend, another renderer, a native A2UI host, A2A delivery, and hosted storage. Each distinguishes available parts from missing adapters or proposed work. The main tutorial stays with the implemented React game. The README and common setup guide point to the React and Lit tracks.
 
 ### Tic-tac-toe example (`examples/tic-tac-toe`)
 
-The example is generated with the React/Hono `saga init` and keeps the template's structure. The game is an example, not an adversarial service:
+The example keeps the React/Hono starter's structure and imports SAGA through the React MCP stack only. The game is an example, not an adversarial service:
 
 - Voice-first hosts need the assistant to place X when the person says their move, so `play_move` is callable by the model for either player.
 - The server still enforces the rules for both players.
@@ -193,8 +173,8 @@ Every result carries the whole game as structured content, plus a short text for
   - when X's move ended the game, it appends the result message only;
   - it applies the append's result only while the board still shows the same game and move, because the action's `current()` ends with the hook ([view conversation](view_conversation.blueprint.md#proposed-behavior)).
 - **The wait.**
-  - The controller owns it. It is a bounded series of `get_game` calls, about every second and a half for up to a minute.
-  - It ends on the assistant's move, a new game, teardown or its limit. At the limit, a "Check for the assistant's move" button replaces it.
+  - The controller owns it. It reads `get_game` every 1.5 seconds for the first 40 reads, then every 5 seconds while O has the turn.
+  - It ends on the assistant's move, game expiry, a new game or teardown. Forty consecutive failed reads stop the wait and offer "Check for the assistant's move". A successful read resets that failure count. A delayed host confirmation alone does not stop the wait.
   - MCP Apps gives a server no way to push to an open view, so this is the mechanism available.
 - **`onToolResult`.** It presents the result that opened the card, and any later result a host does deliver to it.
 - **The guided change** adds a move list bound to the game's `history`. It changes the layout and catalog only.
@@ -237,7 +217,7 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 | The host cannot take the context | The move message is still sent, because the game opts into best effort. The assistant reads `get_game` as the message tells it. |
 | X's move wins or fills the board | The board appends the result message, asks for no move and starts no wait. |
 | An append settles after New game or a newer move | Its result is ignored; nothing appears on the newer game. |
-| The assistant does not move before the wait ends | "Check for the assistant's move" appears. Nothing is retried on the assistant's behalf. |
+| Forty consecutive game reads fail | The board reports the connection failure and offers "Check for the assistant's move". It never repeats a move on the assistant's behalf. |
 | A view call fails or times out | The move may or may not have been applied. The card reads the game again before offering the square. |
 | The host shows the assistant's move in a new card | Both cards read the same game. An older card refuses its stale moves and catches up. |
 | `react-mcp` on another server is requested | `saga init` refuses and lists the supported pairs, as today. |
@@ -270,16 +250,19 @@ The change lands in step 2's SDK release. It amends the operation declaration de
 - stale and duplicate refusals;
 - a new game that an old request cannot change;
 - the unsupported-message instruction;
-- the wait's limit.
+- a host confirmation delayed for several minutes, followed by O appearing in the existing board;
+- recovery after consecutive failed reads, and cancellation when the view retires.
 
 No test asserts which square an assistant chooses.
 
 **Guide.**
-- A document test checks every command, quoted source line and link.
+- Document tests assemble every milestone from its complete files in a fresh directory, typecheck and build it, compare the final source with the maintained example, and check local links.
 - A cold reader follows it from a clean directory to a played game and the move list.
 - They can then explain how a click and an assistant turn use the same game, name the code they would change, and name their next step.
 
-**Hosts.** Claude, ChatGPT and Alexa+ are not run for this design. The guide's host sections say what each host is expected to support, link the [host compatibility guide](../../docs/host-compatibility.md), and state that this game is unverified there until a host run records otherwise.
+**Hosts.** Both Claude and ChatGPT must render the first card, complete a game, and show the move list through a Cloudflare Quick Tunnel. X clicks generate the handoff; any host confirmation may be accepted, but the tester does not type turn prompts or refresh the board. The existing board must show O and the final result. Initial display retries are recorded explicitly. Alexa+ is outside this tutorial's acceptance scope.
+
+**Public installation.** Publish the tested seven-package RC under `next`, verify registry integrity against the qualified tarballs, and install the pinned versions in a fresh app. A separate cold reader follows only the guide and its references, using public npm and no SDK checkout. Local tarball qualification alone does not satisfy this check.
 
 ## Implementation sequence
 
@@ -293,7 +276,7 @@ Steps 1 and 2 are independent. Step 3 needs both.
 
 ## Open decisions
 
-1. **The wait's cadence and limit.** The values above are proposals. Host runs decide them.
+The tutorial's wait behavior is specified above. Host qualification must show that a delayed confirmation still allows O to appear without a refresh.
 
 How `play_move` opens no card is settled: an optional `view` on saga operations, under the three requirements in [operations without a view](#operations-without-a-view).
 

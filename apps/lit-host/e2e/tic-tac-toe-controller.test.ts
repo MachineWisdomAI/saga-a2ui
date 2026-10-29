@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyMove,
   emptyGame,
@@ -130,4 +130,62 @@ describe('the recovery read of the tic-tac-toe board', () => {
     await second;
     expect(playable()).toBe(9);
   });
+});
+
+describe('waiting for a host-confirmed assistant turn', () => {
+  it('updates the same board after a confirmation takes three minutes, and stops reading on retirement', async () => {
+    vi.useFakeTimers();
+    let game = gameAfter(OLD, [4]);
+    let reads = 0;
+    const server: GameServer = {
+      callServerTool: async () => {
+        reads += 1;
+        return { content: [], structuredContent: { game } };
+      },
+    };
+    const { controller, playable, last } = attachedController(server);
+    try {
+      controller.present(game, 'select');
+      controller.startWait();
+      await vi.advanceTimersByTimeAsync(180_000);
+      game = gameAfter(OLD, [4, 0]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(controller.current()?.moveNumber).toBe(2);
+      expect(playable()).toBe(7);
+      expect(last().canCheck).toBe('');
+      controller.retire();
+      const before = reads;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(reads).toBe(before);
+    } finally {
+      controller.retire();
+      vi.useRealTimers();
+    }
+  });
+});
+
+it('stops repeated failed reads and reports a connection problem without claiming O has not played', async () => {
+  vi.useFakeTimers();
+  let reads = 0;
+  const { controller, last } = attachedController({
+    callServerTool: async () => {
+      reads++;
+      throw new Error('offline');
+    },
+  });
+  try {
+    controller.present(gameAfter(OLD, [4]), 'select');
+    controller.startWait();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(last().status).toBe(
+      'Could not read the game. Check the connection.',
+    );
+    expect(last().canCheck).toBe('yes');
+    expect(reads).toBe(40);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reads).toBe(40);
+  } finally {
+    controller.retire();
+    vi.useRealTimers();
+  }
 });
