@@ -170,12 +170,17 @@ describe('the generated existing-backend recipes', () => {
       recipes.indexOf('<!-- pairs -->'),
       recipes.indexOf('<!-- /pairs -->'),
     );
-    const rows = table.split('\n').filter((line) => /^\| `lit-mcp`/.test(line));
+    const rows = table
+      .split('\n')
+      .filter((line) => /^\| `[a-z]+-mcp` \|/.test(line));
     const offered = rows
       .filter((row) => /\| offered \|$/.test(row))
-      .map((row) => row.split('|')[2]?.trim());
+      .map((row) => {
+        const [, stack, server] = row.split('|').map((cell) => cell.trim());
+        return `${stack} on ${server}`;
+      });
     expect(offered).toEqual(
-      SUPPORTED_PAIRS.map((pair) => `\`${pair.server}\``),
+      SUPPORTED_PAIRS.map((pair) => `\`${pair.stack}\` on \`${pair.server}\``),
     );
     expect(rows).toHaveLength(QUALIFIED_STARTERS.length);
   });

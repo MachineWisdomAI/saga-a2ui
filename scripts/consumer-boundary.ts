@@ -406,6 +406,7 @@ export const REQUIRED_TEMPLATES = [
   'lit-fastify',
   'lit-hono',
   'lit-hapi',
+  'react-hono',
 ] as const;
 
 /** `*` is within one path segment, `**` crosses segments, `{a,b}` is a choice; the match covers the whole path. */

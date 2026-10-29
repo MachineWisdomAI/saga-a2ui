@@ -44,9 +44,10 @@ the example. It does not make a simulated answer evidence that any server enforc
 - The tour plays no media, reads no Patreon data and offers no protected content. Episode
   descriptions and Play need the demonstration's server and are not offered.
 - Renderer previews: **Lit** is the full renderer. **React** has bounded evidence (direct action
-  attachment and the notes application in a local fixture host); it is not renderer parity and there
-  is no React starter, template or CLI pair. Lynx delivery was retired and is not offered. A renderer
-  joins the list in `src/scenarios.ts` when its preview works.
+  attachment and the notes application in a local fixture host); it is not renderer parity, and it is
+  not the React starter (`saga init --a2ui-stack react-mcp --server hono`), which is a separate
+  pair. Lynx delivery was retired and is not offered. A renderer joins the list in
+  `src/scenarios.ts` when its preview works.
 - The tour is built from packed candidate tarballs of this source, not from registry packages. Nothing
   here says the stack packages are on a public registry.
 

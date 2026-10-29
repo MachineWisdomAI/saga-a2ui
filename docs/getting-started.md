@@ -2,9 +2,9 @@
 
 SAGA connects an application's UI to an MCP host. Your application supplies the view, the meaning of its data and the actions its controls perform. A stack package connects the renderer to MCP delivery and manages the view's lifetime.
 
-React and Lit are both supported renderer choices. Install the published MCP stack and peers for your application’s framework; both stacks provide custom typed surfaces, actions and FaithfulCard applications. For a generated Lit starter or local demonstration, use the source checkout and its matched candidate tarballs. The source CLI currently offers Lit templates; this is a tooling distinction, not a ranking of the two stacks.
+React and Lit are both supported renderer choices. Install the published MCP stack and peers for your application’s framework; both stacks provide custom typed surfaces, actions and FaithfulCard applications. For a generated starter or local demonstration, use the source checkout and its matched candidate tarballs. The source CLI offers Lit templates on five servers and one React template, on Hono; the local demonstration is Lit only. This is a tooling distinction, not a ranking of the two stacks.
 
-![Choose a published Lit or React stack, or a source-based Lit starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
+![Choose a published Lit or React stack, or a source-based Lit or React starter, then supply application behavior](../diagrams/saga-setup-paths.svg)
 
 ## Install a published stack
 
@@ -69,7 +69,7 @@ Package names are flat under `@saga-a2ui`. There are no aggregate packages: no `
 | Components | `@saga-a2ui/components` | Implemented, optional. The passive FaithfulCard slice. Both stacks install it transitively; an own-catalog application need not import it, and its main-entry browser bundle excludes it. |
 | Tooling | none | The source CLI implements `saga init`, `saga demo` and optional `saga publish` preparation/handoff commands. The `@saga-a2ui/publish` package does not exist; the [publication tooling](../scripts/publish/README.md) runs from this checkout and does not submit or publish an application. |
 
-Renderer packages keep their own framework peers and lifecycle APIs. The maintained source starter declares the Lit stack and its matching SDK packages explicitly, imports its view from `@saga-a2ui/lit-mcp-stack`, and uses the lower-level `@saga-a2ui/mcp/server` registration API on its server. This is the starter's existing source composition. For a new stack application, use the stack exports described above; you do not need to copy those direct SDK dependencies.
+Renderer packages keep their own framework peers and lifecycle APIs. Each maintained source starter declares its stack and the matching SDK packages explicitly, imports its view from `@saga-a2ui/lit-mcp-stack` (the Lit starters) or `@saga-a2ui/react-mcp-stack` (the React starter), and uses the lower-level `@saga-a2ui/mcp/server` registration API on its server. This is the starters' existing source composition. For a new stack application, use the stack exports described above; you do not need to copy those direct SDK dependencies.
 
 ## Component, definition, template and instance
 
@@ -89,20 +89,21 @@ The `bind-action` snippet in the [generated recipes](attach-to-existing-backend.
 
 ## Create a new project
 
-This is the source-based Lit path. From the checkout root, run `npm ci` if its dependencies are not already installed.
+This is the source-based path for a Lit or a React view. From the checkout root, run `npm ci` if its dependencies are not already installed.
 
 `saga init` is a script in this repository, run from a checkout. It creates one new directory from the maintained starter template and installs nothing, runs no package manager and no hook, and never changes anything that already exists.
 
 ```sh repository
 npx tsx scripts/saga.ts --help
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hono ./my-app
+npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server hono ./my-react-app
 ```
 
-`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The command creates `my-app` and installs nothing. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
+`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The commands create `my-app` (a Lit view) and `my-react-app` (a React view on `@saga-a2ui/react-mcp-stack` with React 19.3.1); both serve it from Hono and install nothing. The rest of this guide shows the Lit project, and what differs for React is noted where it matters. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
 
 ### Install the packages from a candidate
 
-This source workflow qualifies the checkout using candidate builds of Lit and the Lit stack. Both packages are also published on npm. The project `saga init` creates depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` cannot resolve those commit-specific candidate versions from the public registry.
+This source workflow qualifies the checkout using candidate builds of the renderer and its stack (Lit and the Lit stack, or React and the React stack). The packages are also published on npm. The project `saga init` creates depends on `@saga-a2ui/*` packages pinned to the exact candidate version of the commit that produced them. A package manager resolves those pins only from that candidate's tarballs, so a plain `npm install` cannot resolve those commit-specific candidate versions from the public registry.
 
 Build the candidate from the checkout that ran `saga init`, then install the tarballs the project uses in one command:
 
@@ -119,7 +120,7 @@ The second line is needed because the root build still builds the retained Lynx 
 npm install ./PATH/candidate-out/packages/saga-a2ui-core-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-components-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-lit-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-mcp-VERSION.tgz ./PATH/candidate-out/packages/saga-a2ui-lit-mcp-stack-VERSION.tgz
 ```
 
-Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A plain `npm install` cannot retrieve these candidate versions from npm; install their tarballs instead. A public release does not replace the matched candidate set used by this source workflow. A candidate is not a public registry release. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
+Replace `PATH` and `VERSION` with your files; the version is the one in the project's `package.json`. A React project installs the five React-side tarballs instead (`core`, `components`, `react`, `mcp` and `react-mcp-stack`, from the same `candidate-out/packages` directory). A plain `npm install` cannot retrieve these candidate versions from npm; install their tarballs instead. A public release does not replace the matched candidate set used by this source workflow. A candidate is not a public registry release. Install every package of the combination you use together, from the same candidate, and keep the `@a2ui/markdown-it` override in your root `package.json` (the starter carries it). [Candidates: contents, update, rollback](candidate-update-and-rollback.md) is the authority for the matched set, the update sequence and rollback; do not update one package alone. CI also uploads each candidate as a workflow artifact.
 
 After installing those tarballs inside `my-app`, build and start it:
 
@@ -132,7 +133,7 @@ npm start
 
 ### HTTP defaults
 
-Use **stateless MCP** and **prepare the built view once at startup**. The five maintained starters each construct two persistent `createMcpHandler` instances: one for the public status endpoint and one for the protected account endpoint. Each factory constructs a fresh server for a request. Each handler owns a separate notification bus, subscription limit and shutdown operation, so public subscribers cannot receive protected endpoint notifications or consume its subscription slots.
+Use **stateless MCP** and **prepare the built view once at startup**. The six maintained starters each construct two persistent `createMcpHandler` instances: one for the public status endpoint and one for the protected account endpoint. Each factory constructs a fresh server for a request. Each handler owns a separate notification bus, subscription limit and shutdown operation, so public subscribers cannot receive protected endpoint notifications or consume its subscription slots.
 
 The Hono target uses the official `@modelcontextprotocol/hono` validation middleware and Hono's Node adapter. Hono supplies routing and middleware; Node remains the runtime. Its routes mount `handler.fetch(c.req.raw, { parsedBody, authInfo })`; Node, Express and Fastify use the official `toNodeHandler` adapter. The application authenticates before invoking the protected handler and reads the body under the request's deadline. All mounting paths pass `parsedBody` explicitly: in the pinned SDK this preserves the original `Request` object in both modern and legacy factories, allowing the endpoint's WeakMap to recover the admitted lifetime through `ctx.requestInfo`.
 
@@ -176,13 +177,13 @@ The CLI creates a separate reference project; it does not migrate an existing ap
 
 ### Unqualified pairs are refused
 
-`saga init` offers only the pairs CI qualifies and that its own list names: `lit-mcp` on `node`, `express`, `fastify`, `hono` and `hapi`. Asking for another pair exits with status 1 before anything is written, and the message lists the five supported ones:
+`saga init` offers only the pairs CI qualifies and that its own list names: `lit-mcp` on `node`, `express`, `fastify`, `hono` and `hapi`, and `react-mcp` on `hono`. Asking for another pair exits with status 1 before anything is written, and the message lists the six supported ones:
 
 ```sh repository
-npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server node ./my-app
+npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server express ./my-app
 ```
 
-A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today (all five). Hapi uses the SAGA-maintained bridge over the official Node/server SDK; React has no starter, template or `saga init` pair.
+A template directory existing does not add a pair, and a *qualified* template is not automatically *offered*: the [pair table](attach-to-existing-backend.md#which-pairs-have-a-recipe) shows which pairs have a qualified template and which of them `saga init` offers today (all six). Hapi uses the SAGA-maintained bridge over the official Node/server SDK; React has one starter, on Hono, and no `saga init` pair on any other server.
 
 ## Attach to an existing backend
 
@@ -286,8 +287,8 @@ Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 secon
 | --- | --- | --- |
 | Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
 | Lit | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer checks cover the starter, demonstration and notes example | Starter and local fixture results do not establish every application or host combination; Windows is not qualified here |
-| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. Bounded notes observations in Claude/ChatGPT are recorded in [host compatibility](host-compatibility.md) | No generated React starter, template or CLI pair. Qualification of a particular application and host remains specific to its built artifact; no complete host matrix is claimed |
-| Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp` | No full matrix; `saga init` offers those five servers; the standalone demonstration is the Node application only |
+| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. Bounded notes observations in Claude/ChatGPT are recorded in [host compatibility](host-compatibility.md) | One generated React starter, `react-mcp` on Hono; no other React server pair and no React demonstration. Qualification of a particular application and host remains specific to its built artifact; no complete host matrix is claimed |
+| Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp`; `hono` qualified with `react-mcp` | No full matrix; `saga init` offers those six pairs; the standalone demonstration is the Lit and Node application only |
 | Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |
 
 A renderer is qualified by running its own lifecycle, not by declaring that it could: a type declaration that compiles is not a working setup claim, and no renderer is forced through a Lit-specific lifecycle (custom elements and `createA2uiAppElement`). React attaches through its own provider and hook; the shared contract is renderer-neutral.
@@ -312,7 +313,7 @@ import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react
 
 **The demo directory does not exist.** Run `npm run build:demo` in the source checkout first. It produces the standalone directory whose own `npm start` serves the demonstration. The standalone demo supports Node only; the other server targets are starter templates.
 
-**A React starter command is refused.** The React stack is published, but there is no React `saga init` pair. Integrate the stack in a React application; do not replace its lifecycle with a Lit-specific lifecycle or follow the retired historical Lynx fixture as a setup path.
+**A React starter command on another server is refused.** The React stack is published and `saga init` offers `react-mcp` on `hono` only. For another server, integrate the stack in a React application; do not replace its lifecycle with a Lit-specific lifecycle or follow the retired historical Lynx fixture as a setup path.
 
 ## Where to go next
 

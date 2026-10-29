@@ -15,7 +15,7 @@ The main entry is for an application's own catalog. An application that installs
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the absence of a generated React starter does not mean the React stack lacks a working application path.
+The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the generated React starter covers one server (`react-mcp` on Hono), and an application on another server or an existing React application integrates the stack directly, which is a working application path.
 
 ## React in Ansari Faithful Answers
 
@@ -34,7 +34,7 @@ The [notes React view](../examples/pack1-consumer/src/notes-react-view.tsx) is a
 
 Follow the [action guide](actions.md#trace-one-press-allowed-and-denied) for the complete server authorization and outcome trace. An expired session can stop Archive before its protected request; cancellation after sending that request leaves its effect uncertain. The application presents that uncertainty and does not retry the write automatically.
 
-This is an existing application example, not a React starter command. Use [public installation](public-install.md) for the stack and exact peers, and [Getting started](getting-started.md) for a runnable local demo.
+This is an existing application example. To start a new React application on Hono, run `saga init --a2ui-stack react-mcp --server hono` as [Getting started](getting-started.md#create-a-new-project) describes; the starter holds the same public status, protected account and local Clear action as the Lit starters. Use [public installation](public-install.md) for the stack and exact peers.
 
 ## The React integration surface
 
