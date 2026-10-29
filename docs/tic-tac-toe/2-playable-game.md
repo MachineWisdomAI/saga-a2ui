@@ -12,7 +12,7 @@ The welcome card returned one string. A game needs a board, whose turn it is, an
 
 `rules.ts` implements `applyMove` without a server or clock. Before placing a mark, it checks that the game is still running, that the submitted move number matches, that the player has the turn, and that the square is empty. It then checks the eight winning lines and whether the board is full. A refused move returns a reason and leaves the board unchanged.
 
-Why send `expectedMoveNumber`? Suppose the view shows move 2, but another call has already applied move 3. The old click must not change the newer board. The server refuses it and returns the current game so the view can catch up.
+Sending `expectedMoveNumber` prevents an old click from changing a newer board. For example, the view might show move 2 after another call has already applied move 3. The server refuses the old click and returns the current game so the view can catch up.
 
 `game-store.ts` gives those rules somewhere to keep their result. Its memory store creates game identifiers, expires idle games after 30 minutes and bounds the number retained. Each request uses the same store. Restarting the process clears it.
 
