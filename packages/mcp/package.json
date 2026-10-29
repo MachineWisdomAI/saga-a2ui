@@ -7,7 +7,8 @@
   "exports": {
     "./server": "./src/server/index.ts",
     "./view": "./src/view/index.ts",
-    "./policy": "./src/policy/index.ts"
+    "./policy": "./src/policy/index.ts",
+    "./server/node": "./src/server/node/index.ts"
   },
   "files": [
     "src",
@@ -22,8 +23,11 @@
     "@modelcontextprotocol/core": "2.3.1",
     "@modelcontextprotocol/ext-apps": "2.0.3",
     "@modelcontextprotocol/server": "2.3.1",
-    "@saga-a2ui/core": "0.8.0-rc.1",
-    "zod": "4.6.7"
+    "@saga-a2ui/core": "0.9.0-rc.1",
+    "zod": "4.6.7",
+    "@hono/node-server": "2.1.5",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "hono": "4.13.13"
   },
   "devDependencies": {
     "@modelcontextprotocol/node": "2.1.1",
@@ -31,7 +35,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.8.0-rc.1",
+  "version": "0.9.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

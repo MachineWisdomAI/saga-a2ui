@@ -56,6 +56,14 @@ const RENDERER =
 const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 
 describe('package subpath exports', () => {
+  it('isolates the local Node listener behind its own server subpath', async () => {
+    const { modules } = await bundle('@saga-a2ui/mcp/server/node', 'node');
+    expect(modules.some((id) => id.endsWith('/server/node/listener.ts'))).toBe(
+      true,
+    );
+    expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
+  });
+
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
