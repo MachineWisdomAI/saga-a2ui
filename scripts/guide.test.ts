@@ -680,8 +680,8 @@ describe('the evidence rules in the guides', () => {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
     expect(guide).toContain('seven-package release set');
-    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.7.7-rc.1');
-    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.7.7-rc.1');
+    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.8.1-rc.1');
+    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.8.0-rc.1');
     expect(guide).toContain('public-install.md');
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(
