@@ -161,7 +161,7 @@ If a call fails or times out, the move may or may not have been applied. The boa
 
 You write the game: its rules, where it is stored, the layout, the components, the actions and the sentences. saga handles the plumbing:
 
-- **Operations.** It checks every input and output against the contracts you declare, enforces time limits, ends cancelled work, and turns a failure into a fixed safe message.
+- **Operations.** It checks every input and output against the contracts you declare, bounds how long a call waits, gives your handler a cancellation signal when the wait ends, and turns a failure into a fixed safe message. A handler that ignores the signal keeps running, and ending a wait does not undo what it already did, so make your own work stop when the signal fires.
 - **The board.** It serves the board as an operation's card, connects it to the host, keeps a result that arrives early, and ends the view once when the host or page goes away.
 - **Actions.** It attaches one definition to each control with state of its own, so nine squares share one action.
 - **The conversation.** It adds the message and its context, and says whether the host took them.
