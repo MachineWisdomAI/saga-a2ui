@@ -97,7 +97,7 @@ npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server hono ./my-app
 npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server hono ./my-react-app
 ```
 
-`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The commands create `my-app` (a Lit view) and `my-react-app` (a React view on `@saga-a2ui/react-mcp-stack` with React 19.3.1); both serve it from Hono and install nothing. The steps below use the Lit project, and what differs for React is noted where it matters. The [React track](build-tic-tac-toe-with-react.md) builds on the output of the second command. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
+`--a2ui-stack` selects the renderer/delivery combination; `--server` selects the server framework. The commands create `my-app` (a Lit view) and `my-react-app` (a React view on `@saga-a2ui/react-mcp-stack` with React 19.3.1); both serve it from Hono and install nothing. The steps below use the Lit project, and what differs for React is noted where it matters. The [React track](build-tic-tac-toe-with-react.md) plays a finished game that was generated from the second command's output, and ends by returning to that command for your own app. Use Node 22.23.3 or newer for this source checkout. Keep this checkout unchanged while exporting the project and packing its dependencies so their candidate identities match.
 
 ### Install the packages from a candidate
 

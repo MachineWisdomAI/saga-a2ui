@@ -16,7 +16,7 @@ You play X and move first. Each square is a button, so the keyboard works too. S
 
 Three things make it different from a page you would build on its own:
 
-- **The board lives in the chat.** The assistant's host, such as Claude or ChatGPT, shows it next to the conversation. The host is the application that runs the assistant. Here it is called an MCP host, because it talks to your game over the Model Context Protocol (MCP). You do not need to know the protocol to follow this guide.
+- **The board lives in the chat.** The assistant's host, such as Claude or ChatGPT, shows it as a card next to the conversation. The host is the application that runs the assistant. Here it is called an MCP host, because it talks to your game over the Model Context Protocol (MCP). You do not need to know the protocol to follow this guide.
 - **The assistant plays through the same door you do.** Your click and the assistant's turn both end in one server operation, `play_move`. An operation is a named action your server offers. The server alone decides whether a move is legal.
 - **Your click wakes the assistant.** A page can call your server, but it cannot make the assistant speak. So after your move the board adds a short message to the conversation, as if you had typed it. That is what hands the turn to the assistant.
 
@@ -56,7 +56,7 @@ Click the centre square of the empty board. Three things happen, in this order:
 
    The message names the game and never draws the board. The server owns the state, so the message carries only the game's identifier. The board also hands the assistant a copy of the game as background it can see and the chat does not show. If the host cannot take that copy, the message is still sent, and the assistant reads the game with `get_game`.
 
-The assistant now has its turn. It reads the game if it needs to and calls `play_move` for O. The board, meanwhile, checks the server every second and a half, for up to a minute. When O appears, the board shows it and gives the turn back to you.
+The assistant now has its turn. It reads the game if it needs to and calls `play_move` for O. The board, meanwhile, checks the server every second and a half, for up to a minute. Those two numbers are provisional defaults, to be settled by runs in real hosts. When O appears, the board shows it and gives the turn back to you.
 
 If the host takes no message at all, the status line tells you what to do: "Tell the assistant it's their move." The board keeps checking either way.
 
@@ -307,7 +307,7 @@ Start your own project from the same starter the example came from:
 npx tsx scripts/saga.ts init --a2ui-stack react-mcp --server hono ../my-saga
 ```
 
-It creates one new directory and installs nothing. The [setup guide](getting-started.md#create-a-new-project) covers installing and starting it, and the [example's README](../examples/tic-tac-toe/README.md) maps the example's files and tests. Replace the rules, the store and the layout with your own, and keep the operations, the action and the conversation message as the pattern.
+It creates one new directory and installs nothing. The starter is not the game: it serves a status view and a protected account view, and the example replaced its operations and removed its sign-in files. The [setup guide](getting-started.md#create-a-new-project) covers installing and starting it, and the [example's README](../examples/tic-tac-toe/README.md) maps the example's files and tests. Replace the rules, the store and the layout with your own, and keep the operations, the action and the conversation message as the pattern.
 
 Other places to go:
 
