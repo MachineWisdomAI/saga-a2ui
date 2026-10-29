@@ -30,6 +30,8 @@ date_added: 2026-10-27
 - Public installation on 2026-10-29: all seven RC packages from SDK source `228be11269826ddc84efd623d1543e9803807706` are published under `next`: React stack `0.8.1-rc.1`, six siblings `0.8.0-rc.1`. [PR #340's publication receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/340) records anonymous registry integrity matching the tested tarballs and strict anonymous lower-level, React-stack, Lit-stack and server-only installation/typechecking. No `latest` tag changed. An independent reader used only the guide and its references, a fresh app directory, and public npm on Node 24.22.1 / npm 11.19.1. Strict installation and all three milestones' typecheck, build, server startup and HTTP tool/resource checks passed without app changes; the game and extension each completed an O win over HTTP. All 20 final files match the guide's code fences. That reader did not test a host; the host observations are recorded separately above. The install still reports 10 inherited audit findings (nine high, one critical), as the guide warns. This completes the delegated tutorial checks; it does not claim personal playtesting or programme acceptance by the owner.
 
 
+- On 2026-10-29, the owner corrected the tutorial's teaching approach: manually copying project configuration and HTTP plumbing is not a learning milestone. The owner authorized the bounded SDK/starter repair and tutorial rewrite while excluding repository reorganization and general CLI distribution work. The implementation will use Vite's published React/TypeScript generator and a reusable local MCP listener, then explain the application's operations, React components, bindings and turns. Complete code remains available for reference; it must not replace explanation. The coordinator attests to that instruction and retains responsibility for final writing, review, release and qualification. This amendment is approved in scope; implementation, publication and the revised cold read are pending.
+
 <!-- Maintain this section using ../README.md#lifecycle-and-revision-records. -->
 
 ## Problem and current behavior
@@ -268,6 +270,16 @@ No test asserts which square an assistant chooses.
 **Hosts.** Both Claude and ChatGPT must render the first card, complete a game, and show the move list through a Cloudflare Quick Tunnel. X clicks generate the handoff; any host confirmation may be accepted, but the tester does not type turn prompts or refresh the board. The existing board must show O and the final result. Initial display retries are recorded explicitly. Alexa+ is outside this tutorial's acceptance scope.
 
 **Public installation.** Publish the tested seven-package RC under `next`, verify registry integrity against the qualified tarballs, and install the pinned versions in a fresh app. A separate cold reader follows only the guide and its references, using public npm and no SDK checkout. Local tarball qualification alone does not satisfy this check.
+
+## Generated setup and the local listener
+
+The tutorial starts with the standard Vite React/TypeScript generator. It explains the changes that make a Vite app run in an MCP host; it does not ask readers to recreate generated project configuration. Each lesson traces one meaningful application change and gives the reader an observable result in Claude or ChatGPT. The first card teaches a server result, a React component and the binding between them before the guide adds the game.
+
+The SDK supplies `startLocalMcpServer` through the MCP package and both stacks' `/server/node` entries. Its caller selects a port and supplies `createServer(lifetime)`, which builds a fresh MCP server for one request. Application state and rendered view bytes remain with the caller. The returned listener exposes its URL and an idempotent `close()`; process signals remain application-owned.
+
+This optional listener preserves the tutorial's existing transport behavior: loopback binding at `/mcp`, local Host and Origin validation, a 1 MiB body limit, one request deadline covering body reading and response delivery, operation budgets, and cancellation on shutdown. It provides no authentication. Existing backends and maintained starter pairs retain their own hosting contracts. The node entry stays outside browser and renderer module graphs.
+
+This repair does not create a SAGA CLI package, move repositories or examples, retire the local host fixture, or change publication tooling. The new package version must be published and installed from the registry before the revised guide relies on it. Source tests qualify the listener's behavior; a fresh generated app qualifies the reader's commands.
 
 ## Implementation sequence
 

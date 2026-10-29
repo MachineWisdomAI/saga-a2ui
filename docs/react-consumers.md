@@ -57,6 +57,8 @@ The application owns everything about the conversation: whether to append, what 
 
 A server can also declare an operation with no view. Omit `view` from the declaration given to `registerPublicOperation` or `registerProtectedOperation` (both from the stack's `/server` entry); the operation keeps its input and output contracts, annotations, budgets, cancellation and safe failures, and carries no UI association: no view resource and no `_meta.ui` on the tool definition or on any result.
 
+For a local Node server, the optional [local MCP listener](local-mcp-server.md) handles HTTP transport and request lifetimes while your app supplies its operations.
+
 ## React in Ansari Faithful Answers
 
 Ansari Faithful Answers uses the React MCP stack for its answer-card application. The public [destination integration PR](https://github.com/iaser-ai/ansari/pull/323) records a candidate using `@saga-a2ui/react-mcp-stack@0.7.6-rc.1` and React/React DOM `19.3.1`, with clean public-package installation, application checks and browser validation. Its [view source](https://github.com/timeleft--/ansari/blob/e4ded0ec3e39afb33292e311c8fe3a0669c1bb41/apps/ansari-faithful-answers/src/view/main.tsx) uses the stack’s FaithfulCard application entry. This is a concrete application consumer alongside the SDK examples; it does not depend on a generated React starter.
