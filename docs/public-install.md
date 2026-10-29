@@ -23,7 +23,9 @@ npm view @saga-a2ui/lit-mcp-stack dist-tags --json
 npm view @saga-a2ui/react-mcp-stack dist-tags --json
 ```
 
-All seven packages are available at `0.7.7-rc.1`, verified on 27 October 2026, and the recipes below pin that release. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records its installation and build qualification. `next` currently selects this version for every package; `latest` differs across the set, so use an exact version. For another release, confirm that version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
+The current RC is `0.8.1-rc.1` for `@saga-a2ui/react-mcp-stack` and `0.8.0-rc.1` for the other six packages, verified on 29 October 2026. The recipes below pin those versions. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/340) records the source revision, registry integrity and anonymous installation checks. `next` selects these versions; `latest` was not changed by this release.
+
+A stack pins its SDK siblings, so its patch version can differ from theirs. For another release, confirm the stack version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
 
 ## Install one stack plus framework peers
 
@@ -40,13 +42,13 @@ At your application's root, preserve existing overrides and add:
 For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.7.7-rc.1 lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.8.0-rc.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.7.7-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.8.1-rc.1 react@19.3.1 react-dom@19.3.1
 ```
 
 Commit the application lockfile. Each stack declares its SAGA siblings as regular dependencies with exact pins, so the application does not declare those packages separately. Use the stack root for an application-owned catalog and `/faithful-card` for a card application; `/server` is composed separately and stays out of browser bundles. A stack's server entry requires the full application's framework peers.
@@ -55,7 +57,7 @@ For pnpm, put the equivalent Markdown override in the consumer workspace root. S
 
 ## Lower-level integrations
 
-Applications that intentionally compose lower-level SDK APIs may install the packages they import, using the same matched release. The original four-package `0.1.0-rc.1` release remains historical; it predates the stacks. See [package layout](../packages/README.md) for ownership and entry points.
+Applications that intentionally compose lower-level SDK APIs may install the packages they import, using the versions recorded in the release receipt. The original four-package `0.1.0-rc.1` release remains historical; it predates the stacks. See [package layout](../packages/README.md) for ownership and entry points.
 
 ## Run a demo or use a starter
 
