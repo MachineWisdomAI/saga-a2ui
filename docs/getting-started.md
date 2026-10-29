@@ -26,7 +26,7 @@ If you are unsure, read the React track first. Its ideas carry over: the layout,
 
 ## Install a published stack
 
-The seven-package release set is published at `0.7.7-rc.1` under `next`, including both renderers and both MCP stacks. Pin the exact version rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1) records anonymous installation, integrity, compilation and build checks. The receipt also identifies the package and source revisions used here. See [public installation](public-install.md) for registry checks and package selection.
+The current seven-package release set is an RC published under `next`: `@saga-a2ui/react-mcp-stack` is `0.8.1-rc.1`, and the other six packages are `0.8.0-rc.1`. Pin these exact versions rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/340) records the source revision, registry integrity and anonymous installation checks. See [public installation](public-install.md) for registry checks and package selection.
 
 Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This registry path configures an existing application; the local demonstration in the [Lit track](build-notes-with-lit.md#start-from-the-demo) is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 
@@ -39,13 +39,13 @@ A2UI 0.13.0 permits a newer Markdown package whose peer requirements target A2UI
 Choose one stack for that application. For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.7.7-rc.1 lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.8.0-rc.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.7.7-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.8.1-rc.1 react@19.3.1 react-dom@19.3.1
 ```
 
 Each stack brings core, components, MCP and its renderer at the matching SDK version. Your application does not need to install those packages separately for the stack's API. Keep the resulting lockfile. Existing applications should reconcile their framework version with these peer requirements before proceeding.
@@ -63,7 +63,7 @@ Package names are flat under `@saga-a2ui`. There are no aggregate packages: no `
 | Core | `@saga-a2ui/core` | Implemented. Renderer-independent action contract (`/actions`), the A2UI v0.9 message session (`/protocols/a2ui/v0_9`) and the Zod 3 alias for catalog schemas (`/protocols/a2ui/zod3`). |
 | Delivery | `@saga-a2ui/mcp` | Implemented. `/server` (protected operations, verified request identity, one request lifetime), `/view` (the view's connection) and `/policy`. |
 | GenUI renderers | `@saga-a2ui/lit`, `@saga-a2ui/react` | Both implement typed A2UI surfaces, action controls and optional FaithfulCard rendering through their own framework integration. A `@saga-a2ui/lynx` package does not exist; Lynx delivery is retired (see [what is implemented](build-notes-with-lit.md#what-is-implemented-and-what-is-not)). |
-| Stacks | `@saga-a2ui/lit-mcp-stack`, `@saga-a2ui/react-mcp-stack` | Implemented. A stack connects one renderer to MCP delivery, so an application installs one stack plus its framework peers and imports from it only: `startA2uiView` for an application's own catalog, and `startFaithfulCardApp` from the `/faithful-card` subpath for a card application. Both stacks are published at `0.7.7-rc.1`. |
+| Stacks | `@saga-a2ui/lit-mcp-stack`, `@saga-a2ui/react-mcp-stack` | Implemented. A stack connects one renderer to MCP delivery, so an application installs one stack plus its framework peers and imports from it only: `startA2uiView` for an application's own catalog, and `startFaithfulCardApp` from the `/faithful-card` subpath for a card application. The current pins are listed in [Install a published stack](#install-a-published-stack). |
 | Components | `@saga-a2ui/components` | Implemented, optional. The passive FaithfulCard slice. Both stacks install it transitively; an own-catalog application need not import it, and its main-entry browser bundle excludes it. |
 | Tooling | none | The source CLI implements `saga init`, `saga demo` and optional `saga publish` preparation/handoff commands. The `@saga-a2ui/publish` package does not exist; the [publication tooling](../scripts/publish/README.md) runs from this checkout and does not submit or publish an application. |
 

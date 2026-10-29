@@ -144,7 +144,7 @@ Keep playing until someone wins or the board is full. The status announces the r
 
 Your click calls `play_move` through the host. The server checks the player, square, and move number before applying it, then returns the updated game. The board shows X and adds a message asking the assistant to play O. It also supplies the current game as model context; the assistant can use `get_game` if it needs to read the state again.
 
-The assistant calls the same `play_move` tool. That call returns to the conversation, so the board checks `get_game` while it waits. It reads every 1.5 seconds for the first minute, then every 5 seconds until O plays or the game expires. Waiting for a host confirmation does not require a refresh. Leaving the view or starting another game ends the old wait.
+The assistant calls the same `play_move` tool. That call returns to the conversation, so the board checks `get_game` while it waits. It reads every 1.5 seconds for about a minute, then every 5 seconds until O plays or the game expires. Waiting for a host confirmation does not require a refresh. Leaving the view or starting another game ends the old wait.
 
 ![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](../diagrams/tic-tac-toe-turn-loop.svg)
 
@@ -170,7 +170,7 @@ Try changing the board’s colours in `index.html`, or the status messages in `s
 
 | Symptom | Check |
 | --- | --- |
-| npm reports `ETARGET` | Confirm that you copied the exact package versions from step 1 and are using the public npm registry; this guide does not use commit-derived candidate versions. |
+| npm reports `ETARGET` | Confirm that you copied the exact package versions from step 1 and are using the public npm registry. |
 | A dependency or audit warning appears | Read the package named in the warning and run `npm audit`; avoid `npm audit fix --force`, which can replace the versions used here. |
 | Port 3000 is already in use | Stop the earlier game server before running `npm start` again. |
 | The host cannot connect | Keep both terminals running, check that the URL ends in `/mcp`, and copy the new address if you restarted the tunnel. |
@@ -179,6 +179,6 @@ Try changing the board’s colours in `index.html`, or the status messages in `s
 | Claude waits after your click | Send the turn message that the board placed in the composer and approve any pending tool call. |
 | The board reports that the game is gone | Start a new game; the server restarted or the game expired. |
 
-If a turn only proceeds after you type a new prompt or refresh the board, it has failed this walkthrough’s expected behavior. Check the pending host confirmation and connection before continuing.
+The board should update after each confirmed turn. If it stalls, check for a pending host confirmation and make sure the server and tunnel are still running. You should not need to type another turn prompt or refresh the board.
 
 When finished, press **Ctrl-C** in both terminals and remove the temporary connection from the host. [Other ways to structure the game](tic-tac-toe-architecture-options.md) discusses a separate backend, other renderers, and proposed delivery options. To build a different React app, keep the connection and build files and replace the game’s rules, components, and actions.
