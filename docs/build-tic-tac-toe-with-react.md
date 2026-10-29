@@ -2,7 +2,7 @@
 
 Build a React game that you play inside Claude or ChatGPT. You click a square to place X; the assistant plays O. A local server checks every move and keeps the board up to date.
 
-You’ll create an app in your own directory, install SAGA from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. The linked steps provide complete files, including the build configuration and server.
+You’ll create an app in your own directory, install SAGA from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
 
@@ -19,7 +19,6 @@ Install Node.js 22.23.3 or newer and `cloudflared`. You also need a text editor,
 | TypeScript | Adds types to the JavaScript you write for the game and server. | [TypeScript handbook](https://www.typescriptlang.org/docs/handbook/intro.html) |
 | React | Draws the board and its controls from your components. | [React quick start](https://react.dev/learn) |
 | Vite | Bundles the React view and the Node server into files the app can run. | [Vite guide](https://vite.dev/guide/) |
-| Hono | Routes HTTP requests to your game’s MCP endpoint. | [Hono on Node.js](https://hono.dev/docs/getting-started/nodejs) |
 | Zod | Checks that tool inputs and results have the shapes the game expects. | [Zod basics](https://zod.dev/basics) |
 | MCP and MCP Apps | Let the assistant call your server’s tools and display an interactive card in the conversation. | [MCP introduction](https://modelcontextprotocol.io/docs/getting-started/intro) and [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) |
 | A2UI | Describes the board’s components and data bindings so a renderer can display them. | [A2UI concepts](https://a2ui.org/concepts/overview/) |
@@ -41,26 +40,11 @@ The game has no sign-in. Anyone with the tunnel address can create a game, and a
 
 ## 1. Create the app
 
-From the directory where you keep your projects, run:
+Follow [Connect a React component to a server result](tic-tac-toe/1-first-card.md). You will generate a React/TypeScript project with Vite, add an operation that returns a message, and display that result in a React component. The lesson includes the installation and build commands; run them in your own app directory.
 
-```sh
-mkdir my-tic-tac-toe
-cd my-tic-tac-toe
-mkdir src server
-```
+The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.9.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
 
-If you already created an empty directory, open your terminal there and run only `mkdir src server`. All remaining app commands run from `my-tic-tac-toe`, the directory containing `package.json`.
-
-Create the files in [Create the app files](tic-tac-toe/1-first-card.md). The package file pins `@saga-a2ui/react-mcp-stack` to `0.8.1-rc.1`, along with exact versions of React and the other dependencies. Use those versions for this walkthrough; the npm `next` tag can move to a later release.
-
-Install, check, build, and start the app:
-
-```sh
-npm install --strict-peer-deps
-npm run typecheck
-npm run build
-npm start
-```
+The npm override for `@a2ui/markdown-it` selects the dependency version used to qualify this package combination. It does not remove the inherited advisories below.
 
 With these versions, npm reports advisories inherited through A2UI’s Zod 3 and DOMPurify dependencies. The game’s tool schemas use Zod 4.6.7; its own React catalog does not bundle DOMPurify or render HTML from the model. The installed dependencies still carry those advisories. See the [Zod advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) and [DOMPurify advisory](https://github.com/advisories/GHSA-cg2g-xh64-v4q7). Do not force Zod 4 into A2UI’s Zod 3 dependency: their APIs differ.
 
@@ -108,7 +92,7 @@ Both hosts can occasionally show a display error on the first load. Use the card
 
 ## 3. Build and play the game
 
-Stop the game server with **Ctrl-C** in its terminal. Leave the tunnel running. Add or replace the files in [Build the playable game](tic-tac-toe/2-playable-game.md), then run:
+Stop the game server with **Ctrl-C** in its terminal. Leave the tunnel running. Follow [Build the playable game](tic-tac-toe/2-playable-game.md) to add the rules, server operations, board and turn handoff. Each section traces a part of the game and includes the complete application files. Then run:
 
 ```sh
 npm run typecheck
@@ -152,7 +136,7 @@ The app owns the game rules, storage, React components, and action definitions. 
 
 ## 4. Add a move list
 
-The game already returns its move history. Add a visible list by replacing `src/catalog.tsx` and `src/surface.ts` with the complete files in [Add a move list](tic-tac-toe/3-move-list.md).
+The game already returns its move history. Follow [Add a move list](tic-tac-toe/3-move-list.md) to render it with a new React component and a layout binding. The lesson shows the small change first and includes both complete files for comparison.
 
 Stop the game server, rebuild, and start it again:
 
@@ -164,7 +148,7 @@ npm start
 
 Use the host’s **Refresh tools** action as in step 3, then open a new chat and start a game. After you click the centre square, the list shows **1. You: row 2, column 2**. When O plays, its move appears below yours. Each turn adds a line without changing the server or the actions.
 
-Try changing the board’s colours in `index.html`, or the status messages in `src/text.ts`. Rebuild and start a new game to see your changes.
+Try changing the board’s colours in `src/index.css`, or the status messages in `src/text.ts`. Rebuild and start a new game to see your changes.
 
 ## When something goes wrong
 
