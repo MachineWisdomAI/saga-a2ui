@@ -20,7 +20,7 @@ import { templateDirectory } from './starter-template.js';
 // examples/tic-tac-toe: generated with the React/Hono `saga init`, keeping the template's
 // structure, and built from packed SDK packages. The rules and the store are checked by
 // tic-tac-toe-rules.test.ts, the page by apps/lit-host/e2e/tic-tac-toe.spec.ts, and the
-// opening of the guide by tic-tac-toe-document.test.ts.
+// guide by tic-tac-toe-document.test.ts.
 
 const template = templateDirectory('react-hono');
 const work = createWorkDirectory('saga-tic-tac-toe-test-');
