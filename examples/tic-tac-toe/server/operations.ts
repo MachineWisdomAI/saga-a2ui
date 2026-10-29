@@ -1,12 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   registerPublicOperation,
-  viewUriForHtml,
+  operationViewFromHtml,
   type OperationOutcome,
   type OperationView,
   type RequestLifetime,
-} from '@saga-a2ui/mcp/server';
+} from '@saga-a2ui/react-mcp-stack/server';
 import { z } from 'zod';
 import {
   GameIdInputSchema,
@@ -58,12 +57,7 @@ export function prepareBoardViews(html: unknown): BoardViews {
   if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
     throw new ViewArtifactMissing();
   const board = (filename: string, title: string): OperationView =>
-    Object.freeze({
-      uri: viewUriForHtml(html, filename),
-      title,
-      html,
-      csp: CLOSED_VIEW_CSP,
-    });
+    operationViewFromHtml({ html, filename, title });
   return Object.freeze({
     newGame: board('new-game.html', 'Tic-tac-toe board (new game)'),
     showGame: board('show-game.html', 'Tic-tac-toe board (show game)'),

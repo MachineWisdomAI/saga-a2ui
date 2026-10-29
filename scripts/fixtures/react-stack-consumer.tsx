@@ -44,6 +44,9 @@ import {
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  type BudgetSettings,
+  type LifetimeCause,
+  type OperationOutcome,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/react-mcp-stack/server';
@@ -218,6 +221,7 @@ export {
   registerPublicOperation,
 };
 export type { RequestLifetime };
+export type { BudgetSettings, LifetimeCause, OperationOutcome };
 
 // The actions, layout components and failures an application writes, all from the stack. An action
 // is defined once from the stack's `Action`, attached to a rendered control through the binding the

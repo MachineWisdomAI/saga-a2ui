@@ -15,7 +15,7 @@ import {
   type BudgetSettings,
   type LifetimeCause,
   type RequestLifetime,
-} from '@saga-a2ui/mcp/server';
+} from '@saga-a2ui/react-mcp-stack/server';
 import { Hono, type Context } from 'hono';
 import { createEndpoint } from './endpoint.js';
 import { createMemoryGameStore, type GameStore } from './game-store.js';

@@ -46,7 +46,7 @@ const specifiersOf = (file: string): string[] => {
 };
 
 describe('the example keeps the template it was generated from', () => {
-  it('has the template’s build files and its server wiring byte for byte', () => {
+  it('has the template’s build files and its server wiring, importing the server types through the stack', () => {
     for (const file of [
       'vite.config.ts',
       'vite.server.config.ts',
@@ -54,7 +54,12 @@ describe('the example keeps the template it was generated from', () => {
       'tsconfig.server.json',
       'server/endpoint.ts',
     ])
-      expect(read(ticTacToeSource, file), file).toBe(read(template, file));
+      expect(read(ticTacToeSource, file), file).toBe(
+        read(template, file).replace(
+          "'@saga-a2ui/mcp/server'",
+          "'@saga-a2ui/react-mcp-stack/server'",
+        ),
+      );
   });
 
   it('declares the template’s dependencies and scripts, with SDK packages as "*"', () => {
@@ -128,7 +133,7 @@ describe('what the example imports', () => {
         if (specifier.startsWith('.') || specifier.startsWith('node:'))
           continue;
         expect(specifier, file).toMatch(
-          /^(@saga-a2ui\/mcp\/(server|policy)|@modelcontextprotocol\/(server|hono)|@hono\/node-server|hono|zod)$/,
+          /^(@saga-a2ui\/react-mcp-stack\/server|@modelcontextprotocol\/(server|hono)|@hono\/node-server|hono|zod)$/,
         );
       }
   });
@@ -148,7 +153,9 @@ describe('the example built from the packed SDK packages', () => {
     const built = await buildTicTacToe(prepared);
     const own = built.viewModules
       .filter((module) => !module.includes('node_modules'))
-      .map((module) => path.relative(prepared.consumer, module))
+      .map((module) =>
+        path.relative(fs.realpathSync(prepared.consumer), module),
+      )
       .filter((module) => !module.startsWith('..'));
     expect(own).toEqual(
       expect.arrayContaining(['src/view.tsx', 'src/contract.ts']),
