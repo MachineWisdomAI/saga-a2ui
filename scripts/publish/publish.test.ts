@@ -91,6 +91,52 @@ const prepare = (
   );
 
 describe('a ready application', () => {
+  it('packages SAGA branding when the application supplies no assets', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      delete input.assets;
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(run.code, run.out + run.err).toBe(0);
+    const out = path.join(cwd, 'publication');
+    const entries = readZip(fs.readFileSync(path.join(out, ARCHIVE_FILE)));
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    const branding = manifest.extensions['com.openai'].interface;
+    expect(branding.logo).toBe('./assets/saga-a2ui/icon.svg');
+    expect(branding.composerIcon).toBe('./assets/saga-a2ui/icon.svg');
+    expect(files.get('assets/saga-a2ui/icon.svg')?.toString()).toContain(
+      '<title>SAGA A2UI</title>',
+    );
+    expect(status(recordOf(out), 'package.assets')).toBe('pass');
+  });
+
+  it('keeps a supplied logo while defaulting an omitted composer icon', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      input.assets = { logo: 'assets/logo.svg' };
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const entries = readZip(
+      fs.readFileSync(path.join(cwd, 'publication', ARCHIVE_FILE)),
+    );
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    expect(manifest.extensions['com.openai'].interface.logo).toBe(
+      './assets/logo.svg',
+    );
+    expect(manifest.extensions['com.openai'].interface.composerIcon).toBe(
+      './assets/saga-a2ui/icon.svg',
+    );
+    expect(files.get('assets/logo.svg')).toEqual(
+      fs.readFileSync(path.join(app, 'assets/logo.svg')),
+    );
+  });
+
   it('check passes every check, reads the endpoint without calling a tool, and writes nothing', async () => {
     const app = copyFixture();
     const cwd = workspace();

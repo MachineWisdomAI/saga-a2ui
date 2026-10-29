@@ -160,7 +160,7 @@ const assetEntryPath = (source: string): string =>
 
 export interface AssembledPackage {
   readonly entries: readonly ZipEntry[];
-  /** Assets named in the input that could not be read, with the reason. */
+  /** Supplied or bundled assets that could not be read, with the reason. */
   readonly unreadableAssets: readonly {
     readonly source: string;
     readonly reason: string;
@@ -174,10 +174,10 @@ export function assemblePackage(
 ): AssembledPackage {
   const { listing } = input;
   const assetFields = {
-    logo: input.assets.logo,
-    composerIcon: input.assets.composerIcon,
-    logoDark: input.assets.logoDark,
-    composerIconDark: input.assets.composerIconDark,
+    logo: input.assets?.logo,
+    composerIcon: input.assets?.composerIcon,
+    logoDark: input.assets?.logoDark,
+    composerIconDark: input.assets?.composerIconDark,
   };
   const entries: ZipEntry[] = [];
   const unreadableAssets: { source: string; reason: string }[] = [];
@@ -204,6 +204,23 @@ export function assemblePackage(
   }
   const reference = (source: string | undefined): string | undefined =>
     source === undefined ? undefined : `./${assetEntryPath(source)}`;
+  const defaultIcon = 'assets/saga-a2ui/icon.svg';
+  if (
+    assetFields.logo === undefined ||
+    assetFields.composerIcon === undefined
+  ) {
+    const source = fileURLToPath(
+      new URL('../../assets/brand/plugin-icon.svg', import.meta.url),
+    );
+    try {
+      entries.push({ path: defaultIcon, data: fs.readFileSync(source) });
+    } catch {
+      unreadableAssets.push({
+        source,
+        reason: 'The bundled SAGA icon could not be read.',
+      });
+    }
+  }
   const withoutUndefined = <T extends Record<string, unknown>>(value: T): T =>
     Object.fromEntries(
       Object.entries(value).filter(([, inner]) => inner !== undefined),
@@ -239,9 +256,10 @@ export function assemblePackage(
           defaultPrompt: listing.defaultPrompt,
           brandColor: listing.brandColor,
           brandColorDark: listing.brandColorDark,
-          composerIcon: reference(assetFields.composerIcon),
+          composerIcon:
+            reference(assetFields.composerIcon) ?? `./${defaultIcon}`,
           composerIconDark: reference(assetFields.composerIconDark),
-          logo: reference(assetFields.logo),
+          logo: reference(assetFields.logo) ?? `./${defaultIcon}`,
           logoDark: reference(assetFields.logoDark),
         }),
         review: input.review,
@@ -613,7 +631,12 @@ export function checkArchive(
     if (face[required] === undefined)
       assetProblems.push(`interface.${required} is required.`);
   for (const { field, value } of referenced) {
-    if (typeof value !== 'string' || !/^\.\/assets\/[^/]+$/.test(value)) {
+    if (
+      typeof value !== 'string' ||
+      !value.startsWith('./assets/') ||
+      value.includes('\\') ||
+      path.posix.normalize(value.slice(2)) !== value.slice(2)
+    ) {
       assetProblems.push(`interface.${field} must be a ./assets/ path.`);
       continue;
     }
@@ -691,11 +714,11 @@ export function checkArchive(
 // The target
 // ---------------------------------------------------------------------------------------------
 
-/** The release input as the ChatGPT target uses it, or `undefined` when it carries no listing or assets. */
+/** The release input as the ChatGPT target uses it, or `undefined` when it carries no listing. */
 function chatgptInput(input: ReleaseInput): ChatgptReleaseInput | undefined {
-  return input.listing === undefined || input.assets === undefined
+  return input.listing === undefined
     ? undefined
-    : { ...input, listing: input.listing, assets: input.assets };
+    : { ...input, listing: input.listing };
 }
 
 function toolFindings(snapshot: EndpointSnapshot): Finding[] {
@@ -792,7 +815,7 @@ export function chatgptTarget(
       "Preparing a package submits nothing. Submission, the host's review and publication are separate acts that only the publisher and the host can perform.",
     inputProblem: (input) =>
       chatgptInput(input) === undefined
-        ? 'The release input has no listing and assets, which the chatgpt target needs.'
+        ? 'The release input has no listing, which the chatgpt target needs.'
         : null,
     endpointProblem: (url) => endpointUrlProblem(url, 'ChatGPT'),
     toolFindings,
@@ -800,7 +823,7 @@ export function chatgptTarget(
       const input = chatgptInput(context.loaded.input);
       if (input === undefined)
         throw new Error(
-          'The release input has no listing and assets, which the chatgpt target needs.',
+          'The release input has no listing, which the chatgpt target needs.',
         );
       const findings: Finding[] = [];
       const assembled = assemblePackage(input, context.loaded.directory);
