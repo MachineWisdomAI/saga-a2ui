@@ -41,7 +41,7 @@ npm install --save-dev --save-exact --strict-peer-deps \
   eslint-plugin-react-refresh@0.4.24 globals@16.5.0 typescript-eslint@8.46.4
 ```
 
-Keep the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the Markdown override.
+Keep Vite's generated `.gitignore`, which excludes `node_modules` and `dist`, and the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the Markdown override.
 
 ## 2. Return a message from the server
 

@@ -64,13 +64,31 @@ function attachedController(server: GameServer) {
 }
 
 describe('the recovery read of the tic-tac-toe board', () => {
+  it('does not offer squares from an unverified saved result when the current-game read fails', async () => {
+    let offline = true;
+    const { controller, playable, last } = attachedController({
+      callServerTool: async () => {
+        if (offline) throw new Error('offline');
+        return { content: [], structuredContent: { game: gameAfter(OLD, []) } };
+      },
+    });
+    controller.present(gameAfter(OLD, []), 'select');
+    await controller.refresh();
+    expect(playable()).toBe(0);
+    offline = false;
+    await controller.refresh();
+    expect(playable()).toBe(9);
+    expect(last().status).toBe(VIEW_TEXT.yourTurn);
+    controller.retire();
+  });
+
   it('turns the squares off while the read is in flight, and on again when it settles', async () => {
     const { server, held } = heldServer();
     const { controller, playable } = attachedController(server);
     controller.present(gameAfter(OLD, []), 'select');
     expect(playable()).toBe(9);
 
-    const recovery = controller.recover();
+    const recovery = controller.refresh();
     expect(playable()).toBe(0);
 
     held[0]?.(gameAfter(OLD, [])); // the move did not land: still X to play
@@ -84,7 +102,7 @@ describe('the recovery read of the tic-tac-toe board', () => {
     controller.present(gameAfter(OLD, [4, 0]), 'select');
 
     // The reply to a move was lost; the recovery read for the old game is held.
-    const recovery = controller.recover();
+    const recovery = controller.refresh();
     expect(playable()).toBe(0);
 
     // The person starts a new game while that read is still outstanding.
@@ -104,7 +122,7 @@ describe('the recovery read of the tic-tac-toe board', () => {
     const { server, held } = heldServer();
     const { controller, last } = attachedController(server);
     controller.present(gameAfter(OLD, [4]), 'select'); // O to play
-    const recovery = controller.recover();
+    const recovery = controller.refresh();
     controller.present(gameAfter(NEW, []), 'select');
 
     held[0]?.(gameAfter(OLD, [4])); // the old game is still waiting for O
@@ -119,8 +137,8 @@ describe('the recovery read of the tic-tac-toe board', () => {
     const { server, held } = heldServer();
     const { controller, playable } = attachedController(server);
     controller.present(gameAfter(OLD, []), 'select');
-    const first = controller.recover();
-    const second = controller.recover();
+    const first = controller.refresh();
+    const second = controller.refresh();
 
     held[0]?.(gameAfter(OLD, []));
     await first;

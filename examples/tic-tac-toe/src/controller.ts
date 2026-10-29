@@ -116,8 +116,8 @@ export interface GameController {
   /** Takes the squares away from the person while their request is in flight; give the token back to `unlock`. */
   lock(): object;
   unlock(token: object): void;
-  /** Reads the game again, with the squares off until the answer arrives. */
-  recover(): Promise<void>;
+  /** Reads the current game, keeping squares off on failure. Returns nothing for an obsolete read. */
+  refresh(): Promise<Game | undefined>;
   /** Starts the wait for the assistant's move on the game on screen. */
   startWait(): void;
   /** Ends the view: nothing is drawn or read afterwards. */
@@ -129,6 +129,7 @@ export function createGameController(server: GameServer): GameController {
   let game: Game | undefined;
   let note = '';
   let gone = false;
+  let confirmed = false;
   let retired = false;
   // Recovery reads in flight for the selected game. Selecting another game empties it, so an old
   // read neither holds the new game's squares off nor, when it settles, changes anything.
@@ -143,6 +144,7 @@ export function createGameController(server: GameServer): GameController {
     const open =
       game !== undefined &&
       !gone &&
+      confirmed &&
       game.status === 'playing' &&
       game.turn === 'X' &&
       readings.size === 0 &&
@@ -152,8 +154,13 @@ export function createGameController(server: GameServer): GameController {
         ? VIEW_TEXT.waiting
         : gone
           ? VIEW_TEXT.gone
-          : [headline(game, assistant), note].filter(Boolean).join(' ');
+          : readings.size > 0
+            ? VIEW_TEXT.checking
+            : !confirmed
+              ? VIEW_TEXT.unconfirmed
+              : [headline(game, assistant), note].filter(Boolean).join(' ');
     surface.update({
+      gameId: game?.gameId ?? '',
       status: text,
       canCheck:
         game !== undefined &&
@@ -198,6 +205,7 @@ export function createGameController(server: GameServer): GameController {
         note = '';
         readings.clear(); // a read for the previous game no longer concerns the board
         game = next;
+        confirmed = true;
         render();
         return true;
       }
@@ -205,6 +213,7 @@ export function createGameController(server: GameServer): GameController {
       if (game === undefined || next.moveNumber > game.moveNumber) note = '';
       gone = false;
       game = next;
+      confirmed = true;
       if (game.status !== 'playing' || game.turn === 'X') {
         stopWait();
         assistant = 'idle';
@@ -246,24 +255,21 @@ export function createGameController(server: GameServer): GameController {
       render();
     },
 
-    async recover() {
+    async refresh() {
       const shown = game;
       if (shown === undefined) return;
       const token = {};
       readings.add(token);
+      confirmed = false;
       render();
       const result = await readGame(server, shown.gameId);
       // Selecting another game, or ending the view, drops the token: the answer is ignored.
       if (!readings.delete(token) || retired) return;
       if (result.kind === 'game') {
         controller.present(result.game);
-        // The move did land, and nobody told the assistant: it is O's turn and nothing has asked.
-        if (result.game.status === 'playing' && result.game.turn === 'O') {
-          note = VIEW_TEXT.tellTheAssistant;
-          controller.startWait();
-        }
+        controller.startWait();
+        return controller.current();
       } else if (result.kind === 'gone') controller.markGone();
-      else note = VIEW_TEXT.unconfirmed;
       render();
     },
 

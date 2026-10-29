@@ -4,10 +4,8 @@ import {
   type ViewHost,
 } from '@saga-a2ui/react-mcp-stack';
 import {
-  GameOutputSchema,
   GET_GAME_TOOL,
   MoveOutputSchema,
-  NEW_GAME_TOOL,
   PLAY_MOVE_TOOL,
   type Game,
   type MoveOutput,
@@ -17,7 +15,12 @@ import {
   replyIsGone,
   type GameController,
 } from './controller.js';
-import { CONVERSATION, REFUSAL_TEXT, VIEW_TEXT } from './text.js';
+import {
+  CONVERSATION,
+  MESSAGE_FAILURE,
+  REFUSAL_TEXT,
+  VIEW_TEXT,
+} from './text.js';
 
 // The board's actions, each defined once. A definition is immutable and holds no pending state, so
 // one definition can be attached to the nine squares; each attachment keeps its own state. The
@@ -79,7 +82,21 @@ export function createGameActions(host: ViewHost, game: GameController) {
         game.markGone();
       // A failed or timed-out request may or may not have been applied: read the game again
       // before offering a square.
-      else void game.recover();
+      else
+        void game.refresh().then((read) => {
+          // Only a lost handler reply needs a handoff. A failed success hook may already have sent it.
+          if (failure.kind !== 'handler-error' && failure.kind !== 'timeout')
+            return;
+          const { gameId, expectedMoveNumber, square } = context.params;
+          const move = read?.history[expectedMoveNumber];
+          if (
+            read?.gameId === gameId &&
+            read.moveNumber === expectedMoveNumber + 1 &&
+            move?.player === 'X' &&
+            move.square === square
+          )
+            handOver(read);
+        });
     })
     .build();
   // #endregion saga-snippet:play-square-action
@@ -94,12 +111,11 @@ export function createGameActions(host: ViewHost, game: GameController) {
     const shown = { gameId: played.gameId, moveNumber: played.moveNumber };
     const playing = played.status === 'playing';
     const appended = playing
-      ? host.conversation.appendMessage(CONVERSATION.yourMove(played.gameId), {
-          // Best effort: the message tells the assistant to read get_game if the board is missing.
+      ? host.conversation.appendMessage(CONVERSATION.yourMove, {
+          // The short message relies on this context to identify the right game.
           context: {
             text: CONVERSATION.boardForAssistant(played),
             data: { game: played },
-            bestEffort: true,
           },
         })
       : host.conversation.appendMessage(CONVERSATION.result(played));
@@ -108,28 +124,20 @@ export function createGameActions(host: ViewHost, game: GameController) {
       if (!game.isShowing(shown)) return; // a newer game or move is on screen
       if (outcome.outcome !== 'appended')
         game.say(
-          playing
-            ? VIEW_TEXT.tellTheAssistant
-            : VIEW_TEXT.tellTheAssistantResult,
+          outcome.stage === 'context'
+            ? VIEW_TEXT.contextFailed
+            : MESSAGE_FAILURE[outcome.outcome],
         );
     });
   }
 
-  /** New game: asks the server for a game and selects it. Nothing from an old request can reach it. */
-  const newGame = Action.server<ActionButtonActivation, Reply>(
-    'new-game',
-    host.server,
-  )
-    .run(async ({ call }) => {
-      const reply = await call(NEW_GAME_TOOL, {});
-      const parsed = GameOutputSchema.safeParse(reply.structuredContent);
-      if (reply.isError === true || !parsed.success)
-        throw new Error('the reply could not be read');
-      return parsed.data.game;
-    })
+  /** Let the assistant open a fresh card, so its saved result names the new game on remount. */
+  const newGame = Action.local<ActionButtonActivation>('new-game')
+    .run(() => host.conversation.appendMessage(CONVERSATION.newGame))
     .onSuccess(({ result, current }) => {
       if (!current()) return;
-      game.present(result, 'select');
+      if (result.outcome !== 'appended')
+        game.say(MESSAGE_FAILURE[result.outcome]);
     })
     .onFailure((context) => {
       if (context.stage === 'running' && context.current())

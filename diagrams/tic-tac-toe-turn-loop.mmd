@@ -3,7 +3,7 @@ sequenceDiagram
   participant B as Board card (React view)
   participant H as Host (Claude, ChatGPT, ...)
   participant A as Assistant
-  participant S as Game server (Hono)
+  participant S as Game server (Node)
   P->>B: clicks row 1, column 2
   B->>H: play_move(X, expectedMoveNumber 0)
   H->>S: play_move
@@ -11,10 +11,13 @@ sequenceDiagram
   H-->>B: result to the calling action (onSuccess)
   B->>B: show X, squares disabled
   alt game in progress, O next
-    B->>H: appendMessage("Your move in game ...", context: game)
+    B->>H: appendMessage("Your turn", context: game)
     Note over B,H: ui/update-model-context, then ui/message
+    opt host puts the message in the chat box
+      P->>H: click Send
+    end
     H->>A: the person's message, with the game as context
-    opt context missing
+    opt assistant needs a current read
       A->>H: get_game
       H->>S: get_game
       S-->>H: game, move 1
@@ -24,7 +27,7 @@ sequenceDiagram
     H->>S: play_move
     S-->>H: game, move 2
     H-->>A: result (no card opened)
-    loop bounded wait, about every 1.5 s
+    loop while O has the turn, every 1.5 s then 5 s
       B->>H: get_game
       H->>S: get_game
       S-->>H: game, move 2

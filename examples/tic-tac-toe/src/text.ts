@@ -1,10 +1,13 @@
 import type { Game, Refusal } from './contract.js';
+import type { RequestOutcome } from '@saga-a2ui/react-mcp-stack';
 
 // Everything the person reads or the conversation receives, in one place. Fixed sentences: none of
 // them repeats a backend message.
 
 export const VIEW_TEXT = {
+  sendHint: 'When a message appears in the chat box, click Send to continue.',
   waiting: 'Waiting for a game…',
+  checking: 'Checking the current game…',
   yourTurn: 'Your move. You are X.',
   assistantTurn: 'Waiting for the assistant to play O…',
   assistantSlow: 'Could not read the game. Check the connection.',
@@ -16,13 +19,18 @@ export const VIEW_TEXT = {
   problem: 'This could not be shown.',
   mismatch:
     'This could not be shown: the view and its server are from different builds. Reopen it; if this continues, update the server and the view together.',
-  unconfirmed:
-    'Your last move could not be confirmed. Look at the board before you play again.',
+  unconfirmed: 'Could not read the current game. Check the connection.',
+  contextFailed: 'The host could not share this game with the assistant.',
   closed: 'This view was closed.',
-  /** The host took no message, so the assistant has not been told. */
-  tellTheAssistant: "Tell the assistant it's their move.",
-  tellTheAssistantResult: 'Tell the assistant how the game ended.',
 } as const;
+
+/** An unconfirmed message may still have arrived; do not resend it automatically. */
+export const MESSAGE_FAILURE: Record<RequestOutcome, string> = {
+  unavailable: 'This host does not support messages from this card.',
+  denied: 'The host declined the message. Check its confirmation controls.',
+  failed:
+    'The host did not confirm the message. Check for a pending confirmation.',
+};
 
 export const REFUSAL_TEXT: Record<Refusal, string> = {
   game_over: 'That game is over.',
@@ -60,13 +68,12 @@ export function headline(
     : VIEW_TEXT.assistantTurn;
 }
 
-// The words the board sends to the conversation, as the person. The message names the game and
-// never the board: the server owns the state.
+// Short messages for the person; game identity and move instructions stay in context.
 
 export const CONVERSATION = {
+  newGame: "Let's play a new game.",
   /** Gives the assistant its turn. */
-  yourMove: (gameId: string): string =>
-    `Your move in tic-tac-toe game ${gameId}. The board is in your context; if it isn't, read it with get_game. Then play O with play_move.`,
+  yourMove: 'Your turn',
   /** Reports how a game that X's move ended came out, and asks for no move. */
   result: (game: Game): string =>
     game.winner === 'X'
@@ -83,5 +90,7 @@ export const CONVERSATION = {
           .map((cell) => cell ?? '-')
           .join(''),
       )
-      .join('/')}. It is ${game.turn}'s turn.`,
+      .join(
+        '/',
+      )}. It is ${game.turn}'s turn. Play O in this game with play_move, using this move number. If you need its current state, read get_game.`,
 } as const;

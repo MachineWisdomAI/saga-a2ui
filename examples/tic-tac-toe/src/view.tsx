@@ -76,8 +76,9 @@ export async function startView(): Promise<void> {
       const read = readGameReply(result);
       if (read.kind === 'game') {
         game.present(read.game, 'select');
-        // A card opened on a game that is waiting for the assistant waits for it too.
-        game.startWait();
+        // Hosts can replay an old result when remounting a card. Read the current game before
+        // offering squares, including when the saved snapshot says it is X's turn.
+        void game.refresh();
       } else
         game.say(read.kind === 'gone' ? VIEW_TEXT.gone : VIEW_TEXT.problem);
     },

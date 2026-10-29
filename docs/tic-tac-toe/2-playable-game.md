@@ -679,7 +679,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 The welcome view kept its component and layout together. Separate them now so you can change the board's appearance without changing its data flow. Add `src/text.ts`, `src/catalog.tsx` and `src/surface.ts`; replace `src/index.css` with the styles below. Keep the generated HTML and the `src/main.tsx` entry from the first lesson.
 
-`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. The catalog identifier matches the one in `surface.ts`.
+`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. `GameDetails` uses the browser’s built-in disclosure control to show the game ID on request. The catalog identifier matches the one in `surface.ts`.
 
 `surface.ts` defines the data and connects it to those components. The `Board` repeats its child over `/squares`. Each square binds its mark and label from that row of data. The `playable` check disables a square when it is occupied, O has the turn, or the game has ended. The layout describes what appears; application code attaches its actions in the next section.
 
@@ -690,12 +690,15 @@ The welcome view kept its component and layout together. Separate them now so yo
 
 ```ts file=src/text.ts
 import type { Game, Refusal } from './contract.js';
+import type { RequestOutcome } from '@saga-a2ui/react-mcp-stack';
 
 // Everything the person reads or the conversation receives, in one place. Fixed sentences: none of
 // them repeats a backend message.
 
 export const VIEW_TEXT = {
+  sendHint: 'When a message appears in the chat box, click Send to continue.',
   waiting: 'Waiting for a game…',
+  checking: 'Checking the current game…',
   yourTurn: 'Your move. You are X.',
   assistantTurn: 'Waiting for the assistant to play O…',
   assistantSlow: 'Could not read the game. Check the connection.',
@@ -707,13 +710,18 @@ export const VIEW_TEXT = {
   problem: 'This could not be shown.',
   mismatch:
     'This could not be shown: the view and its server are from different builds. Reopen it; if this continues, update the server and the view together.',
-  unconfirmed:
-    'Your last move could not be confirmed. Look at the board before you play again.',
+  unconfirmed: 'Could not read the current game. Check the connection.',
+  contextFailed: 'The host could not share this game with the assistant.',
   closed: 'This view was closed.',
-  /** The host took no message, so the assistant has not been told. */
-  tellTheAssistant: "Tell the assistant it's their move.",
-  tellTheAssistantResult: 'Tell the assistant how the game ended.',
 } as const;
+
+/** An unconfirmed message may still have arrived; do not resend it automatically. */
+export const MESSAGE_FAILURE: Record<RequestOutcome, string> = {
+  unavailable: 'This host does not support messages from this card.',
+  denied: 'The host declined the message. Check its confirmation controls.',
+  failed:
+    'The host did not confirm the message. Check for a pending confirmation.',
+};
 
 export const REFUSAL_TEXT: Record<Refusal, string> = {
   game_over: 'That game is over.',
@@ -751,13 +759,12 @@ export function headline(
     : VIEW_TEXT.assistantTurn;
 }
 
-// The words the board sends to the conversation, as the person. The message names the game and
-// never the board: the server owns the state.
+// Short messages for the person; game identity and move instructions stay in context.
 
 export const CONVERSATION = {
+  newGame: "Let's play a new game.",
   /** Gives the assistant its turn. */
-  yourMove: (gameId: string): string =>
-    `Your move in tic-tac-toe game ${gameId}. The board is in your context; if it isn't, read it with get_game. Then play O with play_move.`,
+  yourMove: 'Your turn',
   /** Reports how a game that X's move ended came out, and asks for no move. */
   result: (game: Game): string =>
     game.winner === 'X'
@@ -774,7 +781,9 @@ export const CONVERSATION = {
           .map((cell) => cell ?? '-')
           .join(''),
       )
-      .join('/')}. It is ${game.turn}'s turn.`,
+      .join(
+        '/',
+      )}. It is ${game.turn}'s turn. Play O in this game with play_move, using this move number. If you need its current state, read get_game.`,
 } as const;
 ```
 
@@ -841,6 +850,20 @@ const Line: ReactCatalogComponent = createComponentImplementation(
       <span>{text}</span>
     );
   },
+);
+
+/** Native disclosure keeps the identifier available without crowding the board. */
+const GameDetails: ReactCatalogComponent = createComponentImplementation(
+  {
+    name: 'GameDetails',
+    schema: z.object({ gameId: CommonSchemas.DynamicString }).strict(),
+  },
+  ({ props }) => (
+    <details>
+      <summary>Show game ID</summary>
+      <code>{String(props.gameId ?? '')}</code>
+    </details>
+  ),
 );
 
 const Column: ReactCatalogComponent = createComponentImplementation(
@@ -918,6 +941,7 @@ export const boardEntries: readonly ReactCatalogComponent[] = [
   Line,
   SquareFace,
   Shown,
+  GameDetails,
   ActionButtonEntry,
 ];
 
@@ -950,6 +974,7 @@ export const boardCatalog = new Catalog<ReactCatalogComponent>(
 
 ```ts file=src/surface.ts
 import { defineSurface, z } from '@saga-a2ui/react-mcp-stack';
+import { VIEW_TEXT } from './text.js';
 
 // The layout of the board: its data and its components. The layout gives the markup its IDs and its
 // structure and nothing else: it names no action, no handler and no function. Which behavior a
@@ -977,6 +1002,7 @@ const SquareDataSchema = z.object({
 });
 
 const BoardDataSchema = z.object({
+  gameId: z.string(),
   /** The one status line: whose turn it is, how the game ended, or what to do next. */
   status: z.string(),
   squares: z.array(SquareDataSchema),
@@ -990,13 +1016,26 @@ export const boardSurface = defineSurface({
   surfaceId: 'board',
   catalogId: CATALOG_ID,
   data: BoardDataSchema,
-  initial: { status: '', squares: [], canCheck: '', history: [] },
+  initial: { gameId: '', status: '', squares: [], canCheck: '', history: [] },
   root: {
     component: 'Column',
     bind: {},
-    props: { children: ['status', 'board', 'controls'] },
+    props: {
+      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
+    },
   },
   components: [
+    {
+      id: 'send-hint',
+      component: 'Line',
+      kind: 'body',
+      text: VIEW_TEXT.sendHint,
+    },
+    {
+      id: 'game-details',
+      component: 'GameDetails',
+      gameId: { path: '/gameId' },
+    },
     {
       id: 'status',
       component: 'Line',
@@ -1152,14 +1191,20 @@ Add `src/controller.ts` and `src/actions.ts`, then replace `src/view.tsx`. These
 1. `view.tsx` attaches `playSquare` to each rendered square. The repeated button supplies its square index.
 2. In `actions.ts`, `playSquare` reads that index and the displayed game's identifier and move number. It locks the board while calling `play_move` as X.
 3. On success, `game.present` displays the returned state. If the server refused the move, the board explains why and uses the server's current game.
-4. After an accepted move, `handOver` appends a conversation message asking the assistant to play O, with the game as context. The host may ask the person to send or confirm it.
+4. After an accepted move, `handOver` shares the game ID, board and move instructions as hidden context, then adds **Your turn** to the conversation. Claude puts that message in the chat box: click **Send** to let the assistant play. ChatGPT sends it automatically. The card reminds the player to send any message waiting in the chat box.
 5. While O has the turn, the controller reads `get_game`. When O's tool call changes the state, it presents the newer board and enables the available squares.
 
-The controller owns the displayed game, pending click and wait for O. It ignores older replies and cancels the old wait when you select another game or leave the view. A failed move request is uncertain: the server may have applied it before the connection failed. `recover` reads the game before offering another click instead of submitting the move again.
+The short turn message depends on the hidden context to identify the game. If the host cannot accept that context, the card reports the failure and does not send an ambiguous **Your turn**. Click **Show game ID** on a card when you need its identifier for troubleshooting.
+
+The controller owns the displayed game, pending click and wait for O. It ignores older replies and stops reading when the view closes. A failed move request is uncertain: the server may have applied it before the connection failed. `refresh` reads the game without submitting the move again. If the read confirms the clicked square at the expected move number, the action sends the missing turn message. If it cannot read the game, the squares stay disabled.
 
 The complete controller also slows its reads after about a minute while continuing to wait for a host confirmation. This is why a delayed confirmation does not require a typed turn prompt or a page refresh. The optional “Check for the assistant's move” control is for recovering a failed read.
 
-In `view.tsx`, `onToolResult` now reads a game instead of a message. `createReactActions` binds the three actions to the controls. Each square binding has a subject containing the game and move number; a late action result for an old subject cannot overwrite the current board. `onTeardown` stops the application's wait when the host closes the view.
+In `view.tsx`, `onToolResult` selects the game and reads its current state from the server. A host can remount a card with the result it saved when the game began; that empty snapshot must not become a playable board after several moves. The squares stay disabled until the read finishes.
+
+`createReactActions` binds the three actions to the controls. Each square binding has a subject containing the game and move number; a late action result for an old subject cannot overwrite the current board. `onTeardown` stops the application's wait when the host closes the view.
+
+**New game** prepares **Let’s play a new game.** The tool description tells the assistant how to open it. The host opens a fresh card whose saved result identifies that game. Replacing the game inside the old card would lose the selection when the host remounted it. The action ignores repeated clicks while its message is awaiting confirmation.
 
 <details>
 <summary>Complete src/controller.ts</summary>
@@ -1283,8 +1328,8 @@ export interface GameController {
   /** Takes the squares away from the person while their request is in flight; give the token back to `unlock`. */
   lock(): object;
   unlock(token: object): void;
-  /** Reads the game again, with the squares off until the answer arrives. */
-  recover(): Promise<void>;
+  /** Reads the current game, keeping squares off on failure. Returns nothing for an obsolete read. */
+  refresh(): Promise<Game | undefined>;
   /** Starts the wait for the assistant's move on the game on screen. */
   startWait(): void;
   /** Ends the view: nothing is drawn or read afterwards. */
@@ -1296,6 +1341,7 @@ export function createGameController(server: GameServer): GameController {
   let game: Game | undefined;
   let note = '';
   let gone = false;
+  let confirmed = false;
   let retired = false;
   // Recovery reads in flight for the selected game. Selecting another game empties it, so an old
   // read neither holds the new game's squares off nor, when it settles, changes anything.
@@ -1310,6 +1356,7 @@ export function createGameController(server: GameServer): GameController {
     const open =
       game !== undefined &&
       !gone &&
+      confirmed &&
       game.status === 'playing' &&
       game.turn === 'X' &&
       readings.size === 0 &&
@@ -1319,8 +1366,13 @@ export function createGameController(server: GameServer): GameController {
         ? VIEW_TEXT.waiting
         : gone
           ? VIEW_TEXT.gone
-          : [headline(game, assistant), note].filter(Boolean).join(' ');
+          : readings.size > 0
+            ? VIEW_TEXT.checking
+            : !confirmed
+              ? VIEW_TEXT.unconfirmed
+              : [headline(game, assistant), note].filter(Boolean).join(' ');
     surface.update({
+      gameId: game?.gameId ?? '',
       status: text,
       canCheck:
         game !== undefined &&
@@ -1365,6 +1417,7 @@ export function createGameController(server: GameServer): GameController {
         note = '';
         readings.clear(); // a read for the previous game no longer concerns the board
         game = next;
+        confirmed = true;
         render();
         return true;
       }
@@ -1372,6 +1425,7 @@ export function createGameController(server: GameServer): GameController {
       if (game === undefined || next.moveNumber > game.moveNumber) note = '';
       gone = false;
       game = next;
+      confirmed = true;
       if (game.status !== 'playing' || game.turn === 'X') {
         stopWait();
         assistant = 'idle';
@@ -1413,24 +1467,21 @@ export function createGameController(server: GameServer): GameController {
       render();
     },
 
-    async recover() {
+    async refresh() {
       const shown = game;
       if (shown === undefined) return;
       const token = {};
       readings.add(token);
+      confirmed = false;
       render();
       const result = await readGame(server, shown.gameId);
       // Selecting another game, or ending the view, drops the token: the answer is ignored.
       if (!readings.delete(token) || retired) return;
       if (result.kind === 'game') {
         controller.present(result.game);
-        // The move did land, and nobody told the assistant: it is O's turn and nothing has asked.
-        if (result.game.status === 'playing' && result.game.turn === 'O') {
-          note = VIEW_TEXT.tellTheAssistant;
-          controller.startWait();
-        }
+        controller.startWait();
+        return controller.current();
       } else if (result.kind === 'gone') controller.markGone();
-      else note = VIEW_TEXT.unconfirmed;
       render();
     },
 
@@ -1514,10 +1565,8 @@ import {
   type ViewHost,
 } from '@saga-a2ui/react-mcp-stack';
 import {
-  GameOutputSchema,
   GET_GAME_TOOL,
   MoveOutputSchema,
-  NEW_GAME_TOOL,
   PLAY_MOVE_TOOL,
   type Game,
   type MoveOutput,
@@ -1527,7 +1576,12 @@ import {
   replyIsGone,
   type GameController,
 } from './controller.js';
-import { CONVERSATION, REFUSAL_TEXT, VIEW_TEXT } from './text.js';
+import {
+  CONVERSATION,
+  MESSAGE_FAILURE,
+  REFUSAL_TEXT,
+  VIEW_TEXT,
+} from './text.js';
 
 // The board's actions, each defined once. A definition is immutable and holds no pending state, so
 // one definition can be attached to the nine squares; each attachment keeps its own state. The
@@ -1589,7 +1643,21 @@ export function createGameActions(host: ViewHost, game: GameController) {
         game.markGone();
       // A failed or timed-out request may or may not have been applied: read the game again
       // before offering a square.
-      else void game.recover();
+      else
+        void game.refresh().then((read) => {
+          // Only a lost handler reply needs a handoff. A failed success hook may already have sent it.
+          if (failure.kind !== 'handler-error' && failure.kind !== 'timeout')
+            return;
+          const { gameId, expectedMoveNumber, square } = context.params;
+          const move = read?.history[expectedMoveNumber];
+          if (
+            read?.gameId === gameId &&
+            read.moveNumber === expectedMoveNumber + 1 &&
+            move?.player === 'X' &&
+            move.square === square
+          )
+            handOver(read);
+        });
     })
     .build();
   // #endregion saga-snippet:play-square-action
@@ -1604,12 +1672,11 @@ export function createGameActions(host: ViewHost, game: GameController) {
     const shown = { gameId: played.gameId, moveNumber: played.moveNumber };
     const playing = played.status === 'playing';
     const appended = playing
-      ? host.conversation.appendMessage(CONVERSATION.yourMove(played.gameId), {
-          // Best effort: the message tells the assistant to read get_game if the board is missing.
+      ? host.conversation.appendMessage(CONVERSATION.yourMove, {
+          // The short message relies on this context to identify the right game.
           context: {
             text: CONVERSATION.boardForAssistant(played),
             data: { game: played },
-            bestEffort: true,
           },
         })
       : host.conversation.appendMessage(CONVERSATION.result(played));
@@ -1618,28 +1685,20 @@ export function createGameActions(host: ViewHost, game: GameController) {
       if (!game.isShowing(shown)) return; // a newer game or move is on screen
       if (outcome.outcome !== 'appended')
         game.say(
-          playing
-            ? VIEW_TEXT.tellTheAssistant
-            : VIEW_TEXT.tellTheAssistantResult,
+          outcome.stage === 'context'
+            ? VIEW_TEXT.contextFailed
+            : MESSAGE_FAILURE[outcome.outcome],
         );
     });
   }
 
-  /** New game: asks the server for a game and selects it. Nothing from an old request can reach it. */
-  const newGame = Action.server<ActionButtonActivation, Reply>(
-    'new-game',
-    host.server,
-  )
-    .run(async ({ call }) => {
-      const reply = await call(NEW_GAME_TOOL, {});
-      const parsed = GameOutputSchema.safeParse(reply.structuredContent);
-      if (reply.isError === true || !parsed.success)
-        throw new Error('the reply could not be read');
-      return parsed.data.game;
-    })
+  /** Let the assistant open a fresh card, so its saved result names the new game on remount. */
+  const newGame = Action.local<ActionButtonActivation>('new-game')
+    .run(() => host.conversation.appendMessage(CONVERSATION.newGame))
     .onSuccess(({ result, current }) => {
       if (!current()) return;
-      game.present(result, 'select');
+      if (result.outcome !== 'appended')
+        game.say(MESSAGE_FAILURE[result.outcome]);
     })
     .onFailure((context) => {
       if (context.stage === 'running' && context.current())
@@ -1763,8 +1822,9 @@ export async function startView(): Promise<void> {
       const read = readGameReply(result);
       if (read.kind === 'game') {
         game.present(read.game, 'select');
-        // A card opened on a game that is waiting for the assistant waits for it too.
-        game.startWait();
+        // Hosts can replay an old result when remounting a card. Read the current game before
+        // offering squares, including when the saved snapshot says it is X's turn.
+        void game.refresh();
       } else
         game.say(read.kind === 'gone' ? VIEW_TEXT.gone : VIEW_TEXT.problem);
     },
@@ -1782,7 +1842,7 @@ export async function startView(): Promise<void> {
 
 Run `npm run typecheck`, `npm run build`, then `npm start`. Return to [Build and play the game](../build-tic-tac-toe-with-react.md#3-build-and-play-the-game) to refresh the host's tools and open the board in a new chat.
 
-Click the centre square. X should appear there and the board should disable its empty squares while O has the turn. Confirm the generated message if the host asks. O's move should appear in this same board, then the remaining squares should become available. Finish a game and use **New game** to start another.
+Click the centre square. X should appear there and the board should disable its empty squares while O has the turn. In Claude, **Your turn** appears in the chat box; click **Send**. ChatGPT sends it automatically. O's move should appear in this same board, then the remaining squares should become available. Finish a game and click **New game**. In Claude, click **Send** for **Let’s play a new game.** The assistant opens a fresh card. Each card stays attached to its own game, including when the host remounts it.
 
 To check your understanding, find the two places that prevent a move on an occupied square: the layout disables the control, and the server rules refuse the move. The server check is still needed because an assistant or another client can call the tool without using your board.
 
