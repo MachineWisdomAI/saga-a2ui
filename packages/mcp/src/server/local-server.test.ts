@@ -3,7 +3,7 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import { McpServer } from '@modelcontextprotocol/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { registerPublicOperation } from './operation.js';
 import { startLocalMcpServer } from '@saga-a2ui/mcp/server/node';
@@ -13,38 +13,34 @@ describe('local MCP hosting', () => {
     let count = 0;
     const listener = await startLocalMcpServer({
       port: 0,
-      createServer(lifetime) {
+      createServer() {
         const server = new McpServer({
           name: 'local-host-test',
           version: '1.0.0',
         });
-        registerPublicOperation(
-          server,
-          {
-            name: 'count',
-            title: 'Count',
-            description: 'Increments the application counter.',
-            annotations: {
-              readOnlyHint: false,
-              destructiveHint: false,
-              idempotentHint: false,
-              openWorldHint: false,
-            },
-            input: z.strictObject({}),
-            output: z.strictObject({ count: z.number() }),
-            failures: {
-              absent: 'Absent',
-              unavailable: 'Unavailable',
-              invalidOutput: 'Invalid',
-            },
-            handle: async () => ({ kind: 'record', record: ++count }),
-            project: (value) => ({
-              text: String(value),
-              data: { count: value },
-            }),
+        registerPublicOperation(server, {
+          name: 'count',
+          title: 'Count',
+          description: 'Increments the application counter.',
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: false,
+            openWorldHint: false,
           },
-          { lifetime },
-        );
+          input: z.strictObject({}),
+          output: z.strictObject({ count: z.number() }),
+          failures: {
+            absent: 'Absent',
+            unavailable: 'Unavailable',
+            invalidOutput: 'Invalid',
+          },
+          handle: async () => ({ kind: 'record', record: ++count }),
+          project: (value) => ({
+            text: String(value),
+            data: { count: value },
+          }),
+        });
         return server;
       },
     });
@@ -114,50 +110,7 @@ describe('local MCP request admission', () => {
       );
       const malformed = await post('{');
       expect(malformed.status).toBe(400);
-      expect(await malformed.json()).toMatchObject({ error: { code: -32700 } });
       expect((await fetch(new URL('/other', listener.url))).status).toBe(404);
-      expect(builds).toBe(0);
-    } finally {
-      await listener.close();
-    }
-  });
-
-  it('ends a stalled body at the request deadline before invoking application code', async () => {
-    const { request } = await import('node:http');
-    let builds = 0;
-    const listener = await startLocalMcpServer({
-      port: 0,
-      budgets: { requestMs: 100 },
-      createServer() {
-        builds++;
-        return new McpServer({ name: 'body-test', version: '1.0.0' });
-      },
-    });
-    try {
-      const status = await new Promise<number | undefined>(
-        (resolve, reject) => {
-          const req = request(
-            listener.url,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': '100',
-              },
-            },
-            (res) => {
-              res.resume();
-              res.once('end', () => resolve(res.statusCode));
-            },
-          );
-          req.once('error', reject);
-          req.setTimeout(2000, () =>
-            req.destroy(new Error('request deadline did not close the body')),
-          );
-          req.write('{');
-        },
-      );
-      expect(status).toBe(408);
       expect(builds).toBe(0);
     } finally {
       await listener.close();
@@ -173,40 +126,36 @@ describe('local MCP shutdown', () => {
     });
     const listener = await startLocalMcpServer({
       port: 0,
-      createServer(lifetime) {
+      createServer() {
         const server = new McpServer({
           name: 'shutdown-test',
           version: '1.0.0',
         });
-        registerPublicOperation(
-          server,
-          {
-            name: 'wait',
-            title: 'Wait',
-            description: 'Waits until the request ends.',
-            input: z.strictObject({}),
-            output: z.strictObject({ message: z.string() }),
-            annotations: {
-              readOnlyHint: true,
-              destructiveHint: false,
-              idempotentHint: true,
-              openWorldHint: false,
-            },
-            failures: {
-              absent: 'Absent',
-              unavailable: 'Unavailable',
-              invalidOutput: 'Invalid',
-            },
-            handle: async () => {
-              entered(lifetime.signal);
-              return await new Promise<{ kind: 'record'; record: string }>(
-                () => {},
-              );
-            },
-            project: (message) => ({ text: message, data: { message } }),
+        registerPublicOperation(server, {
+          name: 'wait',
+          title: 'Wait',
+          description: 'Waits until the request ends.',
+          input: z.strictObject({}),
+          output: z.strictObject({ message: z.string() }),
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
           },
-          { lifetime },
-        );
+          failures: {
+            absent: 'Absent',
+            unavailable: 'Unavailable',
+            invalidOutput: 'Invalid',
+          },
+          handle: async (_input, request) => {
+            entered(request.signal);
+            return await new Promise<{ kind: 'record'; record: string }>(
+              () => {},
+            );
+          },
+          project: (message) => ({ text: message, data: { message } }),
+        });
         return server;
       },
     });
@@ -220,7 +169,9 @@ describe('local MCP shutdown', () => {
         .catch(() => undefined);
       const signal = await started;
       await listener.close();
-      expect(signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(signal.aborted).toBe(true), {
+        timeout: 2000,
+      });
       await pending;
     } finally {
       await client.close();

@@ -57,7 +57,7 @@ The application owns everything about the conversation: whether to append, what 
 
 A server can also declare an operation with no view. Omit `view` from the declaration given to `registerPublicOperation` or `registerProtectedOperation` (both from the stack's `/server` entry); the operation keeps its input and output contracts, annotations, budgets, cancellation and safe failures, and carries no UI association: no view resource and no `_meta.ui` on the tool definition or on any result.
 
-For a local Node server, the optional [local MCP listener](local-mcp-server.md) handles HTTP transport and request lifetimes while your app supplies its operations.
+For a local Node server, the optional [local MCP listener](local-mcp-server.md) handles HTTP transport while your app supplies its operations.
 
 ## React in Ansari Faithful Answers
 
