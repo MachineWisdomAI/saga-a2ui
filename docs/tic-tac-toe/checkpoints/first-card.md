@@ -231,10 +231,15 @@ import {
 
 const catalogId = 'https://tic-tac-toe.example/catalogs/welcome/v1';
 const Message = createComponentImplementation(
-  { name: 'Message', schema: z.object({ text: CommonSchemas.DynamicString }).strict() },
+  {
+    name: 'Message',
+    schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+  },
   ({ props }) => <p role="status">{String(props.text ?? '')}</p>,
 );
-const catalog = new Catalog<ReactCatalogComponent>(catalogId, 'v0.9', [Message]);
+const catalog = new Catalog<ReactCatalogComponent>(catalogId, 'v0.9', [
+  Message,
+]);
 const layout = defineSurface({
   surfaceId: 'welcome',
   catalogId,
@@ -252,9 +257,13 @@ export async function startView(): Promise<void> {
     catalog,
     layout,
     onToolResult: (result, running) => {
-      const parsed = z.object({ message: z.string() }).safeParse(result.structuredContent);
+      const parsed = z
+        .object({ message: z.string() })
+        .safeParse(result.structuredContent);
       running.surface.update({
-        message: parsed.success ? parsed.data.message : 'The server did not return a welcome message.',
+        message: parsed.success
+          ? parsed.data.message
+          : 'The server did not return a welcome message.',
       });
     },
   });
@@ -275,27 +284,52 @@ import {
 import { z } from 'zod';
 
 export function prepareBoardViews(html: string): OperationView {
-  if (!html.includes('<div id="root"')) throw new Error('Build the view before starting the server.');
-  return operationViewFromHtml({ html, filename: 'welcome.html', title: 'Tic-tac-toe' });
+  if (!html.includes('<div id="root"'))
+    throw new Error('Build the view before starting the server.');
+  return operationViewFromHtml({
+    html,
+    filename: 'welcome.html',
+    title: 'Tic-tac-toe',
+  });
 }
 
-export function createGameServer({ views, lifetime }: {
+export function createGameServer({
+  views,
+  lifetime,
+}: {
   views: OperationView;
   lifetime: RequestLifetime;
 }): McpServer {
   const server = new McpServer({ name: 'saga-tic-tac-toe', version: '0.0.0' });
-  registerPublicOperation(server, {
-    name: 'new_game',
-    title: 'Open tic-tac-toe',
-    description: 'Opens the tic-tac-toe welcome card. The game is not implemented yet.',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    input: z.strictObject({}),
-    output: z.strictObject({ message: z.string() }),
-    view: views,
-    failures: { absent: 'No welcome message was found.', unavailable: 'The welcome card is unavailable.', invalidOutput: 'The welcome message is invalid.' },
-    handle: async () => ({ kind: 'record', record: 'Your React app is connected. Next, build the board.' }),
-    project: (message) => ({ text: message, data: { message } }),
-  }, { lifetime });
+  registerPublicOperation(
+    server,
+    {
+      name: 'new_game',
+      title: 'Open tic-tac-toe',
+      description:
+        'Opens the tic-tac-toe welcome card. The game is not implemented yet.',
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      input: z.strictObject({}),
+      output: z.strictObject({ message: z.string() }),
+      view: views,
+      failures: {
+        absent: 'No welcome message was found.',
+        unavailable: 'The welcome card is unavailable.',
+        invalidOutput: 'The welcome message is invalid.',
+      },
+      handle: async () => ({
+        kind: 'record',
+        record: 'Your React app is connected. Next, build the board.',
+      }),
+      project: (message) => ({ text: message, data: { message } }),
+    },
+    { lifetime },
+  );
   return server;
 }
 ```
@@ -317,7 +351,9 @@ const listener = await startLocalMcpServer({
 console.log(`Tic-tac-toe MCP endpoint: ${listener.url}`);
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
-    void listener.close().catch(() => { process.exitCode = 1; });
+    void listener.close().catch(() => {
+      process.exitCode = 1;
+    });
   });
 }
 ```
