@@ -24,7 +24,7 @@ deliberate: the starter ships no identity provider.
 ## The tested recipe
 
 The versions in `package.json` are exact and are the ones this starter is tested with: Hono 4.13.13
-and `@hono/node-server` 1.19.17 (the Node host for Hono), the official `@modelcontextprotocol/hono`
+and `@hono/node-server` 2.1.5 (the Node host for Hono), the official `@modelcontextprotocol/hono`
 2.0.2 (peers: `hono` ^4.11.4 and `@modelcontextprotocol/server` ^2.3.0, which the pinned
 `@modelcontextprotocol/server` 2.3.1 satisfies), React and React DOM 19.3.1 (the exact peers of
 `@saga-a2ui/react-mcp-stack`) and Node 22.12.0 or later. Change one and run the starter's build and

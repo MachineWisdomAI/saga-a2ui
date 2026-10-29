@@ -90,7 +90,7 @@ Both players' moves go through the same server operation. They reach the board d
 
 **Same as `templates/lit-hono`.** The template keeps the clean-starter contract: public status, a protected account operation whose verifier refuses every credential, the bound "Clear the note" local action and no fixtures.
 
-- **Server.** Its `server/` is the `lit-hono` text, with the same Hono 4.13.13, `@hono/node-server` 1.19.17 and `@modelcontextprotocol/hono` 2.0.2 pins.
+- **Server.** Its `server/` is the `lit-hono` text, with the same Hono 4.13.13, `@hono/node-server` 2.1.5 and `@modelcontextprotocol/hono` 2.0.2 pins.
   - The one exception is the view-artifact check in `operations.ts`, which looks for `<starter-app` today. It becomes a marker each template declares.
   - The Hono qualification's byte-identity rules extend to the React copy, so a server fix lands in both templates.
 - **View.** `src/` is the same application written against `@saga-a2ui/react-mcp-stack`, as `.tsx`. It uses the `react-jsx` setting and `react`/`react-dom` 19.3.1. Its `template.json` names `react-mcp`, `hono` and the five React-side SDK packages.
