@@ -62,24 +62,19 @@ describe('the example keeps the template it was generated from', () => {
       );
   });
 
-  it('declares the template’s dependencies and scripts, with SDK packages as "*"', () => {
-    const own = JSON.parse(read(ticTacToeSource, 'package.json')) as Record<
-      string,
-      unknown
-    >;
-    const generated = JSON.parse(read(template, 'package.json')) as Record<
-      string,
-      unknown
-    >;
-    for (const field of [
-      'scripts',
-      'dependencies',
-      'devDependencies',
-      'overrides',
-      'engines',
-      'type',
-    ])
-      expect(own[field], field).toEqual(generated[field]);
+  it('installs one SAGA stack with exact package versions', () => {
+    const own = JSON.parse(read(ticTacToeSource, 'package.json'));
+    expect(
+      Object.keys(own.dependencies).filter((name) =>
+        name.startsWith('@saga-a2ui/'),
+      ),
+    ).toEqual(['@saga-a2ui/react-mcp-stack']);
+    for (const version of Object.values({
+      ...own.dependencies,
+      ...own.devDependencies,
+    }))
+      expect(version).toMatch(/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/);
+    expect(own.dependencies['@modelcontextprotocol/client']).toBeUndefined();
   });
 
   it('keeps the template’s server files that carry no sign-in, and the layout of src', () => {

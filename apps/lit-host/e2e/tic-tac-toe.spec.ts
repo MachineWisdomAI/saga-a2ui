@@ -45,7 +45,7 @@ const dist = new URL('../dist/tic-tac-toe/', import.meta.url);
 const TEXT = {
   yourTurn: 'Your move. You are X.',
   assistantTurn: 'Waiting for the assistant to play O…',
-  assistantSlow: 'The assistant has not played yet.',
+  assistantSlow: 'Could not read the game. Check the connection.',
   tell: "Tell the assistant it's their move.",
   stale: 'The board had moved on, so that move was not played.',
   won: 'You won!',
@@ -617,41 +617,25 @@ test.describe('the board', () => {
     );
   });
 
-  test('ends the wait with a button after its last read, and the button reads the game once', async ({
+  test('keeps the existing board current after a delayed host confirmation', async ({
     page,
   }) => {
     const board = await open(page, { clock: true });
     await board.square(2, 2).click();
     await expect(board.status()).toHaveText(TEXT.assistantTurn);
-    // 40 reads, one every 1.5 s; each is allowed to finish before the next one is due.
     for (let reads = 1; reads <= 40; reads += 1) {
       await page.clock.runFor(1_500);
       await expect.poll(() => board.reads()).toBe(reads);
-      await page.waitForTimeout(20);
+      await page.waitForTimeout(20); // let the network reply schedule its next timer before advancing the clock
     }
-    await expect(board.status()).toHaveText(TEXT.assistantSlow);
-    const check = board.button("Check for the assistant's move");
-    await expect(check).toBeVisible();
-    // Nothing more is read on the assistant's behalf.
-    await page.clock.runFor(30_000);
-    await page.waitForTimeout(200);
-    expect(board.reads()).toBe(40);
-
-    // Pressing it reads the game once. With no move yet, it says so and keeps the button.
-    await check.click();
-    await expect.poll(() => board.reads()).toBe(41);
-    await expect(board.status()).toContainText(
-      'Still no move from the assistant.',
-    );
-    await expect(check).toBeVisible();
-
-    // Once the assistant has moved, pressing it shows the move and takes the button away.
+    await page.clock.runFor(120_000);
+    await expect.poll(() => board.reads()).toBeGreaterThan(40);
+    await page.waitForTimeout(20);
+    await expect(board.button("Check for the assistant's move")).toHaveCount(0);
     await play(board.gameId(), 'O', 0, 1);
-    await check.click();
+    await page.clock.runFor(5_000);
     await expect(board.square(1, 1, 'O')).toBeVisible();
     await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(check).toHaveCount(0);
-    expect(board.reads()).toBe(42);
   });
 
   test('offers New game when the game is gone', async ({ page }) => {

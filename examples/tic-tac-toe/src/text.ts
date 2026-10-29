@@ -7,7 +7,7 @@ export const VIEW_TEXT = {
   waiting: 'Waiting for a game…',
   yourTurn: 'Your move. You are X.',
   assistantTurn: 'Waiting for the assistant to play O…',
-  assistantSlow: 'The assistant has not played yet.',
+  assistantSlow: 'Could not read the game. Check the connection.',
   stillWaiting: 'Still no move from the assistant.',
   won: 'You won!',
   lost: 'The assistant won.',

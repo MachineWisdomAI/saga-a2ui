@@ -31,10 +31,7 @@ const BoardDataSchema = z.object({
   squares: z.array(SquareDataSchema),
   /** Non-empty when "Check for the assistant's move" should be offered. */
   canCheck: z.string(),
-  /**
-   * The moves so far, in words, one line each. The layout does not show them: the guided change
-   * (guided-change/move-list.patch) adds a list of them.
-   */
+  /** The moves so far, in words, one line each. */
   history: z.array(z.object({ text: z.string() })),
 });
 
