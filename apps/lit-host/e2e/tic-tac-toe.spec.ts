@@ -44,7 +44,8 @@ const TEXT = {
   yourTurn: 'Your move. You are X.',
   assistantTurn: 'Waiting for the assistant to play O…',
   assistantSlow: 'Could not read the game. Check the connection.',
-  tell: "Tell the assistant it's their move.",
+  unavailable: 'This host does not support messages from this card.',
+  denied: 'The host declined the message. Check its confirmation controls.',
   stale: 'The board had moved on, so that move was not played.',
   won: 'You won!',
   draw: 'It is a draw.',
@@ -255,7 +256,9 @@ async function open(page: Page, options: OpenOptions = {}): Promise<Board> {
     gameId: () => (calls[0]?.arguments as { gameId: string }).gameId,
   };
   await board.deliver(result);
-  await expect(board.status()).not.toHaveText('Waiting for a game…');
+  await expect(board.status()).not.toHaveText(
+    /Waiting for a game|Checking the current game/,
+  );
   return board;
 }
 
@@ -345,6 +348,36 @@ test.describe('the example server', () => {
 });
 
 test.describe('the board', () => {
+  test('asks for one fresh card when New game is activated twice while host confirmation is pending', async ({
+    page,
+  }) => {
+    const board = await open(page, { conversation: { message: 'hold' } });
+    await board.button('New game').click();
+    await board.button('New game').click();
+    await expect.poll(async () => (await board.heard()).length).toBe(1);
+    expect(messageText((await board.heard())[0])).toContain('new_game');
+    expect(board.calls.filter((call) => call.name === 'new_game')).toHaveLength(
+      0,
+    );
+    await expect(board.square(2, 2)).toBeEnabled();
+    await page.evaluate(() => window.releaseConversation?.());
+  });
+
+  test('reads the current game when a remounted card receives its saved empty result', async ({
+    page,
+  }) => {
+    const { game, result } = await newGame();
+    await playMoves(game.gameId, [4, 0]);
+    const board = await open(page, { result });
+    await expect(board.square(2, 2, 'X')).toBeVisible();
+    await expect(board.square(1, 1, 'O')).toBeVisible();
+    await expect(board.square(3, 3)).toBeEnabled();
+    expect(
+      board.calls.filter((call) => call.name === 'play_move'),
+    ).toHaveLength(0);
+    expect(await board.heard()).toEqual([]);
+  });
+
   test('opens with nine named squares, and the person plays by click and by keyboard', async ({
     page,
   }) => {
@@ -425,13 +458,13 @@ test.describe('the board', () => {
     await expect(board.status()).toHaveText(TEXT.assistantTurn);
   });
 
-  test('says what to tell the assistant when the host takes no message, and the wait still picks up the move', async ({
+  test('reports unavailable messaging and still observes a move made through the server', async ({
     page,
   }) => {
     const board = await open(page, { conversation: { message: 'withhold' } });
     await board.square(1, 1).click();
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.tell}`,
+      `${TEXT.assistantTurn} ${TEXT.unavailable} Game: ${board.gameId()}.`,
     );
     expect(await board.heard()).toEqual([
       expect.objectContaining({ kind: 'context' }),
@@ -449,7 +482,7 @@ test.describe('the board', () => {
     });
     await board.square(3, 2).click();
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.tell}`,
+      `${TEXT.assistantTurn} ${TEXT.unavailable} Game: ${board.gameId()}.`,
     );
     expect(await board.heard()).toEqual([]);
   });
@@ -473,7 +506,7 @@ test.describe('the board', () => {
     // No wait: not now, and not after a minute.
     await page.clock.fastForward(70_000);
     await page.waitForTimeout(300);
-    expect(board.reads()).toBe(0);
+    expect(board.reads()).toBe(1);
     expect(await board.heard()).toHaveLength(1);
     await expect(board.button("Check for the assistant's move")).toHaveCount(0);
     await expect(board.square(2, 3)).toBeDisabled(); // a finished game offers no square
@@ -497,7 +530,7 @@ test.describe('the board', () => {
     expect(messageText(only)).toBe('Our tic-tac-toe game ended in a draw.');
     await page.clock.fastForward(70_000);
     await page.waitForTimeout(300);
-    expect(board.reads()).toBe(0);
+    expect(board.reads()).toBe(1);
     expect(await board.heard()).toHaveLength(1);
   });
 
@@ -554,53 +587,6 @@ test.describe('the board', () => {
     await expect(board.square(3, 3, 'O')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('does not let a late move for the old game reach a new game', async ({
-    page,
-  }) => {
-    const board = await open(page);
-    const release = board.hold('play_move');
-    await board.square(2, 2).click();
-    await expect.poll(() => board.calls.length).toBe(1); // the request is on its way and held
-    const oldGameId = board.gameId();
-
-    // New game is not held back by the request in flight.
-    await board.button('New game').click();
-    await expect.poll(() => board.calls.at(-1)?.name).toBe('new_game');
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.square(2, 2)).toBeEnabled();
-
-    // The old request now settles. Nothing of it appears on the new game.
-    release();
-    await page.waitForTimeout(500);
-    await expect(board.square(2, 2)).toBeEnabled();
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-    expect(await board.heard()).toEqual([]);
-    expect(board.reads()).toBe(0);
-    expect((await read(oldGameId)).board[4]).toBe('X'); // the old game kept the move the server took
-  });
-
-  test('shows nothing on a new game when a failed append settles after New game', async ({
-    page,
-  }) => {
-    const board = await open(page, {
-      conversation: { message: 'hold-then-refuse' },
-    });
-    await board.square(1, 1).click();
-    await expect(board.square(1, 1, 'X')).toBeVisible();
-    await expect.poll(async () => (await board.heard()).length).toBe(2); // the message is held
-    await board.button('New game').click();
-    await expect(board.square(1, 1)).toBeEnabled();
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-
-    // The host now refuses the message for the old game.
-    await page.evaluate(() => window.releaseConversation?.());
-    await page.waitForTimeout(500);
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.view.locator('body')).not.toContainText(
-      'Tell the assistant',
-    );
-  });
-
   test('says so when a refused append settles on the game it was made for', async ({
     page,
   }) => {
@@ -611,7 +597,7 @@ test.describe('the board', () => {
     await expect.poll(async () => (await board.heard()).length).toBe(2);
     await page.evaluate(() => window.releaseConversation?.());
     await expect(board.status()).toHaveText(
-      `${TEXT.assistantTurn} ${TEXT.tell}`,
+      `${TEXT.assistantTurn} ${TEXT.denied} Game: ${board.gameId()}.`,
     );
   });
 
@@ -623,7 +609,7 @@ test.describe('the board', () => {
     await expect(board.status()).toHaveText(TEXT.assistantTurn);
     for (let reads = 1; reads <= 40; reads += 1) {
       await page.clock.runFor(1_500);
-      await expect.poll(() => board.reads()).toBe(reads);
+      await expect.poll(() => board.reads()).toBe(reads + 1);
       await page.waitForTimeout(20); // let the network reply schedule its next timer before advancing the clock
     }
     await page.clock.runFor(120_000);
@@ -652,15 +638,16 @@ test.describe('the board', () => {
       await expect(board.status()).toHaveText(TEXT.gone);
       await expect(board.square(1, 1)).toBeDisabled();
       await board.button('New game').click();
-      await expect(board.status()).toHaveText(TEXT.yourTurn);
-      await expect(board.square(1, 1)).toBeEnabled();
+      await expect.poll(async () => (await board.heard()).length).toBe(1);
+      expect(messageText((await board.heard())[0])).toContain('new_game');
+      await expect(board.status()).toHaveText(TEXT.gone);
     } finally {
       await other.close();
       await short.close();
     }
   });
 
-  test('reads the game again when a move request fails, and tells the person the assistant has not been asked', async ({
+  test('hands over a confirmed move after its reply is lost, without playing it twice', async ({
     page,
   }) => {
     const board = await open(page);
@@ -678,49 +665,20 @@ test.describe('the board', () => {
       };
     });
     await board.square(1, 1).click();
-    // The recovery read finds the move applied and O to play, and nobody has told the assistant.
+    // The recovery read confirms this square and move number. The board sends the missing handoff.
     await expect(board.square(1, 1, 'X')).toBeVisible();
-    await expect(board.status()).toContainText(TEXT.tell);
+    await expect
+      .poll(
+        async () =>
+          (await board.heard()).filter((request) => request.kind === 'message')
+            .length,
+      )
+      .toBe(1);
+    await expect(board.status()).toHaveText(TEXT.assistantTurn);
+    expect(
+      board.calls.filter((call) => call.name === 'play_move'),
+    ).toHaveLength(1);
     expect(board.reads()).toBeGreaterThan(0);
-  });
-
-  test('does not let the recovery read of an old game disable a new game, before or after it settles', async ({
-    page,
-  }) => {
-    const board = await open(page);
-    // The move is applied on the server but its reply never reaches the view.
-    await page.evaluate(() => {
-      const original = window.handleToolCall;
-      let first = true;
-      window.handleToolCall = async (params) => {
-        const reply = await original?.(params);
-        if (params.name === 'play_move' && first) {
-          first = false;
-          throw new Error('the connection was lost');
-        }
-        return reply as never;
-      };
-    });
-    const release = board.hold('get_game'); // the recovery read
-    await board.square(1, 1).click();
-    await expect.poll(() => board.reads()).toBe(1);
-    await expect(board.square(1, 2)).toBeDisabled(); // the board waits for the read
-
-    // New game while the old game's read is outstanding: the new board is playable at once.
-    await board.button('New game').click();
-    await expect.poll(() => board.calls.at(-1)?.name).toBe('new_game');
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.square(1, 1)).toBeEnabled();
-    await expect(board.square(3, 3)).toBeEnabled();
-
-    // The old read settles. It changes nothing, and the new board stays playable.
-    release();
-    await page.waitForTimeout(500);
-    await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.square(1, 1)).toBeEnabled();
-    await expect(board.square(3, 3)).toBeEnabled();
-    expect(board.reads()).toBe(1); // no wait was started for the old game
-    expect(await board.heard()).toEqual([]);
   });
 
   test('ending the view stops the wait', async ({ page }) => {
@@ -735,6 +693,23 @@ test.describe('the board', () => {
     const settled = board.reads();
     await page.waitForTimeout(2_500);
     expect(board.reads()).toBe(settled);
+  });
+
+  test('does not ask for O when a failed request did not apply the clicked move', async ({
+    page,
+  }) => {
+    const board = await open(page);
+    await page.evaluate(() => {
+      const original = window.handleToolCall;
+      window.handleToolCall = async (params) => {
+        if (params.name === 'play_move') throw new Error('request never sent');
+        return (await original?.(params)) as never;
+      };
+    });
+    await board.square(1, 1).click();
+    await expect.poll(() => board.reads()).toBe(2); // opening read, then recovery
+    await expect(board.square(1, 1)).toBeEnabled();
+    expect(await board.heard()).toEqual([]);
   });
 
   test('shows none of a result from another build, and recovers on the next valid one', async ({

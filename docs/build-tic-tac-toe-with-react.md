@@ -122,13 +122,15 @@ Click the centre square of the empty board. It shows X and disables the squares 
 
 In Claude, the board puts a turn message in the composer. Click **Send** to confirm it; you do not need to write or edit the message. In ChatGPT, the board sends that message automatically. Accept any tool confirmation the host presents. The assistant plays O, the existing board shows the move, and the empty squares become available again.
 
-Keep playing until someone wins or the board is full. The status announces the result, and a winning line is highlighted. **New game** starts again. Keyboard users can Tab to an available square and press Enter or Space.
+Keep playing until someone wins or the board is full. The status announces the result, and a winning line is highlighted. **New game** prepares a message asking the assistant to open a fresh card. Confirm it if asked, then play in the new card; the old card keeps its own game. Keyboard users can Tab to an available square and press Enter or Space.
 
 ### How a turn reaches the board
 
 Your click calls `play_move` through the host. The server checks the player, square, and move number before applying it, then returns the updated game. The board shows X and adds a message asking the assistant to play O. It also supplies the current game as model context; the assistant can use `get_game` if it needs to read the state again.
 
-The assistant calls the same `play_move` tool. That call returns to the conversation, so the board checks `get_game` while it waits. It reads every 1.5 seconds for about a minute, then every 5 seconds until O plays or the game expires. Waiting for a host confirmation does not require a refresh. Leaving the view or starting another game ends the old wait.
+The assistant calls the same `play_move` tool. That call returns to the conversation, so the board checks `get_game` while it waits. It reads every 1.5 seconds for about a minute, then every 5 seconds until O plays or the game expires. Waiting for a host confirmation does not require a refresh. Closing the view ends its wait.
+
+When the host reopens a card, the board reads its game before enabling any squares. If a move's reply is lost, the board also reads the game to check whether that move landed. A confirmed move gets its turn message without playing the square again. An unconfirmed message is not resent automatically: the host may already have received it.
 
 ![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](../diagrams/tic-tac-toe-turn-loop.svg)
 
@@ -161,6 +163,8 @@ Try changing the board’s colours in `src/index.css`, or the status messages in
 | The server rejects the host | Keep `--http-host-header localhost` in the tunnel command. |
 | The first card fails to display | Use the host’s **Retry** or **Try again** button once; if it still fails, check the server and tunnel output. |
 | Claude waits after your click | Send the turn message that the board placed in the composer and approve any pending tool call. |
+| A reopened board says “Checking the current game…” | The card is reading the live game instead of trusting its saved snapshot. If it reports a connection problem, check the server and tunnel; it keeps the squares disabled. |
+| The card reports unavailable, declined or unconfirmed messaging | Check the host's confirmation controls. A failed response does not establish whether the message arrived. Keep the exact card message and game identifier when reporting the problem; repeated turn prompts can ask the assistant twice. |
 | The board reports that the game is gone | Start a new game; the server restarted or the game expired. |
 
 The board should update after each confirmed turn. If it stalls, check for a pending host confirmation and make sure the server and tunnel are still running. You should not need to type another turn prompt or refresh the board.

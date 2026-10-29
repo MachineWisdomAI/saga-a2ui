@@ -77,7 +77,9 @@ The qualified React/Hono source starter remains available through `saga init`; t
    - The message names the game and never restates the board.
    - The assistant takes its turn. It reads `get_game` only if the context is missing, then calls `play_move` for O.
 4. The board was already waiting for the assistant's move. It reads the game with `get_game`, shows O's square and gives the turn back to the person.
-5. If X's move ends the game, the board instead appends the result as the person, such as "I won our tic-tac-toe game." or "Our tic-tac-toe game ended in a draw.", and starts no wait. New game starts a separate game, and nothing from the old game can change it.
+5. If X's move ends the game, the board instead appends the result as the person, such as "I won our tic-tac-toe game." or "Our tic-tac-toe game ended in a draw.", and starts no wait. **New game** appends a prepared request for the assistant to call `new_game` and open a fresh card, subject to the host's confirmation. Each card retains its own game identity; the old game cannot replace the new one.
+
+When a host remounts a card with a saved tool result, the view reads that game's current state before offering squares. A lost move reply also triggers a read. If the returned history confirms X's clicked square at the expected move number and the game has not advanced beyond it, the board sends the missing turn or result message without replaying the move. Unconfirmed message delivery is reported and is not retried automatically.
 
 ![The person's click and the assistant's tool call reach the same play_move operation; the board learns each move through its own server calls and hands the turn over by appending a message.](../../diagrams/tic-tac-toe-turn-loop.svg)
 
