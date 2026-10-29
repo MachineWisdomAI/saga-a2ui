@@ -127,11 +127,11 @@ export const ReleaseInputSchema = z.strictObject({
       brandColorDark: z.string().optional(),
     })
     .optional(),
-  /** The ChatGPT listing's PNG or SVG files, copied into the package under `assets/`. Needed with `listing`. */
+  /** Application branding overrides. Omitted fields use SAGA branding; paths are relative to this input. */
   assets: z
     .strictObject({
-      logo: z.string(),
-      composerIcon: z.string(),
+      logo: z.string().optional(),
+      composerIcon: z.string().optional(),
       logoDark: z.string().optional(),
       composerIconDark: z.string().optional(),
     })
@@ -200,10 +200,9 @@ export const ReleaseInputSchema = z.strictObject({
 });
 
 export type ReleaseInput = z.infer<typeof ReleaseInputSchema>;
-/** A release input that carries the ChatGPT listing and its assets, which the `chatgpt` target needs. */
+/** A release input that carries the listing the ChatGPT target needs. */
 export type ChatgptReleaseInput = ReleaseInput & {
   readonly listing: NonNullable<ReleaseInput['listing']>;
-  readonly assets: NonNullable<ReleaseInput['assets']>;
 };
 export type ClaudeConnectorInput = z.infer<typeof claudeConnector>;
 export type ClaudePluginBundleInput = z.infer<typeof claudePluginBundle>;
