@@ -3,13 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterAll, describe, expect, it } from 'vitest';
-import { buildConsumerFromConfig, repoRoot } from './packed-consumer.js';
-import {
-  prepareTicTacToe,
-  typecheckTicTacToe,
-  ticTacToeSource,
-  ticTacToeGuidedChange,
-} from './build-tic-tac-toe.js';
+import { repoRoot } from './consumer-boundary.js';
+import { ticTacToeSource, ticTacToeGuidedChange } from './build-tic-tac-toe.js';
 
 const read = (name: string) =>
   fs.readFileSync(path.join(repoRoot, name), 'utf8');
@@ -29,43 +24,7 @@ function files(markdown: string): Map<string, string> {
     ),
   );
 }
-function writeFiles(
-  directory: string,
-  replacements: Map<string, string>,
-): void {
-  for (const [name, source] of replacements) {
-    if (path.isAbsolute(name) || name.split('/').includes('..'))
-      throw new Error(`Unsafe tutorial path: ${name}`);
-    fs.mkdirSync(path.dirname(path.join(directory, name)), { recursive: true });
-    fs.writeFileSync(path.join(directory, name), source);
-  }
-}
-
 describe('the standalone React tutorial', () => {
-  it('builds the first host card using only the files provided, then builds the game and extension', async () => {
-    const { consumer } = prepareTicTacToe(work);
-    // Retain only the installed dependencies. No example source may fill a missing tutorial file.
-    for (const entry of fs.readdirSync(consumer)) {
-      if (entry !== 'node_modules')
-        fs.rmSync(path.join(consumer, entry), { recursive: true, force: true });
-    }
-    for (const chapter of chapters) {
-      writeFiles(consumer, files(chapter));
-      try {
-        typecheckTicTacToe(consumer);
-      } catch (error) {
-        const output = (error as { stdout?: Buffer }).stdout?.toString();
-        throw new Error(output ?? String(error));
-      }
-      await buildConsumerFromConfig(consumer, 'vite.config.ts');
-      await buildConsumerFromConfig(consumer, 'vite.server.config.ts');
-      expect(
-        fs.readFileSync(path.join(consumer, 'dist/index.html'), 'utf8'),
-      ).toContain('<div id="root"');
-      expect(fs.existsSync(path.join(consumer, 'dist/server.mjs'))).toBe(true);
-    }
-  }, 30_000);
-
   it('provides the complete maintained game, followed by the maintained move-list extension', () => {
     const assembled = new Map([...files(chapters[0]!), ...files(chapters[1]!)]);
     for (const [name, source] of assembled)

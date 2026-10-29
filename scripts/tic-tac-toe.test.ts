@@ -14,7 +14,10 @@ import {
   typecheckTicTacToe,
 } from './build-tic-tac-toe.js';
 import { blankComments, repoRoot } from './consumer-boundary.js';
-import { createWorkDirectory } from './packed-consumer.js';
+import {
+  buildConsumerFromConfig,
+  createWorkDirectory,
+} from './packed-consumer.js';
 import { templateDirectory } from './starter-template.js';
 
 // examples/tic-tac-toe: generated with the React/Hono `saga init`, keeping the template's
@@ -241,4 +244,44 @@ describe('the repository', () => {
         `tsc -p examples/tic-tac-toe/${project}`,
       );
   });
+});
+
+// Executable tutorial qualification belongs with application dependencies, not the root-only docs job.
+describe('the tutorial built from complete files', () => {
+  it('builds the first host card using only the files provided, then builds the game and extension', async () => {
+    const tutorial = path.join(work, 'tutorial');
+    fs.mkdirSync(tutorial);
+    const { consumer } = prepareTicTacToe(tutorial);
+    // Retain only the installed dependencies. No example source may fill a missing tutorial file.
+    for (const entry of fs.readdirSync(consumer)) {
+      if (entry !== 'node_modules')
+        fs.rmSync(path.join(consumer, entry), { recursive: true, force: true });
+    }
+    for (const name of [
+      '1-first-card.md',
+      '2-playable-game.md',
+      '3-move-list.md',
+    ]) {
+      const chapter = read(repoRoot, `docs/tic-tac-toe/${name}`);
+      for (const match of chapter.matchAll(
+        /^```\w+ file=([^\n]+)\n([\s\S]*?)^```/gm,
+      )) {
+        const target = path.join(consumer, match[1]!);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, match[2]!);
+      }
+      try {
+        typecheckTicTacToe(consumer);
+      } catch (error) {
+        const output = (error as { stdout?: Buffer }).stdout?.toString();
+        throw new Error(output ?? String(error));
+      }
+      await buildConsumerFromConfig(consumer, 'vite.config.ts');
+      await buildConsumerFromConfig(consumer, 'vite.server.config.ts');
+      expect(
+        fs.readFileSync(path.join(consumer, 'dist/index.html'), 'utf8'),
+      ).toContain('<div id="root"');
+      expect(fs.existsSync(path.join(consumer, 'dist/server.mjs'))).toBe(true);
+    }
+  }, 30_000);
 });
