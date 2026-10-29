@@ -1,8 +1,17 @@
 # Add a move list
 
-Replace these two files in `my-tic-tac-toe`. The layout repeats a line for each item in `history`; the new `MoveList` React component puts those lines in an ordered list. The game already returns its move history, so the server and actions stay as they are.
+The server already records every move, and the controller already turns that history into an array of `{ text }` entries. The board's data includes it at `/history`, but the layout does not display it yet. You can add the list entirely in the view.
 
-### `src/catalog.tsx`
+## Render the history
+
+In `src/catalog.tsx`, add a `MoveList` component using the same registration pattern as `Board`. It renders an ordered list around its children. Include it in `boardCatalog` so the layout can name it. The complete file below shows both additions in context.
+
+In `src/surface.ts`, append `'history'` to the root's children. Add a `history` component that repeats a `move` child over `/history`. Then define `move` as a `Line` with `text: { path: 'text' }`. That relative path reads each history entry's text, just as a square reads its own mark.
+
+The connection is now: the controller updates `history`, the layout repeats one row for each entry, and the React catalog renders those rows as a list. The server operations and click actions need no changes.
+
+<details>
+<summary>Complete src/catalog.tsx</summary>
 
 ```tsx file=src/catalog.tsx
 import {
@@ -177,7 +186,10 @@ export const boardCatalog = new Catalog<ReactCatalogComponent>(
 );
 ```
 
-### `src/surface.ts`
+</details>
+
+<details>
+<summary>Complete src/surface.ts</summary>
 
 ```ts file=src/surface.ts
 import { defineSurface, z } from '@saga-a2ui/react-mcp-stack';
@@ -300,3 +312,13 @@ export const boardSurface = defineSurface({
 export type BoardData = z.infer<typeof BoardDataSchema>;
 ```
 
+</details>
+
+
+## Check it in the host
+
+Stop the server, run `npm run typecheck` and `npm run build`, then `npm start`. Refresh the host's tools and open a new game as described in [Add a move list](../build-tic-tac-toe-with-react.md#4-add-a-move-list).
+
+After you click the centre square, the list should say **1. You: row 2, column 2**. O's reply adds the second entry; later moves append entries without losing earlier ones.
+
+Move `'history'` before `'board'` in the root's children and rebuild. The list should appear above the grid without changing the catalog or controller. The layout controls where a component appears; the catalog controls how it renders.

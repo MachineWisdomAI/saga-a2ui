@@ -10,10 +10,8 @@ import type {
   GameStore,
   MemoryGameStoreOptions,
 } from '../../../examples/tic-tac-toe/server/game-store.js';
-import type {
-  Listener,
-  ListenerOptions,
-} from '../../../examples/tic-tac-toe/server/listener.js';
+import type { LocalMcpServer as Listener } from '@saga-a2ui/react-mcp-stack/server/node';
+import type { ListenerOptions } from '../../../examples/tic-tac-toe/server/listener.js';
 import type {
   ConversationBehavior,
   HostedResource,

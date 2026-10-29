@@ -1,6 +1,6 @@
 # Tic-tac-toe
 
-A game of tic-tac-toe between a person and an AI assistant, inside the chat. The person clicks squares on a board shown by the host; the assistant plays O by calling the same server operation. It was generated with `saga init --a2ui-stack react-mcp --server hono` and keeps the template's structure: [`templates/react-hono`](../../templates/react-hono). The guide [Build tic-tac-toe with React](../../docs/build-tic-tac-toe-with-react.md) walks through it.
+A game of tic-tac-toe between a person and an AI assistant, inside the chat. The person clicks squares on a board shown by the host; the assistant plays O by calling the same server operation. The app uses SAGA’s local MCP listener for HTTP delivery. The guide [Build tic-tac-toe with React](../../docs/build-tic-tac-toe-with-react.md) walks through it.
 
 This is an example, not a starter and not a service. It has no sign-in and no database: games live in memory, expire after a short time, and are named by an unguessable identifier that anyone who holds it may play.
 
@@ -23,7 +23,7 @@ node apps/lit-host/dist/tic-tac-toe/server.mjs
 | `server/rules.ts` | The rules, as pure functions: X first, alternating turns, the eight lines, the draw, no move after the end. |
 | `server/game-store.ts` | `GameStore`, and a bounded in-memory map of short-lived games. A move is checked against the game and applied in one step. |
 | `server/operations.ts` | The four operations, declared with `registerPublicOperation`: `new_game` and `show_game` open the board; `get_game` and `play_move` have no view. |
-| `server/listener.ts`, `server/main.ts`, `server/endpoint.ts` | HTTP hosting, from the template. The game has no identity, so the template's sign-in files are removed. |
+| `server/listener.ts`, `server/main.ts` | App startup: share one game store and prepared view across the SDK listener’s requests. |
 | `src/contract.ts` | The wire contract the server and the board share. |
 | `src/surface.ts`, `src/catalog.tsx` | The board's layout and the components it may use. |
 | `src/controller.ts` | Which game the board shows (`present`), the status line, and the wait for the assistant's move. |
@@ -33,6 +33,6 @@ node apps/lit-host/dist/tic-tac-toe/server.mjs
 ## Tests
 
 - `scripts/tic-tac-toe-rules.test.ts`: the rules and the store (every line, the draw, turn order, refusals that leave a game unchanged, one of two requests with the same move number).
-- `scripts/tic-tac-toe.test.ts`: the example keeps the template, imports no MCP Apps module, builds from the packed packages, starts, and takes the guided change.
+- `scripts/tic-tac-toe.test.ts`: the example imports only public stack APIs, builds from packed packages, starts, and takes the guided change; the tutorial’s generated setup builds at each milestone.
 - `apps/lit-host/e2e/tic-tac-toe.spec.ts`: the board in Chromium on the local MCP Apps host fixture. No test asserts which square an assistant chooses.
-- `scripts/tic-tac-toe-document.test.ts`: builds each tutorial milestone from its complete files and compares the completed game with this example.
+- `scripts/tic-tac-toe-document.test.ts`: compares the tutorial’s application files with this example and checks its dependency pins and links.
