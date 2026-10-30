@@ -1,0 +1,11 @@
+flowchart TD
+  build["Build, Node: final HTML becomes the current view and artifact"] --> asm["ASSEMBLY, Node: assembleViewManifest validates, applies withdrawals and limits"]
+  prev["Application supplies previous manifest, limits, withdrawn list"] --> asm
+  asm --> store["Application stores the returned manifest and ships it with the deploy"]
+  store --> prep["PREPARATION, Node or Workers: application loads manifest, prepareViewSet re-verifies it"]
+  prep --> reg["REGISTRATION: preflight validates, then registers operation with view and ViewSet"]
+  reg --> tool["Tools and results link the current URI only"]
+  reg --> read["READ: resources/read"]
+  read --> cur["Current URI: current HTML and CSP"]
+  read --> old["Retained URI: stored HTML and CSP"]
+  read --> unk["Unknown or withdrawn URI: error -32602"]
