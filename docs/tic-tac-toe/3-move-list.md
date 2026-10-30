@@ -32,7 +32,7 @@ import { CATALOG_ID } from './surface.js';
 
 // The application-owned catalog: the components its layout may name, and nothing else. Every
 // component here is this application's own and shows supplied text as text, never as markup;
-// `ActionButton` is SAGA's opt-in control. Nothing is registered globally by the SDK.
+// `ActionButton` is saga's opt-in control. Nothing is registered globally by the SDK.
 
 type ChildReference =
   string | { readonly id: string; readonly basePath: string };

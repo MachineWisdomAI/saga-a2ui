@@ -23,7 +23,7 @@ Sending `expectedMoveNumber` prevents an old click from changing a newer board. 
 import { z } from 'zod';
 
 // The wire contract shared by the server and the board view. It imports only `zod`, so a view
-// bundle that includes it carries no server code. Application-owned: nothing here is a SAGA export.
+// bundle that includes it carries no server code. Application-owned: nothing here is a saga export.
 
 export const NEW_GAME_TOOL = 'new_game';
 export const SHOW_GAME_TOOL = 'show_game';
@@ -400,7 +400,7 @@ import {
 } from '../src/contract.js';
 import type { GameStore, PlayResult } from './game-store.js';
 
-// The game's MCP operations, declared with SAGA's server export. The application supplies the
+// The game's MCP operations, declared with saga's server export. The application supplies the
 // rules, store and built view; the SDK's local listener handles HTTP and MCP delivery.
 // Each request builds its own server; the one store is shared by all of them.
 
@@ -694,7 +694,7 @@ import { startView } from './view.js';
 await startView();
 ```
 
-`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. `GameDetails` uses the browser’s built-in disclosure control to show the game ID on request. `Credit` places SAGA’s removable `SagaAttribution` line, “Built with saga a2ui”, at the foot of the card; delete it and the layout’s `credit` entry to remove the credit. The catalog identifier matches the one in `surface.ts`. A catalog identifier only names the catalog, so choose a URL you control; the view never fetches it.
+`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from saga and handles the control's interaction state. `GameDetails` uses the browser’s built-in disclosure control to show the game ID on request. `Credit` places saga’s removable `SagaAttribution` line, “Built with saga a2ui”, at the foot of the card; delete it and the layout’s `credit` entry to remove the credit. The catalog identifier matches the one in `surface.ts`. A catalog identifier only names the catalog, so choose a URL you control; the view never fetches it.
 
 `surface.ts` defines the data and connects it to those components. The `Board` repeats its child over `/squares`. Each square binds its mark and label from that row of data. The `playable` check disables a square when it is occupied, O has the turn, or the game has ended. The layout describes what appears; application code attaches its actions in the next section.
 
@@ -826,7 +826,7 @@ import { CATALOG_ID } from './surface.js';
 
 // The application-owned catalog: the components its layout may name, and nothing else. Every
 // component here is this application's own and shows supplied text as text, never as markup;
-// `ActionButton` is SAGA's opt-in control. Nothing is registered globally by the SDK.
+// `ActionButton` is saga's opt-in control. Nothing is registered globally by the SDK.
 
 type ChildReference =
   string | { readonly id: string; readonly basePath: string };

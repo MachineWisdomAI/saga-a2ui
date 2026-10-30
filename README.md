@@ -1,10 +1,14 @@
-# saga a2ui - a framework for building agentic apps with A2UI and MCP
+# saga a2ui — Framework for building agentic apps with A2UI and MCP Apps.
 
 ![saga a2ui: the Wyrm dragon and wordmark](assets/brand/readme-banner.png)
 
-**Bring your services to AI assistants and agents, including Alexa+, ChatGPT, Claude and more, with less engineering work.**
+**Reach users through their AI assistants and agents.**
 
-saga a2ui stands for Simple Agentic Apps. It combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom AI](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
+saga means Simple Agentic Apps. It combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
+
+[Framework website](https://saga-ai.dev/) · [Example applications and source](https://github.com/MachineWisdomAI/saga-a2ui-examples) · [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md)
+
+Hosted examples consume the SDK packages; their application source is maintained in the examples repository.
 
 [Meet the adopters building with saga a2ui](ADOPTERS.md).
 
@@ -86,7 +90,7 @@ My perspective on content safety comes from AMP and Gmail Add-ons, alongside fiv
 
 ## Work with Machine Wisdom AI
 
-saga a2ui is maintained by [Machine Wisdom AI](https://machine-wisdom.ai) for its clients.
+saga a2ui is maintained by [Machine Wisdom](https://machine-wisdom.ai) for its clients.
 
 [Talk to Machine Wisdom AI](https://machine-wisdom.ai) about bringing your services to Alexa+, ChatGPT, Claude and more, or join saga a2ui adopters by following the [Quick Start guide](docs/getting-started.md).
 

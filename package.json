@@ -2,7 +2,7 @@
   "name": "saga-a2ui-workspace",
   "private": true,
   "type": "module",
-  "description": "SAGA A2UI SDK workspace",
+  "description": "saga a2ui \u2014 Framework for building agentic apps with A2UI and MCP Apps. Reach users through their AI assistants and agents.",
   "scripts": {
     "start": "npm run start -w @saga-a2ui/lit-host-app",
     "build": "npm run build -w @saga-a2ui/lit-host-app && npm run build:answer-consumer && npm run build:pack1-consumers && npm run build:starter && npm run build:demo && npm run build:tour && npm run build:react-card-consumer && npm run build:tic-tac-toe && npm run build:installed-lit-host && npm run build --prefix apps/lynx-fixture",
@@ -14,12 +14,12 @@
     "starter:snippets": "tsx scripts/starter-snippets.ts",
     "guide:recipes": "tsx scripts/guide-recipes.ts",
     "build:react-card-consumer": "tsx scripts/build-react-card-consumer.ts",
-    "build:tic-tac-toe": "tsx scripts/build-tic-tac-toe.ts",
+    "build:tic-tac-toe": "npm run stage:tutorial && tsx scripts/build-tic-tac-toe.ts",
     "build:installed-lit-host": "tsx scripts/build-installed-lit-host.ts",
     "serve:mcp": "npm run serve:mcp -w @saga-a2ui/lit-host-app",
-    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/components && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/react && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-mcp-stack && npm run typecheck -w @saga-a2ui/react-mcp-stack && npm run typecheck -w @saga-a2ui/lit-host-app && tsc -p examples/answer-consumer/tsconfig.json && tsc -p examples/answer-consumer/tsconfig.server.json && tsc -p examples/pack1-consumer/tsconfig.json && tsc -p examples/pack1-consumer/tsconfig.server.json && tsc -p examples/react-card-consumer/tsconfig.json && tsc -p examples/react-card-consumer/tsconfig.server.json && tsc -p examples/tic-tac-toe/tsconfig.json && tsc -p examples/tic-tac-toe/tsconfig.server.json && tsc -p templates/lit-node/tsconfig.json && tsc -p templates/lit-node/tsconfig.server.json && tsc -p templates/lit-express/tsconfig.json && tsc -p templates/lit-express/tsconfig.server.json && tsc -p templates/lit-fastify/tsconfig.json && tsc -p templates/lit-fastify/tsconfig.server.json && tsc -p templates/lit-hono/tsconfig.json && tsc -p templates/lit-hono/tsconfig.server.json && tsc -p templates/lit-hapi/tsconfig.json && tsc -p templates/lit-hapi/tsconfig.server.json && tsc -p templates/react-hono/tsconfig.json && tsc -p templates/react-hono/tsconfig.server.json && tsc -p demo/lit-node/tsconfig.json && tsc -p demo/lit-node/tsconfig.server.json && tsc -p demo/tour/tsconfig.json && npm run typecheck --prefix apps/lynx-fixture",
+    "typecheck": "npm run stage:tutorial && tsc -p tsconfig.json && npm run typecheck -w @saga-a2ui/core && npm run typecheck -w @saga-a2ui/components && npm run typecheck -w @saga-a2ui/lit && npm run typecheck -w @saga-a2ui/react && npm run typecheck -w @saga-a2ui/mcp && npm run typecheck -w @saga-a2ui/lit-mcp-stack && npm run typecheck -w @saga-a2ui/react-mcp-stack && npm run typecheck -w @saga-a2ui/lit-host-app && tsc -p examples/answer-consumer/tsconfig.json && tsc -p examples/answer-consumer/tsconfig.server.json && tsc -p examples/pack1-consumer/tsconfig.json && tsc -p examples/pack1-consumer/tsconfig.server.json && tsc -p examples/react-card-consumer/tsconfig.json && tsc -p examples/react-card-consumer/tsconfig.server.json && tsc -p templates/lit-node/tsconfig.json && tsc -p templates/lit-node/tsconfig.server.json && tsc -p templates/lit-express/tsconfig.json && tsc -p templates/lit-express/tsconfig.server.json && tsc -p templates/lit-fastify/tsconfig.json && tsc -p templates/lit-fastify/tsconfig.server.json && tsc -p templates/lit-hono/tsconfig.json && tsc -p templates/lit-hono/tsconfig.server.json && tsc -p templates/lit-hapi/tsconfig.json && tsc -p templates/lit-hapi/tsconfig.server.json && tsc -p templates/react-hono/tsconfig.json && tsc -p templates/react-hono/tsconfig.server.json && tsc -p demo/lit-node/tsconfig.json && tsc -p demo/lit-node/tsconfig.server.json && tsc -p demo/tour/tsconfig.json && npm run typecheck --prefix apps/lynx-fixture",
     "test:browser": "npm run test:browser -w @saga-a2ui/lit-host-app && npm run test:browser --prefix apps/lynx-fixture",
-    "test:headless": "vitest run",
+    "test:headless": "npm run stage:tutorial && vitest run",
     "candidate:identity": "tsx scripts/candidate-identity.ts",
     "candidate:pack": "tsx scripts/release-candidate.ts pack",
     "candidate:verify": "tsx scripts/release-candidate.ts verify",
@@ -27,7 +27,7 @@
     "verify": "tsx scripts/verify.ts",
     "test:pnpm-react": "tsx scripts/check-react-pnpm.ts",
     "release:pack": "tsx scripts/release-packages.ts",
-    "test:docs": "vitest run scripts/guide.test.ts scripts/guide-actions-document.test.ts scripts/tour-document.test.ts scripts/tic-tac-toe-document.test.ts scripts/consumer-boundary.test.ts",
+    "test:docs": "npm run stage:tutorial && vitest run scripts/guide.test.ts scripts/guide-actions-document.test.ts scripts/tour-document.test.ts scripts/tic-tac-toe-document.test.ts scripts/consumer-boundary.test.ts",
     "hooks:install": "node scripts/git-hooks.mjs",
     "hooks:check": "node scripts/git-hooks.mjs --check",
     "format": "node scripts/format.mjs --write",
@@ -35,7 +35,8 @@
     "test:tooling": "node --test scripts/git-hooks.test.mjs",
     "lint": "node scripts/lint.mjs",
     "lint:workflows": "node scripts/lint.mjs --workflows",
-    "test:lint": "node --test scripts/lint.test.mjs"
+    "test:lint": "node --test scripts/lint.test.mjs",
+    "stage:tutorial": "tsx scripts/stage-tutorial-game.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -68,5 +69,6 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/MachineWisdomAI/saga-a2ui.git"
-  }
+  },
+  "homepage": "https://saga-ai.dev/"
 }
