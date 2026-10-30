@@ -70,3 +70,6 @@ body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+.credit {
+  margin-top: 1rem;
+}

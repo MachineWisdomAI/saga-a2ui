@@ -10,8 +10,8 @@ date_added: 2026-10-30
 
 ## Status
 
-- Design: approved on 30 October 2026 by the operator's delegation of this showcase's delivery decisions, not by a human review of this revision. The delegation covered the concrete interface, styling and removal behavior; the pull request that introduces this file is the design revision, and its independent review stands in for human sign-off. A status-only follow-up pins the merged revision.
-- Implementation: in the introducing pull request (candidate); the landed commit is recorded after merge.
+- Design: approved on 30 October 2026 by the operator's delegation of this showcase's delivery decisions, not by a human review of this revision. The delegation covered the concrete interface, styling and removal behavior; [the pull request that introduced this file](https://github.com/MachineWisdomAI/saga-a2ui/pull/353) is the design revision, landed at [`9476d8099c4aeff38ecfbe80b2fd6976cd5c1729`](https://github.com/MachineWisdomAI/saga-a2ui/blob/9476d8099c4aeff38ecfbe80b2fd6976cd5c1729/blueprints/features/own_catalog_attribution.blueprint.md). Per that delegation, the pull request's independent review stands in for human sign-off.
+- Implementation: **Blueprint `9476d8099c4aeff38ecfbe80b2fd6976cd5c1729` implemented at `MachineWisdomAI/saga-a2ui@9476d8099c4aeff38ecfbe80b2fd6976cd5c1729`** ([PR #353](https://github.com/MachineWisdomAI/saga-a2ui/pull/353)). `SagaAttribution` (`@saga-a2ui/react/attribution`), its stylesheet and the React stack's `host.links` landed there, with unit, export-graph and bridge tests and the Chromium spec `apps/lit-host/e2e/attribution.spec.ts`. The tic-tac-toe example is its first consumer (see [hosted Tic Tac Toe](hosted_tic_tac_toe.blueprint.md#status)).
 - Acceptance: package publication, installation from the registry and any actual host's display of the credit remain open. A local browser run is not host evidence.
 
 This design replaces an earlier, never-approved proposal for a FaithfulCard-centred credit (`card`, `app` and `none` placements on the card provider). Lit parity, a logo, telemetry and default-on insertion are not part of it.

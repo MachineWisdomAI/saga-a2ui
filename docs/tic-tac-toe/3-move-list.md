@@ -22,7 +22,9 @@ import {
   createComponentImplementation,
   ListApi,
   RowApi,
+  SagaAttribution,
   z,
+  type HostLinks,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
 import type { ReactNode } from 'react';
@@ -167,6 +169,22 @@ const Shown: ReactCatalogComponent = createComponentImplementation(
       : null,
 );
 
+/**
+ * The framework credit, placed once at the foot of the card so it shows while playing, after the
+ * game ends and beside a recoverable error. The application supplies it with the host's way to
+ * open a link; deleting this component and the layout's `credit` entry removes the credit.
+ */
+function createCredit(links: () => HostLinks | undefined): ReactCatalogComponent {
+  return createComponentImplementation(
+    { name: 'Credit', schema: z.object({}).strict() },
+    () => (
+      <footer className="credit">
+        <SagaAttribution links={links()} />
+      </footer>
+    ),
+  );
+}
+
 export const boardEntries: readonly ReactCatalogComponent[] = [
   Column,
   Row,
@@ -192,13 +210,20 @@ const required = {
     args.value !== undefined && args.value !== null && args.value !== '',
 };
 
-/** What the stack presents the layout over. */
-export const boardCatalog = new Catalog<ReactCatalogComponent>(
-  CATALOG_ID,
-  'v0.9',
-  [...boardEntries],
-  [required],
-);
+/**
+ * What the stack presents the layout over. `links` returns the host's way to open a link, which
+ * the stack hands over when the view starts and before the first render.
+ */
+export function createBoardCatalog(
+  links: () => HostLinks | undefined,
+): Catalog<ReactCatalogComponent> {
+  return new Catalog<ReactCatalogComponent>(
+    CATALOG_ID,
+    'v0.9',
+    [...boardEntries, createCredit(links)],
+    [required],
+  );
+}
 ```
 
 </details>
@@ -215,7 +240,7 @@ import { VIEW_TEXT } from './text.js';
 // control has is decided by application code that attaches an action to the rendered instance
 // (view.tsx), never by a name in this layout.
 
-export const CATALOG_ID = 'https://tic-tac-toe.example/catalogs/board/v1';
+export const CATALOG_ID = 'https://saga-a2ui.dev/catalogs/tic-tac-toe/board/v1';
 
 /** The IDs the application attaches actions to. */
 export const SQUARE_ID = 'square';
@@ -255,7 +280,15 @@ export const boardSurface = defineSurface({
     component: 'Column',
     bind: {},
     props: {
-      children: ['status', 'send-hint', 'board', 'controls', 'game-details', 'history'],
+      children: [
+        'status',
+        'send-hint',
+        'board',
+        'controls',
+        'game-details',
+        'history',
+        'credit',
+      ],
     },
   },
   components: [
@@ -265,6 +298,7 @@ export const boardSurface = defineSurface({
       kind: 'body',
       text: VIEW_TEXT.sendHint,
     },
+    { id: 'credit', component: 'Credit' },
     {
       id: 'game-details',
       component: 'GameDetails',

@@ -2,9 +2,10 @@ import {
   ActionButton,
   createReactActions,
   startA2uiView,
+  type HostLinks,
 } from '@saga-a2ui/react-mcp-stack';
 import { createGameActions } from './actions.js';
-import { boardCatalog } from './catalog.js';
+import { createBoardCatalog } from './catalog.js';
 import { createGameController, readGameReply } from './controller.js';
 import { boardSurface, CHECK_ID, NEW_GAME_ID, SQUARE_ID } from './surface.js';
 import { VIEW_TEXT } from './text.js';
@@ -27,12 +28,17 @@ export async function startView(): Promise<void> {
     return controller;
   };
 
+  // The host's way to open a link, for the framework credit. The stack hands it over when the view
+  // starts, before the board first renders.
+  let links: HostLinks | undefined;
+
   const view = startA2uiView({
     container,
     layout: boardSurface,
-    catalog: boardCatalog,
+    catalog: createBoardCatalog(() => links),
     identity: { name: 'saga-tic-tac-toe-view', version: '0.0.0' },
     actions: (host) => {
+      links = host.links;
       controller = createGameController(host.server);
       const game = controller;
       const actions = createGameActions(host, game);

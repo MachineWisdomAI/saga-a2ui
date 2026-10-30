@@ -350,3 +350,65 @@ describe('the in-memory game store', () => {
     expect(() => createMemoryGameStore({ ttlMs: 0 })).toThrow(RangeError);
   });
 });
+
+describe('the game server a host composes', () => {
+  it('announces the icons it is given, and none by default', async () => {
+    const [{ Client, StreamableHTTPClientTransport }, { createMcpFetchApp }] =
+      await Promise.all([
+        import('@modelcontextprotocol/client'),
+        import('@saga-a2ui/react-mcp-stack/server/http'),
+      ]);
+    const { createGameServer, prepareBoardViews } =
+      await import('../examples/tic-tac-toe/server/operations.js');
+    const { VIEW_MARKER } =
+      await import('../examples/tic-tac-toe/src/contract.js');
+    const views = prepareBoardViews(`<div id="root"></div>${VIEW_MARKER}`);
+    const store = createMemoryGameStore();
+    const icons = [
+      { src: 'https://games.example/icon.png', mimeType: 'image/png' },
+    ];
+
+    async function announcedBy(given: typeof icons | undefined) {
+      const app = createMcpFetchApp({
+        path: '/mcp',
+        allowedHosts: ['games.example'],
+        allowedOrigins: ['games.example'],
+        createServer: (lifetime) =>
+          createGameServer({
+            views,
+            store,
+            lifetime,
+            ...(given === undefined ? {} : { icons: given }),
+          }),
+      });
+      const client = new Client({ name: 'icons-spec', version: '0.0.0' });
+      await client.connect(
+        new StreamableHTTPClientTransport(
+          new URL('https://games.example/mcp'),
+          {
+            // A Request built in Node carries no Host header; the Worker runtime derives it from the URL.
+            fetch: (input, init) => {
+              const headers = new Headers(init?.headers);
+              headers.set('host', 'games.example');
+              return app.fetch(
+                new Request(input instanceof Request ? input.url : input, {
+                  ...init,
+                  headers,
+                }),
+              );
+            },
+          },
+        ),
+      );
+      try {
+        return client.getServerVersion()?.icons;
+      } finally {
+        await client.close();
+        await app.close();
+      }
+    }
+
+    expect(await announcedBy(icons)).toEqual(icons);
+    expect(await announcedBy(undefined)).toBeUndefined();
+  });
+});
