@@ -59,6 +59,25 @@ Set any of these on the card or an ancestor. Each has a neutral fallback; unset 
 
 There is no typed bridge from a host's own CSS variables to these properties. An application maps a host's theme onto them itself. For a host that is read on a device rather than at a desk, both stacks export `readingProfile(context, hostName)` (from their main and `/faithful-card` entries), the one place that recognises such hosts. It answers `'device'` or `'desktop'` for the `hostContext` callback's arguments, and the application maps the answer onto its own tokens (for example a larger `--saga-card-font-size`) and onto a `data-reading-profile` attribute of its own. The card decides nothing from the profile, and the application never branches on a host name.
 
+For example, apply brand colours and a readable measure without depending on the renderer's internal markup:
+
+```css
+.brand-answer {
+  --saga-card-font-family: system-ui, sans-serif;
+  --saga-card-font-size: 1rem;
+  --saga-card-line-height: 1.6;
+  --saga-card-reading-width: 65ch;
+  --saga-card-text-color: #172026;
+  --saga-card-accent-color: #075b54;
+}
+
+.brand-answer[data-reading-profile='device'] {
+  --saga-card-font-size: 1.25rem;
+}
+```
+
+Place the card inside the application's `.brand-answer` element and set its `data-reading-profile` from the `hostContext` callback. The tokens inherit in both renderers, including through Lit's shadow roots. The second rule takes effect only when the application supplies that attribute; the SDK's reading profile does not apply CSS by itself. Test the resulting colours and scale with your own theme, content and target screens.
+
 ## The closing marker
 
 The final top-level block of the content carries `data-saga-closing="paragraph"` when, and only when, that block is a paragraph, whatever its words:
@@ -85,7 +104,7 @@ Re-run the classifier each time the card shows new content; the marker moves wit
 
 ## Reaching the card from a stylesheet
 
-- **React** renders into the page's own tree, so a page or component stylesheet applies. Import `@saga-a2ui/react/faithful-card.css` for the SDK's presentation, then add rules after it.
+- **React** renders into the page's own tree, so a page or component stylesheet applies. A stack application imports `@saga-a2ui/react-mcp-stack/faithful-card.css` for the SDK's presentation; a lower-level renderer integration imports `@saga-a2ui/react/faithful-card.css`. Add application rules after that stylesheet.
 - **Lit** renders the card inside shadow roots that the catalog and the A2UI surface create, so a page stylesheet cannot select into it. Pass constructable stylesheets as `styles` to `startFaithfulCardApp` of the Lit stack (or to `createFaithfulCardView` when composing the card yourself); each connected card adopts them into the root it lives in. Custom properties inherit through shadow roots and need no sheet.
 
 ## Qualification

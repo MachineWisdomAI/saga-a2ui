@@ -279,9 +279,7 @@ describe('a ready connector', () => {
       { cwd },
     );
     expect(chatgpt.code).toBe(1);
-    expect(chatgpt.err).toMatch(
-      /no listing and assets, which the chatgpt target needs/,
-    );
+    expect(chatgpt.err).toMatch(/no listing, which the chatgpt target needs/);
     expect(chatgpt.out).toBe('');
   });
 

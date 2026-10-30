@@ -56,6 +56,11 @@ const UNITS: readonly Unit[] = [
     roles: every(stack('lit')),
   })),
   {
+    name: 'templates/react-hono',
+    directory: 'templates/react-hono',
+    roles: every(stack('react')),
+  },
+  {
     name: 'examples/pack1-consumer',
     directory: 'examples/pack1-consumer',
     roles: (file) => {
@@ -98,6 +103,11 @@ const UNITS: readonly Unit[] = [
   {
     name: 'examples/react-card-consumer',
     directory: 'examples/react-card-consumer',
+    roles: every(stack('react')),
+  },
+  {
+    name: 'examples/tic-tac-toe',
+    directory: 'examples/tic-tac-toe',
     roles: every(stack('react')),
   },
 ];

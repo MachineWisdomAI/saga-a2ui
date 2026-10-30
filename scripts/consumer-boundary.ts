@@ -387,10 +387,6 @@ export const EXCLUDE: readonly ExcludeEntry[] = [
     glob: '**/*.test-support.ts',
     reason: 'test support, like the tests that use it',
   },
-  {
-    glob: 'docs/2026-*',
-    reason: 'dated observations are historical records and are not edited',
-  },
 ];
 
 /** The required templates that no scanned file belongs to: an empty result means all of them are scanned. */
@@ -410,6 +406,7 @@ export const REQUIRED_TEMPLATES = [
   'lit-fastify',
   'lit-hono',
   'lit-hapi',
+  'react-hono',
 ] as const;
 
 /** `*` is within one path segment, `**` crosses segments, `{a,b}` is a choice; the match covers the whole path. */

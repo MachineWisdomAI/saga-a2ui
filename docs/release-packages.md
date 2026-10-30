@@ -6,7 +6,7 @@ Read exact prepared versions from the reviewed manifests and generated `release.
 
 ## Build the exact artifacts
 
-From the reviewed commit, on Node >=22.12.0:
+From the reviewed commit, on Node >=22.23.3 (the source-tooling minimum in `package.json` and `.nvmrc`; published packages require >=22.12.0):
 
 ```sh
 npm ci
@@ -72,10 +72,10 @@ Zod **3.25.76** context; do not add direct application A2UI dependencies or forc
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
 
-The stack pins exact siblings that are not on the registry yet, so a local
-install supplies them from the tarballs through overrides. Keep two consumers
-apart, as `npm run test:pnpm-react` (`scripts/check-react-pnpm.ts`) does, and
-neither stands in for the other:
+To qualify the exact prepared bytes, supply every SDK sibling from the reviewed
+tarballs through overrides, even when a version is also available on npm. Keep
+three consumer recipes separate, as `npm run test:pnpm-react`
+(`scripts/check-react-pnpm.ts`) does; each checks a different dependency boundary:
 
 - **Lower-level consumer** (availability of the seven packages). It names every
   SAGA tarball as a direct dependency and as an override, plus React, React DOM,
@@ -84,7 +84,7 @@ neither stands in for the other:
   Lit). Its direct dependencies are only the stack and its framework peers
   (`react`, `react-dom`; `lit`), and its typed fixture imports every stack entry
   and nothing else: no upstream renderer or schema package, no Zod, no other
-  SAGA package. The unpublished siblings are supplied by overrides only. Direct
+  SAGA package. The reviewed sibling tarballs are supplied by overrides only. Direct
   declarations would mask a dependency or an export the stack failed to
   provide, so only this consumer shows that the recipe resolves. It also checks
   the exact sibling resolutions, the stack's full peer requirements and one

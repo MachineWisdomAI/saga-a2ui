@@ -81,6 +81,7 @@ export function qualifyStarter(
     startListener(options: ListenerOptions): Promise<Listener>;
     readonly ACCOUNT_SCOPE: string;
     readonly ViewArtifactMissing: new () => Error;
+    readonly VIEW_MARKER: string;
   }
 
   const ACCOUNT_A = 'qualification-account-a';
@@ -975,11 +976,14 @@ export function qualifyStarter(
       ).toMatch(/throw\s+new\s+OAuthError\(\s*OAuthErrorCode\.InvalidToken/);
       // SDK behavior is imported, not reimplemented: no copy of the runtime's modules in the starter's own source.
       const own = exported
-        .filter((one) => one.file.endsWith('.ts'))
+        .filter((one) => /\.tsx?$/.test(one.file))
         .map((one) => one.text)
         .join('\n');
+      // The starter imports its authoring surface from the one stack package its template declares.
       expect(own).toMatch(
-        /import\s*\{[^}]*\bAction\b[^}]*\}\s*from\s*'@saga-a2ui\/lit-mcp-stack'/,
+        new RegExp(
+          `import\\s*\\{[^}]*\\bAction\\b[^}]*\\}\\s*from\\s*'@saga-a2ui/${built.metadata.stack}-stack'`,
+        ),
       );
       expect(own).not.toMatch(
         /function\s+(createBinding|createInstanceHost|registerProtectedOperation|createMessageSession)\b/,
@@ -1002,7 +1006,7 @@ export function qualifyStarter(
         /NodeStreamableHTTPServerTransport|verifyAccessToken|registerProtectedOperation|@modelcontextprotocol\/(node|express)|localhostHostValidation/,
       );
       expect(html).not.toMatch(/(?:from|import|require)\s*\(?\s*["']node:/);
-      expect(html).toContain('<starter-app');
+      expect(html).toContain(entry.VIEW_MARKER); // the element this template's view renders into
     });
   });
 

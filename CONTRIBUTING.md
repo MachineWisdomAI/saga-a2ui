@@ -8,10 +8,6 @@ Use [Getting started](docs/getting-started.md) for setup and the [development re
 
 Keep private customer material, credentials, business records and internal planning out of this repository, including its history. Contributions must have appropriate redistribution rights; retain third-party license obligations.
 
-Name documents expected to be superseded `YYYY-MM-DD_title_vN.ext`, for example `2026-10-13_binding-design_v1.md`. Start at `v1`; when a new edition supersedes it, use the new edition date and increment the document version, retain the previous edition, and update links to the current one. Ordinary corrections stay in the same edition. Keep evergreen files such as README.md, CONTRIBUTING.md, CODING_STANDARDS.md, SECURITY.md and AGENTS.md at stable names. Document versions are separate from package versions.
-
-Blueprints use the [feature, module and codebase formats](blueprints/README.md). Their filenames are stable contract names without a date or edition suffix; Git revisions preserve their history.
-
 New clones can install the local default-branch and force-push guards with the installed MachineWisdom helper:
 
 ```sh
@@ -19,6 +15,21 @@ mw-git-guard.sh install --repo .
 ```
 
 GitHub branch protections apply independently of these local hooks.
+
+## Documentation
+
+This section owns what belongs in current SDK documentation and how it is named. Classify the material before choosing where it goes; each kind has one destination:
+
+| Material | Destination |
+| --- | --- |
+| Current usage, behavior, requirements and meaningful limitations | The stable-named guide that owns the topic. Edit it in place; Git preserves earlier text. |
+| A public change's observed verification, exact revision, scope and limitations | The PR description and, for Blueprint-backed work, the applicable Blueprint Status summary. A reader without private access can assess the claim. |
+| Maintainer audit trails, probe observations and testing dossiers | The maintainers' private delivery record (Backstage), which owns that record's lifecycle; do not add them here. Keep current guides useful without them. |
+| Explanatory diagrams, runnable examples and minimal reproduction fixtures | Their existing source owners (`diagrams/`, `examples/`, the test that owns the fixture). Their purpose distinguishes them from a delivery dossier. |
+
+Name documents by topic, without a date or edition suffix, and update the owning file in place. Keep README.md, CONTRIBUTING.md, CODING_STANDARDS.md, SECURITY.md, AGENTS.md, guides and Blueprints at stable names. An observation's date belongs in the sentence that states it. Document names are separate from package versions. Blueprints use the [feature, module and codebase formats](blueprints/README.md); Git revisions preserve their history.
+
+A document is finished when its examples and links resolve, and the check that covers it (for example `npm run test:headless` for guides with quoted source) passes. Evidence rules are in [change hygiene](docs/change-hygiene.md#evidence).
 
 ## Report a problem or propose a feature
 
@@ -44,4 +55,4 @@ Provide reproducible checks, clear documentation and any acceptance evidence req
 
 ## PR descriptions and artifacts
 
-Follow [change hygiene](docs/change-hygiene.md) for concise PR descriptions, proportional evidence collection and Git LFS storage. Retain only evidence that supports a specific acceptance claim; keep disposable captures ignored.
+Follow [change hygiene](docs/change-hygiene.md) for concise PR descriptions, [evidence](docs/change-hygiene.md#evidence) and Git LFS storage.

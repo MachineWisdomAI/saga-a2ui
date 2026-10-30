@@ -34,7 +34,7 @@ export const RENDERERS: readonly RendererChoice[] = [
     id: 'react',
     label: 'React (bounded evidence)',
     evidence:
-      'The same actions and server contract through a React consumer of @saga-a2ui/react in a local fixture host. There is no React starter, template or CLI pair, and this preview is not renderer parity with Lit.',
+      'The same actions and server contract through a React consumer of @saga-a2ui/react in a local fixture host. It is not the React starter, which is a separate Hono pair, and this preview is not renderer parity with Lit.',
   },
 ];
 

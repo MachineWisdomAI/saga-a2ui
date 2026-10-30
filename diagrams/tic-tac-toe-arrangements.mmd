@@ -1,0 +1,47 @@
+flowchart TB
+  classDef runnable fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef compose fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+  classDef sketch fill:#ffffff,stroke:#6b7280,stroke-width:2px,stroke-dasharray:6 4,color:#374151
+
+  subgraph Layout["Layout: what the board says"]
+    A2UI["A2UI layout and data<br/>surface.ts"]:::runnable
+  end
+  subgraph Draw["Renderer: who draws it"]
+    React["React catalog and view<br/>this guide"]:::runnable
+    Lit["Lit catalog and view"]:::compose
+  end
+  subgraph Carry["Delivery: how it travels"]
+    MCPApps["MCP Apps card in a host<br/>this guide"]:::runnable
+    Native["Native A2UI host<br/>no MCP"]:::sketch
+    A2A["A2A client<br/>appendMessage as message/send"]:::sketch
+  end
+  subgraph Ops["Operations: what the board and the assistant call"]
+    One["One server<br/>MCP endpoint, rules and store<br/>this guide"]:::runnable
+    Gateway["Gateway server<br/>MCP endpoint only"]:::compose
+    API["App API server<br/>rules and store"]:::compose
+  end
+  subgraph Store["GameStore: where games live"]
+    Memory["In-memory map<br/>this guide"]:::runnable
+    Remote["Workers KV or<br/>Durable Object"]:::sketch
+  end
+  subgraph Key["Key"]
+    K1["Runnable: the guide's own app"]:::runnable
+    K2["Straightforward composition:<br/>existing packages"]:::compose
+    K3["Architectural sketch:<br/>needs adapters that do not exist yet"]:::sketch
+  end
+
+  A2UI --> React
+  A2UI --> Lit
+  A2UI -.-> Native
+  React --> MCPApps
+  Lit --> MCPApps
+  React -.-> A2A
+  MCPApps --> One
+  MCPApps --> Gateway
+  Native -.-> API
+  A2A -.-> API
+  Gateway --> API
+  One --> Memory
+  API --> Memory
+  API -.-> Remote
+  Layout ~~~ Key
