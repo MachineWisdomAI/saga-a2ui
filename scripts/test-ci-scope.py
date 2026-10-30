@@ -67,7 +67,7 @@ class CiScopeTests(unittest.TestCase):
         for name in ["apps/player/icon.png", "packages/core/src/prompt.md", "demo/fixtures/input.md",
                      "docs/check.py", "docs/evidence/receipt.md", "docs/artifacts/bundle.svg",
                      "docs/model.json", "new-format.xyz", "package-lock.json", ".gitattributes",
-                     "assets/brand/plugin-icon.svg",
+                     "assets/brand/plugin/logo-dark.png", "assets/brand/plugin/composer-icon-light.png",
                      ".github/workflows/ci.yml", "scripts/ci-scope.py"]:
             with self.subTest(name=name):
                 self.write(name, "updated")
