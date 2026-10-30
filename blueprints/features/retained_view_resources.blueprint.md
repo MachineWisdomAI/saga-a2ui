@@ -40,6 +40,21 @@ A [public issue comment](https://github.com/iaser-ai/ansari/issues/335#issuecomm
 
 What makes a host refresh is unknown. These runs do not show a universal timeout or a requirement that users refresh by hand, and the design depends on neither claim. They do support keeping old bytes readable.
 
+### First-display and reload examples: what retention can fix
+
+Hosted SAGA Tic Tac Toe observations on 30 October 2026 show why resource availability and visible-card reliability need separate checks. Claude web and ChatGPT web returned correct game state while an initial card sometimes failed to display. A supported Retry recovered the observed cards, and gameplay then worked. Earlier cards could fail again after reopening or navigation. ChatGPT failures also continued in fresh chats after tool-list refresh. An earlier embedded artwork version was observed, but stale content was not established as the general cause.
+
+One sanitized ChatGPT Network capture gives a more specific boundary. The application widget fetch returned HTTP 200 in 866 ms. Separately, the host-owned sandbox bootstrap document spent approximately 20 seconds in Initial connection before the card failed. One Retry obtained that document from disk cache in approximately 1 ms and the card rendered. This localizes that occurrence to sandbox loading while the application fetch succeeded; it does not establish an OpenAI outage, a view-size limit, or the cause of Claude's failures. Browser cache, transport, service-worker, host and local-environment effects remain unresolved. A separate bounded Claude trace showed HTTP 200 MCP POSTs and no Worker exceptions, but contained no JSON-RPC method, resource URI or result payload; it cannot establish successful resource delivery.
+
+| Example | Effect of the proposed retention contract | What remains unresolved |
+| --- | --- | --- |
+| After deployment, a host requests an old application URI that now returns `-32602`, as in the Ansari observations. | If the exact artifact is supplied and retained, the SDK returns its original HTML and CSP. | Sandbox startup, client compatibility and rendering must still succeed. |
+| A host displays cached earlier artwork or keeps using an older view. | A later read of that retained URI succeeds with the earlier artifact; it never substitutes the latest artwork. | Retention cannot force discovery refresh or replace HTML already cached by the host. |
+| The application widget fetch succeeds, but the host sandbox document stalls, as in the captured ChatGPT case. | Retention changes no behavior at the failing boundary. The application resource is already available. | The host/browser sandbox-loading failure needs its own causal diagnosis. |
+| An initial or reopened card fails and Retry recovers it, without a resource-level trace. | Retention helps only if a missing old application URI is demonstrated. Retry alone does not establish that condition. | The cause remains unknown for that attempt; recovery is not a first-load pass. |
+
+These examples motivate preserving historical resources while keeping the broader first-card reliability requirement open. Tic Tac Toe supplies diagnostic evidence here, not a second required adoption consumer. The proposal adds no automatic retry, host workaround or new diagnostic framework.
+
 ### Current exports and runtime
 
 `@saga-a2ui/mcp/server` exports, among others, `OperationConfigurationError`, `registerPublicOperation`, `registerProtectedOperation`, `operationViewFromHtml`, `viewUriForHtml` and the `OperationView` type. Both stack `/server` entries ([Lit](../../packages/lit-mcp-stack/src/server/index.ts), [React](../../packages/react-mcp-stack/src/server/index.ts)) re-export the same shorter list: `attachRequestLifetime`, `createServerBudgets`, `operationViewFromHtml`, `registerPublicOperation`, `viewUriForHtml`, and the types `OperationView` and `RequestLifetime`. They do not re-export `registerProtectedOperation` or `OperationConfigurationError`, so a stack-only import path cannot reach protected registration.
@@ -78,6 +93,8 @@ An ETag looks like the obvious fix for stale views: let the host revalidate inst
 4. A validator cannot restore what is gone. The observed failure is a host asking for an old URI whose bytes no longer exist. A validator answers whether something changed; it cannot return bytes the server discarded. Retention can.
 
 ETags remain useful for separately fetched HTTPS assets and for a future protocol that explicitly defines per-resource validators. Neither is the failure observed here. This is an argument about fit, not a claim about any host's cache behavior beyond the observations above.
+
+The sandbox capture above displayed a 304/zero-byte entry for the host-owned HTTPS bootstrap document. That entry concerns a different resource from the application's MCP `ui://` view. No headers were captured, so it does not establish which validator was involved or why connection time accumulated. It supplies no evidence that adding an ETag to the SAGA endpoint would repair the stall or provide MCP resource revalidation.
 
 ### Behavior rules
 
@@ -329,6 +346,8 @@ Host trials are empirical and separate from the structural checks.
 **ChatGPT.** Whether ChatGPT refreshes its cached discovery, and what triggers it, is unknown. A refresh investigation is separate from the Claude schedule, and each entry records the rendered build identifier.
 
 **Recording and reading.** Every attempt is recorded, including failures and repeats: host and version, date, deployed build, URI requested, what the host requested and when, what the server returned, the rendered build identifier and any error text. The result is a report of what each host did. It does not establish a freshness guarantee, a universal timeout or a need for manual refresh, and the refresh trigger stays unknown unless the trials expose one. A planned trial is not an observed success. Acceptance of this feature stays pending until a human reviewer decides what host evidence is enough.
+
+Record the initial attempt, any supported Retry and later reload separately. Where observable, distinguish application resource delivery, host sandbox document/script loading, iframe creation, MCP Apps initialization, first result and application rendering; mark unobserved stages unknown. An HTTP 200 alone does not establish JSON-RPC success, and a successful resource fetch does not establish a mounted card. If retention serves the correct artifact but sandbox loading still fails, record resource-delivery success and host-rendering failure together. Neither Retry recovery nor SDK qualification closes the first-display/reload reliability requirement.
 
 ### Limits
 
