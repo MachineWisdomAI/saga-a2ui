@@ -1802,11 +1802,18 @@ import {
   createReactActions,
   startA2uiView,
   type HostLinks,
+  type StartA2uiViewOptions,
 } from '@saga-a2ui/react-mcp-stack';
 import { createGameActions } from './actions.js';
 import { createBoardCatalog } from './catalog.js';
 import { createGameController, readGameReply } from './controller.js';
-import { boardSurface, CHECK_ID, NEW_GAME_ID, SQUARE_ID } from './surface.js';
+import {
+  boardSurface,
+  CHECK_ID,
+  NEW_GAME_ID,
+  SQUARE_ID,
+  type BoardData,
+} from './surface.js';
 import { VIEW_TEXT } from './text.js';
 
 // The composition root of the view. It uses public package exports only, and the page it builds is
@@ -1816,7 +1823,11 @@ import { VIEW_TEXT } from './text.js';
 // decisions: which components exist (catalog.tsx), which action each control has (below), what a
 // result means and what ending the view takes with it.
 
-export async function startView(): Promise<void> {
+// Optional. A page that embeds this view can learn the host's context (for example its theme)
+// through the stack's own typed callback; the game itself does not use it.
+export async function startView(
+  settings: Pick<StartA2uiViewOptions<BoardData>, 'hostContext'> = {},
+): Promise<void> {
   const container = document.getElementById('root');
   if (container === null) throw new Error('the page has no #root');
 
@@ -1836,6 +1847,7 @@ export async function startView(): Promise<void> {
     layout: boardSurface,
     catalog: createBoardCatalog(() => links),
     identity: { name: 'saga-tic-tac-toe-view', version: '0.0.0' },
+    hostContext: settings.hostContext,
     actions: (host) => {
       links = host.links;
       controller = createGameController(host.server);
