@@ -6,6 +6,8 @@ You’ll create an app in your own directory, install SAGA from npm, and open it
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
 
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/main/apps/tic-tac-toe) adds only hosting and storage to this example. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
+
 ## Before you start
 
 Install Node.js 22.23.3 or newer and `cloudflared`. You also need a text editor, a terminal, and access to custom MCP connections in Claude or ChatGPT on the web. Check that your account offers **Add custom connector** in Claude or **Add custom MCP server** in ChatGPT before creating the app. A managed workspace may require an administrator to enable this.

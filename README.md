@@ -56,7 +56,7 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 React and Lit are both supported application paths. Their MCP stacks provide typed surfaces, action controls and the optional FaithfulCard application, with framework-specific rendering and lifecycle integration. Choose the stack that matches your application. Start with [Getting started](docs/getting-started.md), which covers what every application needs, then follow one of two tracks:
 
-- [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md): build a game in your own app directory with npm packages, then play against Claude or ChatGPT.
+- [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md): build a game in your own app directory with npm packages, then play against Claude or ChatGPT. To try a finished, hosted version first, see the [hosted game and its source](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game).
 - [Build the notes application with Lit](docs/build-notes-with-lit.md): a view composed with the Lit stack, leading into the [action guide](docs/actions.md).
 
 To add the React stack to an application you already have, use the [React integration guide](docs/react-consumers.md). [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and five of the six generated starters use Lit, and one starter uses React on Hono; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
