@@ -26,6 +26,22 @@ function files(markdown: string): Map<string, string> {
   );
 }
 describe('the standalone React tutorial', () => {
+  it('keeps the framework introduction and tutorial copy aligned with the brand', () => {
+    for (const copy of [
+      read('README.md'),
+      read('package.json'),
+      guide,
+      checkpoint,
+      ...chapters,
+    ])
+      expect(copy).not.toMatch(/\bSAGA\b|\bMachineWisdom\b/);
+    expect(read('README.md')).toContain('saga means Simple Agentic Apps.');
+    expect(read('README.md')).toContain('https://saga-ai.dev/');
+    expect(read('README.md')).toContain(
+      'https://github.com/MachineWisdomAI/saga-a2ui-examples',
+    );
+  });
+
   it('provides the complete maintained game, followed by the maintained move-list extension', () => {
     const assembled = new Map([...files(checkpoint), ...files(chapters[1]!)]);
     // Generated project configuration differs from the repository's contributor harness.
@@ -54,7 +70,7 @@ describe('the standalone React tutorial', () => {
       expect(source.trim(), name).toBe(reference.get(name)?.trim());
   });
 
-  it('uses a registry-only manifest with exact versions and one SAGA stack', () => {
+  it('uses a registry-only manifest with exact versions and one saga stack', () => {
     const manifest = JSON.parse(files(checkpoint).get('package.json')!);
     const dependencies = {
       ...manifest.dependencies,

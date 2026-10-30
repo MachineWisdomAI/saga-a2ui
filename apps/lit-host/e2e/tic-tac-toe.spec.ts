@@ -9,15 +9,15 @@ import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import type {
   GameStore,
   MemoryGameStoreOptions,
-} from '../../../examples/tic-tac-toe/server/game-store.js';
+} from '../../../.wise-agents/tutorial-game/server/game-store.js';
 import type { LocalMcpServer as Listener } from '@saga-a2ui/react-mcp-stack/server/node';
-import type { ListenerOptions } from '../../../examples/tic-tac-toe/server/listener.js';
+import type { ListenerOptions } from '../../../.wise-agents/tutorial-game/server/listener.js';
 import type {
   ConversationBehavior,
   HostedResource,
 } from './host-fixture/host.js';
 
-// The tic-tac-toe example (examples/tic-tac-toe), built from packed SDK tarballs
+// The pinned external tic-tac-toe application, built from packed SDK tarballs
 // (scripts/build-tic-tac-toe.ts) and served by its own MCP server, in a real browser. The page is
 // mounted in the sandboxed iframe of the local host fixture under the CSP the server declared;
 // the view's server calls are forwarded to that server, the assistant's turns are made by calling
@@ -804,7 +804,7 @@ test.describe('the board', () => {
 });
 
 test.describe('the guided change', () => {
-  // The page built after applying examples/tic-tac-toe/guided-change/move-list.patch: the layout and
+  // The page built after applying the external game's guided-change/move-list.patch: the layout and
   // the catalog gain a list bound to the game's history, and nothing else changes.
   test('adds a move list that follows the game, from the person’s click to the assistant’s move', async ({
     page,

@@ -43,7 +43,7 @@ const specifiersOf = (file: string): string[] => {
 };
 
 describe('the example uses the public stack', () => {
-  it('installs one SAGA stack with exact package versions', () => {
+  it('installs one saga stack with exact package versions', () => {
     const own = JSON.parse(read(ticTacToeSource, 'package.json'));
     expect(
       Object.keys(own.dependencies).filter((name) =>
@@ -85,7 +85,7 @@ describe('the example uses the public stack', () => {
 });
 
 describe('what the example imports', () => {
-  it('uses no MCP Apps module and no SAGA package but the stack and the server export', () => {
+  it('uses no MCP Apps module and no saga package but the stack and the server export', () => {
     const everything = [...sourceFiles('src'), ...sourceFiles('server')];
     expect(everything.length).toBeGreaterThan(10);
     for (const file of everything)
@@ -215,12 +215,10 @@ describe('the repository', () => {
     };
     expect(manifest.scripts.build).toContain('npm run build:tic-tac-toe');
     expect(manifest.scripts['build:tic-tac-toe']).toBe(
-      'tsx scripts/build-tic-tac-toe.ts',
+      'npm run stage:tutorial && tsx scripts/build-tic-tac-toe.ts',
     );
-    for (const project of ['tsconfig.json', 'tsconfig.server.json'])
-      expect(manifest.scripts.typecheck).toContain(
-        `tsc -p examples/tic-tac-toe/${project}`,
-      );
+    expect(manifest.scripts.typecheck).toContain('npm run stage:tutorial');
+    expect(manifest.scripts.typecheck).not.toContain('examples/tic-tac-toe');
   });
 });
 

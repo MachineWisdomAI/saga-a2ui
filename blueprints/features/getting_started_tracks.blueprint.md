@@ -138,9 +138,11 @@ The reader connects either Claude or ChatGPT at the first milestone, then adds t
 
 [Alternative architectures](../../docs/tic-tac-toe-architecture-options.md) explains a separate backend, another renderer, a native A2UI host, A2A delivery, and hosted storage. Each distinguishes available parts from missing adapters or proposed work. The main tutorial stays with the implemented React game. The README and common setup guide point to the React and Lit tracks.
 
-### Tic-tac-toe example (`examples/tic-tac-toe`)
+### Tic-tac-toe example
 
-The example keeps the React/Hono starter's structure and imports SAGA through the React MCP stack only. The game is an example, not an adversarial service:
+The [examples repository](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/6431e6a984c88eca6904b75b760a57d0e2edde16/apps/tic-tac-toe/game) now owns the application under the [hosted-game ownership amendment](hosted_tic_tac_toe.blueprint.md#status). The tutorial and SDK candidate qualification remain here.
+
+The local example keeps the React/Hono starter's structure and imports SAGA through the React MCP stack only. The game is an example, not an adversarial service:
 
 - Voice-first hosts need the assistant to place X when the person says their move, so `play_move` is callable by the model for either player.
 - The server still enforces the rules for both players.

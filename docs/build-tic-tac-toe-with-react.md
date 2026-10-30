@@ -2,11 +2,11 @@
 
 Build a React game that you play inside Claude or ChatGPT. You click a square to place X; the assistant plays O. A local server checks every move and keeps the board up to date.
 
-You’ll create an app in your own directory, install SAGA from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
+You’ll create an app in your own directory, install saga from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
 
-A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/main/apps/tic-tac-toe) adds only hosting and storage to this example. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/6431e6a984c88eca6904b75b760a57d0e2edde16/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
 
 ## Before you start
 
@@ -24,7 +24,7 @@ Install Node.js 22.23.3 or newer and `cloudflared`. You also need a text editor,
 | Zod | Checks that tool inputs and results have the shapes the game expects. | [Zod basics](https://zod.dev/basics) |
 | MCP and MCP Apps | Let the assistant call your server’s tools and display an interactive card in the conversation. | [MCP introduction](https://modelcontextprotocol.io/docs/getting-started/intro) and [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) |
 | A2UI | Describes the board’s components and data bindings so a renderer can display them. | [A2UI concepts](https://a2ui.org/concepts/overview/) |
-| SAGA React MCP stack | Connects your React components, server operations, and conversation actions to the host. | [SAGA React integration](react-consumers.md) |
+| saga React MCP stack | Connects your React components, server operations, and conversation actions to the host. | [saga React integration](react-consumers.md) |
 | Claude or ChatGPT | Hosts the card and supplies the assistant that plays O. | [Claude custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) or [ChatGPT custom MCP servers](https://developers.openai.com/plugins/deploy/connect-chatgpt) |
 | Cloudflare Quick Tunnel | Gives the local server a temporary HTTPS address that the host can reach, without a Cloudflare account or domain. | [Install cloudflared](https://developers.cloudflare.com/tunnel/downloads/) and [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) |
 
@@ -136,7 +136,7 @@ When the host reopens a card, the board reads its game before enabling any squar
 
 ![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](../diagrams/tic-tac-toe-turn-loop.svg)
 
-The app owns the game rules, storage, React components, and action definitions. SAGA validates the operation inputs and results, connects the view to the host, and supplies the action and conversation APIs. `src/surface.ts` describes the layout; `src/catalog.tsx` implements its components in React; `src/actions.ts` gives the buttons their behavior.
+The app owns the game rules, storage, React components, and action definitions. saga validates the operation inputs and results, connects the view to the host, and supplies the action and conversation APIs. `src/surface.ts` describes the layout; `src/catalog.tsx` implements its components in React; `src/actions.ts` gives the buttons their behavior.
 
 ## 4. Add a move list
 
