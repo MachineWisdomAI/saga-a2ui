@@ -68,13 +68,13 @@ const BUNDLED: Record<(typeof FIELDS)[number], string> = {
 };
 const DIGESTS: Record<string, string> = {
   'composer-icon-light.png':
-    'b4bad3c7c3ff6baec188c69ac60f622c03c81b12d5aa6a4c9a4ca8f27c136912',
+    '59b21877707e9f3ae59c47ea5a00bed4938a0c7a99903a555155f06b6ae61a2d',
   'composer-icon-dark.png':
-    '7609a165f30649cb6a06d5711da4b9e57918671b07bf9fbc9ec8f9a227969cab',
+    '87f6878befdebe02ef954dbd2c92a47c0a84f803033ae0da279f031d93ea7013',
   'logo-light.png':
-    '622ac01fb4ef89a81f8e17671bc8f299aabb1fd9c00439939bccbcd4ef685a1c',
+    '66f444d50e29b7317bbf0a0743fa08630239e7f2e17f022d25dc042e01c7e95c',
   'logo-dark.png':
-    '1c5d3adb66e8661fde7e3c37633fb459cca7eb19c0d1c2058271cda2ba08ca8e',
+    '3dab20a89fd8318abab9b83ab6490162ab5ccc4d0157a37d2af3afbd4e59c07c',
 };
 
 const release = (app: string): string =>

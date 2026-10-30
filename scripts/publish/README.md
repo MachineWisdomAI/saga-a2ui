@@ -35,7 +35,7 @@ portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 section belongs to the Claude target. The ChatGPT target requires `listing`. Branding is optional:
 each of `assets.logo`, `assets.composerIcon`, `assets.logoDark` and `assets.composerIconDark` that
 you omit uses the bundled SAGA A2UI dragon, in the light or dark artwork that suits the field (the
-composer icons are the transparent mark; the logos are the mark on a solid tile; see
+composer icons are the transparent head crop of the mark; the logos are the full mark on a solid tile; see
 [`assets/brand/plugin`](../../assets/brand/plugin/README.md)). A dark default follows its light
 field: `logoDark` and `composerIconDark` default to the dragon only when `logo` or `composerIcon`
 also uses the dragon, so your own light branding is never paired with SAGA's dark artwork. Supply
