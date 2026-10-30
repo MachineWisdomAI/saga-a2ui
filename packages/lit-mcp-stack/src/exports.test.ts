@@ -6,6 +6,7 @@ import * as main from '@saga-a2ui/lit-mcp-stack';
 import * as card from '@saga-a2ui/lit-mcp-stack/faithful-card';
 import * as contentPolicy from '@saga-a2ui/lit-mcp-stack/content-policy';
 import * as server from '@saga-a2ui/lit-mcp-stack/server';
+import * as fetchServer from '@saga-a2ui/lit-mcp-stack/server/http';
 import * as localServer from '@saga-a2ui/lit-mcp-stack/server/node';
 import {
   checkPackageDirection,
@@ -59,6 +60,22 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
     expect(
       anyOf(modules, /node_modules\/(react|react-dom|lit|lit-html|@a2ui)\//),
     ).toEqual([]);
+  });
+
+  it('offers Fetch hosting without a listener, a filesystem module or a renderer', async () => {
+    expect(Object.keys(fetchServer).sort()).toEqual([
+      'McpFetchConfigurationError',
+      'createMcpFetchApp',
+    ]);
+    const modules = await bundledModules(
+      '@saga-a2ui/lit-mcp-stack/server/http',
+    );
+    expect(
+      anyOf(modules, /\/packages\/mcp\/src\/server\/http\/fetch-app\.ts$/),
+    ).toHaveLength(1);
+    expect(anyOf(modules, /\/packages\/mcp\/src\/server\/node\//)).toEqual([]);
+    expect(anyOf(modules, /node_modules\/@hono\/node-server\//)).toEqual([]);
+    expect(anyOf(modules, /\/packages\/(lit|react|components)\//)).toEqual([]);
   });
 
   it('exposes exactly the supported names', () => {

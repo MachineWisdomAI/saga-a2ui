@@ -160,6 +160,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
       './faithful-card',
       './faithful-card.css',
       './server',
+      './server/http',
       './server/node',
     ]);
     for (const [subpath, target] of Object.entries(stackExports))
