@@ -55,5 +55,12 @@ export {
   type ReactActions,
   type ReactActionsOptions,
 } from '@saga-a2ui/react/actions';
+// The removable credit, and the host-link seam it uses (`host.links`): no card or Markdown parser.
+// Import its stylesheet from `@saga-a2ui/react-mcp-stack/attribution.css`.
+export {
+  SagaAttribution,
+  type SagaAttributionProps,
+} from '@saga-a2ui/react/attribution';
+export type { HostLinks, LinkOpenOutcome } from '@saga-a2ui/core/host-links';
 export { Action, type ActionBinding } from '@saga-a2ui/core/actions';
 export type { BoundSurface } from '@saga-a2ui/react/a2ui';

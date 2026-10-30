@@ -59,6 +59,29 @@ A server can also declare an operation with no view. Omit `view` from the declar
 
 For a local Node server, the optional [local MCP listener](local-mcp-server.md) handles HTTP transport and request lifetimes while your app supplies its operations.
 
+## Removable credit
+
+An application with its own catalog can credit the framework without a FaithfulCard. `SagaAttribution` is a small line, "Built with saga a2ui", whose name asks the host to open `https://saga-ai.dev/`. Render it where you want it and pass the host's link seam from the actions factory:
+
+```tsx
+import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';
+import '@saga-a2ui/react-mcp-stack/attribution.css';
+
+let links: HostLinks | undefined;
+startA2uiView({
+  // ...
+  actions: (host) => {
+    links = host.links; // asks the host to open a link; ends with the view
+    return undefined;
+  },
+});
+
+// Wherever the application renders its footer:
+<footer><SagaAttribution links={links} /></footer>
+```
+
+To remove the credit, delete the element; there is nothing to configure and no account or payment. Optional `prefix`, `name` and `href` (an absolute `https:` URL) change the wording and destination, and only your own code supplies them. Without `links`, or with a destination that is not acceptable, nothing is clickable and nothing navigates. A host that does not open the link leaves the credit in place with a short message and the destination as text. The component makes no network request of its own and carries no card, Markdown parser or components package. Style it with `.saga-attribution` or the `--saga-attribution-*` tokens documented at the top of the stylesheet. Removing it removes no licence notice or answer-source attribution; those are not part of it. The design is [own-catalog attribution](../blueprints/features/own_catalog_attribution.blueprint.md).
+
 ## React in Ansari Faithful Answers
 
 Ansari Faithful Answers uses the React MCP stack for its answer-card application. The public [destination integration PR](https://github.com/iaser-ai/ansari/pull/323) records a candidate using `@saga-a2ui/react-mcp-stack@0.7.6-rc.1` and React/React DOM `19.3.1`, with clean public-package installation, application checks and browser validation. Its [view source](https://github.com/timeleft--/ansari/blob/e4ded0ec3e39afb33292e311c8fe3a0669c1bb41/apps/ansari-faithful-answers/src/view/main.tsx) uses the stack’s FaithfulCard application entry. This is a concrete application consumer alongside the SDK examples; it does not depend on a generated React starter.

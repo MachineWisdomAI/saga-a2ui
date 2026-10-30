@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     "./actions": "./src/actions/index.ts",
+    "./attribution": "./src/attribution/index.ts",
+    "./attribution.css": "./src/attribution/attribution.css",
     "./faithful-card": "./src/faithful-card/index.ts",
     "./faithful-card.css": "./src/faithful-card/faithful-card.css",
     "./a2ui": "./src/a2ui.ts"
@@ -21,11 +23,11 @@
   "dependencies": {
     "@a2ui/react": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "0.10.0-rc.1",
+    "@saga-a2ui/core": "0.11.0-rc.1",
     "zod": "3.25.76"
   },
   "peerDependencies": {
-    "@saga-a2ui/components": "0.10.0-rc.1",
+    "@saga-a2ui/components": "0.11.0-rc.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -35,7 +37,7 @@
     }
   },
   "devDependencies": {
-    "@saga-a2ui/components": "0.10.0-rc.1",
+    "@saga-a2ui/components": "0.11.0-rc.1",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -45,7 +47,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.10.0-rc.1",
+  "version": "0.11.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

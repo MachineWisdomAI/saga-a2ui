@@ -12,6 +12,7 @@
     "./faithful-card": "./src/faithful-card/index.ts",
     "./content-policy": "./src/content-policy/index.ts",
     "./server": "./src/server/index.ts",
+    "./attribution.css": "./src/attribution.css",
     "./faithful-card.css": "./src/faithful-card/faithful-card.css",
     "./server/http": "./src/server/http/index.ts",
     "./server/node": "./src/server/node/index.ts"
@@ -26,10 +27,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "2.0.3",
-    "@saga-a2ui/components": "0.10.0-rc.1",
-    "@saga-a2ui/core": "0.10.0-rc.1",
-    "@saga-a2ui/mcp": "0.10.0-rc.1",
-    "@saga-a2ui/react": "0.10.0-rc.1",
+    "@saga-a2ui/components": "0.11.0-rc.1",
+    "@saga-a2ui/core": "0.11.0-rc.1",
+    "@saga-a2ui/mcp": "0.11.0-rc.1",
+    "@saga-a2ui/react": "0.11.0-rc.1",
     "zod": "4.6.7"
   },
   "peerDependencies": {
@@ -47,7 +48,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.10.0-rc.1",
+  "version": "0.11.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },
