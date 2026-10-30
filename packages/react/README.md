@@ -1,6 +1,6 @@
 # @saga-a2ui/react
 
-React renderer integration. Entry points: `/a2ui`, `/actions`, `/faithful-card` (the card, `createFaithfulCardView`, `openFaithfulCardSurface`, `useHostLink`), `/faithful-card.css`. React and React DOM peers are both exactly 19.3.1. Components is optional for own-catalog rendering and required for FaithfulCard.
+React renderer integration. Entry points: `/a2ui`, `/actions`, `/faithful-card` (the card, `createFaithfulCardView`, `openFaithfulCardSurface`, `useHostLink`), `/faithful-card.css`, `/attribution` (the removable `SagaAttribution` credit, no card needed) and `/attribution.css`. React and React DOM peers are both exactly 19.3.1. Components is optional for own-catalog rendering and required for FaithfulCard.
 
 Requires Node >=22.12.0 and a TypeScript-aware bundler; exports are TypeScript source. Apache-2.0, with dependency licenses retained separately.
 

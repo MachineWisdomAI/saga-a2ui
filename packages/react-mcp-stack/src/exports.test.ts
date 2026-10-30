@@ -88,6 +88,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'CommonSchemas',
       'ListApi',
       'RowApi',
+      'SagaAttribution',
       'StartError',
       'StartFailure',
       'createComponentImplementation',
