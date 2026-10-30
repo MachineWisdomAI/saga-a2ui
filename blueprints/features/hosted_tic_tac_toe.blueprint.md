@@ -11,8 +11,9 @@ date_added: 2026-10-30
 ## Status
 
 - Design: approved by human review on 30 October 2026 at [revision `eb2f0c2cd3cf9216c5b3dbb17d09830283863c05`](https://github.com/MachineWisdomAI/saga-a2ui/blob/eb2f0c2cd3cf9216c5b3dbb17d09830283863c05/blueprints/features/hosted_tic_tac_toe.blueprint.md), including its referenced diagrams. Approval preserves the open upstream attribution/interface and canonical-artwork decisions below; it does not approve those designs or authorize deployment.
-- Implementation: not started for the hosted application. The existing local game and tutorial remain their own implemented scope.
-- Acceptance: package consumption, deployment, installation and actual-host branding are pending. Shared own-catalog attribution and final theme artwork remain prerequisite outputs; this design does not approve their interfaces or a new mark geometry.
+- Implementation: not started for the hosted application. The existing local game and tutorial remain their own implemented scope. Landed prerequisites: the shared Fetch entry at [`f1fbac0`](https://github.com/MachineWisdomAI/saga-a2ui/commit/f1fbac0882302cbf024100b462e08abd06a5bdc1) and the selected SAGA dragon light/dark theme assets, bundled unchanged as the default ChatGPT plugin branding at [`1660855`](https://github.com/MachineWisdomAI/saga-a2ui/commit/1660855a2bd643a3161d86f49d090c6cb43682e5) ([provenance](../../assets/brand/plugin/README.md)).
+- Publish preparation: at `f1fbac0`, the existing `saga publish check` and `prepare` commands, run on the fixture application through the test network seam with its ChatGPT `assets` removed, produced a `ready` ChatGPT package (`package.assets` pass; `plugin.json` references the four dragon files as `composerIcon`, `composerIconDark`, `logo` and `logoDark`, and their bytes are the valid PNG files of the recorded digests). With `claude.connector.icon` pointing at the dragon logo, the Claude connector dossier was also `ready` (`package.images` pass). Neither run needed a code change, so no reusable preparation gap is recorded. This used a fixture endpoint, not the game's: preparing the game's own release input waits for its deployed endpoint, and preparation alone establishes no installation, web distribution or actual connector icon.
+- Acceptance: package consumption, deployment, installation and actual-host branding are pending. Shared own-catalog attribution, the hosted application and the host checks remain pending.
 
 ## Problem and current behavior
 
@@ -68,7 +69,7 @@ Establish the shared Fetch entry, compatible own-catalog attribution and approve
 
 ## Open decisions
 
-The shared attribution owner must settle its own-catalog interface and how the agreed credit/link are supplied through trusted configuration. The brand owner must select the canonical geometry before final theme assets. Those upstream design decisions remain open; the hosted application consumes their approved outputs and does not settle them here. Actual connector icon behavior remains a host verification requirement, not an architecture decision already proven.
+The shared attribution owner must settle its own-catalog interface and how the agreed credit/link are supplied through trusted configuration; that decision remains open, and the hosted application consumes its approved output and does not settle it here. The canonical geometry is selected: the founder's dragon mark, with the light/dark theme assets noted in Status. Actual connector icon behavior remains a host verification requirement, not an architecture decision already proven.
 
 ## References
 
