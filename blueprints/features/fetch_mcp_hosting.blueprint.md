@@ -11,7 +11,7 @@ date_added: 2026-10-30
 ## Status
 
 - Design: approved by human review on 30 October 2026 at [revision `eb2f0c2cd3cf9216c5b3dbb17d09830283863c05`](https://github.com/MachineWisdomAI/saga-a2ui/blob/eb2f0c2cd3cf9216c5b3dbb17d09830283863c05/blueprints/features/fetch_mcp_hosting.blueprint.md), including its referenced diagrams. This records design approval, not implementation or release acceptance.
-- Implementation: Partial. The shared Fetch entry (`createMcpFetchApp`, [guide](../../docs/fetch-mcp-hosting.md)) is a candidate in the implementation pull request, which qualifies it from source and packed packages in the `workerd` runtime and behind a Node listener; the landed commit is recorded in a status-only follow-up after merge. Existing operation registration and request-lifetime attachment remain implemented. The hosted game's consumption is separate scope.
+- Implementation: Partial. The shared Fetch entry (`createMcpFetchApp`, [guide](../../docs/fetch-mcp-hosting.md)) landed in [`f1fbac0882302cbf024100b462e08abd06a5bdc1`](https://github.com/MachineWisdomAI/saga-a2ui/commit/f1fbac0882302cbf024100b462e08abd06a5bdc1) and is qualified from source and packed packages in the `workerd` runtime and behind a Node listener. Existing operation registration and request-lifetime attachment remain implemented. The hosted game's consumption is separate scope.
 - Acceptance: Package publication, a published-registry installation and any deployed endpoint remain open. This design does not establish a deployed endpoint.
 
 ## Problem and current behavior
