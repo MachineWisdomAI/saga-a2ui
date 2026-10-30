@@ -2,7 +2,7 @@
 
 `createMcpFetchApp` serves an application's MCP operations through a standard `fetch(Request)` function. Use it in a Cloudflare Worker, or place the same function behind a Node listener you choose. The SDK admits requests by Host and Origin, hands them to the official MCP handler, and ends each request's lifetime when its server closes. Your application supplies the operations, rendered view, stored data and settings.
 
-The helper is introduced in the next `@saga-a2ui/mcp` release after `0.9.0-rc.1`. Check [public installation](public-install.md) for registry availability before choosing a version. Import it from your stack's `/server/http` entry; the Lit and React stacks offer the same function. A lower-level integration can import it from `@saga-a2ui/mcp/server/http`.
+The helper is introduced in `0.10.0-rc.1`. Check [public installation](public-install.md) for registry availability before choosing a version. Import it from your stack's `/server/http` entry; the Lit and React stacks offer the same function. A lower-level integration can import it from `@saga-a2ui/mcp/server/http`.
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';
