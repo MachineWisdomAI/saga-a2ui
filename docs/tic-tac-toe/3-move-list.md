@@ -174,7 +174,9 @@ const Shown: ReactCatalogComponent = createComponentImplementation(
  * game ends and beside a recoverable error. The application supplies it with the host's way to
  * open a link; deleting this component and the layout's `credit` entry removes the credit.
  */
-function createCredit(links: () => HostLinks | undefined): ReactCatalogComponent {
+function createCredit(
+  links: () => HostLinks | undefined,
+): ReactCatalogComponent {
   return createComponentImplementation(
     { name: 'Credit', schema: z.object({}).strict() },
     () => (
