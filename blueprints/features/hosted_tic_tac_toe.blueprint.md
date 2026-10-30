@@ -1,6 +1,6 @@
 ---
 feature_name: hosted_tic_tac_toe
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [fetch_mcp_hosting, getting_started_tracks, host_publication]
 date_added: 2026-10-30
@@ -10,7 +10,7 @@ date_added: 2026-10-30
 
 ## Status
 
-- Design: draft awaiting human approval.
+- Design: approved by human review on 30 October 2026 at [revision `eb2f0c2cd3cf9216c5b3dbb17d09830283863c05`](https://github.com/MachineWisdomAI/saga-a2ui/blob/eb2f0c2cd3cf9216c5b3dbb17d09830283863c05/blueprints/features/hosted_tic_tac_toe.blueprint.md), including its referenced diagrams. Approval preserves the open upstream attribution/interface and canonical-artwork decisions below; it does not approve those designs or authorize deployment.
 - Implementation: not started for the hosted application. The existing local game and tutorial remain their own implemented scope.
 - Acceptance: package consumption, deployment, installation and actual-host branding are pending. Shared own-catalog attribution and final theme artwork remain prerequisite outputs; this design does not approve their interfaces or a new mark geometry.
 
