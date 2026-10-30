@@ -13,6 +13,7 @@
     "./content-policy": "./src/content-policy/index.ts",
     "./server": "./src/server/index.ts",
     "./faithful-card.css": "./src/faithful-card/faithful-card.css",
+    "./server/http": "./src/server/http/index.ts",
     "./server/node": "./src/server/node/index.ts"
   },
   "files": [

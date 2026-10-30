@@ -8,6 +8,7 @@
     "./server": "./src/server/index.ts",
     "./view": "./src/view/index.ts",
     "./policy": "./src/policy/index.ts",
+    "./server/http": "./src/server/http/index.ts",
     "./server/node": "./src/server/node/index.ts"
   },
   "files": [

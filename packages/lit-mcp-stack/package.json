@@ -10,6 +10,7 @@
     "./faithful-card": "./src/faithful-card/index.ts",
     "./content-policy": "./src/content-policy/index.ts",
     "./server": "./src/server/index.ts",
+    "./server/http": "./src/server/http/index.ts",
     "./server/node": "./src/server/node/index.ts"
   },
   "files": [
