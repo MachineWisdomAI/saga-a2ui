@@ -32,9 +32,15 @@ credential; reviewer credentials, authentication and publisher verification stay
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
 `listing` and `assets` (with `review` and `publication`) belong to the ChatGPT target, and a `claude`
-section belongs to the Claude target. Each target needs only its own: a release input for Claude alone
-has no `listing`, and the `chatgpt` target says so and prepares nothing when `listing` or `assets` is
-missing. `claude` is the one section whose missing fields are findings instead of a parse error
+section belongs to the Claude target. The ChatGPT target requires `listing`. Branding is optional:
+omitted `assets.logo` and `assets.composerIcon` use the bundled SAGA A2UI seahorse. Supply both paths
+to use your application's own branding; optional `logoDark` and `composerIconDark` supply dark-theme
+variants. Supplied files are preserved, and an invalid supplied file remains an error. These defaults
+affect newly prepared ChatGPT packages; they do not update an installed App or establish how a host
+renders an existing connection. Claude submissions still use their own supplied connector icon.
+The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
+`git lfs pull --include='assets/brand/plugin-icon.svg'` before preparing a default-branded package.
+`claude` is the one section whose missing fields are findings instead of a parse error
 (below), so a maintainer sees every missing piece at once.
 
 ## What is produced (ChatGPT)
@@ -152,14 +158,16 @@ publisher submits by hand in the host's documented flow
 [Claude](https://claude.com/docs/connectors/building/submission), portal
 <https://claude.ai/directory/manage>).
 
-```sh
-saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
-saga publish handoff status              --handoff DIR [--prepared ./publication-now]
-saga publish handoff attempt             --handoff DIR --prepared ./publication-now
-saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
-saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
-saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
-saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
+
+```text
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
+npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
+npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the

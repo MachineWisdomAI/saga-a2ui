@@ -20,13 +20,17 @@ import {
   templateFiles,
 } from './starter-template.js';
 
-// The setup guide (docs/getting-started.md) and its generated recipes
-// (docs/attach-to-existing-backend.md) as a developer uses them: every command a reader is told to
-// run, every snippet they are told to copy and every name they are told to install is checked
-// against the tool, template or package it names. Prose is not parsed for meaning; what is checked
-// is what a reader would type, import or follow.
+// The setup guide (docs/getting-started.md), the Lit track it leads to (docs/build-notes-with-lit.md)
+// and the generated recipes (docs/attach-to-existing-backend.md) as a developer uses them: every
+// command a reader is told to run, every snippet they are told to copy and every name they are told
+// to install is checked against the tool, template or package it names. Prose is not parsed for
+// meaning; what is checked is what a reader would type, import or follow. The setup guide keeps what
+// every app needs; the Lit composition, evidence and actions overview moved to the Lit track, and
+// its assertions moved with it. The React track is checked by tic-tac-toe-document.test.ts.
 
 const GUIDE = 'docs/getting-started.md';
+const LIT_TRACK = 'docs/build-notes-with-lit.md';
+const REACT_TRACK = 'docs/build-tic-tac-toe-with-react.md';
 const read = (file: string): string =>
   fs.readFileSync(path.join(repoRoot, file), 'utf8');
 /** The guide only runs `init`; a demo build here would be a defect, so asking for one fails the test. */
@@ -77,9 +81,12 @@ const commandsOf = (markdown: string, kind: string): string[] =>
     .filter((line) => line !== '');
 
 const guide = read(GUIDE);
+const litTrack = read(LIT_TRACK);
 const recipes = read(RECIPES_FILE);
 const documents: Record<string, string> = {
   [GUIDE]: guide,
+  [LIT_TRACK]: litTrack,
+  [REACT_TRACK]: read(REACT_TRACK),
   [RECIPES_FILE]: recipes,
 };
 
@@ -170,12 +177,17 @@ describe('the generated existing-backend recipes', () => {
       recipes.indexOf('<!-- pairs -->'),
       recipes.indexOf('<!-- /pairs -->'),
     );
-    const rows = table.split('\n').filter((line) => /^\| `lit-mcp`/.test(line));
+    const rows = table
+      .split('\n')
+      .filter((line) => /^\| `[a-z]+-mcp` \|/.test(line));
     const offered = rows
       .filter((row) => /\| offered \|$/.test(row))
-      .map((row) => row.split('|')[2]?.trim());
+      .map((row) => {
+        const [, stack, server] = row.split('|').map((cell) => cell.trim());
+        return `${stack} on ${server}`;
+      });
     expect(offered).toEqual(
-      SUPPORTED_PAIRS.map((pair) => `\`${pair.server}\``),
+      SUPPORTED_PAIRS.map((pair) => `\`${pair.stack}\` on \`${pair.server}\``),
     );
     expect(rows).toHaveLength(QUALIFIED_STARTERS.length);
   });
@@ -272,7 +284,7 @@ describe('the commands the guide tells a reader to type', () => {
     expect(commandsOf(guide, 'repository').length).toBeGreaterThan(0);
   });
 
-  it('run in a created project only scripts that every qualified starter has, in the order `saga init` prints them', async () => {
+  it('run in a created project only scripts that every qualified starter has, after installing its matched candidate dependencies', async () => {
     const shown = commandsOf(guide, 'project');
     expect(shown.length).toBeGreaterThan(0);
     for (const name of QUALIFIED_STARTERS) {
@@ -307,13 +319,15 @@ describe('the commands the guide tells a reader to type', () => {
       .filter((line) => /^ {2}(cd |npm )/.test(line))
       .map((line) => line.trim());
     expect(shown.filter((line) => line !== 'npm run typecheck')).toEqual(
-      printed.map((line) => (line.startsWith('cd ') ? 'cd my-app' : line)),
+      printed.filter(
+        (line) => line !== 'npm install' && !line.startsWith('cd '),
+      ),
     );
   });
 
   it('run in the demo download only its declared scripts, without requiring a build', () => {
     const scripts = DOWNLOAD_SCRIPTS;
-    const shown = commandsOf(guide, 'demo');
+    const shown = commandsOf(litTrack, 'demo');
     expect(shown.length).toBeGreaterThan(0);
     for (const line of shown) {
       const script = /^npm (?:run )?(start|[\w:.-]+)$/.exec(line)?.[1];
@@ -379,9 +393,9 @@ describe('the names and imports the guide uses', () => {
         /from ['"]@a2ui\/react|from ['"]@a2ui\/web_core.*react/i,
       );
     }
-    const reactSection = guide.slice(
-      guide.indexOf('<!-- react -->'),
-      guide.indexOf('<!-- /react -->'),
+    const reactSection = litTrack.slice(
+      litTrack.indexOf('<!-- react -->'),
+      litTrack.indexOf('<!-- /react -->'),
     );
     expect(reactSection).toContain('`@saga-a2ui/react/a2ui`');
     expect(reactSection).not.toMatch(/import .* from '@a2ui\/react'/);
@@ -426,42 +440,113 @@ describe('links in the guide and the recipes', () => {
   });
 });
 
-describe('what the guide must explain', () => {
-  const headings = guide
+const headingsOf = (markdown: string): string[] =>
+  markdown
     .split('\n')
     .filter((line) => /^#{2,3} /.test(line))
     .map((line) => line.replace(/^#+ /, ''));
 
-  it('has a section for each part of the setup the issue names', () => {
+describe('what the setup guide must explain', () => {
+  const headings = headingsOf(guide);
+
+  it('has a section for each part of the setup that every app needs', () => {
     for (const required of [
+      'Choose a track',
+      'Prerequisites',
+      'Install a published stack',
       'Which packages do what',
       'Component, definition, template and instance',
-      'Start from the demo',
       'Create a new project',
+      'HTTP defaults',
+      'Unqualified pairs are refused',
       'Attach to an existing backend',
-      'Content policy',
-      'Identity and the evidence behind it',
-      'Actions',
-      'What is implemented and what is not',
-      'Friction recorded while writing this guide',
+      'Troubleshooting setup',
+      'Where to go next',
     ]) {
       expect(headings, required).toContain(required);
     }
   });
 
-  it('keeps Lynx as history, with no setup claim, and does not route another renderer through the Lit lifecycle', () => {
+  it('keeps only what every app needs: the Lit composition, evidence and actions overview are in the Lit track', () => {
+    for (const moved of [
+      'Start from the demo',
+      'Compose a view with a stack',
+      'Content policy',
+      'Identity and the evidence behind it',
+      'Actions',
+      'What is implemented and what is not',
+    ]) {
+      expect(headings, `${moved} is not in the setup guide`).not.toContain(
+        moved,
+      );
+      expect(headingsOf(litTrack), `${moved} is in the Lit track`).toContain(
+        moved,
+      );
+    }
+    expect(guide).not.toContain('startA2uiView({');
+  });
+
+  it('links both application tracks and their setup instructions', () => {
+    const choice = guide.slice(
+      guide.indexOf('## Choose a track'),
+      guide.indexOf('## Prerequisites'),
+    );
+    expect(choice).toContain('(build-tic-tac-toe-with-react.md)');
+    expect(choice).toContain('(build-notes-with-lit.md)');
+    expect(choice).toContain('(actions.md)');
+    expect(read(REACT_TRACK)).toContain('(tic-tac-toe/1-first-card.md)');
+    expect(litTrack).toContain('(getting-started.md)');
+  });
+});
+
+describe('what the Lit track must explain', () => {
+  const headings = headingsOf(litTrack);
+
+  it('has a section for each part of the Lit composition and actions overview', () => {
+    for (const required of [
+      'Start from the demo',
+      'Compose a view with a stack',
+      'Content policy',
+      'Identity and the evidence behind it',
+      'Actions',
+      'What is implemented and what is not',
+      'Where to go next',
+    ]) {
+      expect(headings, required).toContain(required);
+    }
+  });
+
+  it('leads into the action guide, as the next step of the track', () => {
+    expect(litTrack).toContain('(actions.md)');
+    const next = litTrack.slice(litTrack.indexOf('## Where to go next'));
+    expect(next).toContain('(actions.md)');
+    expect(next).toContain('(getting-started.md)');
+    expect(next).toContain('(build-tic-tac-toe-with-react.md)');
+  });
+
+  it('points to the setup guide and the other track from its opening', () => {
+    const opening = litTrack.slice(0, litTrack.indexOf('\n## '));
+    expect(opening).toContain('(getting-started.md)');
+    expect(opening).toContain('(build-tic-tac-toe-with-react.md)');
+  });
+});
+
+describe('the evidence rules in the guides', () => {
+  it('keep Lynx as history, with no setup claim, and does not route another renderer through the Lit lifecycle', () => {
     // Prose only: the one command that installs the retained fixture's own lockfile is a command, not a claim.
-    const prose = guide.replace(/```[\s\S]*?```/g, '');
-    const lynx = prose.split('\n').filter((line) => /lynx/i.test(line));
-    expect(lynx.length).toBeGreaterThan(0);
-    for (const line of lynx)
-      expect(line).toMatch(/retired|history|historical/i);
-    expect(guide).toMatch(
+    for (const document of [guide, litTrack]) {
+      const prose = document.replace(/```[\s\S]*?```/g, '');
+      const lynx = prose.split('\n').filter((line) => /lynx/i.test(line));
+      expect(lynx.length).toBeGreaterThan(0);
+      for (const line of lynx)
+        expect(line).toMatch(/retired|history|historical/i);
+    }
+    expect(litTrack).toMatch(
       /not a Lit lifecycle|no Lit-specific lifecycle|Lit-specific lifecycle/,
     );
   });
 
-  it('quotes identifiers the notes example and the starter really contain', () => {
+  it('quote identifiers the notes example and the starter really contain', () => {
     const files = {
       'examples/pack1-consumer/src/notes-surface.ts': [
         "id: 'row-archive'",
@@ -493,15 +578,17 @@ describe('what the guide must explain', () => {
           `${file} contains ${needle}`,
         ).toContain(needle.replace(/\s+/g, ''));
     }
+    // What stayed in the setup guide, and what moved with the Lit material.
     for (const quoted of [
       'row-archive',
       "{ componentId: 'note-row', path: '/notes' }",
       '/status/mcp',
       '/account/mcp',
-      'CLOSED_VIEW_CSP',
-      'identityOf',
     ]) {
       expect(guide, quoted).toContain(quoted);
+    }
+    for (const quoted of ['CLOSED_VIEW_CSP', 'identityOf']) {
+      expect(litTrack, quoted).toContain(quoted);
     }
     expect(read('templates/lit-node/server/listener.ts')).toContain(
       "'/status/mcp'",
@@ -512,7 +599,7 @@ describe('what the guide must explain', () => {
   });
 
   describe('the quoted stack composition', () => {
-    const composition = blocks(guide).find((block) =>
+    const composition = blocks(litTrack).find((block) =>
       block.lines.some((line) => line.includes('startA2uiView({')),
     );
     const significant = (lines: readonly string[]): string[] =>
@@ -593,6 +680,8 @@ describe('what the guide must explain', () => {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
     expect(guide).toContain('seven-package release set');
+    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.8.1-rc.1');
+    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.8.0-rc.1');
     expect(guide).toContain('public-install.md');
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(

@@ -15,6 +15,7 @@ import {
   STATUS_TOOL,
   StatusOutputSchema,
   TEXT,
+  VIEW_MARKER,
 } from '../src/contract.js';
 import { identityOf, type AccountIdentity } from './identity.js';
 
@@ -37,7 +38,7 @@ export function prepareStarterView(
   html: unknown,
   filename = 'index.html',
 ): OperationView {
-  if (typeof html !== 'string' || !html.includes('<starter-app'))
+  if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
     throw new ViewArtifactMissing();
   return Object.freeze({
     uri: viewUriForHtml(html, filename),

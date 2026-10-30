@@ -21,13 +21,17 @@ Existing authentication, authorization and request isolation remain required, as
 
 ## Rejected proposal retained for reference
 
-The remaining text and diagram preserve the rejected design; their proposed requirements are not a current implementation contract.
+The proposal tried to solve a specific hypothetical case: Alice's view remains mounted while the host switches to Bob, and Alice's delayed result arrives afterward. Its proposed retention timer and focus/resume revalidation would limit what that old view could keep showing. Those mechanisms would also add a generic session lifecycle without evidence that an actual supported host exposed the workflow or the signals it required.
 
-## Problem and current behavior
+The approved successor instead separates the problems the application can observe: authenticating each request, correlating a read, retiring a changed selection, ending a view and bounding work that may never settle. A server still rejects unauthorized access independently of whether an old view is visible. This distinction is why rejecting the proposal did not remove authentication or cleanup obligations.
+
+The remaining text and diagram preserve the rejected design at the time of review. Its references to “current” or “missing” behavior describe that historical baseline, and its proposed requirements are not a current implementation contract. The [current lifetime Blueprint](request_view_lifetimes.blueprint.md) describes the implemented Lit/React path and its acceptance limits.
+
+## Problem and behavior at proposal time
 
 A listener can change accounts or episodes while a subscription read, Play request or media acquisition is still pending. Play is the app-only operation for starting playback of a selected episode; the [authorized playback design](authorized_playback.blueprint.md) defines it. The old response must never bring back the previous account's rows or audio. When the view cannot establish a current sign-in, it must clear private state before presenting a recovery action.
 
-The application already has two useful pieces. [`connectSubscriptionsView`](../../apps/lit-host/src/mcp/subscriptions-view.ts) pins an opaque sign-in label, correlates app-initiated reads and rejects late results after invalidation. [`connectPlaybackView`](../../apps/lit-host/src/playback/playback-view.ts) retires playback generations, aborts media acquisition and stops its player on replacement, failure and teardown.
+The application already has two useful pieces. [`connectSubscriptionsView`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/subscriptions-view.ts) pins an opaque sign-in label, correlates app-initiated reads and rejects late results after invalidation. [`connectPlaybackView`](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/playback/playback-view.ts) retires playback generations, aborts media acquisition and stops its player on replacement, failure and teardown.
 
 What is missing is whole-request coverage. The subscription and playback entry points currently build separate resources; they do not yet establish a complete account-to-selection-to-player lifetime. The subscription read has a deadline, but that does not establish a single deadline across identity verification, authorization, handler and projection work.
 
@@ -112,7 +116,7 @@ The implementation must choose and document the finite private-state retention i
 
 - [Authorized playback design](authorized_playback.blueprint.md)
 - [Content safety levels](content_safety_levels.blueprint.md)
-- [Subscription view and correlated reads](../../apps/lit-host/src/mcp/subscriptions-view.ts)
-- [Playback view and player lifetime](../../apps/lit-host/src/playback/playback-view.ts)
-- [Application listener and transport ownership](../../apps/lit-host/src/mcp/listener.ts)
+- [Subscription view and correlated reads](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/subscriptions-view.ts)
+- [Playback view and player lifetime](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/playback/playback-view.ts)
+- [Application listener and transport ownership](https://github.com/MachineWisdomAI/saga-a2ui/blob/ff0f4da45c40cf2581d7f3198a2fceb04aba593b/apps/lit-host/src/mcp/listener.ts)
 - [Coding standards](../../CODING_STANDARDS.md)

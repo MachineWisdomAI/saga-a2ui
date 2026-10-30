@@ -1,0 +1,55 @@
+diff --git a/src/catalog.tsx b/src/catalog.tsx
+--- a/src/catalog.tsx
++++ b/src/catalog.tsx
+@@ -95,6 +95,18 @@
+   ),
+ );
+ 
++/** The moves so far, one per line, in the order they were played. */
++const MoveList: ReactCatalogComponent = createComponentImplementation(
++  { ...ListApi, name: 'MoveList' },
++  ({ props, buildChild }) => (
++    <ol className="moves" aria-label="Moves so far" style={{ listStyle: 'none', padding: 0 }}>
++      {childrenOf(buildChild, props.children).map((move, at) => (
++        <li key={at}>{move}</li>
++      ))}
++    </ol>
++  ),
++);
++
+ const SquareFaceApi = {
+   name: 'SquareFace',
+   schema: z
+@@ -143,6 +155,7 @@
+   Column,
+   Row,
+   Board,
++  MoveList,
+   Line,
+   SquareFace,
+   Shown,
+diff --git a/src/surface.ts b/src/surface.ts
+--- a/src/surface.ts
++++ b/src/surface.ts
+@@ -46,7 +46,7 @@
+     component: 'Column',
+     bind: {},
+     props: {
+-      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
++      children: ['status', 'send-hint', 'board', 'controls', 'game-details', 'history'],
+     },
+   },
+   components: [
+@@ -113,6 +113,12 @@
+       when: { path: '/canCheck' },
+       child: CHECK_ID,
+     },
++    {
++      id: 'history',
++      component: 'MoveList',
++      children: { componentId: 'move', path: '/history' },
++    },
++    { id: 'move', component: 'Line', kind: 'body', text: { path: 'text' } },
+     { id: CHECK_ID, component: 'ActionButton', child: 'check-label' },
+     {
+       id: 'check-label',

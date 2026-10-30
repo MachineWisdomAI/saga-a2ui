@@ -421,6 +421,10 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
     write('apps/host/src/main.ts', BAD);
     write('apps/host/src/view-main.ts', 'export {};\n');
     write('docs/2026-10-19_observations_v1.md', `\`\`\`ts\n${BAD}\`\`\`\n`);
+    write(
+      'docs/2026-10-20_teaching_v1.md',
+      `\`\`\`ts before\n${BAD}\`\`\`\n\n\`\`\`ts historical\n${BAD}\`\`\`\n`,
+    );
     write('docs/guide.md', `\`\`\`ts\n${BAD}\`\`\`\n`);
     write('node_modules/x/src/index.ts', BAD);
   });
@@ -437,19 +441,22 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
     { glob: 'apps/host/src/main.ts', reason: 'host side' },
     { glob: 'apps/host/e2e/**', reason: 'fixtures send wire messages' },
     { glob: '**/*.test.ts', reason: 'tests' },
-    { glob: 'docs/2026-*', reason: 'historical' },
   ];
 
-  it('leaves out an excluded fixture, a test file, a host-side module and a dated observation', () => {
+  it('leaves out an excluded fixture, a test file and a host-side module, and scans a dated filename like any other', () => {
     const report = scan(root, include, exclude);
     expect(report.files).toEqual([
       'apps/host/src/view-main.ts',
+      'docs/2026-10-19_observations_v1.md',
+      'docs/2026-10-20_teaching_v1.md',
       'docs/guide.md',
       'templates/lit-a/server/listener.ts',
       'templates/lit-a/src/view.ts',
     ]);
-    // What remains is judged: the view, the server, the guide's fence, and nothing excluded.
+    // What remains is judged: the dated guide's fence, the view, the server and the guide's fence.
+    // The dated file whose only fences say `before` or `historical` is scanned and reports nothing.
     expect(report.hits.map((hit) => hit.file)).toEqual([
+      'docs/2026-10-19_observations_v1.md',
       'docs/guide.md',
       'templates/lit-a/server/listener.ts',
       'templates/lit-a/src/view.ts',
@@ -511,7 +518,10 @@ describe('what is scanned is explicit and fails loudly when it is wrong', () => 
 
   it('reports the unexempted hits in its text report', () => {
     const text = formatReport(scan(root, include, exclude));
-    expect(text).toContain('files scanned: 4');
+    expect(text).toContain('files scanned: 6');
+    expect(text).toContain(
+      'HIT docs/2026-10-19_observations_v1.md:2 [integration-import]',
+    );
     expect(text).toContain(
       'HIT templates/lit-a/src/view.ts:1 [integration-import]',
     );
@@ -546,15 +556,19 @@ describe('the repository consumers hold application meaning only', () => {
       ).not.toThrow();
     expect(
       report.files.filter((file) =>
-        /(^apps\/lit-host\/(e2e|src\/saga-panel)\/|^apps\/lynx-fixture\/|\.test\.tsx?$|^docs\/2026-|^apps\/lit-host\/src\/main\.ts$)/.test(
+        /(^apps\/lit-host\/(e2e|src\/saga-panel)\/|^apps\/lynx-fixture\/|\.test\.tsx?$|^apps\/lit-host\/src\/main\.ts$)/.test(
           file,
         ),
       ),
     ).toEqual([]);
     expect(EXCLUDE.every((entry) => entry.reason.length > 20)).toBe(true);
+    // No documentation is excluded by its date or edition name.
+    expect(EXCLUDE.filter((entry) => /docs\/|\d{4}-/.test(entry.glob))).toEqual(
+      [],
+    );
   });
 
-  it('asserts all five maintained templates are present and scanned', () => {
+  it('asserts all six maintained templates are present and scanned', () => {
     const directories = fs
       .readdirSync(path.join(repoRoot, 'templates'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -585,6 +599,7 @@ describe('the repository consumers hold application meaning only', () => {
       'examples/answer-consumer/server/answer-server.ts',
       'examples/pack1-consumer/server/notes-server.ts',
       'examples/react-card-consumer/server/card-server.ts',
+      'examples/tic-tac-toe/server/operations.ts',
       'demo/lit-node/server/demo-server.ts',
       'apps/lit-host/src/mcp/server.ts',
       'apps/lit-host/src/playback/playback-server.ts',

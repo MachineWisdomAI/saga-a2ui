@@ -1,0 +1,35 @@
+{
+  "name": "saga-tic-tac-toe-example",
+  "private": true,
+  "description": "A React tic-tac-toe game built with the SAGA MCP stack.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build:view": "vite build",
+    "build:server": "vite build --config vite.server.config.ts",
+    "build": "npm run build:view && npm run build:server",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
+    "start": "node dist/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7",
+    "@saga-a2ui/react-mcp-stack": "0.9.0-rc.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vite-plugin-singlefile": "2.3.3"
+  },
+  "overrides": {
+    "@a2ui/markdown-it": "0.2.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

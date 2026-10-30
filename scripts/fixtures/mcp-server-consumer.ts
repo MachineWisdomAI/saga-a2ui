@@ -3,6 +3,7 @@ import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   attachRequestLifetime,
   createServerBudgets,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
   type OperationView,
@@ -43,6 +44,61 @@ export function createStatusServer(
         unavailable: 'Unavailable.',
         invalidOutput: 'Invalid output.',
       },
+      handle: () => ({
+        kind: 'record',
+        record: { status: 'running' as const },
+      }),
+      project: (record) => ({
+        text: 'The service is running.',
+        data: { status: record.status },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+// The same operation with no view: a data operation that keeps every execution guarantee, public and
+// protected. Nothing here names the MCP Apps server API; the registration stays inside the package.
+export function createDataServer(lifetime: RequestLifetime): McpServer {
+  const server = new McpServer({ name: 'data', version: '0.0.0' });
+  const failures = {
+    absent: 'No status.',
+    unavailable: 'Unavailable.',
+    invalidOutput: 'Invalid output.',
+  };
+  registerPublicOperation(
+    server,
+    {
+      name: 'read_status',
+      title: 'Read the service status',
+      description: 'Returns whether the service is running.',
+      annotations: { readOnlyHint: true },
+      input: z.strictObject({}),
+      output: StatusOutput,
+      failures,
+      handle: () => ({
+        kind: 'record',
+        record: { status: 'running' as const },
+      }),
+      project: (record) => ({
+        text: 'The service is running.',
+        data: { status: record.status },
+      }),
+    },
+    { lifetime },
+  );
+  registerProtectedOperation(
+    server,
+    {
+      name: 'read_my_status',
+      title: 'Read my service status',
+      description: 'Returns the status for the signed-in user.',
+      annotations: { readOnlyHint: true },
+      input: z.strictObject({}),
+      output: StatusOutput,
+      failures: { ...failures, signInRequired: 'Sign in.' },
+      identity: (authInfo) =>
+        authInfo === undefined ? undefined : { clientId: authInfo.clientId },
       handle: () => ({
         kind: 'record',
         record: { status: 'running' as const },
