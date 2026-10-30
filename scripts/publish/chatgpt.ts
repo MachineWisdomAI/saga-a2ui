@@ -158,6 +158,23 @@ const json = (value: unknown): Buffer =>
 const assetEntryPath = (source: string): string =>
   `assets/${path.basename(source)}`;
 
+/**
+ * SAGA's own dragon artwork for the four branding fields, from `assets/brand/plugin/` (see its
+ * README for provenance). A composer icon is the transparent mark, which sits on the host's own
+ * surface; a logo is the mark on a solid tile, which stands on any listing background. The
+ * `Dark` files are for dark host surfaces.
+ */
+const BUNDLED_BRANDING = {
+  composerIcon: { file: 'composer-icon-light.png' },
+  composerIconDark: { file: 'composer-icon-dark.png' },
+  logo: { file: 'logo-light.png' },
+  logoDark: { file: 'logo-dark.png' },
+} as const;
+
+/** Where a bundled file is stored in the package; apart from `assets/<name>`, so it cannot collide with an application's file. */
+const bundledEntryPath = (field: keyof typeof BUNDLED_BRANDING): string =>
+  `assets/saga-a2ui/${BUNDLED_BRANDING[field].file}`;
+
 export interface AssembledPackage {
   readonly entries: readonly ZipEntry[];
   /** Supplied or bundled assets that could not be read, with the reason. */
@@ -204,23 +221,40 @@ export function assemblePackage(
   }
   const reference = (source: string | undefined): string | undefined =>
     source === undefined ? undefined : `./${assetEntryPath(source)}`;
-  const defaultIcon = 'assets/saga-a2ui/icon.svg';
-  if (
-    assetFields.logo === undefined ||
-    assetFields.composerIcon === undefined
-  ) {
+  // SAGA's dragon fills a field the application left out. A dark default follows its light
+  // counterpart: it is used only when that light field is defaulted too, so an application's own
+  // light branding is never paired with SAGA's dark artwork.
+  const defaulted = new Set<keyof typeof BUNDLED_BRANDING>();
+  if (assetFields.logo === undefined) {
+    defaulted.add('logo');
+    if (assetFields.logoDark === undefined) defaulted.add('logoDark');
+  }
+  if (assetFields.composerIcon === undefined) {
+    defaulted.add('composerIcon');
+    if (assetFields.composerIconDark === undefined)
+      defaulted.add('composerIconDark');
+  }
+  for (const field of defaulted) {
+    const { file } = BUNDLED_BRANDING[field];
     const source = fileURLToPath(
-      new URL('../../assets/brand/plugin-icon.svg', import.meta.url),
+      new URL(`../../assets/brand/plugin/${file}`, import.meta.url),
     );
     try {
-      entries.push({ path: defaultIcon, data: fs.readFileSync(source) });
+      entries.push({
+        path: bundledEntryPath(field),
+        data: fs.readFileSync(source),
+      });
     } catch {
       unreadableAssets.push({
         source,
-        reason: 'The bundled SAGA icon could not be read.',
+        reason: `The bundled SAGA ${field} artwork could not be read.`,
       });
     }
   }
+  const resolve = (field: keyof typeof BUNDLED_BRANDING): string | undefined =>
+    defaulted.has(field)
+      ? `./${bundledEntryPath(field)}`
+      : reference(assetFields[field]);
   const withoutUndefined = <T extends Record<string, unknown>>(value: T): T =>
     Object.fromEntries(
       Object.entries(value).filter(([, inner]) => inner !== undefined),
@@ -256,11 +290,10 @@ export function assemblePackage(
           defaultPrompt: listing.defaultPrompt,
           brandColor: listing.brandColor,
           brandColorDark: listing.brandColorDark,
-          composerIcon:
-            reference(assetFields.composerIcon) ?? `./${defaultIcon}`,
-          composerIconDark: reference(assetFields.composerIconDark),
-          logo: reference(assetFields.logo) ?? `./${defaultIcon}`,
-          logoDark: reference(assetFields.logoDark),
+          composerIcon: resolve('composerIcon'),
+          composerIconDark: resolve('composerIconDark'),
+          logo: resolve('logo'),
+          logoDark: resolve('logoDark'),
         }),
         review: input.review,
         publication: input.publication,
