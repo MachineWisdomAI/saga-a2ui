@@ -42,7 +42,7 @@ The game has no sign-in. Anyone with the tunnel address can create a game, and a
 
 Follow [Connect a React component to a server result](tic-tac-toe/1-first-card.md). You will generate a React/TypeScript project with Vite, add an operation that returns a message, and display that result in a React component. The lesson includes the installation and build commands; run them in your own app directory.
 
-The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.9.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
+The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.11.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
 
 The npm override for `@a2ui/markdown-it` selects the dependency version used to qualify this package combination. It does not remove the inherited advisories below.
 

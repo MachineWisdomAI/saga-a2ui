@@ -169,7 +169,7 @@ interface Board {
     mark?: string,
   ): ReturnType<FrameLocator['getByRole']>;
   button(name: string): ReturnType<FrameLocator['getByRole']>;
-  status(): ReturnType<FrameLocator['getByRole']>;
+  status(): ReturnType<FrameLocator['locator']>;
   /** How many times the view read a game. */
   reads(): number;
   /** The game the view's first call named. */
@@ -251,7 +251,8 @@ async function open(page: Page, options: OpenOptions = {}): Promise<Board> {
         exact: true,
       }),
     button: (name) => view.getByRole('button', { name, exact: true }),
-    status: () => view.getByRole('status'),
+    // The game's own status line; the credit has a status region of its own.
+    status: () => view.locator('p.status'),
     reads: () => calls.filter((call) => call.name === 'get_game').length,
     gameId: () => (calls[0]?.arguments as { gameId: string }).gameId,
   };
@@ -265,6 +266,61 @@ async function open(page: Page, options: OpenOptions = {}): Promise<Board> {
 /** The text of the message request the fixture recorded. */
 const messageText = (request: Heard | undefined): string =>
   (request?.params.content as Array<{ text: string }>)[0]!.text;
+
+test.describe('the framework credit', () => {
+  const CREDIT = 'Built with saga a2ui';
+
+  /** A host that opens links, recording each destination it was asked for. */
+  async function hostOpeningLinks(page: Page): Promise<string[]> {
+    const opened: string[] = [];
+    await page.exposeFunction('handleOpenLink', (params: { url: string }) => {
+      opened.push(params.url);
+      return {};
+    });
+    return opened;
+  }
+
+  test('shows on a game in play and opens saga-ai.dev through the host', async ({
+    page,
+  }) => {
+    const opened = await hostOpeningLinks(page);
+    const board = await open(page);
+    await expect(board.status()).toHaveText(TEXT.yourTurn);
+    await expect(board.view.getByText(CREDIT)).toBeVisible();
+    expect(opened).toEqual([]);
+    await board.button('saga a2ui').click();
+    await expect.poll(() => opened).toEqual(['https://saga-ai.dev/']);
+  });
+
+  test('shows on a finished game', async ({ page }) => {
+    const { game } = await newGame();
+    await playMoves(game.gameId, [0, 3, 1, 4, 2]);
+    const board = await open(page, { result: await show(game.gameId) });
+    await expect(board.status()).toHaveText(TEXT.won);
+    await expect(board.view.getByText(CREDIT)).toBeVisible();
+  });
+
+  test('shows when the game is not available', async ({ page }) => {
+    const { game } = await newGame();
+    // A server that never issued this game answers that it is not available.
+    const fresh = await entry.startListener({
+      html: await readFile(new URL('index.html', dist), 'utf8'),
+      port: 0,
+    });
+    const other = await connect(fresh);
+    try {
+      const board = await open(page, {
+        result: await show(game.gameId),
+        server: other,
+      });
+      await expect(board.status()).toHaveText(TEXT.gone);
+      await expect(board.view.getByText(CREDIT)).toBeVisible();
+    } finally {
+      await other.close();
+      await fresh.close();
+    }
+  });
+});
 
 test.describe('the example server', () => {
   test('declares four operations: the board for new_game and show_game, nothing for get_game and play_move', async () => {
@@ -405,7 +461,7 @@ test.describe('the board', () => {
   }) => {
     const board = await open(page);
     await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.view.getByRole('button')).toHaveCount(10); // nine squares and New game
+    await expect(board.view.getByRole('button')).toHaveCount(11); // nine squares, New game and the credit's link
     for (let at = 0; at < 9; at += 1)
       await expect(
         board.square(Math.floor(at / 3) + 1, (at % 3) + 1),

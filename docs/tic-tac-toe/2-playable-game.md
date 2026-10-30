@@ -373,7 +373,7 @@ The startup file reads the built HTML, calls this wrapper, prints the endpoint a
 <summary>Complete server/operations.ts</summary>
 
 ```ts file=server/operations.ts
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, type Implementation } from '@modelcontextprotocol/server';
 import {
   registerPublicOperation,
   operationViewFromHtml,
@@ -477,6 +477,8 @@ export interface GameServerOptions {
   readonly lifetime: RequestLifetime;
   /** Every request's server shares this one store. */
   readonly store: GameStore;
+  /** The icons the server announces to a host, such as its brand in light and dark. None by default. */
+  readonly icons?: Implementation['icons'];
 }
 
 const failures = {
@@ -495,8 +497,13 @@ export function createGameServer({
   views,
   lifetime,
   store,
+  icons,
 }: GameServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-tic-tac-toe', version: '0.0.0' });
+  const server = new McpServer({
+    name: 'saga-tic-tac-toe',
+    version: '0.0.0',
+    ...(icons === undefined ? {} : { icons }),
+  });
   const project = (game: Game) => ({
     text: describeGame(game),
     data: { game },
@@ -677,9 +684,17 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 ## 3. Draw the board from data
 
-The welcome view kept its component and layout together. Separate them now so you can change the board's appearance without changing its data flow. Add `src/text.ts`, `src/catalog.tsx` and `src/surface.ts`; replace `src/index.css` with the styles below. Keep the generated HTML and the `src/main.tsx` entry from the first lesson.
+The welcome view kept its component and layout together. Separate them now so you can change the board's appearance without changing its data flow. Add `src/text.ts`, `src/catalog.tsx` and `src/surface.ts`; replace `src/index.css` and `src/main.tsx` with the files below. Keep the generated HTML from the first lesson. `main.tsx` also loads the credit's stylesheet from the stack.
 
-`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. `GameDetails` uses the browser’s built-in disclosure control to show the game ID on request. The catalog identifier matches the one in `surface.ts`.
+```tsx file=src/main.tsx
+import '@saga-a2ui/react-mcp-stack/attribution.css';
+import './index.css';
+import { startView } from './view.js';
+
+await startView();
+```
+
+`catalog.tsx` implements the components in React. `Column` and `Row` arrange children, `Board` makes the grid, and `SquareFace` displays a mark with its accessible label. `ActionButton` comes from SAGA and handles the control's interaction state. `GameDetails` uses the browser’s built-in disclosure control to show the game ID on request. `Credit` places SAGA’s removable `SagaAttribution` line, “Built with saga a2ui”, at the foot of the card; delete it and the layout’s `credit` entry to remove the credit. The catalog identifier matches the one in `surface.ts`. A catalog identifier only names the catalog, so choose a URL you control; the view never fetches it.
 
 `surface.ts` defines the data and connects it to those components. The `Board` repeats its child over `/squares`. Each square binds its mark and label from that row of data. The `playable` check disables a square when it is occupied, O has the turn, or the game has ended. The layout describes what appears; application code attaches its actions in the next section.
 
@@ -801,7 +816,9 @@ import {
   createComponentImplementation,
   ListApi,
   RowApi,
+  SagaAttribution,
   z,
+  type HostLinks,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
 import type { ReactNode } from 'react';
@@ -934,6 +951,24 @@ const Shown: ReactCatalogComponent = createComponentImplementation(
       : null,
 );
 
+/**
+ * The framework credit, placed once at the foot of the card so it shows while playing, after the
+ * game ends and beside a recoverable error. The application supplies it with the host's way to
+ * open a link; deleting this component and the layout's `credit` entry removes the credit.
+ */
+function createCredit(
+  links: () => HostLinks | undefined,
+): ReactCatalogComponent {
+  return createComponentImplementation(
+    { name: 'Credit', schema: z.object({}).strict() },
+    () => (
+      <footer className="credit">
+        <SagaAttribution links={links()} />
+      </footer>
+    ),
+  );
+}
+
 export const boardEntries: readonly ReactCatalogComponent[] = [
   Column,
   Row,
@@ -958,13 +993,20 @@ const required = {
     args.value !== undefined && args.value !== null && args.value !== '',
 };
 
-/** What the stack presents the layout over. */
-export const boardCatalog = new Catalog<ReactCatalogComponent>(
-  CATALOG_ID,
-  'v0.9',
-  [...boardEntries],
-  [required],
-);
+/**
+ * What the stack presents the layout over. `links` returns the host's way to open a link, which
+ * the stack hands over when the view starts and before the first render.
+ */
+export function createBoardCatalog(
+  links: () => HostLinks | undefined,
+): Catalog<ReactCatalogComponent> {
+  return new Catalog<ReactCatalogComponent>(
+    CATALOG_ID,
+    'v0.9',
+    [...boardEntries, createCredit(links)],
+    [required],
+  );
+}
 ```
 
 </details>
@@ -981,7 +1023,7 @@ import { VIEW_TEXT } from './text.js';
 // control has is decided by application code that attaches an action to the rendered instance
 // (view.tsx), never by a name in this layout.
 
-export const CATALOG_ID = 'https://tic-tac-toe.example/catalogs/board/v1';
+export const CATALOG_ID = 'https://saga-a2ui.dev/catalogs/tic-tac-toe/board/v1';
 
 /** The IDs the application attaches actions to. */
 export const SQUARE_ID = 'square';
@@ -1021,7 +1063,14 @@ export const boardSurface = defineSurface({
     component: 'Column',
     bind: {},
     props: {
-      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
+      children: [
+        'status',
+        'send-hint',
+        'board',
+        'controls',
+        'game-details',
+        'credit',
+      ],
     },
   },
   components: [
@@ -1031,6 +1080,7 @@ export const boardSurface = defineSurface({
       kind: 'body',
       text: VIEW_TEXT.sendHint,
     },
+    { id: 'credit', component: 'Credit' },
     {
       id: 'game-details',
       component: 'GameDetails',
@@ -1180,13 +1230,16 @@ body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+.credit {
+  margin-top: 1rem;
+}
 ```
 
 </details>
 
 ## 4. Connect a click to the next turn
 
-Add `src/controller.ts` and `src/actions.ts`, then replace `src/view.tsx`. These files connect the server and board you have just defined. Trace one click through them before running the game:
+Add `src/controller.ts` and `src/actions.ts`, then replace `src/view.tsx`. These files connect the server and board you have just defined. `view.tsx` keeps the host's link seam (`host.links`) for the `Credit` component, which opens the credit's destination through the host. Trace one click through them before running the game:
 
 1. `view.tsx` attaches `playSquare` to each rendered square. The repeated button supplies its square index.
 2. In `actions.ts`, `playSquare` reads that index and the displayed game's identifier and move number. It locks the board while calling `play_move` as X.
@@ -1748,9 +1801,10 @@ import {
   ActionButton,
   createReactActions,
   startA2uiView,
+  type HostLinks,
 } from '@saga-a2ui/react-mcp-stack';
 import { createGameActions } from './actions.js';
-import { boardCatalog } from './catalog.js';
+import { createBoardCatalog } from './catalog.js';
 import { createGameController, readGameReply } from './controller.js';
 import { boardSurface, CHECK_ID, NEW_GAME_ID, SQUARE_ID } from './surface.js';
 import { VIEW_TEXT } from './text.js';
@@ -1773,12 +1827,17 @@ export async function startView(): Promise<void> {
     return controller;
   };
 
+  // The host's way to open a link, for the framework credit. The stack hands it over when the view
+  // starts, before the board first renders.
+  let links: HostLinks | undefined;
+
   const view = startA2uiView({
     container,
     layout: boardSurface,
-    catalog: boardCatalog,
+    catalog: createBoardCatalog(() => links),
     identity: { name: 'saga-tic-tac-toe-view', version: '0.0.0' },
     actions: (host) => {
+      links = host.links;
       controller = createGameController(host.server);
       const game = controller;
       const actions = createGameActions(host, game);

@@ -24,8 +24,10 @@ node apps/lit-host/dist/tic-tac-toe/server.mjs
 | `server/game-store.ts` | `GameStore`, and a bounded in-memory map of short-lived games. A move is checked against the game and applied in one step. |
 | `server/operations.ts` | The four operations, declared with `registerPublicOperation`: `new_game` and `show_game` open the board; `get_game` and `play_move` have no view. |
 | `server/listener.ts`, `server/main.ts` | App startup: share one game store and prepared view across the SDK listener’s requests. |
+
+`server/operations.ts` and `server/rules.ts` do not depend on the local listener, and `createGameServer` takes an optional `icons` list for the server it builds, so a Fetch-hosted deployment can compose the same rules and view with its own store. A pinned copy of this directory is how the hosted application consumes it; it keeps no second rules owner.
 | `src/contract.ts` | The wire contract the server and the board share. |
-| `src/surface.ts`, `src/catalog.tsx` | The board's layout and the components it may use. |
+| `src/surface.ts`, `src/catalog.tsx` | The board's layout and the components it may use, including the removable "Built with saga a2ui" credit. The catalog identifier is a name, never fetched. |
 | `src/controller.ts` | Which game the board shows (`present`), the status line, and the wait for the assistant's move. |
 | `src/actions.ts`, `src/view.tsx` | The square action and the other two, and where each is attached. |
 | `guided-change/move-list.patch` | The guide's change: a move list bound to the game's `history`. It touches only `src/surface.ts` and `src/catalog.tsx`. |

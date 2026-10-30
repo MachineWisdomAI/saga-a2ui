@@ -25,7 +25,7 @@ Install the stack, the React version it supports, and the MCP server and schema 
 
 ```sh
 npm install --save-exact --strict-peer-deps \
-  @saga-a2ui/react-mcp-stack@0.9.0-rc.1 \
+  @saga-a2ui/react-mcp-stack@0.11.0-rc.1 \
   react@19.3.1 react-dom@19.3.1 \
   @modelcontextprotocol/server@2.3.1 zod@4.6.7
 ```

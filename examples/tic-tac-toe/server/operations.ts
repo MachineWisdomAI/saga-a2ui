@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, type Implementation } from '@modelcontextprotocol/server';
 import {
   registerPublicOperation,
   operationViewFromHtml,
@@ -102,6 +102,8 @@ export interface GameServerOptions {
   readonly lifetime: RequestLifetime;
   /** Every request's server shares this one store. */
   readonly store: GameStore;
+  /** The icons the server announces to a host, such as its brand in light and dark. None by default. */
+  readonly icons?: Implementation['icons'];
 }
 
 const failures = {
@@ -120,8 +122,13 @@ export function createGameServer({
   views,
   lifetime,
   store,
+  icons,
 }: GameServerOptions): McpServer {
-  const server = new McpServer({ name: 'saga-tic-tac-toe', version: '0.0.0' });
+  const server = new McpServer({
+    name: 'saga-tic-tac-toe',
+    version: '0.0.0',
+    ...(icons === undefined ? {} : { icons }),
+  });
   const project = (game: Game) => ({
     text: describeGame(game),
     data: { game },

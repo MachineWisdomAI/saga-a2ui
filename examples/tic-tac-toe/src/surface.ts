@@ -6,7 +6,7 @@ import { VIEW_TEXT } from './text.js';
 // control has is decided by application code that attaches an action to the rendered instance
 // (view.tsx), never by a name in this layout.
 
-export const CATALOG_ID = 'https://tic-tac-toe.example/catalogs/board/v1';
+export const CATALOG_ID = 'https://saga-a2ui.dev/catalogs/tic-tac-toe/board/v1';
 
 /** The IDs the application attaches actions to. */
 export const SQUARE_ID = 'square';
@@ -46,7 +46,14 @@ export const boardSurface = defineSurface({
     component: 'Column',
     bind: {},
     props: {
-      children: ['status', 'send-hint', 'board', 'controls', 'game-details'],
+      children: [
+        'status',
+        'send-hint',
+        'board',
+        'controls',
+        'game-details',
+        'credit',
+      ],
     },
   },
   components: [
@@ -56,6 +63,7 @@ export const boardSurface = defineSurface({
       kind: 'body',
       text: VIEW_TEXT.sendHint,
     },
+    { id: 'credit', component: 'Credit' },
     {
       id: 'game-details',
       component: 'GameDetails',

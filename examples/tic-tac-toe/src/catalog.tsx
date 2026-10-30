@@ -6,7 +6,9 @@ import {
   createComponentImplementation,
   ListApi,
   RowApi,
+  SagaAttribution,
   z,
+  type HostLinks,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
 import type { ReactNode } from 'react';
@@ -139,6 +141,24 @@ const Shown: ReactCatalogComponent = createComponentImplementation(
       : null,
 );
 
+/**
+ * The framework credit, placed once at the foot of the card so it shows while playing, after the
+ * game ends and beside a recoverable error. The application supplies it with the host's way to
+ * open a link; deleting this component and the layout's `credit` entry removes the credit.
+ */
+function createCredit(
+  links: () => HostLinks | undefined,
+): ReactCatalogComponent {
+  return createComponentImplementation(
+    { name: 'Credit', schema: z.object({}).strict() },
+    () => (
+      <footer className="credit">
+        <SagaAttribution links={links()} />
+      </footer>
+    ),
+  );
+}
+
 export const boardEntries: readonly ReactCatalogComponent[] = [
   Column,
   Row,
@@ -163,10 +183,17 @@ const required = {
     args.value !== undefined && args.value !== null && args.value !== '',
 };
 
-/** What the stack presents the layout over. */
-export const boardCatalog = new Catalog<ReactCatalogComponent>(
-  CATALOG_ID,
-  'v0.9',
-  [...boardEntries],
-  [required],
-);
+/**
+ * What the stack presents the layout over. `links` returns the host's way to open a link, which
+ * the stack hands over when the view starts and before the first render.
+ */
+export function createBoardCatalog(
+  links: () => HostLinks | undefined,
+): Catalog<ReactCatalogComponent> {
+  return new Catalog<ReactCatalogComponent>(
+    CATALOG_ID,
+    'v0.9',
+    [...boardEntries, createCredit(links)],
+    [required],
+  );
+}
