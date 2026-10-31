@@ -41,6 +41,9 @@ npx tsx scripts/docs-probe.ts compare before.json after.json
 page returned for that release's question; other releases that also appear are listed.
 It exits 1 on a wrong or unidentifiable release, which holds dependent publication.
 `compare` lists changed and unchanged pages and exits 1 when a page could not be read.
+A pull request receives a Mintlify preview on its own host, named in the Mintlify check
+and PR comment; pass that host to `snapshot` and `mcp`. Provider host names are removed
+before hashing, so a preview snapshot compares directly with a production snapshot.
 The tests in `scripts/docs-probe.test.ts` use local stand-ins, so they show how the probe
 judges a response, not what the hosted site returns.
 
