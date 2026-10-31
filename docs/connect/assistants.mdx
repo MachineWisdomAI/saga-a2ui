@@ -81,7 +81,7 @@ These steps follow the Mintlify instructions for search servers. The SDK reposit
 
 The site holds more than one release, and search can return pages from several of them. Name the release you use in the question and check the page path in each result: release pages are under `/docs/releases/VERSION/`.
 
-The search tool also takes an optional `version` argument. Use the exact version name from the site's version selector, for example `0.7.6` or `0.11.0-rc.1`. In the recorded checks, the filtered search returned only that release's pages. Other spellings, such as `v0.7.6`, returned no results. Without the argument, pages of every release can appear, and a result list does not say which release is stable.
+The search tool also takes an optional `version` argument. Use the exact version name from the site's version selector, for example `0.7.6` or `0.11.0-rc.1`. In the recorded checks, the filtered search returned only that release's pages, plus this page, which belongs to every release. Other spellings, such as `v0.7.6`, returned no results. Without the argument, pages of every release can appear, and a result list does not say which release is stable.
 
 - Stable documentation is the default release of the site. A prerelease is labeled **Prerelease** in the selector and on its pages.
 - Development `main` is never published as a release. A page documents the version and source revision named in its first paragraph.

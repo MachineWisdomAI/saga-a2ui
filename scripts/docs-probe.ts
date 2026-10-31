@@ -143,11 +143,20 @@ export function releaseCases(
   });
 }
 
-/** Release pages named in a response, in the order they first appear. */
+/**
+ * Release pages named in a response, in the order they first appear. A search result names its page
+ * in `Link:` and `Page:` lines; when the response has them, only those lines count, so a page whose
+ * text mentions another release's path (as the shared assistants page does) is not read as a hit.
+ * A response without such lines is scanned whole.
+ */
 export function releasePagesIn(text: string): ReleasePage[] {
+  const headers = [...text.matchAll(/^(?:Link|Page):[ \t]*(.*)$/gm)]
+    .map((match) => match[1])
+    .join('\n');
+  const scanned = headers === '' ? text : headers;
   const seen = new Set<string>();
   const pages: ReleasePage[] = [];
-  for (const match of text.matchAll(RELEASE_PAGE)) {
+  for (const match of scanned.matchAll(RELEASE_PAGE)) {
     const [, version, slug] = match;
     const page = `docs/releases/${version}/${slug?.replace(/(?:\.mdx?)?\.?$/, '')}`;
     if (version === undefined || seen.has(page)) continue;

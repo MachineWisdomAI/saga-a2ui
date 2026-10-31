@@ -149,6 +149,24 @@ describe('the facts that tell the releases apart', () => {
 });
 
 describe('release pages in a response', () => {
+  it('counts the page a result names, not another release mentioned in its text', () => {
+    expect(
+      releasePagesIn(
+        [
+          'Title: Choose a release',
+          'Link: https://x.test/docs/connect/assistants#choose-a-release',
+          'Page: docs/connect/assistants',
+          'Content: read it with cat /docs/releases/0.11.0-rc.1/guides/actions.mdx',
+          '',
+          'Title: Entry points',
+          'Link: https://x.test/docs/releases/0.7.6/server-entry-points',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/server-entry-points' },
+    ]);
+  });
+
   it('names a page under a section by its whole path and ignores sentence punctuation', () => {
     expect(
       releasePagesIn(
