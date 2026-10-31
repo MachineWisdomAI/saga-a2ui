@@ -1,6 +1,6 @@
-# Release candidates: contents, update, rollback and publication
+# Private development builds: contents, update and rollback
 
-This guide is for a maintainer who prepares, updates to, or restores a **candidate**: a build of one revision of the seven owned packages that CI packs, installs and qualifies as a set. A candidate is not a release. Nothing described here publishes, tags, deploys or makes anything public, and candidate artifacts stay private. Public npm releases of all seven packages already exist and are a different thing from a candidate (see [public install](public-install.md) and [the version policy](version-policy.md)).
+This guide is for a maintainer who prepares, updates to, or restores a private development build of the seven owned packages. The `candidate:*` commands and CI artifacts use **candidate** for this private build; it does not mean a selected public RC, even after local qualification. Public RCs follow [RC selection](release-packages.md#select-a-public-release-candidate). Nothing described here publishes, tags, deploys or makes anything public. See [public install](public-install.md) for existing npm releases.
 
 ## Use unpublished source in another application
 

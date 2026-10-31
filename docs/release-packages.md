@@ -10,6 +10,25 @@ Use private tarballs for SDK changes, cross-package tests and development in ano
 
 Publish only an intentional consumer release: stable versions belong under `latest`; a deliberately shared release candidate belongs under `next`. Do not publish staging placeholders or an RC for each implementation step. Source versions may advance between public releases. The sequence below applies when a public release is selected, not to ordinary development.
 
+## Select a public release candidate
+
+A public RC is a candidate for a specific intended stable release. Its planned functionality is implemented, and we expect to promote it without further feature work if final release acceptance passes. An unfinished implementation stays a private development build.
+
+Select an RC only when all of these conditions hold:
+
+- The intended stable release and its scope are explicit, with no planned implementation left in that scope.
+- The exact source has independent review and passing required checks. Its release tarballs pass the artifact qualification below, including sibling resolution from that same set without public npm publication.
+- Known findings have been assessed and no release blockers remain. Harmless review nits do not block selection; a known blocking defect does.
+- The remaining release acceptance is named and limited, such as anonymous registry installation or validation in a named host. It does not include unfinished features or missing local correctness checks.
+
+Record the intended stable release, scope, reviewed commit, artifact integrity, finding dispositions and remaining acceptance in the existing release PR or release record. The owner's publication authorization in the sequence below selects these exact artifacts and the `next` tag. Existing authorization can cover the whole sequence.
+
+Source manifests may already contain `-rc` because the version updater advances prerelease source versions. That suffix is bookkeeping until the release selection above is made; `release:pack`, a green CI build and a merged PR each leave selection separate. The private `candidate:*` commands likewise produce development artifacts, even when every local check passes.
+
+If RC validation finds a blocker, repair and qualify it privately before selecting a replacement RC. Explain why the previous candidate could not be promoted and which final acceptance remains. An implementation slice, sibling dependency update or downstream experiment uses private tarballs throughout; it is never a reason by itself to publish another RC.
+
+If release acceptance is already complete and stable publication is authorized, use the stable promotion path directly. Publishing an intermediate public RC is optional.
+
 ## Build the exact artifacts
 
 From the reviewed commit, on Node >=22.23.3 (the source-tooling minimum in `package.json` and `.nvmrc`; published packages require >=22.12.0):
@@ -38,14 +57,16 @@ local-CI rehearsal evidence is not evidence about release bytes (see
 
 ## Release sequence
 
-Each step is a separate, reviewed change or an owner action. Steps 1 to 3 are
-preparation, steps 4 and 5 are owner actions that publish a release candidate,
-and stable promotion (step 6) is held and never implied by an earlier step.
+Each step is a reviewed change or an owner action. Steps 1 to 3 prepare the
+artifacts. Step 4 selects the public release; step 5 applies only to a selected
+RC. Stable promotion in step 6 requires its own authority and may follow private
+qualification directly, without a public RC.
 
 1. Changes land on `main` through the ordinary [version policy](version-policy.md),
-   so every unit shares one major.minor and the current prerelease advances
-   with product changes. Documentation-only changes leave the versions alone.
-2. Qualify the exact head as a candidate: from that commit run `candidate:pack`,
+   so every unit shares one major.minor and source versions advance with product
+   changes. Documentation-only changes leave the versions alone. This is source
+   maintenance and does not select an RC for publication.
+2. Qualify the exact head privately: from that commit run `candidate:pack`,
    `candidate:verify`, `candidate:rehearse` and the packed-consumer suites,
    including `test:pnpm-react` (see [candidate installation, updates and
    rollback](candidate-update-and-rollback.md)). This is the behavioral
@@ -55,17 +76,21 @@ and stable promotion (step 6) is held and never implied by an earlier step.
    (identities, sibling pins, files, dependency graph, and the lower-level,
    stack-only and server-only installs below). Fresh package bytes alone do not
    require rerunning unchanged behavior or host evidence.
-4. The owner approves the exact source, package names, versions, tarball
-   integrity and tag, and the tag names the exact commit that was demonstrated.
-5. Publish the approved bytes under the `next` tag (see below), then verify
+4. Record the release decision: confirm the
+   [RC selection conditions](#select-a-public-release-candidate), or select
+   stable promotion when release acceptance is complete. The owner approves
+   the exact source, package names, versions, tarball integrity and tag, and
+   the tag names the exact commit that was demonstrated.
+5. For a selected RC, publish the approved bytes under `next`, then verify
    through an anonymous registry install. Downstream adoption and named-host
-   acceptance are separate evidence.
-6. Held until the owner decides: an explicit promotion change
+   acceptance are separate evidence. A selected stable release proceeds to
+   step 6 without this RC publication.
+6. With stable publication authority, an explicit promotion change
    (`chore(release): promote version`) turns the prerelease into the stable
    version. Promotion changes only version metadata, so unchanged behavioral
    evidence carries over, but the `release:pack` bytes are rebuilt from the
-   promoted commit and verified again, and the stable `latest` tag is a
-   separate publication decision.
+   promoted commit and verified again. Publish the approved stable artifacts
+   under `latest`; RC publication alone never grants that authority.
 
 ## Qualify the exact artifacts before publishing
 
