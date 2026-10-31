@@ -47,6 +47,41 @@ afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 const sha256 = (file: string): string =>
   createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
+it('exports unpublished tarballs and npm overrides without requiring built applications', () => {
+  const output = path.join(work, 'local-development');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      'scripts/release-candidate.ts',
+      'tarballs',
+      '--out',
+      output,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+  const recipe = JSON.parse(
+    fs.readFileSync(path.join(output, 'npm-overrides.json'), 'utf8'),
+  );
+  for (const name of SDK_PACKAGES) {
+    const spec = recipe.overrides[`@saga-a2ui/${name}`];
+    expect(spec).toMatch(/^file:/);
+    expect(fs.existsSync(spec.slice(5))).toBe(true);
+    const manifest = JSON.parse(
+      spawnSync('tar', ['-xOf', spec.slice(5), 'package/package.json'], {
+        encoding: 'utf8',
+      }).stdout,
+    );
+    expect(manifest.private).toBe(true);
+    expect(manifest.publishConfig.registry).toBe(CANDIDATE_REGISTRY);
+  }
+  expect(recipe.overrides['@a2ui/markdown-it']).toBe('0.2.1');
+  // Packing alone must not claim the installed-application qualification record.
+  expect(fs.existsSync(path.join(output, 'candidate.json'))).toBe(false);
+}, 120_000);
+
 it('packs all seven SDK releases, preserving exact sibling pins, exports and license files', () => {
   const releases = packReleasePackages(
     path.join(work, 'release'),

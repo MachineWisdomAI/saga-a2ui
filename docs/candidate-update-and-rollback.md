@@ -2,6 +2,40 @@
 
 This guide is for a maintainer who prepares, updates to, or restores a **candidate**: a build of one revision of the seven owned packages that CI packs, installs and qualifies as a set. A candidate is not a release. Nothing described here publishes, tags, deploys or makes anything public, and candidate artifacts stay private. Public npm releases of all seven packages already exist and are a different thing from a candidate (see [public install](public-install.md) and [the version policy](version-policy.md)).
 
+## Use unpublished source in another application
+
+From the SDK checkout, pack the current source into a new directory:
+
+```sh
+npm ci
+npm run candidate:tarballs -- --out /tmp/saga-local-build
+```
+
+This quick command needs no built applications. It writes all seven private tarballs and `npm-overrides.json`, with commit-derived versions and an invalid publication registry. It installs, publishes and qualifies nothing. Keep the directory until applications using it have moved to another build; choose a new output directory for each update.
+
+In the application's directory, merge the generated overrides, select the local tarballs for its existing SAGA dependencies and align any directly declared third-party override:
+
+```sh
+node --input-type=module - /tmp/saga-local-build/npm-overrides.json <<'JS'
+import fs from 'node:fs';
+const { overrides } = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const file = 'package.json';
+const app = JSON.parse(fs.readFileSync(file, 'utf8'));
+app.overrides = { ...app.overrides, ...overrides };
+for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+  for (const name of Object.keys(app[field] ?? {})) {
+    if (typeof overrides[name] === 'string') app[field][name] = overrides[name];
+  }
+}
+fs.writeFileSync(file, `${JSON.stringify(app, null, 2)}\n`);
+JS
+npm install --strict-peer-deps --ignore-scripts
+```
+
+Start with the application's usual one-stack recipe and framework peers. The overrides resolve transitive SDK siblings from the same set without adding them as direct application dependencies. npm requires every directly declared package and its override to use the same specifier. The merge above also aligns an existing Hono or DOMPurify dependency, avoiding EOVERRIDE. Review the manifest and lockfile diff, then run the application's build and tests. These local file paths are development settings: restore registry versions and remove the seven local SDK overrides before sharing a registry installation recipe. Keep the third-party security overrides below.
+
+Full installed-application qualification still uses `candidate:pack`, `candidate:verify` and `candidate:rehearse`. The quick command does not write `candidate.json` or claim their results.
+
 ## What CI produces
 
 `npm run verify` builds, type-checks and tests everything, including the packages installed from packed tarballs into clean directories outside the repository. The CI job then runs `npm run candidate:pack -- --out candidate-out` and uploads that directory as a workflow artifact, and only that (the job has `contents: read`, no publish step and no registry credential):
@@ -26,7 +60,7 @@ The tarball digests, the built views and servers, and the consumer installs are 
 
 **Recipe.** Node: CI uses the version in `.nvmrc` (22.23.3, also the minimum in `package.json`); `candidate.json` records the version the run actually used, and local runs may use a newer one. npm: recorded per run. Upstream: `@a2ui/web_core`/`lit`/`react` 0.13.0; `@modelcontextprotocol/client`, `core`, `server` 2.3.1 and `ext-apps` 2.0.3; Zod 4.6.7 (3.25.76 only as core's `zod3` alias); React and React DOM 19.3.1 exactly, for the React renderer and stack. Optional peers: `@saga-a2ui/components` for `lit` and `react`.
 
-**Application overrides.** An application must carry `"overrides": { "@a2ui/markdown-it": "0.2.1" }` in its own `package.json`. Without it a fresh install resolves `@a2ui/markdown-it` 0.2.2, whose peer `@a2ui/web_core ^0.14.0` conflicts with the pinned 0.13.0, and npm stops with ERESOLVE. npm honors overrides of the root project only, so a package cannot carry this for its consumers. `candidate:pack` installs with the overrides taken from the workspace root, and `candidate.json` records them. For pnpm, place the equivalent override in the consumer workspace root `pnpm-workspace.yaml`. See [React consumer dependencies](react-consumers.md) for the supported imports and Zod ownership; merely declaring another direct Markdown dependency does not constrain every transitive resolution.
+**Application overrides.** An application must carry `"overrides": { "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5" }` in its own `package.json`. Without it a fresh install resolves `@a2ui/markdown-it` 0.2.2, whose peer `@a2ui/web_core ^0.14.0` conflicts with the pinned 0.13.0, and npm stops with ERESOLVE. npm honors overrides of the root project only, so a package cannot carry this for its consumers. `candidate:pack` installs with the overrides taken from the workspace root, and `candidate.json` records them. For pnpm, place the equivalent override in the consumer workspace root `pnpm-workspace.yaml`. See [React consumer dependencies](react-consumers.md) for the supported imports and Zod ownership; merely declaring another direct Markdown dependency does not constrain every transitive resolution.
 
 **Predecessor.** All seven SAGA packages have public npm releases (see [public install](public-install.md) for current versions). This guide does not inventory the registry. A candidate is a separate artifact, not an upgrade of any of those releases: its `0.0.0-candidate.g…` version, `private` manifest and invalid registry keep it apart. No upgrade from a registry release has been exercised by the candidate update and rollback sequence, and a candidate rehearsal is a local source rehearsal, not a promoted artifact, an anonymous registry install or a real host. The generated `candidate.json` and `CANDIDATE.md` state the same limits (`predecessor.statement`; the generator is `candidateProvenance` in `scripts/release-candidate.ts`). The sequence below is rehearsed between two *candidate* builds only: `scripts/release-candidate.test.ts` packs two builds, installs one, updates to the other and restores the first byte for byte, and `npm run candidate:rehearse` (see [the rehearsal](#update-and-rollback-rehearsal)) installs, updates and restores them as built applications. The preceding accepted evidence is PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21), [#154](https://github.com/MachineWisdomAI/saga-a2ui/issues/154)); its consumers and checks are carried, not redone.
 
@@ -55,7 +89,7 @@ No file routes an action through a handler name. Layout messages name controls b
 Update every SDK package of the combination together. Do not update one package alone.
 
 1. Read the new `CANDIDATE.md`: version, tarballs, the resource digests and the carried checks. Confirm the recipe (Node, npm, overrides) matches your build.
-2. Install all the tarballs you use, from the same candidate, in one command (`npm install ./candidate/packages/saga-a2ui-core-….tgz ./…lit….tgz …`): each pins its siblings to the exact candidate version, which npm can satisfy only from the tarballs named beside it. Keep the `@a2ui/markdown-it` override in place and commit the lockfile.
+2. Install all the tarballs you use, from the same candidate, in one command (`npm install ./candidate/packages/saga-a2ui-core-….tgz ./…lit….tgz …`): each pins its siblings to the exact candidate version, which npm can satisfy only from the tarballs named beside it. Keep the compatibility and security overrides above in place and commit the lockfile.
 3. Check the installed set: `npm run candidate:verify -- --candidate candidate/candidate.json --modules PATH/node_modules --combination own` (or `card`). The named combination's recorded packages must all be installed at the candidate version: both `own` and `card` install `core`, `lit`, `components`, `mcp` and `lit-mcp-stack`. The stack declares components, so it is in both installed trees; only the `card` browser bundle includes FaithfulCard and the Markdown parser. A missing package, a mismatched one, or a `--modules` location that does not exist or holds no `@saga-a2ui` package is reported with the tarball to reinstall, and the command exits 1; a missing or unknown `--combination` is a usage error (exit 2).
 4. Rebuild the view from that install (not from a cached build). With `--page FILE --combination own|card` the same command compares the example's built page with the recorded resource.
 5. Restart the server so it serves the rebuilt view; its tool result names the view by digest, so a host that kept the old view is pointed at the new one. Pair the server and resource: never run a server of one build with a view of another.

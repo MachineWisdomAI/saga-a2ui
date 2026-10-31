@@ -4,6 +4,12 @@ The public release set is `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2u
 
 Read exact prepared versions from the reviewed manifests and generated `release.json`; verify registry availability separately through [public installation](public-install.md). Release candidates use `next`. Existing publication authority remains required; a private candidate copy does not establish a continuing hold on the source package. The owner can authorize preparation, merge and publication together; carry that authorization through the verified release rather than asking again at each step.
 
+## Develop without publishing
+
+Use private tarballs for SDK changes, cross-package tests and development in another application. A merged PR, a version bump or a downstream test does not require a public npm release. Run [the local tarball recipe](candidate-update-and-rollback.md#use-unpublished-source-in-another-application), or download the qualified candidate artifact from CI. Both stacks can resolve their core, renderer and MCP siblings from that same local set.
+
+Publish only an intentional consumer release: stable versions belong under `latest`; a deliberately shared release candidate belongs under `next`. Do not publish staging placeholders or an RC for each implementation step. Source versions may advance between public releases. The sequence below applies when a public release is selected, not to ordinary development.
+
 ## Build the exact artifacts
 
 From the reviewed commit, on Node >=22.23.3 (the source-tooling minimum in `package.json` and `.nvmrc`; published packages require >=22.12.0):
@@ -67,7 +73,7 @@ Verify the seven tarballs that would be published, not a candidate or an earlier
 build of different source. Evidence from another source revision or version
 identity is context, not qualification of these bytes. Use React and React DOM
 **19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
-consumer-root override `@a2ui/markdown-it: 0.2.1`. SAGA owns A2UI **0.13.0** and its
+consumer-root overrides from [public installation](public-install.md#install-one-stack-plus-framework-peers). SAGA owns A2UI **0.13.0** and its
 Zod **3.25.76** context; do not add direct application A2UI dependencies or force
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
 for public imports and the pnpm root override.
