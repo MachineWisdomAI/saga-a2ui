@@ -45,11 +45,13 @@ Two further controls live outside this repository and are not configured by it:
 
 - The Mintlify project switch **Don't index project** (dashboard, General) withholds the whole
   project, overrides `docs.json` and must stay off for production.
-- Pull-request preview hosts are withheld by the provider. On a pull-request preview
-  observed while this section was written, `robots.txt` was `User-agent: *` with `Disallow: /` and
-  `Content-Signal: ai-train=no, search=no, ai-input=no`, while the production project's
-  `robots.txt` allowed crawling apart from `/_next/` and `/cdn-cgi/`. That is the provider's
-  behavior for preview hosts, not a setting here; the probe below shows it for any preview.
+- Pull-request preview hosts are withheld by the provider. A preview built from a
+  `docs.json` with no `robots` tag, observed when this section was written, still rendered
+  `<meta name="robots" content="noindex, nofollow">` on its pages and served a `robots.txt` of
+  `User-agent: *`, `Disallow: /` and `Content-Signal: ai-train=no, search=no, ai-input=no`. The
+  production project's `robots.txt` allowed crawling apart from `/_next/` and `/cdn-cgi/`. That is
+  the provider's behavior for preview hosts, not a setting here; the probe below shows it for any
+  preview.
 
 ```bash
 # Production: no blocking meta tag, header or robots rule, canonical on the custom domain, and a
