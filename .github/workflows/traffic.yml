@@ -1,0 +1,65 @@
+name: Traffic
+
+on:
+  schedule:
+    - cron: '59 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: traffic-archive
+  cancel-in-progress: false
+
+jobs:
+  traffic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Require the scoped traffic credential
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          if [ -z "$TRAFFIC_TOKEN" ]; then
+            echo '::error::TRAFFIC_TOKEN is unavailable. Configure an existing credential with Administration read access to this repository; no sample was collected.'
+            exit 1
+          fi
+
+      - name: Collect traffic data
+        id: traffic
+        uses: yi-Xu-0100/traffic-to-badge@6e7656202ad370afe7e80465c32ee367324ab4fc # v1.4.0
+        with:
+          my_token: ${{ secrets.TRAFFIC_TOKEN }}
+          static_list: ${{ github.repository }}
+          traffic_branch: traffic
+
+      - name: Retain the dated observation
+        env:
+          TRAFFIC_PATH: ${{ steps.traffic.outputs.traffic_path }}
+        run: |
+          observed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          sample_dir="$TRAFFIC_PATH/observations/${observed_at:0:10}"
+          mkdir -p "$sample_dir"
+          for metric in views clones paths referrers; do
+            cp "$TRAFFIC_PATH/traffic-${GITHUB_REPOSITORY#*/}/traffic_$metric.json" "$sample_dir/$metric.json"
+          done
+          jq -n --arg at "$observed_at" --arg repository "$GITHUB_REPOSITORY" \
+            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{observed_at: $at, repository: $repository, workflow_run: $run, views_and_clones: "UTC daily series retained by timestamp", referrers_and_paths: "top ten over the preceding 14 days; overlapping snapshots are not additive"}' \
+            > "$sample_dir/observation.json"
+
+      - name: Publish the traffic archive
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: traffic
+          publish_dir: ${{ steps.traffic.outputs.traffic_path }}
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          full_commit_message: 'chore: update traffic data'
