@@ -38,8 +38,12 @@ npx tsx scripts/docs-probe.ts compare before.json after.json
 ```
 
 `mcp` passes only when each release's own server-entry-points page is the first release
-page returned for that release's question; other releases that also appear are listed.
-It exits 1 on a wrong or unidentifiable release, which holds dependent publication.
+page searched for that release's question and the page the endpoint's read-only
+filesystem tool returns for it states that release's export facts (`FACTS` in the probe,
+checked against the committed pages by the tests) without the other release's. A correct
+page address with another release's content fails. Other releases that also appear in
+search results are listed, not failed. It exits 1 on a wrong, unreadable or
+unidentifiable release, which holds dependent publication.
 `compare` lists changed and unchanged pages and exits 1 when a page could not be read.
 A pull request receives a Mintlify preview on its own host, named in the Mintlify check
 and PR comment; pass that host to `snapshot` and `mcp`. Provider host names are removed

@@ -13,10 +13,13 @@ import {
 // Two checks that a local build cannot make:
 //   - `mcp`: a real MCP client connects to the site's documentation endpoint, initializes, lists its
 //     tools, calls the search tool once per release with that release's own question and reports
-//     which release pages came back and in what order. A result passes only when the page of the
-//     release that was asked about is the first release page returned; a response that merely
-//     repeats the version string does not pass. Pages of other releases that also appear are
-//     reported, not hidden.
+//     which release pages came back and in what order. The page of the release that was asked about
+//     must be the first release page returned, and the probe then reads that page with the
+//     endpoint's read-only filesystem tool and checks its words against facts that differ between
+//     the releases (FACTS, each checked against the committed pages by the tests). A page address
+//     that is right but whose retrieved content belongs to another release does not pass, and
+//     neither does a response that merely repeats the version string. Pages of other releases that
+//     also appear in the search results are reported, not hidden; they are not a failure.
 //   - `snapshot` / `compare`: the hosted Markdown of every page in docs.json is hashed, so a
 //     snapshot taken before and after a newer page changes shows whether a released page moved.
 // Nothing here writes to the site. The only network traffic is MCP initialize, tools/list and
@@ -77,6 +80,39 @@ export interface SearchCase {
   readonly query: string;
   /** The page whose release must be the first one returned. */
   readonly expectedPage: string;
+  /** Statements the retrieved page must make, compared after {@link plain}. */
+  readonly required: readonly string[];
+  /** Statements that belong to another release and must not appear in the retrieved page. */
+  readonly forbidden: readonly string[];
+}
+
+/**
+ * What distinguishes each release's answer to the server-entry-points question, as the pinned
+ * source of that release defines it. The tests confirm each statement against the committed page
+ * of its own release and its absence from the other release's page.
+ */
+export const FACTS: Readonly<
+  Record<string, Pick<SearchCase, 'required' | 'forbidden'>>
+> = {
+  '0.7.6': {
+    required: [
+      '0.7.6 (stable)',
+      'does not export /server/http or /server/node',
+    ],
+    forbidden: ['exports /server, /server/http, and /server/node'],
+  },
+  '0.11.0-rc.1': {
+    required: [
+      '0.11.0-rc.1 (prerelease)',
+      'exports /server, /server/http, and /server/node',
+    ],
+    forbidden: ['does not export'],
+  },
+};
+
+/** Page text without Markdown emphasis or code marks, on one line, so a statement can be compared. */
+export function plain(markdown: string): string {
+  return markdown.replace(/[*`]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -91,9 +127,15 @@ export function releaseCases(
     const expectedPage = release.pages.find((page) => page.endsWith(topic));
     if (expectedPage === undefined)
       throw new Error(`Release ${release.version} has no ${topic} page.`);
+    const facts = FACTS[release.version];
+    if (facts === undefined)
+      throw new Error(
+        `No distinguishing facts are recorded for ${release.version}.`,
+      );
     return {
       version: release.version,
       expectedPage,
+      ...facts,
       query: `React MCP stack ${release.version}: which server entry points does this release export?`,
     };
   });
@@ -119,6 +161,10 @@ export interface CaseResult {
   readonly expectedPage: string;
   readonly returned: readonly ReleasePage[];
   readonly otherReleases: readonly string[];
+  /** Required statements the retrieved page did not make. */
+  readonly missing: readonly string[];
+  /** Statements of another release found in the retrieved page. */
+  readonly foreign: readonly string[];
   readonly passed: boolean;
   readonly reason: string;
 }
@@ -128,6 +174,7 @@ export interface McpProbeReport {
   readonly server: { readonly name: string; readonly version: string } | null;
   readonly tools: readonly string[];
   readonly searchTool: string | null;
+  readonly readTool: string | null;
   readonly cases: readonly CaseResult[];
   readonly passed: boolean;
 }
@@ -155,10 +202,15 @@ function textOf(result: {
     : `${text}\n${JSON.stringify(result.structuredContent)}`;
 }
 
-/** Judges one response; kept separate from the network so the rule is checked on its own. */
+/**
+ * Judges one case; kept separate from the network so the rule is checked on its own. `content` is
+ * the text retrieved for the expected page, or undefined when it could not be retrieved, which
+ * never passes: a page address alone does not show that the release's guidance was returned.
+ */
 export function judge(
   searchCase: SearchCase,
   returned: readonly ReleasePage[],
+  content?: string,
 ): CaseResult {
   const first = returned[0];
   const others = [
@@ -174,6 +226,8 @@ export function judge(
     expectedPage: searchCase.expectedPage,
     returned,
     otherReleases: others,
+    missing: [] as string[],
+    foreign: [] as string[],
   };
   if (first === undefined)
     return {
@@ -187,13 +241,38 @@ export function judge(
       passed: false,
       reason: `The first release page was ${first.page}, not ${searchCase.expectedPage}.`,
     };
+  if (content === undefined)
+    return {
+      ...base,
+      passed: false,
+      reason: `The content of ${searchCase.expectedPage} was not retrieved, so its guidance was not checked.`,
+    };
+  const text = plain(content);
+  const missing = searchCase.required.filter(
+    (statement) => !text.includes(statement),
+  );
+  const foreign = searchCase.forbidden.filter((statement) =>
+    text.includes(statement),
+  );
+  if (missing.length > 0 || foreign.length > 0)
+    return {
+      ...base,
+      missing,
+      foreign,
+      passed: false,
+      reason: `The retrieved ${searchCase.expectedPage} does not match release ${searchCase.version}: ${[
+        ...missing.map((statement) => `missing "${statement}"`),
+        ...foreign.map((statement) => `contains "${statement}"`),
+      ].join('; ')}.`,
+    };
+  const labeled =
+    others.length === 0
+      ? 'Only the requested release was returned by search.'
+      : `Search also returned pages of ${others.join(', ')}, labeled by their own paths.`;
   return {
     ...base,
     passed: true,
-    reason:
-      others.length === 0
-        ? 'Only the requested release was returned.'
-        : `The requested page ranked first; pages of ${others.join(', ')} also appeared and are labeled by their own paths.`,
+    reason: `The requested page ranked first and its retrieved content states release ${searchCase.version}'s facts. ${labeled}`,
   };
 }
 
@@ -214,6 +293,7 @@ export async function probeMcp(
     const listed = await client.listTools(undefined, { signal: signal() });
     const tools = listed.tools.map((tool) => tool.name);
     const searchTool = tools.find((name) => /search/i.test(name)) ?? null;
+    const readTool = tools.find((name) => /filesystem/i.test(name)) ?? null;
     const results: CaseResult[] = [];
     for (const searchCase of cases) {
       if (searchTool === null) {
@@ -227,13 +307,34 @@ export async function probeMcp(
         { name: searchTool, arguments: { query: searchCase.query } },
         { signal: signal() },
       );
+      if (response.isError === true) {
+        results.push({
+          ...judge(searchCase, []),
+          reason: 'The search tool reported an error.',
+        });
+        continue;
+      }
+      const returned = releasePagesIn(textOf(response));
+      const ranked = returned[0]?.page === searchCase.expectedPage;
+      let content: string | undefined;
+      if (ranked && readTool !== null) {
+        const read = await client.callTool(
+          {
+            name: readTool,
+            arguments: { command: `cat /${searchCase.expectedPage}.mdx` },
+          },
+          { signal: signal() },
+        );
+        if (read.isError !== true) content = textOf(read);
+      }
+      const verdict = judge(searchCase, returned, content);
       results.push(
-        response.isError === true
+        ranked && readTool === null
           ? {
-              ...judge(searchCase, []),
-              reason: 'The search tool reported an error.',
+              ...verdict,
+              reason: 'The endpoint lists no read-only filesystem tool.',
             }
-          : judge(searchCase, releasePagesIn(textOf(response))),
+          : verdict,
       );
     }
     return {
@@ -242,6 +343,7 @@ export async function probeMcp(
         info === undefined ? null : { name: info.name, version: info.version },
       tools,
       searchTool,
+      readTool,
       cases: results,
       passed: results.length > 0 && results.every((result) => result.passed),
     };
