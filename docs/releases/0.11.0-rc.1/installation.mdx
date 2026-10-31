@@ -1,0 +1,32 @@
+---
+title: 'Install the React stack 0.11.0-rc.1'
+sidebarTitle: 'Installation'
+description: 'Install saga a2ui React MCP stack 0.11.0-rc.1 with its exact React peers and required Node runtime.'
+keywords: ['0.11.0-rc.1', 'React', 'installation']
+---
+
+Use saga a2ui **0.11.0-rc.1** to connect React rendering to MCP Apps delivery. This page documents this exact published package, independently of newer source changes.
+
+Package version: **0.11.0-rc.1 (prerelease)**. [Pinned SDK source](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/react-mcp-stack). [Published package](https://www.npmjs.com/package/@saga-a2ui/react-mcp-stack/v/0.11.0-rc.1).
+
+Use Node **22.12.0 or newer** and a TypeScript-aware bundler. The package exports TypeScript source.
+
+Preserve existing overrides and add this entry to your application's root package.json:
+
+```json
+{
+  "overrides": {
+    "@a2ui/markdown-it": "0.2.1"
+  }
+}
+```
+
+Install the stack and its declared framework peers:
+
+```sh
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.11.0-rc.1 react@19.3.1 react-dom@19.3.1
+```
+
+Commit your application lockfile. The stack pins its SAGA dependencies. Import application APIs from the stack; keep server imports out of browser bundles.
+
+See [server entry points](/docs/releases/0.11.0-rc.1/server-entry-points) for this version's supported exports.

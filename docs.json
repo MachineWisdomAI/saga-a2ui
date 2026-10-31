@@ -1,0 +1,54 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "saga a2ui",
+  "colors": {
+    "primary": "#657B32"
+  },
+  "navigation": {
+    "versions": [
+      {
+        "version": "0.7.6",
+        "tag": "Stable",
+        "default": true,
+        "groups": [
+          {
+            "group": "React stack",
+            "pages": [
+              "docs/releases/0.7.6/installation",
+              "docs/releases/0.7.6/server-entry-points"
+            ]
+          }
+        ]
+      },
+      {
+        "version": "0.11.0-rc.1",
+        "tag": "Prerelease",
+        "default": false,
+        "groups": [
+          {
+            "group": "React stack",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/installation",
+              "docs/releases/0.11.0-rc.1/server-entry-points"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "robots": "noindex, nofollow"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/MachineWisdomAI/saga-a2ui"
+      }
+    ]
+  }
+}

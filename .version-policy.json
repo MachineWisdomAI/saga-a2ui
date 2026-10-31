@@ -370,7 +370,9 @@
     "tsconfig.json",
     "vitest.config.ts",
     "scripts/stage-tutorial-game.ts",
-    "scripts/tic-tac-toe-source.json"
+    "scripts/tic-tac-toe-source.json",
+    "docs.json",
+    ".mintignore"
   ],
   "release_paths": [
     "templates/lit-*/**",

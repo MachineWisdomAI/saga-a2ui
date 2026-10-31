@@ -1,0 +1,6 @@
+*
+!docs.json
+!docs/
+docs/*
+!docs/releases/
+!docs/releases/**
