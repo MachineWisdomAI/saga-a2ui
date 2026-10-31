@@ -7,6 +7,7 @@ import {
   StreamableHTTPClientTransport,
   type FetchLike,
 } from '@modelcontextprotocol/client';
+import { fencedBlocks } from './docs-release/convert.js';
 
 // A reproducible probe of the hosted versioned documentation (see docs/mintlify.md).
 //
@@ -27,7 +28,8 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const RELEASE_PAGE = /docs\/releases\/([^/\s)"'<>?#\\]+)\/([A-Za-z0-9._-]+)/g;
+const RELEASE_PAGE =
+  /docs\/releases\/([^/\s)"'<>?#\\]+)\/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)/g;
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 export interface ReleasePage {
@@ -147,7 +149,7 @@ export function releasePagesIn(text: string): ReleasePage[] {
   const pages: ReleasePage[] = [];
   for (const match of text.matchAll(RELEASE_PAGE)) {
     const [, version, slug] = match;
-    const page = `docs/releases/${version}/${slug?.replace(/\.mdx?$/, '')}`;
+    const page = `docs/releases/${version}/${slug?.replace(/(?:\.mdx?)?\.?$/, '')}`;
     if (version === undefined || seen.has(page)) continue;
     seen.add(page);
     pages.push({ version, page });
@@ -504,8 +506,67 @@ export function comparePages(
   return { changed, unchanged, unreadable };
 }
 
+export interface PageCheck {
+  readonly page: string;
+  readonly status: number;
+  readonly fences: { readonly expected: number; readonly actual: number };
+  /** The first code block that differs, or null when all are equal. */
+  readonly firstDifference: number | null;
+  readonly passed: boolean;
+}
+
+/** The platform adds a theme attribute to a fence's info string when it serves Markdown. */
+function withoutTheme(block: string): string {
+  return block.replace(/^([^\n]*?) theme=\{[^}\n]*\}/, '$1');
+}
+
+/**
+ * Compares what the site serves for each page with the committed page: the page must be served and
+ * every fenced code block must equal the committed block (after the platform's theme attribute is
+ * removed from the info string). It reads only the hosted Markdown and the committed files.
+ */
+export async function checkPages(
+  site: string,
+  pages: readonly string[],
+  readCommitted: (page: string) => string,
+  fetchPage: FetchLike = fetch,
+): Promise<PageCheck[]> {
+  const base = site.replace(/\/+$/, '');
+  return Promise.all(
+    pages.map(async (page): Promise<PageCheck> => {
+      const expected = fencedBlocks(readCommitted(page));
+      const response = await fetchPage(`${base}/${page}.md`, {
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      });
+      let actual: string[] = [];
+      if (response.ok) {
+        try {
+          actual = fencedBlocks(await response.text()).map(withoutTheme);
+        } catch {
+          actual = [];
+        }
+      }
+      const index = expected.findIndex((block, i) => actual[i] !== block);
+      const firstDifference =
+        index >= 0
+          ? index
+          : actual.length === expected.length
+            ? null
+            : actual.length;
+      return {
+        page,
+        status: response.status,
+        fences: { expected: expected.length, actual: actual.length },
+        firstDifference,
+        passed: response.ok && firstDifference === null,
+      };
+    }),
+  );
+}
+
 const USAGE = `Usage:
   tsx scripts/docs-probe.ts mcp <https://site/mcp>
+  tsx scripts/docs-probe.ts pages <https://site>
   tsx scripts/docs-probe.ts snapshot <https://site> > before.json
   tsx scripts/docs-probe.ts compare before.json after.json`;
 
@@ -515,6 +576,16 @@ export async function main(argv: readonly string[]): Promise<number> {
     const report = await probeMcp(first, releaseCases(readSite()));
     console.log(JSON.stringify(report, null, 2));
     return report.passed ? 0 : 1;
+  }
+  if (command === 'pages' && first !== undefined) {
+    const pages = [
+      ...new Set(readSite().releases.flatMap((release) => release.pages)),
+    ];
+    const checks = await checkPages(first, pages, (page) =>
+      fs.readFileSync(path.join(root, `${page}.mdx`), 'utf8'),
+    );
+    console.log(JSON.stringify(checks, null, 2));
+    return checks.every((check) => check.passed) ? 0 : 1;
   }
   if (command === 'snapshot' && first !== undefined) {
     // A page shared by several releases, such as the assistants page, is hashed once.

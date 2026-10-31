@@ -5,6 +5,7 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  checkPages,
   comparePages,
   FACTS,
   judge,
@@ -148,6 +149,20 @@ describe('the facts that tell the releases apart', () => {
 });
 
 describe('release pages in a response', () => {
+  it('names a page under a section by its whole path and ignores sentence punctuation', () => {
+    expect(
+      releasePagesIn(
+        'See /docs/releases/0.7.6/guides/actions.md. Also (https://x.test/docs/releases/0.7.6/components/faithful-card).',
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/guides/actions' },
+      {
+        version: '0.7.6',
+        page: 'docs/releases/0.7.6/components/faithful-card',
+      },
+    ]);
+  });
+
   it('names each page once in order of appearance', () => {
     expect(
       releasePagesIn(
@@ -312,6 +327,60 @@ describe('the MCP probe', () => {
     });
     expect(report.searchTool).toBeNull();
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('the hosted page check', () => {
+  const page = site.releases[0]!.pages[0]!;
+  const withTheme = (text: string) =>
+    text.replace(/^```(\w+)$/gm, '```$1 theme={null}');
+  const serve = (body: (page: string) => string, status = 200) =>
+    (async (url: string | URL) =>
+      new Response(body(String(url)), { status })) as (
+      url: string | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
+
+  it('accepts a page whose code blocks are served unchanged apart from the theme attribute', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => withTheme(committed(page))),
+    );
+    expect(check?.fences.expected).toBeGreaterThan(0);
+    expect(check?.passed).toBe(true);
+  });
+
+  it('fails when a served code block differs from the committed one', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() =>
+        withTheme(committed(page)).replace('npm install', 'npm  install'),
+      ),
+    );
+    expect(check?.firstDifference).not.toBeNull();
+    expect(check?.passed).toBe(false);
+  });
+
+  it('fails when the page is not served or loses a block', async () => {
+    const [missing] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => 'absent', 404),
+    );
+    expect(missing?.passed).toBe(false);
+    const [short] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => '# Page\n\nNo code here.'),
+    );
+    expect(short?.fences.actual).toBe(0);
+    expect(short?.passed).toBe(false);
   });
 });
 

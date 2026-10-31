@@ -96,6 +96,8 @@ The rule was compared with the ids that `mint dev` renders for every published p
 # Real MCP client: initialize, list tools, then once per release a search, a version-filtered
 # search and a read of that release's server-entry-points page.
 npx tsx scripts/docs-probe.ts mcp https://SITE/mcp
+# Every page in docs.json is served as Markdown and its code blocks equal the committed ones.
+npx tsx scripts/docs-probe.ts pages https://SITE
 # Hash every page in docs.json before and after a change to a newer page.
 npx tsx scripts/docs-probe.ts snapshot https://SITE > before.json
 npx tsx scripts/docs-probe.ts snapshot https://SITE > after.json
@@ -110,7 +112,9 @@ and the page returned by the endpoint's read-only filesystem tool states that re
 When the search tool has a `version` argument, the probe repeats the question with the release's exact
 version name and fails if the filtered search returns another release's page or none. Without the
 argument, search results can include pages of every release, listed by path but not failed. A snippet
-is not a retrieved page, so the probe reads the page. `compare` lists changed and unchanged pages and
+is not a retrieved page, so the probe reads the page. `pages` fetches each page's hosted Markdown and
+fails on a page that is not served or whose fenced code blocks differ from the committed ones; it
+ignores the `theme` attribute the platform adds to a block's info string. `compare` lists changed and unchanged pages and
 exits 1 when a page could not be read. The probe writes nothing to the site. Its tests in
 `scripts/docs-probe.test.ts` use local stand-ins, so they show how the probe judges a response, not
 what the hosted site returns.
@@ -121,8 +125,11 @@ What the hosted site does, as the probe found it:
   it; `v0.7.6` and `v0.7` returned no result;
 - without the argument, both releases' pages are returned, with the requested release first for a
   question that names it;
-- `/llms.txt`, `/llms-full.txt`, `/sitemap.xml`, `/.well-known/mcp.json` and a page address with `.md`
-  appended are served. `llms.txt` lists the pages of every release in navigation order;
+- `/llms.txt`, `/sitemap.xml`, `/.well-known/mcp.json`, a page address with `.md` appended and each
+  release's `components/catalog.json` are served. `llms.txt` lists the default release's pages only;
+- `/llms-full.txt` is documented by Mintlify and was served by the production site before this
+  content was added, but a pull-request preview returned 404 for it. Confirm it on the production site
+  after merging before telling anyone to rely on it;
 - the site's root redirects with `308` to the default release's installation page.
 
 A pull request receives a Mintlify preview on its own host, named in the Mintlify check and PR
