@@ -257,6 +257,18 @@ export interface PageSnapshot {
   >;
 }
 
+/**
+ * The hosted Markdown names the host that served it (the documentation index and absolute links),
+ * so the same page differs between a preview and the production site. Provider-hosted names are
+ * removed before hashing; the page's own words are untouched.
+ */
+export function normalizeHosts(markdown: string): string {
+  return markdown.replace(
+    /https?:\/\/[a-z0-9-]+\.mintlify\.(?:site|app)/gi,
+    '',
+  );
+}
+
 /** Hashes the hosted Markdown of each listed page. Mintlify serves any page's source at `<url>.md`. */
 export async function snapshotPages(
   site: string,
@@ -269,7 +281,7 @@ export async function snapshotPages(
       const response = await fetchPage(`${base}/${page}.md`, {
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
       });
-      const body = response.ok ? await response.text() : null;
+      const body = response.ok ? normalizeHosts(await response.text()) : null;
       return [
         page,
         {

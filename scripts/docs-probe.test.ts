@@ -147,6 +147,28 @@ describe('the page snapshot', () => {
     expect(comparison.unreadable).toEqual([]);
   });
 
+  it('hashes the same page identically on a preview and on the production host', async () => {
+    const page = pages[0]!;
+    const served = (host: string) =>
+      (() =>
+        Promise.resolve(
+          new Response(
+            `> Index: ${host}/llms.txt\n\nSee [next](${host}/${page}.md) for details.`,
+          ),
+        )) as (url: string | URL, init?: RequestInit) => Promise<Response>;
+    const production = await snapshotPages(
+      'https://docs.mintlify.app',
+      [page],
+      served('https://docs.mintlify.app'),
+    );
+    const preview = await snapshotPages(
+      'https://docs-branch.mintlify.site',
+      [page],
+      served('https://docs-branch.mintlify.site'),
+    );
+    expect(comparePages(production, preview).unchanged).toEqual([page]);
+  });
+
   it('reports an unreadable page instead of calling it unchanged', async () => {
     const before = await snapshotPages(
       'https://docs.example.test',
