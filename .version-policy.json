@@ -372,7 +372,8 @@
     "scripts/stage-tutorial-game.ts",
     "scripts/tic-tac-toe-source.json",
     "docs.json",
-    ".mintignore"
+    ".mintignore",
+    "scripts/docs-probe.ts"
   ],
   "release_paths": [
     "templates/lit-*/**",
