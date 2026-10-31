@@ -25,6 +25,32 @@ page on a preview branch, and compare the stable page after that preview deploys
 Use each page's full version and topic in MCP searches and verify the returned
 page URL and content. A tool response that merely repeats the version is insufficient.
 
+`scripts/docs-probe.ts` makes both checks repeatable against any deployment. It reads
+the release navigation from `docs.json` and writes nothing to the site:
+
+```bash
+# Real MCP client: initialize, list tools, search once per release.
+npx tsx scripts/docs-probe.ts mcp https://SITE/mcp
+# Hash every released page before and after the newer page changes.
+npx tsx scripts/docs-probe.ts snapshot https://SITE > before.json
+npx tsx scripts/docs-probe.ts snapshot https://SITE > after.json
+npx tsx scripts/docs-probe.ts compare before.json after.json
+```
+
+`mcp` passes only when each release's own server-entry-points page is the first release
+page searched for that release's question and the page the endpoint's read-only
+filesystem tool returns for it states that release's export facts (`FACTS` in the probe,
+checked against the committed pages by the tests) without the other release's. A correct
+page address with another release's content fails. Other releases that also appear in
+search results are listed, not failed. It exits 1 on a wrong, unreadable or
+unidentifiable release, which holds dependent publication.
+`compare` lists changed and unchanged pages and exits 1 when a page could not be read.
+A pull request receives a Mintlify preview on its own host, named in the Mintlify check
+and PR comment; pass that host to `snapshot` and `mcp`. Provider host names are removed
+before hashing, so a preview snapshot compares directly with a production snapshot.
+The tests in `scripts/docs-probe.test.ts` use local stand-ins, so they show how the probe
+judges a response, not what the hosted site returns.
+
 Rollback a site change by reverting its commit through a PR. Restore the previous
 navigation entry and page content together. Remove a qualification project in the
 Mintlify dashboard only after confirming its identity; no DNS is needed for a
