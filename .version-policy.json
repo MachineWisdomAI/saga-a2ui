@@ -373,7 +373,9 @@
     "scripts/tic-tac-toe-source.json",
     "docs.json",
     ".mintignore",
-    "scripts/docs-probe.ts"
+    "scripts/docs-probe.ts",
+    "scripts/docs-release.ts",
+    "scripts/docs-release/**"
   ],
   "release_paths": [
     "templates/lit-*/**",

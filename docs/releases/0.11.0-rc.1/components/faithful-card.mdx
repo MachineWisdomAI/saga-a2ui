@@ -1,0 +1,94 @@
+---
+title: 'FaithfulCard'
+sidebarTitle: 'FaithfulCard'
+description: 'A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible.'
+---
+
+> Documents saga a2ui **0.11.0-rc.1** (prerelease). This catalog entry is generated from the package manifests and entry points at source revision [`fb4126c`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/LICENSE).
+
+A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible.
+
+Renderers: Lit and React.
+
+## Entry points
+
+| Import | Registry version | Role |
+| --- | --- | --- |
+| `@saga-a2ui/components/faithful-card` | `@saga-a2ui/components@0.11.0-rc.1` | Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent |
+| `@saga-a2ui/react/faithful-card` | `@saga-a2ui/react@0.11.0-rc.1` | React rendering, catalog entry and trusted settings provider |
+| `@saga-a2ui/lit/faithful-card` | `@saga-a2ui/lit@0.11.0-rc.1` | Lit rendering, catalog entry and content view |
+| `@saga-a2ui/react-mcp-stack/faithful-card` | `@saga-a2ui/react-mcp-stack@0.11.0-rc.1` | Starts a FaithfulCard application in React over MCP Apps |
+| `@saga-a2ui/lit-mcp-stack/faithful-card` | `@saga-a2ui/lit-mcp-stack@0.11.0-rc.1` | Starts a FaithfulCard application in Lit over MCP Apps |
+
+## Exports
+
+The names below are read from the entry point sources at the pinned revision.
+
+### `@saga-a2ui/components/faithful-card`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/components/src/faithful-card/index.ts).
+
+Values: `CONTENT_POLICY_ELEMENT_ID`, `DEFAULT_CONTENT_POLICY`, `FAITHFUL_CARD_CATALOG_ID`, `FAITHFUL_CARD_CONTRACT_VERSION`, `FAITHFUL_CARD_STYLING`, `FaithfulCardApi`, `FaithfulCardApp`, `MAX_IMAGE_HOSTS`, `MAX_NESTING_LEVEL`, `cardData`, `cardLayout`, `closesWithParagraph`, `contentPolicyFromEmbedded`, `createCardView`, `createContentPolicy`, `createFaithfulCardReader`, `createImageConsentScope`, `describeContentFailure`, `embedContentPolicy`, `establishImageEnforcement`, `readCardResult`, `requestLinkOpen`, `resourcePermissionsOf`.
+
+Types: `BlockNode`, `BlockedPresentation`, `CardAppIdentity`, `CardAppPolicySource`, `CardAppReaderOptions`, `CardAppTexts`, `CardContent`, `CardData`, `CardResultOutcome`, `CardResultReader`, `CardViewParts`, `CardViewSettings`, `ConsentSubscription`, `ContentFailure`, `ContentLevel`, `ContentPolicy`, `CreatePolicyResult`, `CreateReaderResult`, `FaithfulCardAppBuilder`, `FaithfulCardAppDefinition`, `FaithfulCardContent`, `FaithfulCardReader`, `FaithfulCardSettings`, `ImageConsent`, `ImageConsentScope`, `ImageConsentState`, `ImageContext`, `ImageDecision`, `ImageEnforcement`, `ImageOffer`, `InlineNode`, `InterpretedCard`, `LinkDecision`, `MarkdownDialect`, `MarkdownFragments`, `PolicyConfiguration`, `PolicyFailure`, `ReadResult`, `ReaderFailure`, `ResourcePolicy`, `TableAlignment`, `TableCell`.
+
+### `@saga-a2ui/react/faithful-card`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/react/src/faithful-card/index.ts).
+Stylesheet: `@saga-a2ui/react/faithful-card.css`.
+
+Values: `FaithfulCard`, `FaithfulCardProvider`, `FaithfulCardSurface`, `createFaithfulCardView`, `faithfulCardEntry`, `openFaithfulCardSurface`, `useHostLink`.
+
+Types: `CardSurface`, `FaithfulCardProps`, `FaithfulCardView`, `HostLink`, `HostLinkOutcome`.
+
+### `@saga-a2ui/lit/faithful-card`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/lit/src/faithful-card/index.ts).
+
+Values: `CONTENT_VIEW_REQUEST`, `ContentViewRequest`, `FaithfulCardContentElement`, `FaithfulCardElement`, `bindHostLink`, `createFaithfulCardView`, `faithfulCardEntry`, `openFaithfulCardSurface`, `provideContentView`, `registerFaithfulCard`, `requestContentView`.
+
+Types: `CardSurface`, `ContentView`, `HostLinkBinding`, `HostLinkOutcome`.
+
+### `@saga-a2ui/react-mcp-stack/faithful-card`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/react-mcp-stack/src/faithful-card/index.ts).
+Stylesheet: `@saga-a2ui/react-mcp-stack/faithful-card.css`.
+
+Values: `FaithfulCardApp`, `StartError`, `StartFailure`, `readingProfile`, `startFaithfulCardApp`, `useHostLink`.
+
+Types: `CardChromeProps`, `CardContent`, `CardResultOutcome`, `CardResultReader`, `CardViewState`, `DeliveredResult`, `ErrorPhase`, `FaithfulCardAppDefinition`, `HostLink`, `HostLinkOutcome`, `ReadingProfile`, `RunningView`, `StartFailureKind`, `StartFaithfulCardOptions`, `StartMisuse`.
+
+### `@saga-a2ui/lit-mcp-stack/faithful-card`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/lit-mcp-stack/src/faithful-card/index.ts).
+
+Values: `FaithfulCardApp`, `StartError`, `StartFailure`, `bindHostLink`, `contentPolicyFromDocument`, `documentContentSecurityPolicies`, `readingProfile`, `startFaithfulCardApp`.
+
+Types: `CardChrome`, `CardChromeParts`, `CardContent`, `CardResultOutcome`, `CardResultReader`, `CardViewState`, `DeliveredResult`, `ErrorPhase`, `FaithfulCardAppDefinition`, `HostLinkBinding`, `HostLinkOutcome`, `ReadingProfile`, `RunningView`, `StartFailureKind`, `StartFaithfulCardOptions`, `StartMisuse`.
+
+## Static demonstration
+
+A FaithfulCard declared in an A2UI layout and bound to the body of a note. It is a copy of lines from [`examples/pack1-consumer/src/main-card.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/examples/pack1-consumer/src/main-card.ts) at the pinned revision, not a live rendering.
+
+```ts
+const body = {
+  id: 'note-body',
+  component: 'FaithfulCard',
+  contractVersion: 1,
+  markdown: { path: 'body' },
+} as const;
+```
+
+## Usage
+
+- [Style the FaithfulCard](/docs/releases/0.11.0-rc.1/guides/faithful-card-styling)
+- [Install the React stack and start a card application](/docs/releases/0.11.0-rc.1/guides/react-consumers)
+- [Choose a stack and install the published packages](/docs/releases/0.11.0-rc.1/guides/getting-started)
+
+## Evidence and limits
+
+- Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host. ([Styling qualification](/docs/releases/0.11.0-rc.1/guides/faithful-card-styling#qualification))
+- The recorded answer-card flows were observed in ChatGPT web and Claude web, and the Ansari answer-card flow in the Alexa+ simulator. The guide says these are observations of particular flows, not a complete renderer, device or host-version matrix. ([Host compatibility](/docs/releases/0.11.0-rc.1/guides/host-compatibility))
+- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.
+
+Back to the [component catalog](/docs/releases/0.11.0-rc.1/components/index).

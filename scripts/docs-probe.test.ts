@@ -5,12 +5,14 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  checkPages,
   comparePages,
   FACTS,
   judge,
   plain,
   probeMcp,
   readSite,
+  judgeFilter,
   releaseCases,
   releasePagesIn,
   snapshotPages,
@@ -37,6 +39,8 @@ interface Stand {
   /** What the read-only filesystem tool returns for a page path such as `docs/releases/…`. */
   readonly read: (page: string) => string;
   readonly tools?: { search?: string | null; read?: string | null };
+  /** When set, the search tool has a `version` argument and this is what it returns for it. */
+  readonly filtered?: (query: string, version: string) => string;
 }
 
 function endpoint(
@@ -52,10 +56,28 @@ function endpoint(
     if (names.search !== null)
       server.registerTool(
         names.search,
-        { inputSchema: z.object({ query: z.string() }) },
-        ({ query }) => ({
-          content: [{ type: 'text', text: stand.search(query) }],
-        }),
+        {
+          inputSchema: z.object({
+            query: z.string(),
+            ...(stand.filtered === undefined
+              ? {}
+              : { version: z.string().optional() }),
+          }),
+        },
+        (args) => {
+          const version = (args as { version?: unknown }).version;
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  typeof version !== 'string' || stand.filtered === undefined
+                    ? stand.search(args.query)
+                    : stand.filtered(args.query, version),
+              },
+            ],
+          };
+        },
       );
     if (names.read !== null)
       server.registerTool(
@@ -127,6 +149,38 @@ describe('the facts that tell the releases apart', () => {
 });
 
 describe('release pages in a response', () => {
+  it('counts the page a result names, not another release mentioned in its text', () => {
+    expect(
+      releasePagesIn(
+        [
+          'Title: Choose a release',
+          'Link: https://x.test/docs/connect/assistants#choose-a-release',
+          'Page: docs/connect/assistants',
+          'Content: read it with cat /docs/releases/0.11.0-rc.1/guides/actions.mdx',
+          '',
+          'Title: Entry points',
+          'Link: https://x.test/docs/releases/0.7.6/server-entry-points',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/server-entry-points' },
+    ]);
+  });
+
+  it('names a page under a section by its whole path and ignores sentence punctuation', () => {
+    expect(
+      releasePagesIn(
+        'See /docs/releases/0.7.6/guides/actions.md. Also (https://x.test/docs/releases/0.7.6/components/faithful-card).',
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/guides/actions' },
+      {
+        version: '0.7.6',
+        page: 'docs/releases/0.7.6/components/faithful-card',
+      },
+    ]);
+  });
+
   it('names each page once in order of appearance', () => {
     expect(
       releasePagesIn(
@@ -234,6 +288,57 @@ describe('the MCP probe', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('reports that a search tool without a version argument has no filter to check', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint(faithful),
+    });
+    expect(report.cases[0]?.versionFilter?.supported).toBe(false);
+    expect(report.passed).toBe(true);
+  });
+
+  it('passes a version filter that returns only the requested release', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: (_query, version) =>
+          result(
+            cases.find((entry) => entry.version === version)!.expectedPage,
+          ),
+      }),
+    });
+    expect(report.cases.map((entry) => entry.versionFilter?.passed)).toEqual([
+      true,
+      true,
+    ]);
+    expect(report.cases[0]?.versionFilter?.supported).toBe(true);
+    expect(report.passed).toBe(true);
+  });
+
+  it('fails when a version filter returns another release anyway', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: () => result(cases[1]!.expectedPage),
+      }),
+    });
+    expect(report.cases[0]?.passed).toBe(false);
+    expect(report.cases[0]?.versionFilter?.foreign).toEqual([
+      cases[1]!.expectedPage,
+    ]);
+    expect(report.cases[0]?.reason).toContain('filtered to 0.7.6');
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails when a version filter returns no release page', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, filtered: () => 'No results found' }),
+    });
+    expect(report.passed).toBe(false);
+    expect(judgeFilter('0.7.6', []).reason).toContain(
+      'returned no release page',
+    );
+  });
+
   it('fails when the endpoint offers no search tool', async () => {
     const report = await probeMcp(ENDPOINT, cases, {
       fetch: endpoint({ ...faithful, tools: { search: null, read: null } }),
@@ -243,8 +348,62 @@ describe('the MCP probe', () => {
   });
 });
 
+describe('the hosted page check', () => {
+  const page = site.releases[0]!.pages[0]!;
+  const withTheme = (text: string) =>
+    text.replace(/^```(\w+)$/gm, '```$1 theme={null}');
+  const serve = (body: (page: string) => string, status = 200) =>
+    (async (url: string | URL) =>
+      new Response(body(String(url)), { status })) as (
+      url: string | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
+
+  it('accepts a page whose code blocks are served unchanged apart from the theme attribute', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => withTheme(committed(page))),
+    );
+    expect(check?.fences.expected).toBeGreaterThan(0);
+    expect(check?.passed).toBe(true);
+  });
+
+  it('fails when a served code block differs from the committed one', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() =>
+        withTheme(committed(page)).replace('npm install', 'npm  install'),
+      ),
+    );
+    expect(check?.firstDifference).not.toBeNull();
+    expect(check?.passed).toBe(false);
+  });
+
+  it('fails when the page is not served or loses a block', async () => {
+    const [missing] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => 'absent', 404),
+    );
+    expect(missing?.passed).toBe(false);
+    const [short] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => '# Page\n\nNo code here.'),
+    );
+    expect(short?.fences.actual).toBe(0);
+    expect(short?.passed).toBe(false);
+  });
+});
+
 describe('the page snapshot', () => {
-  const pages = site.releases.flatMap((release) => release.pages);
+  const pages = [...new Set(site.releases.flatMap((release) => release.pages))];
   const host = (edits: Record<string, string> = {}) =>
     ((url: string | URL) => {
       const page = String(url).replace('https://docs.example.test/', '');

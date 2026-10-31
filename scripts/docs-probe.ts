@@ -7,6 +7,7 @@ import {
   StreamableHTTPClientTransport,
   type FetchLike,
 } from '@modelcontextprotocol/client';
+import { fencedBlocks } from './docs-release/convert.js';
 
 // A reproducible probe of the hosted versioned documentation (see docs/mintlify.md).
 //
@@ -27,7 +28,8 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const RELEASE_PAGE = /docs\/releases\/([^/\s)"'<>?#\\]+)\/([A-Za-z0-9._-]+)/g;
+const RELEASE_PAGE =
+  /docs\/releases\/([^/\s)"'<>?#\\]+)\/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)/g;
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 export interface ReleasePage {
@@ -141,13 +143,22 @@ export function releaseCases(
   });
 }
 
-/** Release pages named in a response, in the order they first appear. */
+/**
+ * Release pages named in a response, in the order they first appear. A search result names its page
+ * in `Link:` and `Page:` lines; when the response has them, only those lines count, so a page whose
+ * text mentions another release's path (as the shared assistants page does) is not read as a hit.
+ * A response without such lines is scanned whole.
+ */
 export function releasePagesIn(text: string): ReleasePage[] {
+  const headers = [...text.matchAll(/^(?:Link|Page):[ \t]*(.*)$/gm)]
+    .map((match) => match[1])
+    .join('\n');
+  const scanned = headers === '' ? text : headers;
   const seen = new Set<string>();
   const pages: ReleasePage[] = [];
-  for (const match of text.matchAll(RELEASE_PAGE)) {
+  for (const match of scanned.matchAll(RELEASE_PAGE)) {
     const [, version, slug] = match;
-    const page = `docs/releases/${version}/${slug?.replace(/\.mdx?$/, '')}`;
+    const page = `docs/releases/${version}/${slug?.replace(/(?:\.mdx?)?\.?$/, '')}`;
     if (version === undefined || seen.has(page)) continue;
     seen.add(page);
     pages.push({ version, page });
@@ -164,6 +175,17 @@ export interface CaseResult {
   /** Required statements the retrieved page did not make. */
   readonly missing: readonly string[];
   /** Statements of another release found in the retrieved page. */
+  readonly foreign: readonly string[];
+  readonly passed: boolean;
+  readonly reason: string;
+  /** The same question with the search tool's own `version` argument, when the tool has one. */
+  readonly versionFilter?: VersionFilterResult;
+}
+
+export interface VersionFilterResult {
+  readonly supported: boolean;
+  readonly returned: readonly ReleasePage[];
+  /** Pages of another release that the filtered search returned anyway. */
   readonly foreign: readonly string[];
   readonly passed: boolean;
   readonly reason: string;
@@ -200,6 +222,39 @@ function textOf(result: {
   return result.structuredContent === undefined
     ? text
     : `${text}\n${JSON.stringify(result.structuredContent)}`;
+}
+
+/** Judges the filtered search: it may return only the requested release, and must return its pages. */
+export function judgeFilter(
+  version: string,
+  returned: readonly ReleasePage[],
+): VersionFilterResult {
+  const foreign = returned
+    .filter((page) => page.version !== version)
+    .map((page) => page.page);
+  if (foreign.length > 0)
+    return {
+      supported: true,
+      returned,
+      foreign,
+      passed: false,
+      reason: `The search filtered to ${version} returned ${foreign.join(', ')}.`,
+    };
+  if (returned.length === 0)
+    return {
+      supported: true,
+      returned,
+      foreign,
+      passed: false,
+      reason: `The search filtered to ${version} returned no release page.`,
+    };
+  return {
+    supported: true,
+    returned,
+    foreign,
+    passed: true,
+    reason: `The search filtered to ${version} returned only its pages.`,
+  };
 }
 
 /**
@@ -294,6 +349,12 @@ export async function probeMcp(
     const tools = listed.tools.map((tool) => tool.name);
     const searchTool = tools.find((name) => /search/i.test(name)) ?? null;
     const readTool = tools.find((name) => /filesystem/i.test(name)) ?? null;
+    const filterable = listed.tools.some(
+      (tool) =>
+        tool.name === searchTool &&
+        'version' in
+          ((tool.inputSchema as { properties?: object }).properties ?? {}),
+    );
     const results: CaseResult[] = [];
     for (const searchCase of cases) {
       if (searchTool === null) {
@@ -328,13 +389,45 @@ export async function probeMcp(
         if (read.isError !== true) content = textOf(read);
       }
       const verdict = judge(searchCase, returned, content);
-      results.push(
+      let versionFilter: VersionFilterResult = {
+        supported: false,
+        returned: [],
+        foreign: [],
+        passed: true,
+        reason: 'The search tool has no version argument.',
+      };
+      if (filterable) {
+        const filtered = await client.callTool(
+          {
+            name: searchTool,
+            arguments: {
+              query: searchCase.query,
+              version: searchCase.version,
+            },
+          },
+          { signal: signal() },
+        );
+        versionFilter = judgeFilter(
+          searchCase.version,
+          filtered.isError === true ? [] : releasePagesIn(textOf(filtered)),
+        );
+      }
+      const checked =
         ranked && readTool === null
           ? {
               ...verdict,
               reason: 'The endpoint lists no read-only filesystem tool.',
             }
-          : verdict,
+          : verdict;
+      results.push(
+        versionFilter.passed
+          ? { ...checked, versionFilter }
+          : {
+              ...checked,
+              passed: false,
+              reason: `${checked.reason} ${versionFilter.reason}`,
+              versionFilter,
+            },
       );
     }
     return {
@@ -422,8 +515,67 @@ export function comparePages(
   return { changed, unchanged, unreadable };
 }
 
+export interface PageCheck {
+  readonly page: string;
+  readonly status: number;
+  readonly fences: { readonly expected: number; readonly actual: number };
+  /** The first code block that differs, or null when all are equal. */
+  readonly firstDifference: number | null;
+  readonly passed: boolean;
+}
+
+/** The platform adds a theme attribute to a fence's info string when it serves Markdown. */
+function withoutTheme(block: string): string {
+  return block.replace(/^([^\n]*?) theme=\{[^}\n]*\}/, '$1');
+}
+
+/**
+ * Compares what the site serves for each page with the committed page: the page must be served and
+ * every fenced code block must equal the committed block (after the platform's theme attribute is
+ * removed from the info string). It reads only the hosted Markdown and the committed files.
+ */
+export async function checkPages(
+  site: string,
+  pages: readonly string[],
+  readCommitted: (page: string) => string,
+  fetchPage: FetchLike = fetch,
+): Promise<PageCheck[]> {
+  const base = site.replace(/\/+$/, '');
+  return Promise.all(
+    pages.map(async (page): Promise<PageCheck> => {
+      const expected = fencedBlocks(readCommitted(page));
+      const response = await fetchPage(`${base}/${page}.md`, {
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      });
+      let actual: string[] = [];
+      if (response.ok) {
+        try {
+          actual = fencedBlocks(await response.text()).map(withoutTheme);
+        } catch {
+          actual = [];
+        }
+      }
+      const index = expected.findIndex((block, i) => actual[i] !== block);
+      const firstDifference =
+        index >= 0
+          ? index
+          : actual.length === expected.length
+            ? null
+            : actual.length;
+      return {
+        page,
+        status: response.status,
+        fences: { expected: expected.length, actual: actual.length },
+        firstDifference,
+        passed: response.ok && firstDifference === null,
+      };
+    }),
+  );
+}
+
 const USAGE = `Usage:
   tsx scripts/docs-probe.ts mcp <https://site/mcp>
+  tsx scripts/docs-probe.ts pages <https://site>
   tsx scripts/docs-probe.ts snapshot <https://site> > before.json
   tsx scripts/docs-probe.ts compare before.json after.json`;
 
@@ -434,8 +586,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     console.log(JSON.stringify(report, null, 2));
     return report.passed ? 0 : 1;
   }
+  if (command === 'pages' && first !== undefined) {
+    const pages = [
+      ...new Set(readSite().releases.flatMap((release) => release.pages)),
+    ];
+    const checks = await checkPages(first, pages, (page) =>
+      fs.readFileSync(path.join(root, `${page}.mdx`), 'utf8'),
+    );
+    console.log(JSON.stringify(checks, null, 2));
+    return checks.every((check) => check.passed) ? 0 : 1;
+  }
   if (command === 'snapshot' && first !== undefined) {
-    const pages = readSite().releases.flatMap((release) => release.pages);
+    // A page shared by several releases, such as the assistants page, is hashed once.
+    const pages = [
+      ...new Set(readSite().releases.flatMap((release) => release.pages)),
+    ];
     console.log(JSON.stringify(await snapshotPages(first, pages), null, 2));
     return 0;
   }

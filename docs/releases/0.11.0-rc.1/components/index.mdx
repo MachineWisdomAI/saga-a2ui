@@ -1,0 +1,25 @@
+---
+title: 'Component catalog for 0.11.0-rc.1'
+sidebarTitle: 'Component catalog'
+description: 'Components exported by saga a2ui 0.11.0-rc.1, with their entry points and the guides that explain them.'
+---
+
+> Documents saga a2ui **0.11.0-rc.1** (prerelease). This catalog is generated from the package manifests and entry points at source revision [`fb4126c`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/LICENSE).
+
+Every component the SDK documents at this release is listed here or in the exclusions below. A row names only exports found in the source at the pinned revision.
+
+| Component | Renderers | Summary |
+| --- | --- | --- |
+| [FaithfulCard](/docs/releases/0.11.0-rc.1/components/faithful-card) | Lit, React | A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible. |
+| [ActionButton](/docs/releases/0.11.0-rc.1/components/action-button) | Lit, React | A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state. |
+| [SagaAttribution](/docs/releases/0.11.0-rc.1/components/saga-attribution) | React | A removable one-line credit, Built with saga a2ui, for an application with its own catalog. It carries no card, Markdown parser or components package. |
+
+## Not in the catalog
+
+- **Typed surfaces.** `Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout.
+- **Layout and basic components.** Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward (`basicCatalog`, `ColumnApi`, `ListApi`, `RowApi`). The SDK does not document them as its own.
+- **Lynx.** No Lynx package exists. The packages guide records that the Lynx delivery chain was retired.
+
+## Machine-readable catalog
+
+The same entries are committed as [`docs/releases/0.11.0-rc.1/components/catalog.json`](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/docs/releases/0.11.0-rc.1/components/catalog.json). A consumer such as a marketing site reads it at a pinned commit of this repository and links to the pages here; it does not keep its own copy of the manual.

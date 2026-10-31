@@ -1,0 +1,62 @@
+---
+title: 'SagaAttribution'
+sidebarTitle: 'SagaAttribution'
+description: 'A removable one-line credit, Built with saga a2ui, for an application with its own catalog. It carries no card, Markdown parser or components package.'
+---
+
+> Documents saga a2ui **0.11.0-rc.1** (prerelease). This catalog entry is generated from the package manifests and entry points at source revision [`fb4126c`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/LICENSE).
+
+A removable one-line credit, Built with saga a2ui, for an application with its own catalog. It carries no card, Markdown parser or components package.
+
+Renderers: React.
+
+## Entry points
+
+| Import | Registry version | Role |
+| --- | --- | --- |
+| `@saga-a2ui/react/attribution` | `@saga-a2ui/react@0.11.0-rc.1` | React credit component and its stylesheet |
+
+## Exports
+
+The names below are read from the entry point sources at the pinned revision.
+
+### `@saga-a2ui/react/attribution`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/react/src/attribution/index.ts).
+Stylesheet: `@saga-a2ui/react/attribution.css`.
+
+Values: `DEFAULT_ATTRIBUTION`, `SagaAttribution`.
+
+Types: `SagaAttributionProps`.
+
+## Static demonstration
+
+The credit rendered in an application's own footer, using the host link seam. It is a copy of lines from [`docs/react-consumers.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/docs/react-consumers.md) at the pinned revision, not a live rendering.
+
+```tsx
+import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';
+import '@saga-a2ui/react-mcp-stack/attribution.css';
+
+let links: HostLinks | undefined;
+startA2uiView({
+  // ...
+  actions: (host) => {
+    links = host.links; // asks the host to open a link; ends with the view
+    return undefined;
+  },
+});
+
+// Wherever the application renders its footer:
+<footer><SagaAttribution links={links} /></footer>
+```
+
+## Usage
+
+- [Removable credit](/docs/releases/0.11.0-rc.1/guides/react-consumers#removable-credit)
+
+## Evidence and limits
+
+- No guide of this release records a renderer or host qualification for this component beyond the behavior its usage guide describes.
+- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.
+
+Back to the [component catalog](/docs/releases/0.11.0-rc.1/components/index).
