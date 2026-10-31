@@ -1,0 +1,108 @@
+---
+title: 'Use these docs with assistants'
+sidebarTitle: 'Assistants and MCP'
+description: 'Connect an assistant to the saga a2ui documentation search server, choose a release, and find the Markdown and index files the site serves.'
+keywords: ['MCP', 'llms.txt', 'assistants', 'search', 'versions']
+---
+
+This page is not part of a release snapshot. It describes how the hosted documentation behaves and may change when the site does. Each release page states its own version and source revision.
+
+## Documentation MCP server
+
+The site serves a search MCP server for its content. Add this address to an MCP client that supports remote servers over HTTP:
+
+```text
+https://saga-a2ui.mintlify.site/mcp
+```
+
+`docs.saga-a2ui.dev` is the intended permanent address. Until that domain is switched to this site, use the address above. The paths below are the same on either host.
+
+The server lists three tools:
+
+| Tool                              | What it does                                                          |
+| --------------------------------- | --------------------------------------------------------------------- |
+| `search_saga_a2ui`                | Searches the pages and returns titles, snippets and page paths.       |
+| `query_docs_filesystem_saga_a2ui` | Reads pages as files with shell-style commands, for example `cat`.    |
+| `submit_feedback`                 | Reports an incorrect or unclear page. Use it only when you mean it.   |
+
+An assistant does not find this server by itself. A person connects it to each client that should use it.
+
+## Connect a client
+
+These steps follow the Mintlify instructions for search servers. The SDK repository has exercised the server with its own Streamable HTTP client, [`scripts/docs-probe.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/scripts/docs-probe.ts). It has not run the steps below in each product.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```sh
+    claude mcp add --transport http saga-a2ui https://saga-a2ui.mintlify.site/mcp
+    ```
+  </Tab>
+  <Tab title="Claude">
+    Open the [Connectors](https://claude.ai/settings/connectors) page in Claude settings, choose **Add custom connector**, enter `saga-a2ui` and the address above, and choose **Add**. Select the connector from the attachments button in a conversation.
+  </Tab>
+  <Tab title="Cursor">
+    Open the command palette, search for `Open MCP settings`, choose **Add custom MCP**, and add this to `mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "saga-a2ui": {
+          "url": "https://saga-a2ui.mintlify.site/mcp"
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="VS Code">
+    Create `.vscode/mcp.json`:
+
+    ```json
+    {
+      "servers": {
+        "saga-a2ui": {
+          "type": "http",
+          "url": "https://saga-a2ui.mintlify.site/mcp"
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Codex CLI">
+    Add this to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.saga-a2ui]
+    url = "https://saga-a2ui.mintlify.site/mcp"
+    ```
+  </Tab>
+</Tabs>
+
+## Choose a release
+
+The site holds more than one release, and search can return pages from several of them. Name the release you use in the question and check the page path in each result: release pages are under `/docs/releases/VERSION/`.
+
+The search tool also takes an optional `version` argument. Use the exact version name from the site's version selector, for example `0.7.6` or `0.11.0-rc.1`. In the recorded checks, the filtered search returned only that release's pages. Other spellings, such as `v0.7.6`, returned no results. Without the argument, pages of every release can appear, and a result list does not say which release is stable.
+
+- Stable documentation is the default release of the site. A prerelease is labeled **Prerelease** in the selector and on its pages.
+- Development `main` is never published as a release. A page documents the version and source revision named in its first paragraph.
+- Read the page itself, not only the snippet. A snippet can come from a different release than the one you asked about.
+
+To read one page after searching, ask the filesystem tool for it, for example `cat /docs/releases/0.11.0-rc.1/guides/actions.mdx`.
+
+## Markdown and index files
+
+Mintlify serves these formats for every site. They were present on the hosted site when this page was written:
+
+| Address                                 | Content                                                           |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `/llms.txt`                             | An index of pages with their descriptions.                        |
+| `/llms-full.txt`                        | The page content in one file.                                     |
+| `/sitemap.xml`                          | The pages as a sitemap.                                           |
+| Any page address with `.md` appended    | That page as Markdown, for example `/docs/releases/0.7.6/installation.md`. |
+| `/.well-known/mcp.json`                 | A description of the search MCP server.                           |
+
+The index files are generated by the provider. Check them before relying on a particular release being listed: they follow the site's navigation, and a prerelease appears beside the stable release.
+
+## Component catalog data
+
+Each release lists its components on a catalog page, `/docs/releases/VERSION/components/index`. The same entries are committed in the SDK repository as `docs/releases/VERSION/components/catalog.json`, with the release version and source revision. A site that links to components, such as a marketing site, reads that file at a pinned commit and links to these pages. It does not keep a separate copy of the manual.

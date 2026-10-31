@@ -2,9 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "saga a2ui",
-  "colors": {
-    "primary": "#657B32"
-  },
+  "colors": { "primary": "#657B32" },
   "navigation": {
     "versions": [
       {
@@ -18,6 +16,25 @@
               "docs/releases/0.7.6/installation",
               "docs/releases/0.7.6/server-entry-points"
             ]
+          },
+          {
+            "group": "Concepts and reference",
+            "pages": [
+              "docs/releases/0.7.6/guides/faithful-card-styling",
+              "docs/releases/0.7.6/guides/host-compatibility-observations"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "docs/releases/0.7.6/components/index",
+              "docs/releases/0.7.6/components/faithful-card",
+              "docs/releases/0.7.6/components/action-button"
+            ]
+          },
+          {
+            "group": "Use these docs with assistants",
+            "pages": ["docs/connect/assistants"]
           }
         ]
       },
@@ -32,6 +49,55 @@
               "docs/releases/0.11.0-rc.1/installation",
               "docs/releases/0.11.0-rc.1/server-entry-points"
             ]
+          },
+          {
+            "group": "Get started",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/guides/getting-started",
+              "docs/releases/0.11.0-rc.1/guides/public-install"
+            ]
+          },
+          {
+            "group": "Build an application",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/guides/build-tic-tac-toe-with-react",
+              "docs/releases/0.11.0-rc.1/guides/tic-tac-toe-1-first-card",
+              "docs/releases/0.11.0-rc.1/guides/tic-tac-toe-2-playable-game",
+              "docs/releases/0.11.0-rc.1/guides/tic-tac-toe-3-move-list",
+              "docs/releases/0.11.0-rc.1/guides/tic-tac-toe-architecture-options",
+              "docs/releases/0.11.0-rc.1/guides/build-notes-with-lit"
+            ]
+          },
+          {
+            "group": "Integrate",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/guides/react-consumers",
+              "docs/releases/0.11.0-rc.1/guides/attach-to-existing-backend",
+              "docs/releases/0.11.0-rc.1/guides/local-mcp-server",
+              "docs/releases/0.11.0-rc.1/guides/fetch-mcp-hosting"
+            ]
+          },
+          {
+            "group": "Concepts and reference",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/guides/actions",
+              "docs/releases/0.11.0-rc.1/guides/authorized-playback",
+              "docs/releases/0.11.0-rc.1/guides/faithful-card-styling",
+              "docs/releases/0.11.0-rc.1/guides/host-compatibility"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "docs/releases/0.11.0-rc.1/components/index",
+              "docs/releases/0.11.0-rc.1/components/faithful-card",
+              "docs/releases/0.11.0-rc.1/components/action-button",
+              "docs/releases/0.11.0-rc.1/components/saga-attribution"
+            ]
+          },
+          {
+            "group": "Use these docs with assistants",
+            "pages": ["docs/connect/assistants"]
           }
         ]
       }
@@ -39,9 +105,7 @@
   },
   "seo": {
     "indexing": "navigable",
-    "metatags": {
-      "robots": "noindex, nofollow"
-    }
+    "metatags": { "robots": "noindex, nofollow" }
   },
   "navbar": {
     "links": [

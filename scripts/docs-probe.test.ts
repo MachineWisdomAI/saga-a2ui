@@ -11,6 +11,7 @@ import {
   plain,
   probeMcp,
   readSite,
+  judgeFilter,
   releaseCases,
   releasePagesIn,
   snapshotPages,
@@ -37,6 +38,8 @@ interface Stand {
   /** What the read-only filesystem tool returns for a page path such as `docs/releases/…`. */
   readonly read: (page: string) => string;
   readonly tools?: { search?: string | null; read?: string | null };
+  /** When set, the search tool has a `version` argument and this is what it returns for it. */
+  readonly filtered?: (query: string, version: string) => string;
 }
 
 function endpoint(
@@ -52,10 +55,28 @@ function endpoint(
     if (names.search !== null)
       server.registerTool(
         names.search,
-        { inputSchema: z.object({ query: z.string() }) },
-        ({ query }) => ({
-          content: [{ type: 'text', text: stand.search(query) }],
-        }),
+        {
+          inputSchema: z.object({
+            query: z.string(),
+            ...(stand.filtered === undefined
+              ? {}
+              : { version: z.string().optional() }),
+          }),
+        },
+        (args) => {
+          const version = (args as { version?: unknown }).version;
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  typeof version !== 'string' || stand.filtered === undefined
+                    ? stand.search(args.query)
+                    : stand.filtered(args.query, version),
+              },
+            ],
+          };
+        },
       );
     if (names.read !== null)
       server.registerTool(
@@ -234,6 +255,57 @@ describe('the MCP probe', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('reports that a search tool without a version argument has no filter to check', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint(faithful),
+    });
+    expect(report.cases[0]?.versionFilter?.supported).toBe(false);
+    expect(report.passed).toBe(true);
+  });
+
+  it('passes a version filter that returns only the requested release', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: (_query, version) =>
+          result(
+            cases.find((entry) => entry.version === version)!.expectedPage,
+          ),
+      }),
+    });
+    expect(report.cases.map((entry) => entry.versionFilter?.passed)).toEqual([
+      true,
+      true,
+    ]);
+    expect(report.cases[0]?.versionFilter?.supported).toBe(true);
+    expect(report.passed).toBe(true);
+  });
+
+  it('fails when a version filter returns another release anyway', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: () => result(cases[1]!.expectedPage),
+      }),
+    });
+    expect(report.cases[0]?.passed).toBe(false);
+    expect(report.cases[0]?.versionFilter?.foreign).toEqual([
+      cases[1]!.expectedPage,
+    ]);
+    expect(report.cases[0]?.reason).toContain('filtered to 0.7.6');
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails when a version filter returns no release page', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, filtered: () => 'No results found' }),
+    });
+    expect(report.passed).toBe(false);
+    expect(judgeFilter('0.7.6', []).reason).toContain(
+      'returned no release page',
+    );
+  });
+
   it('fails when the endpoint offers no search tool', async () => {
     const report = await probeMcp(ENDPOINT, cases, {
       fetch: endpoint({ ...faithful, tools: { search: null, read: null } }),
@@ -244,7 +316,7 @@ describe('the MCP probe', () => {
 });
 
 describe('the page snapshot', () => {
-  const pages = site.releases.flatMap((release) => release.pages);
+  const pages = [...new Set(site.releases.flatMap((release) => release.pages))];
   const host = (edits: Record<string, string> = {}) =>
     ((url: string | URL) => {
       const page = String(url).replace('https://docs.example.test/', '');

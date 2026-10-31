@@ -167,6 +167,17 @@ export interface CaseResult {
   readonly foreign: readonly string[];
   readonly passed: boolean;
   readonly reason: string;
+  /** The same question with the search tool's own `version` argument, when the tool has one. */
+  readonly versionFilter?: VersionFilterResult;
+}
+
+export interface VersionFilterResult {
+  readonly supported: boolean;
+  readonly returned: readonly ReleasePage[];
+  /** Pages of another release that the filtered search returned anyway. */
+  readonly foreign: readonly string[];
+  readonly passed: boolean;
+  readonly reason: string;
 }
 
 export interface McpProbeReport {
@@ -200,6 +211,39 @@ function textOf(result: {
   return result.structuredContent === undefined
     ? text
     : `${text}\n${JSON.stringify(result.structuredContent)}`;
+}
+
+/** Judges the filtered search: it may return only the requested release, and must return its pages. */
+export function judgeFilter(
+  version: string,
+  returned: readonly ReleasePage[],
+): VersionFilterResult {
+  const foreign = returned
+    .filter((page) => page.version !== version)
+    .map((page) => page.page);
+  if (foreign.length > 0)
+    return {
+      supported: true,
+      returned,
+      foreign,
+      passed: false,
+      reason: `The search filtered to ${version} returned ${foreign.join(', ')}.`,
+    };
+  if (returned.length === 0)
+    return {
+      supported: true,
+      returned,
+      foreign,
+      passed: false,
+      reason: `The search filtered to ${version} returned no release page.`,
+    };
+  return {
+    supported: true,
+    returned,
+    foreign,
+    passed: true,
+    reason: `The search filtered to ${version} returned only its pages.`,
+  };
 }
 
 /**
@@ -294,6 +338,12 @@ export async function probeMcp(
     const tools = listed.tools.map((tool) => tool.name);
     const searchTool = tools.find((name) => /search/i.test(name)) ?? null;
     const readTool = tools.find((name) => /filesystem/i.test(name)) ?? null;
+    const filterable = listed.tools.some(
+      (tool) =>
+        tool.name === searchTool &&
+        'version' in
+          ((tool.inputSchema as { properties?: object }).properties ?? {}),
+    );
     const results: CaseResult[] = [];
     for (const searchCase of cases) {
       if (searchTool === null) {
@@ -328,13 +378,45 @@ export async function probeMcp(
         if (read.isError !== true) content = textOf(read);
       }
       const verdict = judge(searchCase, returned, content);
-      results.push(
+      let versionFilter: VersionFilterResult = {
+        supported: false,
+        returned: [],
+        foreign: [],
+        passed: true,
+        reason: 'The search tool has no version argument.',
+      };
+      if (filterable) {
+        const filtered = await client.callTool(
+          {
+            name: searchTool,
+            arguments: {
+              query: searchCase.query,
+              version: searchCase.version,
+            },
+          },
+          { signal: signal() },
+        );
+        versionFilter = judgeFilter(
+          searchCase.version,
+          filtered.isError === true ? [] : releasePagesIn(textOf(filtered)),
+        );
+      }
+      const checked =
         ranked && readTool === null
           ? {
               ...verdict,
               reason: 'The endpoint lists no read-only filesystem tool.',
             }
-          : verdict,
+          : verdict;
+      results.push(
+        versionFilter.passed
+          ? { ...checked, versionFilter }
+          : {
+              ...checked,
+              passed: false,
+              reason: `${checked.reason} ${versionFilter.reason}`,
+              versionFilter,
+            },
       );
     }
     return {
@@ -435,7 +517,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     return report.passed ? 0 : 1;
   }
   if (command === 'snapshot' && first !== undefined) {
-    const pages = readSite().releases.flatMap((release) => release.pages);
+    // A page shared by several releases, such as the assistants page, is hashed once.
+    const pages = [
+      ...new Set(readSite().releases.flatMap((release) => release.pages)),
+    ];
     console.log(JSON.stringify(await snapshotPages(first, pages), null, 2));
     return 0;
   }
