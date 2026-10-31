@@ -101,9 +101,9 @@ jobs:
         run: npm run test:pnpm-react
       - name: Run guards, types, builds, headless and browser tests
         run: npm run verify
-      # PACK2: qualify a private development build and retain it as a workflow artifact.
+      # PACK2: pack, install and qualify the release candidate, then keep it as a workflow artifact.
       # Nothing is published: this job has contents: read and holds no registry credential.
-      - name: Pack and qualify private development build
+      - name: Pack and qualify complete release candidate
         run: npm run candidate:pack -- --out candidate-out
       # Install candidate A, update to B and roll back to A as rebuilt applications, running the
       # PACK1 action and lifetime cases against each rebuilt page and server; adds rehearsal.json.
