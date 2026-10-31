@@ -43,15 +43,19 @@ A stack pins its SDK siblings, so its patch version can differ from theirs. For 
 
 ## Install one stack plus framework peers
 
-At your application's root, preserve existing overrides and add:
+At your application's root, preserve existing overrides and add the following. If the application already directly declares any of these three packages, use the same exact specifier in its dependency field too; npm rejects a direct dependency and override with different specifiers (EOVERRIDE).
 
 ```json
 {
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"
   }
 }
 ```
+
+The DOMPurify and Hono overrides replace vulnerable transitive versions pinned or permitted by upstream dependencies. npm applies overrides only from the application root; the SDK cannot impose them through its own manifest. Regenerate the application's lockfile after changing them.
+
+A2UI still requires Zod 3, which is covered by [the Zod resource-consumption advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The available upstream fix is in Zod 4; forcing it into the A2UI v3 context breaks schema compatibility. These overrides do not resolve that advisory. Bound untrusted request sizes at the application's ingress while that dependency remains in use.
 
 For Lit:
 

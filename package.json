@@ -22,6 +22,7 @@
     "test:headless": "npm run stage:tutorial && vitest run",
     "candidate:identity": "tsx scripts/candidate-identity.ts",
     "candidate:pack": "tsx scripts/release-candidate.ts pack",
+    "candidate:tarballs": "tsx scripts/release-candidate.ts tarballs",
     "candidate:verify": "tsx scripts/release-candidate.ts verify",
     "candidate:rehearse": "tsx scripts/candidate-rehearsal.ts",
     "verify": "tsx scripts/verify.ts",
@@ -57,7 +58,9 @@
     "vitest": "5.0.4"
   },
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1",
+    "dompurify": "3.4.17",
+    "@hono/node-server": "2.1.5"
   },
   "engines": {
     "node": ">=22.23.3"
