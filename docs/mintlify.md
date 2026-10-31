@@ -9,7 +9,7 @@ documentation MCP endpoint are the platform's.
 | --- | --- |
 | Source | `MachineWisdomAI/saga-a2ui`, `main`, root `docs.json` |
 | Mintlify project | `saga-a2ui`, served today at `https://saga-a2ui.mintlify.site` |
-| Intended address | `docs.saga-a2ui.dev`. The project accepted the hostname; DNS and certificate activation are a separate launch operation. Until then use the provider host. |
+| Intended address | `docs.saga-a2ui.dev`. The project serves this hostname over HTTPS with canonical URLs on it. DNS and certificates belong to the domain owner, not to this repository. |
 | Pull-request previews | A Mintlify check comments with a preview host. Previews depend on the project's plan, so confirm one appears before relying on this procedure. |
 
 ## What is published
@@ -30,8 +30,39 @@ scripts/docs-probe.ts                  hosted-site checks (MCP, snapshots)
 
 The first release in `docs.json` is the stable default. Prereleases carry an explicit `Prerelease`
 label. Development `main` is never published as a release: a release directory is named for a version
-that exists on npm, and `check` rejects any other name. Root metadata keeps this site out of external
-search engines until launch.
+that exists on npm, and `check` rejects any other name.
+
+## Search-engine indexing
+
+Production is indexable. `docs.json` sets `seo.indexing` to `navigable`, so search engines see the
+pages in the navigation and nothing else, and it sets no site-wide `robots` meta tag. A `robots` tag
+under `seo.metatags` is rendered on every page of every deployment, production included, so it
+cannot protect previews and it blocks the production site; `check` fails on a site-wide value that
+contains `noindex`, `nofollow` or `none`, and on any `seo.indexing` other than `navigable`. A
+reviewed `seo.paths` entry may still withhold one folder.
+
+Two further controls live outside this repository and are not configured by it:
+
+- The Mintlify project switch **Don't index project** (dashboard, General) withholds the whole
+  project, overrides `docs.json` and must stay off for production.
+- Pull-request preview hosts are withheld by the provider. On a pull-request preview
+  observed while this section was written, `robots.txt` was `User-agent: *` with `Disallow: /` and
+  `Content-Signal: ai-train=no, search=no, ai-input=no`, while the production project's
+  `robots.txt` allowed crawling apart from `/_next/` and `/cdn-cgi/`. That is the provider's
+  behavior for preview hosts, not a setting here; the probe below shows it for any preview.
+
+```bash
+# Production: no blocking meta tag, header or robots rule, canonical on the custom domain, and a
+# sitemap that lists pages.
+npx tsx scripts/docs-probe.ts indexing https://docs.saga-a2ui.dev indexable
+# A pull-request preview: at least one signal withholds it.
+npx tsx scripts/docs-probe.ts indexing https://PREVIEW-HOST withheld
+```
+
+The report lists each signal (`robotsMeta`, `robotsHeader`, `robotsTxtDisallowsAll`, `blocks`),
+the page's canonical and the sitemap's URL count, and exits 1 when the expectation fails. A
+sitemap or search-engine submission, Search Console verification and the time a crawler takes to
+index are separate operations and are not shown by this probe.
 
 ## Generated output and its one regeneration path
 

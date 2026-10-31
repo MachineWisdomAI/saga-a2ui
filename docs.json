@@ -104,8 +104,7 @@
     ]
   },
   "seo": {
-    "indexing": "navigable",
-    "metatags": { "robots": "noindex, nofollow" }
+    "indexing": "navigable"
   },
   "navbar": {
     "links": [

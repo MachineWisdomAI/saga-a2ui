@@ -536,6 +536,42 @@ describe('the offline check of committed release content', () => {
     expect(checkReleases(site()).problems).toEqual([]);
   });
 
+  it('keeps the site indexable and published pages only, with no site-wide robots block', () => {
+    const committed = JSON.parse(
+      fs.readFileSync(path.join(root, 'docs.json'), 'utf8'),
+    ) as { seo?: { indexing?: string; metatags?: Record<string, string> } };
+    expect(committed.seo?.indexing).toBe('navigable');
+    expect(committed.seo?.metatags?.robots).toBeUndefined();
+
+    const blocked = site(({ config }) => {
+      config.seo = { metatags: { robots: 'noindex, nofollow' } };
+    });
+    expect(checkReleases(blocked).problems.join('\n')).toMatch(
+      /seo\.metatags\.robots is "noindex, nofollow"/,
+    );
+    const nofollow = site(({ config }) => {
+      config.seo = { metatags: { Robots: 'index, nofollow' } };
+    });
+    expect(checkReleases(nofollow).problems.join('\n')).toMatch(/nofollow/);
+    const everything = site(({ config }) => {
+      config.seo = { indexing: 'all' };
+    });
+    expect(checkReleases(everything).problems.join('\n')).toMatch(
+      /seo\.indexing must be "navigable"/,
+    );
+    // An explicit allow, other tags and a reviewed folder-scoped block are not the site-wide block.
+    const allowed = site(({ config }) => {
+      config.seo = {
+        indexing: 'navigable',
+        metatags: { robots: 'index, follow', 'og:site_name': 'saga a2ui' },
+        paths: [
+          { path: 'docs/releases/0.1.0', metatags: { robots: 'noindex' } },
+        ],
+      };
+    });
+    expect(checkReleases(allowed).problems).toEqual([]);
+  });
+
   it('requires exactly one default and that it is a stable release', () => {
     const noDefault = site(({ config }) => {
       config.navigation.versions[0].default = false;
