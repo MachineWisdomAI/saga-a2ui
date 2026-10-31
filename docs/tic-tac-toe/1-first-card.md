@@ -15,10 +15,11 @@ Accept npm's prompt to install `create-vite` if it appears. If you already have 
 
 [Vite's React/TypeScript generator](https://vite.dev/guide/#scaffolding-your-first-vite-project) creates the package file, compiler configuration, React entry point and lint setup. Keep that configuration. We will replace its demo counter and add the parts that connect the app to an MCP host. All commands below run from this app directory. Continue with the installation commands below; the generator’s suggested `npm run dev` starts a standalone website, while this app opens in Claude or ChatGPT.
 
-saga's supported A2UI dependency combination needs one npm override. Set it before installing:
+saga's supported dependency combination needs compatibility and security overrides. Set them before installing:
 
 ```sh
-npm pkg set 'overrides.@a2ui/markdown-it=0.2.1'
+npm pkg set 'overrides.@a2ui/markdown-it=0.2.1' \
+  'overrides.dompurify=3.4.17' 'overrides.@hono/node-server=2.1.5'
 ```
 
 Install the stack, the React version it supports, and the MCP server and schema libraries used by your operations:
@@ -41,7 +42,7 @@ npm install --save-dev --save-exact --strict-peer-deps \
   eslint-plugin-react-refresh@0.4.24 globals@16.5.0 typescript-eslint@8.46.4
 ```
 
-Keep Vite's generated `.gitignore`, which excludes `node_modules` and `dist`, and the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the Markdown override.
+Keep Vite's generated `.gitignore`, which excludes `node_modules` and `dist`, and the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the consumer-root overrides.
 
 ## 2. Return a message from the server
 

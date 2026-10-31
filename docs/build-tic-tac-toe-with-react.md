@@ -46,9 +46,9 @@ Follow [Connect a React component to a server result](tic-tac-toe/1-first-card.m
 
 The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.11.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
 
-The npm override for `@a2ui/markdown-it` selects the dependency version used to qualify this package combination. It does not remove the inherited advisories below.
+The lesson's consumer-root overrides keep `@a2ui/markdown-it` at the compatible version and replace vulnerable DOMPurify and Hono dependencies with patched versions. Keep them when regenerating your lockfile; see the [complete override recipe](public-install.md#install-one-stack-plus-framework-peers).
 
-With these versions, npm reports advisories inherited through A2UI’s Zod 3 and DOMPurify dependencies. The game’s tool schemas use Zod 4.6.7; its own React catalog does not bundle DOMPurify or render HTML from the model. The installed dependencies still carry those advisories. See the [Zod advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) and [DOMPurify advisory](https://github.com/advisories/GHSA-cg2g-xh64-v4q7). Do not force Zod 4 into A2UI’s Zod 3 dependency: their APIs differ.
+A2UI's Zod 3 dependency still carries the [resource-consumption advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The game's tool schemas use Zod 4.6.7; its own React catalog does not bundle DOMPurify or render HTML from the model. Do not force Zod 4 into A2UI's Zod 3 dependency: their APIs differ.
 
 Keep the generated `package-lock.json` in your project. Use `npm ci` for later installs from that lockfile.
 

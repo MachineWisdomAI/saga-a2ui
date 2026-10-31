@@ -77,7 +77,11 @@ it('exports unpublished tarballs and npm overrides without requiring built appli
     expect(manifest.private).toBe(true);
     expect(manifest.publishConfig.registry).toBe(CANDIDATE_REGISTRY);
   }
-  expect(recipe.overrides['@a2ui/markdown-it']).toBe('0.2.1');
+  expect(recipe.overrides).toMatchObject({
+    '@a2ui/markdown-it': '0.2.1',
+    dompurify: '3.4.17',
+    '@hono/node-server': '2.1.5',
+  });
   // Packing alone must not claim the installed-application qualification record.
   expect(fs.existsSync(path.join(output, 'candidate.json'))).toBe(false);
 }, 120_000);
