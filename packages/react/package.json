@@ -24,7 +24,7 @@
     "@a2ui/react": "0.13.0",
     "@a2ui/web_core": "0.13.0",
     "@saga-a2ui/core": "0.11.1-rc.1",
-    "zod": "3.25.76"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
     "@saga-a2ui/components": "0.11.1-rc.1",
