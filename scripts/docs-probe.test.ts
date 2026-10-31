@@ -10,6 +10,7 @@ import {
   FACTS,
   judge,
   plain,
+  probeIndexing,
   probeMcp,
   readSite,
   judgeFilter,
@@ -478,5 +479,133 @@ describe('the page snapshot', () => {
         after,
       ).unreadable,
     ).toEqual(['docs/releases/none/missing']);
+  });
+});
+
+describe('the indexing check', () => {
+  const page = site.releases[0]!.pages[0]!;
+  const SITEMAP =
+    '<urlset><url><loc>https://docs.example.test/a</loc></url></urlset>';
+  // A host that serves one page, a robots file and a sitemap, with the given head tags.
+  const host =
+    (options: {
+      head?: string;
+      header?: string;
+      robots?: string;
+      sitemap?: string;
+    }) =>
+    async (url: string | URL): Promise<Response> => {
+      const { pathname } = new URL(String(url));
+      if (pathname === '/robots.txt')
+        return new Response(
+          options.robots ?? 'User-agent: *\nDisallow: /_next/\n',
+        );
+      if (pathname === '/sitemap.xml')
+        return new Response(options.sitemap ?? SITEMAP);
+      return new Response(
+        `<html><head>${options.head ?? ''}</head><body></body></html>`,
+        {
+          headers:
+            options.header === undefined
+              ? {}
+              : { 'x-robots-tag': options.header },
+        },
+      );
+    };
+  const canonical =
+    '<link data-mint-head rel="canonical" href="https://docs.example.test/a">';
+
+  it('passes an indexable site: no blocking tag, an open robots file and a sitemap', async () => {
+    const report = await probeIndexing(
+      'https://docs.example.test/',
+      page,
+      'indexable',
+      host({ head: canonical }),
+    );
+    expect(report).toMatchObject({
+      robotsMeta: null,
+      canonical: 'https://docs.example.test/a',
+      robotsTxtDisallowsAll: false,
+      sitemapUrls: 1,
+      blocks: [],
+      passed: true,
+    });
+    const allowed = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      host({ head: '<meta name="robots" content="index, follow">' }),
+    );
+    expect(allowed.passed).toBe(true);
+  });
+
+  it('fails an indexable site that blocks by meta tag, header, robots file or empty sitemap', async () => {
+    const cases = [
+      [
+        {
+          head: '<meta data-mint-head name="robots" content="noindex, nofollow">',
+        },
+        /robots meta/,
+      ],
+      [{ head: '<meta content="noindex" name="robots">' }, /robots meta/],
+      [{ header: 'noindex' }, /X-Robots-Tag/],
+      [{ robots: 'User-agent: *\nDisallow: /\n' }, /robots\.txt/],
+      [{ sitemap: '<urlset></urlset>' }, null],
+    ] as const;
+    for (const [options, reason] of cases) {
+      const report = await probeIndexing(
+        'https://docs.example.test',
+        page,
+        'indexable',
+        host(options),
+      );
+      expect(report.passed).toBe(false);
+      if (reason !== null) expect(report.blocks.join('\n')).toMatch(reason);
+    }
+    const missing = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      async (url) =>
+        new Response('x', {
+          status: new URL(String(url)).pathname === `/${page}` ? 404 : 200,
+        }),
+    );
+    expect(missing.passed).toBe(false);
+  });
+
+  it('reads a disallow only under the universal user agent', async () => {
+    const other = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      host({
+        robots: 'User-agent: BadBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n',
+      }),
+    );
+    expect(other.robotsTxtDisallowsAll).toBe(false);
+    expect(other.passed).toBe(true);
+  });
+
+  it('passes a preview only while at least one signal withholds it', async () => {
+    const protectedPreview = await probeIndexing(
+      'https://preview.example.test',
+      page,
+      'withheld',
+      host({
+        robots: 'User-agent: *\nContent-Signal: search=no\nDisallow: /\n',
+      }),
+    );
+    expect(protectedPreview).toMatchObject({
+      blocks: ['robots.txt disallows everything'],
+      passed: true,
+    });
+    const open = await probeIndexing(
+      'https://preview.example.test',
+      page,
+      'withheld',
+      host({ head: canonical }),
+    );
+    expect(open.passed).toBe(false);
   });
 });

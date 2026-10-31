@@ -418,7 +418,38 @@ interface DocsConfig {
       groups: { group: string; pages: string[] }[];
     }[];
   };
+  seo?: {
+    indexing?: unknown;
+    metatags?: Record<string, unknown>;
+  };
   [key: string]: unknown;
+}
+
+const BLOCKING_ROBOTS = /\b(?:noindex|nofollow|none)\b/i;
+
+/**
+ * The production site must be indexable. A robots meta tag in `docs.json` is rendered on every
+ * page of every deployment, production included, so a blocking value there cannot be limited to
+ * previews: the provider withholds previews from search engines on its own (docs/mintlify.md).
+ */
+export function checkIndexing(config: DocsConfig): string[] {
+  const problems: string[] = [];
+  const seo = config.seo ?? {};
+  if (seo.indexing !== undefined && seo.indexing !== 'navigable')
+    problems.push(
+      `docs.json seo.indexing must be "navigable" (published pages only); found ${JSON.stringify(seo.indexing)}.`,
+    );
+  // Only the site-wide tag is judged. A reviewed `seo.paths` entry may still withhold one folder.
+  for (const [name, value] of Object.entries(seo.metatags ?? {}))
+    if (
+      name.toLowerCase() === 'robots' &&
+      typeof value === 'string' &&
+      BLOCKING_ROBOTS.test(value)
+    )
+      problems.push(
+        `docs.json seo.metatags.robots is "${value}", which keeps the whole production site out of search engines. Remove it; previews are withheld by the provider.`,
+      );
+  return problems;
 }
 
 /** Add or replace one release's navigation; labels and the default are never changed for an existing entry. */
@@ -554,6 +585,7 @@ export function checkReleases(root: string): CheckResult {
   const config = JSON.parse(
     fs.readFileSync(path.join(root, 'docs.json'), 'utf8'),
   ) as DocsConfig;
+  problems.push(...checkIndexing(config));
   const versions = config.navigation.versions;
   const directories = releaseVersions(root);
   const navigationVersions = versions.map((entry) => entry.version);

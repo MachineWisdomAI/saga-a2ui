@@ -23,6 +23,8 @@ import { fencedBlocks } from './docs-release/convert.js';
 //     also appear in the search results are reported, not hidden; they are not a failure.
 //   - `snapshot` / `compare`: the hosted Markdown of every page in docs.json is hashed, so a
 //     snapshot taken before and after a newer page changes shows whether a released page moved.
+//   - `indexing`: whether a deployment lets search engines index it (robots meta tag, header,
+//     `robots.txt`, sitemap), expected `indexable` for production and `withheld` for a preview.
 // Nothing here writes to the site. The only network traffic is MCP initialize, tools/list and
 // search calls and page GETs.
 
@@ -573,9 +575,120 @@ export async function checkPages(
   );
 }
 
+export type IndexingExpectation = 'indexable' | 'withheld';
+
+export interface IndexingReport {
+  readonly site: string;
+  readonly page: string;
+  readonly expectation: IndexingExpectation;
+  /** The robots meta tag the page renders, or null when it renders none. */
+  readonly robotsMeta: string | null;
+  readonly robotsHeader: string | null;
+  readonly canonical: string | null;
+  /** True when `robots.txt` disallows the whole site for every crawler. */
+  readonly robotsTxtDisallowsAll: boolean;
+  readonly sitemapUrls: number;
+  /** Every signal that withholds the site from search engines, named. */
+  readonly blocks: readonly string[];
+  readonly passed: boolean;
+}
+
+const BLOCKING_DIRECTIVE = /\b(?:noindex|nofollow|none)\b/i;
+
+function attributeOf(tag: string, name: string): string | null {
+  const match = new RegExp(
+    `\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    'i',
+  ).exec(tag);
+  return match === null ? null : (match[1] ?? match[2] ?? match[3] ?? null);
+}
+
+function headTag(
+  html: string,
+  tagName: 'meta' | 'link',
+  key: string,
+  value: string,
+  read: string,
+): string | null {
+  for (const tag of html.match(new RegExp(`<${tagName}\\b[^>]*>`, 'gi')) ?? [])
+    if (attributeOf(tag, key)?.toLowerCase() === value)
+      return attributeOf(tag, read);
+  return null;
+}
+
+/**
+ * Judges whether a deployment lets search engines index it, from what it serves: the robots meta
+ * tag and canonical of one published page, any `X-Robots-Tag` header, `robots.txt` and the
+ * sitemap. `indexable` is the production expectation (nothing blocks, the sitemap lists pages);
+ * `withheld` is the preview expectation (at least one signal blocks). The signals are reported
+ * separately because the platform raises them independently of `docs.json`.
+ */
+export async function probeIndexing(
+  site: string,
+  page: string,
+  expectation: IndexingExpectation,
+  fetchPage: FetchLike = fetch,
+): Promise<IndexingReport> {
+  const base = site.replace(/\/+$/, '');
+  const get = (suffix: string) =>
+    fetchPage(`${base}${suffix}`, {
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  const [pageResponse, robotsResponse, sitemapResponse] = await Promise.all([
+    get(`/${page}`),
+    get('/robots.txt'),
+    get('/sitemap.xml'),
+  ]);
+  const html = pageResponse.ok ? await pageResponse.text() : '';
+  const robotsMeta = headTag(html, 'meta', 'name', 'robots', 'content');
+  const canonical = headTag(html, 'link', 'rel', 'canonical', 'href');
+  const robotsHeader = pageResponse.headers.get('x-robots-tag');
+  const robotsTxt = robotsResponse.ok ? await robotsResponse.text() : '';
+  // Group the file by `User-agent` blocks and look for `Disallow: /` under `*`.
+  let universal = false;
+  let robotsTxtDisallowsAll = false;
+  for (const raw of robotsTxt.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim();
+    const [field, ...rest] = line.split(':');
+    const value = rest.join(':').trim();
+    if (/^user-agent$/i.test(field ?? '')) universal = value === '*';
+    else if (universal && /^disallow$/i.test(field ?? '') && value === '/')
+      robotsTxtDisallowsAll = true;
+  }
+  const sitemapUrls = sitemapResponse.ok
+    ? ((await sitemapResponse.text()).match(/<loc>/g) ?? []).length
+    : 0;
+  const blocks = [
+    ...(robotsMeta !== null && BLOCKING_DIRECTIVE.test(robotsMeta)
+      ? [`robots meta "${robotsMeta}"`]
+      : []),
+    ...(robotsHeader !== null && BLOCKING_DIRECTIVE.test(robotsHeader)
+      ? [`X-Robots-Tag "${robotsHeader}"`]
+      : []),
+    ...(robotsTxtDisallowsAll ? ['robots.txt disallows everything'] : []),
+  ];
+  const passed =
+    expectation === 'indexable'
+      ? pageResponse.ok && blocks.length === 0 && sitemapUrls > 0
+      : blocks.length > 0;
+  return {
+    site: base,
+    page,
+    expectation,
+    robotsMeta,
+    robotsHeader,
+    canonical,
+    robotsTxtDisallowsAll,
+    sitemapUrls,
+    blocks,
+    passed,
+  };
+}
+
 const USAGE = `Usage:
   tsx scripts/docs-probe.ts mcp <https://site/mcp>
   tsx scripts/docs-probe.ts pages <https://site>
+  tsx scripts/docs-probe.ts indexing <https://site> [indexable|withheld]
   tsx scripts/docs-probe.ts snapshot <https://site> > before.json
   tsx scripts/docs-probe.ts compare before.json after.json`;
 
@@ -595,6 +708,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     );
     console.log(JSON.stringify(checks, null, 2));
     return checks.every((check) => check.passed) ? 0 : 1;
+  }
+  if (command === 'indexing' && first !== undefined) {
+    if (second !== undefined && second !== 'indexable' && second !== 'withheld')
+      return (console.error(USAGE), 2);
+    // The default release's first page is a published page of every deployment.
+    const site = readSite();
+    const page = (
+      site.releases.find((release) => release.default) ?? site.releases[0]
+    )?.pages[0];
+    if (page === undefined) throw new Error('docs.json lists no page.');
+    const report = await probeIndexing(first, page, second ?? 'indexable');
+    console.log(JSON.stringify(report, null, 2));
+    return report.passed ? 0 : 1;
   }
   if (command === 'snapshot' && first !== undefined) {
     // A page shared by several releases, such as the assistants page, is hashed once.
