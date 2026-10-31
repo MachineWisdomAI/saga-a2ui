@@ -15,6 +15,12 @@ python3 scripts/mw-version.py update --base origin/main --title 'chore(deps): up
 python3 scripts/mw-version.py check --base origin/main --title 'chore(deps): update transitive dependency'
 ```
 
+These are source versions. An automatically advanced `-rc` suffix does not
+nominate a public release candidate or authorize npm publication. Development
+and downstream integration use [private tarballs](candidate-update-and-rollback.md#use-unpublished-source-in-another-application).
+Publish an RC only after [RC selection](release-packages.md#select-a-public-release-candidate)
+for an intended stable release; routine source bumps stay unpublished.
+
 Use the actual PR title. Supply `--body-file PATH` for its body, or `--event-file`
 with a GitHub pull-request event containing title/body. The updater also reads
 the PR branch's commits. One PR gets the largest applicable increment: features

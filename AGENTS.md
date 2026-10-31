@@ -12,6 +12,7 @@ This repository is the public Machine Wisdom TypeScript SDK. Package publication
 - Make tracked edits only on a dedicated worktree or feature branch. Keep the default checkout clean. Never commit or push directly to the default branch; land tracked changes through a pull request.
 - Never force-push or amend a pushed commit. Stage explicit paths only; do not use `git add -A` or `git add .`.
 - Versioned PRs: follow `docs/version-policy.md` before review and after syncing main. Docs, tests, CI, and development checks alone need no bump. Use Conventional Commits; enroll owned versions through bootstrap. Publication stays separate.
+- npm releases: use private tarballs or CI artifacts for development and downstream integration. Before publishing an RC, follow [RC selection](docs/release-packages.md#select-a-public-release-candidate). A merged PR, source `-rc` suffix or need for a sibling package does not select a public RC.
 - Resolve exact targets before destructive work. Do not discard changes, delete material data, merge, deploy, publish, post externally, or alter access without authority for that action.
 - Never expose secrets. Keep provider credentials and user data within their authorized boundary.
 - Treat `~/git/vendor/` checkouts as read-only. Develop in an owned repository or worktree.
