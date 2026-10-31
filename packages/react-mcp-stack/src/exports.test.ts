@@ -6,6 +6,8 @@ import * as main from '@saga-a2ui/react-mcp-stack';
 import * as card from '@saga-a2ui/react-mcp-stack/faithful-card';
 import * as contentPolicy from '@saga-a2ui/react-mcp-stack/content-policy';
 import * as server from '@saga-a2ui/react-mcp-stack/server';
+import * as fetchServer from '@saga-a2ui/react-mcp-stack/server/http';
+import * as localServer from '@saga-a2ui/react-mcp-stack/server/node';
 import {
   checkPackageDirection,
   directionViolations,
@@ -46,6 +48,36 @@ const anyOf = (modules: string[], pattern: RegExp): string[] =>
   modules.filter((id) => pattern.test(id));
 
 describe('@saga-a2ui/react-mcp-stack', () => {
+  it('offers local Node hosting without importing a renderer', async () => {
+    expect(Object.keys(localServer)).toEqual(['startLocalMcpServer']);
+    const modules = await bundledModules(
+      '@saga-a2ui/react-mcp-stack/server/node',
+    );
+    expect(
+      anyOf(modules, /\/packages\/mcp\/src\/server\/node\/listener\.ts$/),
+    ).toHaveLength(1);
+    expect(anyOf(modules, /\/packages\/(react|lit|components)\//)).toEqual([]);
+    expect(
+      anyOf(modules, /node_modules\/(react|react-dom|lit|lit-html|@a2ui)\//),
+    ).toEqual([]);
+  });
+
+  it('offers Fetch hosting without a listener, a filesystem module or a renderer', async () => {
+    expect(Object.keys(fetchServer).sort()).toEqual([
+      'McpFetchConfigurationError',
+      'createMcpFetchApp',
+    ]);
+    const modules = await bundledModules(
+      '@saga-a2ui/react-mcp-stack/server/http',
+    );
+    expect(
+      anyOf(modules, /\/packages\/mcp\/src\/server\/http\/fetch-app\.ts$/),
+    ).toHaveLength(1);
+    expect(anyOf(modules, /\/packages\/mcp\/src\/server\/node\//)).toEqual([]);
+    expect(anyOf(modules, /node_modules\/@hono\/node-server\//)).toEqual([]);
+    expect(anyOf(modules, /\/packages\/(react|lit|components)\//)).toEqual([]);
+  });
+
   it('exposes exactly the supported names', () => {
     expect(Object.keys(main).sort()).toEqual([
       'Action',
@@ -56,6 +88,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'CommonSchemas',
       'ListApi',
       'RowApi',
+      'SagaAttribution',
       'StartError',
       'StartFailure',
       'createComponentImplementation',
@@ -81,6 +114,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'attachRequestLifetime',
       'createServerBudgets',
       'operationViewFromHtml',
+      'registerProtectedOperation',
       'registerPublicOperation',
       'viewUriForHtml',
     ]);

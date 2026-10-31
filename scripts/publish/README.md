@@ -32,9 +32,21 @@ credential; reviewer credentials, authentication and publisher verification stay
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
 `listing` and `assets` (with `review` and `publication`) belong to the ChatGPT target, and a `claude`
-section belongs to the Claude target. Each target needs only its own: a release input for Claude alone
-has no `listing`, and the `chatgpt` target says so and prepares nothing when `listing` or `assets` is
-missing. `claude` is the one section whose missing fields are findings instead of a parse error
+section belongs to the Claude target. The ChatGPT target requires `listing`. Branding is optional:
+each of `assets.logo`, `assets.composerIcon`, `assets.logoDark` and `assets.composerIconDark` that
+you omit uses the bundled SAGA A2UI dragon, in the light or dark artwork that suits the field (the
+composer icons are the transparent head crop of the mark; the logos are the full mark on a solid tile; see
+[`assets/brand/plugin`](../../assets/brand/plugin/README.md)). A dark default follows its light
+field: `logoDark` and `composerIconDark` default to the dragon only when `logo` or `composerIcon`
+also uses the dragon, so your own light branding is never paired with SAGA's dark artwork. Supply
+your own paths to use your application's branding; an application that supplies a light file and
+no dark file gets no dark variant. Supplied files are preserved, and an invalid supplied file
+remains an error. These defaults
+affect newly prepared ChatGPT packages; they do not update an installed App or establish how a host
+renders an existing connection. Claude submissions still use their own supplied connector icon.
+The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
+`git lfs pull --include='assets/brand/plugin/*.png'` before preparing a default-branded package.
+`claude` is the one section whose missing fields are findings instead of a parse error
 (below), so a maintainer sees every missing piece at once.
 
 ## What is produced (ChatGPT)
@@ -152,14 +164,16 @@ publisher submits by hand in the host's documented flow
 [Claude](https://claude.com/docs/connectors/building/submission), portal
 <https://claude.ai/directory/manage>).
 
-```sh
-saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
-saga publish handoff status              --handoff DIR [--prepared ./publication-now]
-saga publish handoff attempt             --handoff DIR --prepared ./publication-now
-saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
-saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
-saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
-saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
+
+```text
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
+npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
+npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the

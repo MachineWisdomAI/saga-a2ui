@@ -138,6 +138,8 @@ describe('the React card consumer built from the packed SDK packages', () => {
     expect(Object.keys(exportsMap).sort()).toEqual([
       './a2ui',
       './actions',
+      './attribution',
+      './attribution.css',
       './faithful-card',
       './faithful-card.css',
     ]);
@@ -156,10 +158,13 @@ describe('the React card consumer built from the packed SDK packages', () => {
         .exports ?? {};
     expect(Object.keys(stackExports).sort()).toEqual([
       '.',
+      './attribution.css',
       './content-policy',
       './faithful-card',
       './faithful-card.css',
       './server',
+      './server/http',
+      './server/node',
     ]);
     for (const [subpath, target] of Object.entries(stackExports))
       expect(sdk.files['react-mcp-stack'], subpath).toContain(

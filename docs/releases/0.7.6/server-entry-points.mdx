@@ -1,0 +1,18 @@
+---
+title: 'React server entry points in 0.7.6'
+sidebarTitle: 'Server entry points'
+description: 'Check the server imports exported by saga a2ui React MCP stack 0.7.6 before choosing a transport integration.'
+keywords: ['0.7.6', 'server/http', 'server/node', 'exports']
+---
+
+The saga a2ui React stack **0.7.6** exposes the server entry points listed below. Use this version's package exports when choosing imports.
+
+Package version: **0.7.6 (stable)**. [Pinned SDK source](https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react-mcp-stack). [Published package](https://www.npmjs.com/package/@saga-a2ui/react-mcp-stack/v/0.7.6).
+
+This stable release exports `/server`. It does **not** export `/server/http` or `/server/node`; do not copy those imports from newer prerelease documentation.
+
+| Import                              | Package source          |
+| ----------------------------------- | ----------------------- |
+| `@saga-a2ui/react-mcp-stack/server` | `./src/server/index.ts` |
+
+These are server-side imports. Compose the server separately from browser view code. The application still supplies the framework peers named in [installation](/docs/releases/0.7.6/installation).

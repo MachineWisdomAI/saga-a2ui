@@ -1,0 +1,8 @@
+*
+!docs.json
+!docs/
+docs/*
+!docs/connect/
+!docs/connect/**
+!docs/releases/
+!docs/releases/**

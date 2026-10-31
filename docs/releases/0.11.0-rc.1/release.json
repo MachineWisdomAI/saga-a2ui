@@ -1,0 +1,325 @@
+{
+  "version": "0.11.0-rc.1",
+  "channel": "prerelease",
+  "revision": "fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8",
+  "packages": {
+    "@saga-a2ui/core": "0.11.0-rc.1",
+    "@saga-a2ui/components": "0.11.0-rc.1",
+    "@saga-a2ui/mcp": "0.11.0-rc.1",
+    "@saga-a2ui/lit": "0.11.0-rc.1",
+    "@saga-a2ui/react": "0.11.0-rc.1",
+    "@saga-a2ui/lit-mcp-stack": "0.11.0-rc.1",
+    "@saga-a2ui/react-mcp-stack": "0.11.0-rc.1"
+  },
+  "authored": [
+    { "page": "installation", "group": "React stack" },
+    { "page": "server-entry-points", "group": "React stack" }
+  ],
+  "guides": [
+    {
+      "source": "docs/getting-started.md",
+      "slug": "getting-started",
+      "group": "Get started",
+      "description": "Choose a stack, create a starter or attach SAGA to an existing backend, and learn the vocabulary of surfaces, components and actions."
+    },
+    {
+      "source": "docs/public-install.md",
+      "slug": "public-install",
+      "group": "Get started",
+      "sidebarTitle": "Published packages",
+      "description": "The seven packages published for this release, their registry integrity values and the install recipes for the Lit and React stacks."
+    },
+    {
+      "source": "docs/build-tic-tac-toe-with-react.md",
+      "slug": "build-tic-tac-toe-with-react",
+      "group": "Build an application",
+      "description": "Build a React tic-tac-toe game that you play inside Claude or ChatGPT, starting from the published npm packages."
+    },
+    {
+      "source": "docs/tic-tac-toe/1-first-card.md",
+      "slug": "tic-tac-toe-1-first-card",
+      "group": "Build an application",
+      "sidebarTitle": "Tic-tac-toe 1: first card",
+      "description": "Connect a React component to a server result in the first lesson of the tic-tac-toe tutorial."
+    },
+    {
+      "source": "docs/tic-tac-toe/2-playable-game.md",
+      "slug": "tic-tac-toe-2-playable-game",
+      "group": "Build an application",
+      "sidebarTitle": "Tic-tac-toe 2: playable game",
+      "description": "Replace the welcome message with a game whose rules the server decides and whose moves the assistant answers."
+    },
+    {
+      "source": "docs/tic-tac-toe/3-move-list.md",
+      "slug": "tic-tac-toe-3-move-list",
+      "group": "Build an application",
+      "sidebarTitle": "Tic-tac-toe 3: move list",
+      "description": "Show the server's move history in the tic-tac-toe view without changing the server."
+    },
+    {
+      "source": "docs/tic-tac-toe-architecture-options.md",
+      "slug": "tic-tac-toe-architecture-options",
+      "group": "Build an application",
+      "sidebarTitle": "Other game structures",
+      "description": "Changes to the tic-tac-toe structure that the tutorial does not implement."
+    },
+    {
+      "source": "docs/build-notes-with-lit.md",
+      "slug": "build-notes-with-lit",
+      "group": "Build an application",
+      "description": "The Lit track: compose a notes application view with a stack, see how identity reaches an operation, and where each claim's evidence stops."
+    },
+    {
+      "source": "docs/react-consumers.md",
+      "slug": "react-consumers",
+      "group": "Integrate",
+      "description": "Install the React renderer with MCP, import from the stack and add the removable credit."
+    },
+    {
+      "source": "docs/attach-to-existing-backend.md",
+      "slug": "attach-to-existing-backend",
+      "group": "Integrate",
+      "description": "Recipes for attaching SAGA to an existing backend, cut from the maintained and qualified starter templates."
+    },
+    {
+      "source": "docs/local-mcp-server.md",
+      "slug": "local-mcp-server",
+      "group": "Integrate",
+      "description": "Run an application's MCP operations on a local Node server with the SDK's HTTP admission and request lifetimes."
+    },
+    {
+      "source": "docs/fetch-mcp-hosting.md",
+      "slug": "fetch-mcp-hosting",
+      "group": "Integrate",
+      "description": "Serve an application's MCP operations through a standard fetch function, for example in a Cloudflare Worker."
+    },
+    {
+      "source": "docs/actions.md",
+      "slug": "actions",
+      "group": "Concepts and reference",
+      "description": "Change a component and trace allowed and denied requests through prerequisites, server authorization, feedback and cleanup."
+    },
+    {
+      "source": "docs/authorized-playback.md",
+      "slug": "authorized-playback",
+      "group": "Concepts and reference",
+      "description": "How the reference application authorizes and fetches protected audio with a capability bound to the view's key."
+    },
+    {
+      "source": "docs/faithful-card-styling.md",
+      "slug": "faithful-card-styling",
+      "group": "Concepts and reference",
+      "description": "The class names, custom properties and selectors an application may use to style the FaithfulCard in either renderer."
+    },
+    {
+      "source": "docs/host-compatibility.md",
+      "slug": "host-compatibility",
+      "group": "Concepts and reference",
+      "description": "The flows observed in ChatGPT web, Claude web and the Alexa+ simulator, with their limits."
+    }
+  ],
+  "exclusions": [
+    {
+      "source": "docs/development-reference.md",
+      "reason": "Contributor reference for the repository's slices and tests, not a guide for installing the packages."
+    },
+    {
+      "source": "docs/release-packages.md",
+      "reason": "Maintainer procedure for preparing and publishing a release."
+    },
+    {
+      "source": "docs/candidate-update-and-rollback.md",
+      "reason": "Maintainer procedure for private candidate builds, which are not public releases."
+    },
+    {
+      "source": "docs/change-hygiene.md",
+      "reason": "Contributor rules for pull requests and retained artifacts."
+    },
+    {
+      "source": "docs/version-policy.md",
+      "reason": "Contributor rules for versioning this repository."
+    },
+    {
+      "source": "docs/tic-tac-toe/checkpoints/first-card.md",
+      "reason": "A complete-file checkpoint for comparing tutorial lesson 1; links from the lessons open it in the pinned source."
+    }
+  ],
+  "components": [
+    {
+      "id": "faithful-card",
+      "name": "FaithfulCard",
+      "summary": "A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible.",
+      "entries": [
+        {
+          "package": "@saga-a2ui/components",
+          "subpath": "./faithful-card",
+          "role": "Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent"
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "subpath": "./faithful-card",
+          "stylesheet": "./faithful-card.css",
+          "role": "React rendering, catalog entry and trusted settings provider"
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "subpath": "./faithful-card",
+          "role": "Lit rendering, catalog entry and content view"
+        },
+        {
+          "package": "@saga-a2ui/react-mcp-stack",
+          "subpath": "./faithful-card",
+          "stylesheet": "./faithful-card.css",
+          "role": "Starts a FaithfulCard application in React over MCP Apps"
+        },
+        {
+          "package": "@saga-a2ui/lit-mcp-stack",
+          "subpath": "./faithful-card",
+          "role": "Starts a FaithfulCard application in Lit over MCP Apps"
+        }
+      ],
+      "preview": {
+        "caption": "A FaithfulCard declared in an A2UI layout and bound to the body of a note.",
+        "source": "examples/pack1-consumer/src/main-card.ts",
+        "from": "const body = {",
+        "to": "} as const;",
+        "language": "ts"
+      },
+      "usage": [
+        {
+          "label": "Style the FaithfulCard",
+          "guide": "faithful-card-styling"
+        },
+        {
+          "label": "Install the React stack and start a card application",
+          "guide": "react-consumers"
+        },
+        {
+          "label": "Choose a stack and install the published packages",
+          "guide": "getting-started"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host.",
+          "guide": "faithful-card-styling",
+          "anchor": "qualification",
+          "label": "Styling qualification"
+        },
+        {
+          "statement": "The recorded answer-card flows were observed in ChatGPT web and Claude web, and the Ansari answer-card flow in the Alexa+ simulator. The guide says these are observations of particular flows, not a complete renderer, device or host-version matrix.",
+          "guide": "host-compatibility",
+          "label": "Host compatibility"
+        }
+      ]
+    },
+    {
+      "id": "action-button",
+      "name": "ActionButton",
+      "summary": "A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.",
+      "entries": [
+        {
+          "package": "@saga-a2ui/core",
+          "subpath": "./actions/action-button-schema",
+          "role": "Renderer-neutral contract of the control: a strict schema with no action property"
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "subpath": "./actions",
+          "role": "React control and action setup"
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "subpath": "./actions",
+          "role": "Lit control and action setup"
+        }
+      ],
+      "preview": {
+        "caption": "Two ActionButton instances in a row of the notes application's layout. Neither names an action.",
+        "source": "examples/pack1-consumer/src/notes-surface.ts",
+        "from": "id: 'note-actions',",
+        "to": "text: 'Archive',",
+        "before": 1,
+        "after": 1,
+        "language": "ts"
+      },
+      "usage": [
+        {
+          "label": "Change a component and trace allowed and denied requests",
+          "guide": "actions"
+        },
+        {
+          "label": "Component definition, template and instance",
+          "guide": "getting-started",
+          "anchor": "component-definition-template-and-instance"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "The notes application runs with Lit controls and, through a React consumer, with React controls in a local fixture host. The guide lists what each renderer has and has not shown.",
+          "guide": "actions",
+          "anchor": "what-each-renderer-and-server-has-shown",
+          "label": "Renderer evidence"
+        },
+        {
+          "statement": "In ChatGPT web and Claude web, allowed and refused in-card server requests were observed.",
+          "guide": "host-compatibility",
+          "anchor": "chatgpt-and-claude",
+          "label": "ChatGPT and Claude"
+        },
+        {
+          "statement": "In the Alexa+ simulator, an in-card server call reached a response but the waiting card did not receive a usable completion in the recorded probes.",
+          "guide": "host-compatibility",
+          "anchor": "alexa+",
+          "label": "Alexa+"
+        }
+      ]
+    },
+    {
+      "id": "saga-attribution",
+      "name": "SagaAttribution",
+      "summary": "A removable one-line credit, Built with saga a2ui, for an application with its own catalog. It carries no card, Markdown parser or components package.",
+      "entries": [
+        {
+          "package": "@saga-a2ui/react",
+          "subpath": "./attribution",
+          "stylesheet": "./attribution.css",
+          "role": "React credit component and its stylesheet"
+        }
+      ],
+      "preview": {
+        "caption": "The credit rendered in an application's own footer, using the host link seam.",
+        "source": "docs/react-consumers.md",
+        "from": "import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';",
+        "to": "<footer><SagaAttribution links={links} /></footer>",
+        "language": "tsx"
+      },
+      "usage": [
+        {
+          "label": "Removable credit",
+          "guide": "react-consumers",
+          "anchor": "removable-credit"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "No guide of this release records a renderer or host qualification for this component beyond the behavior its usage guide describes."
+        }
+      ]
+    }
+  ],
+  "componentExclusions": [
+    {
+      "name": "Typed surfaces",
+      "reason": "`Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout."
+    },
+    {
+      "name": "Layout and basic components",
+      "reason": "Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward (`basicCatalog`, `ColumnApi`, `ListApi`, `RowApi`). The SDK does not document them as its own."
+    },
+    {
+      "name": "Lynx",
+      "reason": "No Lynx package exists. The packages guide records that the Lynx delivery chain was retired."
+    }
+  ]
+}

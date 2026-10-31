@@ -56,6 +56,11 @@ const UNITS: readonly Unit[] = [
     roles: every(stack('lit')),
   })),
   {
+    name: 'templates/react-hono',
+    directory: 'templates/react-hono',
+    roles: every(stack('react')),
+  },
+  {
     name: 'examples/pack1-consumer',
     directory: 'examples/pack1-consumer',
     roles: (file) => {

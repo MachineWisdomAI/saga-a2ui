@@ -158,9 +158,26 @@ const json = (value: unknown): Buffer =>
 const assetEntryPath = (source: string): string =>
   `assets/${path.basename(source)}`;
 
+/**
+ * SAGA's own dragon artwork for the four branding fields, from `assets/brand/plugin/` (see its
+ * README for provenance). A composer icon is the transparent mark, which sits on the host's own
+ * surface; a logo is the mark on a solid tile, which stands on any listing background. The
+ * `Dark` files are for dark host surfaces.
+ */
+const BUNDLED_BRANDING = {
+  composerIcon: { file: 'composer-icon-light.png' },
+  composerIconDark: { file: 'composer-icon-dark.png' },
+  logo: { file: 'logo-light.png' },
+  logoDark: { file: 'logo-dark.png' },
+} as const;
+
+/** Where a bundled file is stored in the package; apart from `assets/<name>`, so it cannot collide with an application's file. */
+const bundledEntryPath = (field: keyof typeof BUNDLED_BRANDING): string =>
+  `assets/saga-a2ui/${BUNDLED_BRANDING[field].file}`;
+
 export interface AssembledPackage {
   readonly entries: readonly ZipEntry[];
-  /** Assets named in the input that could not be read, with the reason. */
+  /** Supplied or bundled assets that could not be read, with the reason. */
   readonly unreadableAssets: readonly {
     readonly source: string;
     readonly reason: string;
@@ -174,10 +191,10 @@ export function assemblePackage(
 ): AssembledPackage {
   const { listing } = input;
   const assetFields = {
-    logo: input.assets.logo,
-    composerIcon: input.assets.composerIcon,
-    logoDark: input.assets.logoDark,
-    composerIconDark: input.assets.composerIconDark,
+    logo: input.assets?.logo,
+    composerIcon: input.assets?.composerIcon,
+    logoDark: input.assets?.logoDark,
+    composerIconDark: input.assets?.composerIconDark,
   };
   const entries: ZipEntry[] = [];
   const unreadableAssets: { source: string; reason: string }[] = [];
@@ -204,6 +221,40 @@ export function assemblePackage(
   }
   const reference = (source: string | undefined): string | undefined =>
     source === undefined ? undefined : `./${assetEntryPath(source)}`;
+  // SAGA's dragon fills a field the application left out. A dark default follows its light
+  // counterpart: it is used only when that light field is defaulted too, so an application's own
+  // light branding is never paired with SAGA's dark artwork.
+  const defaulted = new Set<keyof typeof BUNDLED_BRANDING>();
+  if (assetFields.logo === undefined) {
+    defaulted.add('logo');
+    if (assetFields.logoDark === undefined) defaulted.add('logoDark');
+  }
+  if (assetFields.composerIcon === undefined) {
+    defaulted.add('composerIcon');
+    if (assetFields.composerIconDark === undefined)
+      defaulted.add('composerIconDark');
+  }
+  for (const field of defaulted) {
+    const { file } = BUNDLED_BRANDING[field];
+    const source = fileURLToPath(
+      new URL(`../../assets/brand/plugin/${file}`, import.meta.url),
+    );
+    try {
+      entries.push({
+        path: bundledEntryPath(field),
+        data: fs.readFileSync(source),
+      });
+    } catch {
+      unreadableAssets.push({
+        source,
+        reason: `The bundled SAGA ${field} artwork could not be read.`,
+      });
+    }
+  }
+  const resolve = (field: keyof typeof BUNDLED_BRANDING): string | undefined =>
+    defaulted.has(field)
+      ? `./${bundledEntryPath(field)}`
+      : reference(assetFields[field]);
   const withoutUndefined = <T extends Record<string, unknown>>(value: T): T =>
     Object.fromEntries(
       Object.entries(value).filter(([, inner]) => inner !== undefined),
@@ -239,10 +290,10 @@ export function assemblePackage(
           defaultPrompt: listing.defaultPrompt,
           brandColor: listing.brandColor,
           brandColorDark: listing.brandColorDark,
-          composerIcon: reference(assetFields.composerIcon),
-          composerIconDark: reference(assetFields.composerIconDark),
-          logo: reference(assetFields.logo),
-          logoDark: reference(assetFields.logoDark),
+          composerIcon: resolve('composerIcon'),
+          composerIconDark: resolve('composerIconDark'),
+          logo: resolve('logo'),
+          logoDark: resolve('logoDark'),
         }),
         review: input.review,
         publication: input.publication,
@@ -613,7 +664,12 @@ export function checkArchive(
     if (face[required] === undefined)
       assetProblems.push(`interface.${required} is required.`);
   for (const { field, value } of referenced) {
-    if (typeof value !== 'string' || !/^\.\/assets\/[^/]+$/.test(value)) {
+    if (
+      typeof value !== 'string' ||
+      !value.startsWith('./assets/') ||
+      value.includes('\\') ||
+      path.posix.normalize(value.slice(2)) !== value.slice(2)
+    ) {
       assetProblems.push(`interface.${field} must be a ./assets/ path.`);
       continue;
     }
@@ -691,11 +747,11 @@ export function checkArchive(
 // The target
 // ---------------------------------------------------------------------------------------------
 
-/** The release input as the ChatGPT target uses it, or `undefined` when it carries no listing or assets. */
+/** The release input as the ChatGPT target uses it, or `undefined` when it carries no listing. */
 function chatgptInput(input: ReleaseInput): ChatgptReleaseInput | undefined {
-  return input.listing === undefined || input.assets === undefined
+  return input.listing === undefined
     ? undefined
-    : { ...input, listing: input.listing, assets: input.assets };
+    : { ...input, listing: input.listing };
 }
 
 function toolFindings(snapshot: EndpointSnapshot): Finding[] {
@@ -792,7 +848,7 @@ export function chatgptTarget(
       "Preparing a package submits nothing. Submission, the host's review and publication are separate acts that only the publisher and the host can perform.",
     inputProblem: (input) =>
       chatgptInput(input) === undefined
-        ? 'The release input has no listing and assets, which the chatgpt target needs.'
+        ? 'The release input has no listing, which the chatgpt target needs.'
         : null,
     endpointProblem: (url) => endpointUrlProblem(url, 'ChatGPT'),
     toolFindings,
@@ -800,7 +856,7 @@ export function chatgptTarget(
       const input = chatgptInput(context.loaded.input);
       if (input === undefined)
         throw new Error(
-          'The release input has no listing and assets, which the chatgpt target needs.',
+          'The release input has no listing, which the chatgpt target needs.',
         );
       const findings: Finding[] = [];
       const assembled = assemblePackage(input, context.loaded.directory);

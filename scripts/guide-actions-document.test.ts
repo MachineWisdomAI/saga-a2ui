@@ -133,7 +133,10 @@ describe('the commands the guide tells a reader to type', () => {
 
   it('keeps the Lit tutorial on its matched candidate packages', () => {
     expect(guide).not.toMatch(/npm (install|i|add) [^\n]*@saga-a2ui/);
-    expect(guide).toContain('unpublished Lit renderer');
+    expect(guide).toContain('including Lit and both stacks');
+    expect(guide).toContain('[published on npm](public-install.md)');
+    expect(guide).toContain('matched locally packed tarballs');
+    expect(guide).not.toContain('unpublished Lit renderer');
     expect(guide).not.toMatch(/there is no release/i);
     expect(guide).toContain('candidate-update-and-rollback.md');
   });
@@ -316,7 +319,7 @@ describe('what the guide must explain', () => {
       expect(line).toMatch(/retired|history/i);
     expect(guide).toMatch(/not shown/i);
     expect(guide).toMatch(
-      /no React starter, template, CLI pair or authenticated recipe/,
+      /one React starter, `react-mcp` on Hono, and its generated recipe[^|]*\|\s*No other React pair, no authenticated React recipe/,
     );
     expect(guide).not.toMatch(/\bhapi\b[^\n]*\bis qualified\b/i);
   });

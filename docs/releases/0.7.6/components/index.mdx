@@ -1,0 +1,26 @@
+---
+title: 'Component catalog for 0.7.6'
+sidebarTitle: 'Component catalog'
+description: 'Components exported by saga a2ui 0.7.6, with their entry points and the guides that explain them.'
+---
+
+> Documents saga a2ui **0.7.6** (stable). This catalog is generated from the package manifests and entry points at source revision [`5995b1f`](https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/LICENSE).
+>
+> The Lit packages (`@saga-a2ui/lit`, `@saga-a2ui/lit-mcp-stack`) were first published to npm at 0.7.7-rc.1. Where this snapshot mentions them, it describes source at the pinned revision, not packages you can install at 0.7.6.
+
+Every component the SDK documents at this release is listed here or in the exclusions below. A row names only exports found in the source at the pinned revision.
+
+| Component | Renderers | Summary |
+| --- | --- | --- |
+| [FaithfulCard](/docs/releases/0.7.6/components/faithful-card) | Lit, React | A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible. |
+| [ActionButton](/docs/releases/0.7.6/components/action-button) | Lit, React | A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state. |
+
+## Not in the catalog
+
+- **SagaAttribution.** `@saga-a2ui/react/attribution` is not an export of the packages at this revision. The credit component first appears in a later release.
+- **Typed surfaces.** `Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout.
+- **Layout and basic components.** Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward. The SDK does not document them as its own.
+
+## Machine-readable catalog
+
+The same entries are committed as [`docs/releases/0.7.6/components/catalog.json`](https://github.com/MachineWisdomAI/saga-a2ui/blob/main/docs/releases/0.7.6/components/catalog.json). A consumer such as a marketing site reads it at a pinned commit of this repository and links to the pages here; it does not keep its own copy of the manual.

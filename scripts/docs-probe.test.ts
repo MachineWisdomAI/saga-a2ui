@@ -1,0 +1,611 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import {
+  checkPages,
+  comparePages,
+  FACTS,
+  judge,
+  plain,
+  probeIndexing,
+  probeMcp,
+  readSite,
+  judgeFilter,
+  releaseCases,
+  releasePagesIn,
+  snapshotPages,
+} from './docs-probe.js';
+
+// The probe is a development tool for the hosted documentation. These checks run it against local
+// stand-ins: a search endpoint served by the real MCP server package, and a page host. They show
+// that the probe distinguishes a correct release from a wrong one; they do not show anything about
+// the hosted site, which only a run of the probe against it can.
+
+const ENDPOINT = 'https://docs.example.test/mcp';
+const site = readSite();
+const cases = releaseCases(site);
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** The committed Markdown of a release page, which the hosted site is built from. */
+const committed = (page: string): string =>
+  fs.readFileSync(path.join(root, `${page}.mdx`), 'utf8');
+
+interface Stand {
+  /** What search returns for a query. */
+  readonly search: (query: string) => string;
+  /** What the read-only filesystem tool returns for a page path such as `docs/releases/…`. */
+  readonly read: (page: string) => string;
+  readonly tools?: { search?: string | null; read?: string | null };
+  /** When set, the search tool has a `version` argument and this is what it returns for it. */
+  readonly filtered?: (query: string, version: string) => string;
+}
+
+function endpoint(
+  stand: Stand,
+): (url: string | URL, init?: RequestInit) => Promise<Response> {
+  const names = {
+    search: 'search_saga_a2ui',
+    read: 'query_docs_filesystem_saga_a2ui',
+    ...stand.tools,
+  };
+  const handler = createMcpHandler(() => {
+    const server = new McpServer({ name: 'docs', version: '1.0.0' });
+    if (names.search !== null)
+      server.registerTool(
+        names.search,
+        {
+          inputSchema: z.object({
+            query: z.string(),
+            ...(stand.filtered === undefined
+              ? {}
+              : { version: z.string().optional() }),
+          }),
+        },
+        (args) => {
+          const version = (args as { version?: unknown }).version;
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  typeof version !== 'string' || stand.filtered === undefined
+                    ? stand.search(args.query)
+                    : stand.filtered(args.query, version),
+              },
+            ],
+          };
+        },
+      );
+    if (names.read !== null)
+      server.registerTool(
+        names.read,
+        { inputSchema: z.object({ command: z.string() }) },
+        ({ command }) => ({
+          content: [
+            {
+              type: 'text',
+              text: stand.read(
+                command.replace(/^cat \//, '').replace(/\.mdx$/, ''),
+              ),
+            },
+          ],
+        }),
+      );
+    if (names.search === null && names.read === null)
+      server.registerTool('fetch_page', { inputSchema: z.object({}) }, () => ({
+        content: [{ type: 'text', text: '' }],
+      }));
+    return server;
+  });
+  return (url, init) => handler.fetch(new Request(url, init));
+}
+
+const result = (page: string) =>
+  `Title: page\nLink: https://docs.example.test/${page}\nContent: text`;
+
+const entryFor = (query: string) =>
+  cases.find((candidate) => query.includes(candidate.version))!;
+
+/** A stand-in that answers every question with its own release's page and committed content. */
+const faithful: Stand = {
+  search: (query) => result(entryFor(query).expectedPage),
+  read: committed,
+};
+
+describe('the committed release navigation', () => {
+  it('lists a stable default and a labeled prerelease with the same topic page', () => {
+    expect(site.releases.filter((release) => release.default)).toHaveLength(1);
+    expect(site.releases.every((release) => release.tag !== undefined)).toBe(
+      true,
+    );
+    expect(cases.map((entry) => entry.version)).toEqual(
+      site.releases.map((release) => release.version),
+    );
+    for (const entry of cases)
+      expect(entry.expectedPage).toContain(`docs/releases/${entry.version}/`);
+  });
+});
+
+describe('the facts that tell the releases apart', () => {
+  it('are stated by the committed page of their own release and not by the other', () => {
+    for (const entry of cases) {
+      const other = cases.find((candidate) => candidate !== entry)!;
+      const own = plain(committed(entry.expectedPage));
+      const rival = plain(committed(other.expectedPage));
+      expect(entry.required).toEqual(FACTS[entry.version]?.required);
+      for (const statement of entry.required) {
+        expect(own).toContain(statement);
+        expect(rival).not.toContain(statement);
+      }
+      for (const statement of entry.forbidden) {
+        expect(own).not.toContain(statement);
+        expect(rival).toContain(statement);
+      }
+    }
+  });
+});
+
+describe('release pages in a response', () => {
+  it('counts the page a result names, not another release mentioned in its text', () => {
+    expect(
+      releasePagesIn(
+        [
+          'Title: Choose a release',
+          'Link: https://x.test/docs/connect/assistants#choose-a-release',
+          'Page: docs/connect/assistants',
+          'Content: read it with cat /docs/releases/0.11.0-rc.1/guides/actions.mdx',
+          '',
+          'Title: Entry points',
+          'Link: https://x.test/docs/releases/0.7.6/server-entry-points',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/server-entry-points' },
+    ]);
+  });
+
+  it('names a page under a section by its whole path and ignores sentence punctuation', () => {
+    expect(
+      releasePagesIn(
+        'See /docs/releases/0.7.6/guides/actions.md. Also (https://x.test/docs/releases/0.7.6/components/faithful-card).',
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/guides/actions' },
+      {
+        version: '0.7.6',
+        page: 'docs/releases/0.7.6/components/faithful-card',
+      },
+    ]);
+  });
+
+  it('names each page once in order of appearance', () => {
+    expect(
+      releasePagesIn(
+        'a https://x.test/docs/releases/0.7.6/installation.md b (/docs/releases/1.0.0/installation) c /docs/releases/0.7.6/installation',
+      ),
+    ).toEqual([
+      { version: '0.7.6', page: 'docs/releases/0.7.6/installation' },
+      { version: '1.0.0', page: 'docs/releases/1.0.0/installation' },
+    ]);
+  });
+
+  it('does not accept a response that only mentions a version', () => {
+    const [stable] = cases;
+    expect(stable).toBeDefined();
+    const verdict = judge(stable!, releasePagesIn('This is 0.7.6 guidance.'));
+    expect(verdict.passed).toBe(false);
+  });
+
+  it('does not accept the expected page address without its retrieved content', () => {
+    const [stable] = cases;
+    const returned = releasePagesIn(result(stable!.expectedPage));
+    expect(judge(stable!, returned).passed).toBe(false);
+    expect(
+      judge(stable!, returned, committed(stable!.expectedPage)).passed,
+    ).toBe(true);
+  });
+});
+
+describe('the MCP probe', () => {
+  it('passes when each question returns its own release first with that release’s content', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint(faithful),
+    });
+    expect(report.server?.name).toBe('docs');
+    expect(report.tools).toEqual([
+      'search_saga_a2ui',
+      'query_docs_filesystem_saga_a2ui',
+    ]);
+    expect(report.searchTool).toBe('search_saga_a2ui');
+    expect(report.readTool).toBe('query_docs_filesystem_saga_a2ui');
+    expect(report.cases.map((entry) => entry.passed)).toEqual([true, true]);
+    expect(report.passed).toBe(true);
+  });
+
+  it('reports other releases that also appear in search without failing for them', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        search: (query) => {
+          const own = entryFor(query);
+          const other = cases.find((candidate) => candidate !== own)!;
+          return `${result(own.expectedPage)}\n${result(other.expectedPage)}`;
+        },
+      }),
+    });
+    expect(report.passed).toBe(true);
+    expect(report.cases[0]?.otherReleases).toEqual([cases[1]?.version]);
+  });
+
+  it('fails when the right page address carries another release’s guidance', async () => {
+    const [stable, prerelease] = cases;
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        // The stable address is returned, but its content is the prerelease page.
+        read: (page) =>
+          committed(
+            page === stable!.expectedPage ? prerelease!.expectedPage : page,
+          ),
+      }),
+    });
+    expect(report.cases.map((entry) => entry.passed)).toEqual([false, true]);
+    expect(report.cases[0]?.missing).toEqual(stable!.required);
+    expect(report.cases[0]?.foreign).toEqual(stable!.forbidden);
+    expect(report.cases[0]?.reason).toContain('does not match release 0.7.6');
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails when the retrieved page is not the release’s guidance at all', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, read: () => 'Content: text' }),
+    });
+    expect(report.cases.map((entry) => entry.passed)).toEqual([false, false]);
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails when the page cannot be read or the endpoint has no read tool', async () => {
+    const noRead = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, tools: { read: null } }),
+    });
+    expect(noRead.readTool).toBeNull();
+    expect(noRead.passed).toBe(false);
+    expect(noRead.cases[0]?.reason).toContain('no read-only filesystem tool');
+  });
+
+  it('fails when one release answers every question', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        search: () => result(cases[1]!.expectedPage),
+      }),
+    });
+    expect(report.cases.map((entry) => entry.passed)).toEqual([false, true]);
+    expect(report.cases[0]?.reason).toContain(cases[1]!.expectedPage);
+    expect(report.passed).toBe(false);
+  });
+
+  it('reports that a search tool without a version argument has no filter to check', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint(faithful),
+    });
+    expect(report.cases[0]?.versionFilter?.supported).toBe(false);
+    expect(report.passed).toBe(true);
+  });
+
+  it('passes a version filter that returns only the requested release', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: (_query, version) =>
+          result(
+            cases.find((entry) => entry.version === version)!.expectedPage,
+          ),
+      }),
+    });
+    expect(report.cases.map((entry) => entry.versionFilter?.passed)).toEqual([
+      true,
+      true,
+    ]);
+    expect(report.cases[0]?.versionFilter?.supported).toBe(true);
+    expect(report.passed).toBe(true);
+  });
+
+  it('fails when a version filter returns another release anyway', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({
+        ...faithful,
+        filtered: () => result(cases[1]!.expectedPage),
+      }),
+    });
+    expect(report.cases[0]?.passed).toBe(false);
+    expect(report.cases[0]?.versionFilter?.foreign).toEqual([
+      cases[1]!.expectedPage,
+    ]);
+    expect(report.cases[0]?.reason).toContain('filtered to 0.7.6');
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails when a version filter returns no release page', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, filtered: () => 'No results found' }),
+    });
+    expect(report.passed).toBe(false);
+    expect(judgeFilter('0.7.6', []).reason).toContain(
+      'returned no release page',
+    );
+  });
+
+  it('fails when the endpoint offers no search tool', async () => {
+    const report = await probeMcp(ENDPOINT, cases, {
+      fetch: endpoint({ ...faithful, tools: { search: null, read: null } }),
+    });
+    expect(report.searchTool).toBeNull();
+    expect(report.passed).toBe(false);
+  });
+});
+
+describe('the hosted page check', () => {
+  const page = site.releases[0]!.pages[0]!;
+  const withTheme = (text: string) =>
+    text.replace(/^```(\w+)$/gm, '```$1 theme={null}');
+  const serve = (body: (page: string) => string, status = 200) =>
+    (async (url: string | URL) =>
+      new Response(body(String(url)), { status })) as (
+      url: string | URL,
+      init?: RequestInit,
+    ) => Promise<Response>;
+
+  it('accepts a page whose code blocks are served unchanged apart from the theme attribute', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => withTheme(committed(page))),
+    );
+    expect(check?.fences.expected).toBeGreaterThan(0);
+    expect(check?.passed).toBe(true);
+  });
+
+  it('fails when a served code block differs from the committed one', async () => {
+    const [check] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() =>
+        withTheme(committed(page)).replace('npm install', 'npm  install'),
+      ),
+    );
+    expect(check?.firstDifference).not.toBeNull();
+    expect(check?.passed).toBe(false);
+  });
+
+  it('fails when the page is not served or loses a block', async () => {
+    const [missing] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => 'absent', 404),
+    );
+    expect(missing?.passed).toBe(false);
+    const [short] = await checkPages(
+      'https://docs.example.test',
+      [page],
+      committed,
+      serve(() => '# Page\n\nNo code here.'),
+    );
+    expect(short?.fences.actual).toBe(0);
+    expect(short?.passed).toBe(false);
+  });
+});
+
+describe('the page snapshot', () => {
+  const pages = [...new Set(site.releases.flatMap((release) => release.pages))];
+  const host = (edits: Record<string, string> = {}) =>
+    ((url: string | URL) => {
+      const page = String(url).replace('https://docs.example.test/', '');
+      const key = page.replace(/\.md$/, '');
+      return Promise.resolve(
+        pages.includes(key)
+          ? new Response(edits[key] ?? `body of ${key}`)
+          : new Response('absent', { status: 404 }),
+      );
+    }) as (url: string | URL, init?: RequestInit) => Promise<Response>;
+
+  it('shows that only the edited newer page moved', async () => {
+    const newer = site.releases[1]!.pages[0]!;
+    const before = await snapshotPages(
+      'https://docs.example.test/',
+      pages,
+      host(),
+    );
+    const after = await snapshotPages(
+      'https://docs.example.test',
+      pages,
+      host({ [newer]: 'edited' }),
+    );
+    const comparison = comparePages(before, after);
+    expect(comparison.changed).toEqual([newer]);
+    expect(comparison.unchanged).toHaveLength(pages.length - 1);
+    expect(comparison.unreadable).toEqual([]);
+  });
+
+  it('hashes the same page identically on a preview and on the production host', async () => {
+    const page = pages[0]!;
+    const served = (host: string) =>
+      (() =>
+        Promise.resolve(
+          new Response(
+            `> Index: ${host}/llms.txt\n\nSee [next](${host}/${page}.md) for details.`,
+          ),
+        )) as (url: string | URL, init?: RequestInit) => Promise<Response>;
+    const production = await snapshotPages(
+      'https://docs.mintlify.app',
+      [page],
+      served('https://docs.mintlify.app'),
+    );
+    const preview = await snapshotPages(
+      'https://docs-branch.mintlify.site',
+      [page],
+      served('https://docs-branch.mintlify.site'),
+    );
+    expect(comparePages(production, preview).unchanged).toEqual([page]);
+  });
+
+  it('reports an unreadable page instead of calling it unchanged', async () => {
+    const before = await snapshotPages(
+      'https://docs.example.test',
+      pages,
+      host(),
+    );
+    const after = await snapshotPages(
+      'https://docs.example.test',
+      [...pages, 'docs/releases/none/missing'],
+      host(),
+    );
+    expect(
+      comparePages(
+        {
+          ...before,
+          pages: {
+            ...before.pages,
+            'docs/releases/none/missing': { status: 200, sha256: 'x' },
+          },
+        },
+        after,
+      ).unreadable,
+    ).toEqual(['docs/releases/none/missing']);
+  });
+});
+
+describe('the indexing check', () => {
+  const page = site.releases[0]!.pages[0]!;
+  const SITEMAP =
+    '<urlset><url><loc>https://docs.example.test/a</loc></url></urlset>';
+  // A host that serves one page, a robots file and a sitemap, with the given head tags.
+  const host =
+    (options: {
+      head?: string;
+      header?: string;
+      robots?: string;
+      sitemap?: string;
+    }) =>
+    async (url: string | URL): Promise<Response> => {
+      const { pathname } = new URL(String(url));
+      if (pathname === '/robots.txt')
+        return new Response(
+          options.robots ?? 'User-agent: *\nDisallow: /_next/\n',
+        );
+      if (pathname === '/sitemap.xml')
+        return new Response(options.sitemap ?? SITEMAP);
+      return new Response(
+        `<html><head>${options.head ?? ''}</head><body></body></html>`,
+        {
+          headers:
+            options.header === undefined
+              ? {}
+              : { 'x-robots-tag': options.header },
+        },
+      );
+    };
+  const canonical =
+    '<link data-mint-head rel="canonical" href="https://docs.example.test/a">';
+
+  it('passes an indexable site: no blocking tag, an open robots file and a sitemap', async () => {
+    const report = await probeIndexing(
+      'https://docs.example.test/',
+      page,
+      'indexable',
+      host({ head: canonical }),
+    );
+    expect(report).toMatchObject({
+      robotsMeta: null,
+      canonical: 'https://docs.example.test/a',
+      robotsTxtDisallowsAll: false,
+      sitemapUrls: 1,
+      blocks: [],
+      passed: true,
+    });
+    const allowed = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      host({ head: '<meta name="robots" content="index, follow">' }),
+    );
+    expect(allowed.passed).toBe(true);
+  });
+
+  it('fails an indexable site that blocks by meta tag, header, robots file or empty sitemap', async () => {
+    const cases = [
+      [
+        {
+          head: '<meta data-mint-head name="robots" content="noindex, nofollow">',
+        },
+        /robots meta/,
+      ],
+      [{ head: '<meta content="noindex" name="robots">' }, /robots meta/],
+      [{ header: 'noindex' }, /X-Robots-Tag/],
+      [{ robots: 'User-agent: *\nDisallow: /\n' }, /robots\.txt/],
+      [{ sitemap: '<urlset></urlset>' }, null],
+    ] as const;
+    for (const [options, reason] of cases) {
+      const report = await probeIndexing(
+        'https://docs.example.test',
+        page,
+        'indexable',
+        host(options),
+      );
+      expect(report.passed).toBe(false);
+      if (reason !== null) expect(report.blocks.join('\n')).toMatch(reason);
+    }
+    const missing = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      async (url) =>
+        new Response('x', {
+          status: new URL(String(url)).pathname === `/${page}` ? 404 : 200,
+        }),
+    );
+    expect(missing.passed).toBe(false);
+  });
+
+  it('reads a disallow only under the universal user agent', async () => {
+    const other = await probeIndexing(
+      'https://docs.example.test',
+      page,
+      'indexable',
+      host({
+        robots: 'User-agent: BadBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n',
+      }),
+    );
+    expect(other.robotsTxtDisallowsAll).toBe(false);
+    expect(other.passed).toBe(true);
+  });
+
+  it('passes a preview only while at least one signal withholds it', async () => {
+    const protectedPreview = await probeIndexing(
+      'https://preview.example.test',
+      page,
+      'withheld',
+      host({
+        robots: 'User-agent: *\nContent-Signal: search=no\nDisallow: /\n',
+      }),
+    );
+    expect(protectedPreview).toMatchObject({
+      blocks: ['robots.txt disallows everything'],
+      passed: true,
+    });
+    const open = await probeIndexing(
+      'https://preview.example.test',
+      page,
+      'withheld',
+      host({ head: canonical }),
+    );
+    expect(open.passed).toBe(false);
+  });
+});

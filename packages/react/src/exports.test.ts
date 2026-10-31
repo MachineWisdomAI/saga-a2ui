@@ -4,6 +4,7 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import * as a2ui from '@saga-a2ui/react/a2ui';
 import * as actions from '@saga-a2ui/react/actions';
+import * as attribution from '@saga-a2ui/react/attribution';
 import * as faithfulCard from '@saga-a2ui/react/faithful-card';
 import {
   checkPackageDirection,
@@ -62,6 +63,10 @@ describe('the optional React exports', () => {
       'createReactActions',
       'useActionSetup',
     ]);
+    expect(Object.keys(attribution).sort()).toEqual([
+      'DEFAULT_ATTRIBUTION',
+      'SagaAttribution',
+    ]);
     expect(Object.keys(faithfulCard).sort()).toEqual([
       'FaithfulCard',
       'FaithfulCardProvider',
@@ -82,6 +87,27 @@ describe('the optional React exports', () => {
     expect(
       anyOf(modules, /\/packages\/core\/src\/actions\//).length,
     ).toBeGreaterThan(0);
+    expect(anyOf(modules, /\/packages\/react\/src\/faithful-card\//)).toEqual(
+      [],
+    );
+    expect(anyOf(modules, /\/packages\/components\//)).toEqual([]);
+    expect(
+      anyOf(
+        modules,
+        /node_modules\/(markdown-it|mdurl|linkify-it|uc\.micro|entities)\//,
+      ),
+    ).toEqual([]);
+  });
+
+  it('give an application the credit alone: no card, Markdown parser, components package or second host-link definition', async () => {
+    const modules = await bundledModules('@saga-a2ui/react/attribution');
+    // The graph was really walked: the credit and the shared host-link contract are in it.
+    expect(
+      anyOf(modules, /\/packages\/react\/src\/attribution\/attribution\.tsx$/),
+    ).toHaveLength(1);
+    expect(
+      anyOf(modules, /\/packages\/core\/src\/host-links\.ts$/),
+    ).toHaveLength(1);
     expect(anyOf(modules, /\/packages\/react\/src\/faithful-card\//)).toEqual(
       [],
     );

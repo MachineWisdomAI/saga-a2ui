@@ -1,13 +1,13 @@
-graph TD
-  A["Play: enter pending"] --> B{"Identity, input, entitlement and host checks pass?"}
-  B -->|"No"| X["Safe failure; stop and clear"]
-  B -->|"Yes"| C["Issue capability; validate projections"]
-  C -->|"Invalid output"| X
-  C -->|"View-only delivery"| D{"Current session, selection and request?"}
-  D -->|"No"| L["Discard stale result"]
-  D -->|"Yes"| E{"Acquisition checks pass?"}
-  E -->|"Wrong recipient, expired or revoked"| X
-  E -->|"Yes"| F["Protected bytes; foreground player"]
-  F -->|"Next range: repeat checks"| E
-  F -->|"Session or selection loss; expiry, failure, disposal"| X
-  X --> R["Explicit fresh Play if recovery is supported"]
+flowchart TD
+  A["User presses Play<br/>enter pending"] --> B{"Input, identity, entitlement<br/>and host checks pass?"}
+  B -->|"known refusal"| X["Safe failure<br/>stop and clear"]
+  B -->|"yes"| C["Issue capability<br/>validate private grant"]
+  C --> D{"Current label,<br/>selection and request?"}
+  D -->|"no"| L["Discard stale result"]
+  D -->|"yes"| E{"Capability, key proof and<br/>current entitlement pass?"}
+  E -->|"no"| X
+  E -->|"yes"| F["Protected bytes<br/>foreground player"]
+  F -->|"fresh acquisition or range"| E
+  F -->|"observed label or selection change;<br/>failure or teardown"| X
+  X -->|"only if recovery is permitted"| R["Explicit fresh Play<br/>new authorization"]
+  A -.->|"request sent; no known outcome"| U["Unconfirmed outcome<br/>no automatic or in-card retry"]

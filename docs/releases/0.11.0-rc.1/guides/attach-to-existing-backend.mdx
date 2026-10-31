@@ -1,0 +1,751 @@
+---
+title: 'Attach SAGA to an existing backend'
+description: 'Recipes for attaching SAGA to an existing backend, cut from the maintained and qualified starter templates.'
+---
+
+> Documents saga a2ui **0.11.0-rc.1** (prerelease). This is the SDK guide [`docs/attach-to-existing-backend.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/docs/attach-to-existing-backend.md) at source revision [`fb4126c`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/LICENSE).
+
+This document is generated. Each snippet is the maintained starter template’s own text, cut from the files CI builds and qualifies, so it cannot drift from a tested file. The [setup guide](/docs/releases/0.11.0-rc.1/guides/getting-started) explains the concepts and the order to read them in.
+
+Attaching SAGA to a backend you already run is an integration you make in your own source. No command edits an existing application: `saga init` creates one new directory and nothing else. The Lit and React stacks belong to the [public npm release set](/docs/releases/0.11.0-rc.1/guides/public-install). These source-based snippets use matched local candidate packages so they can qualify unpublished changes (see [Install the packages from a candidate](/docs/releases/0.11.0-rc.1/guides/getting-started#install-the-packages-from-a-candidate)).
+
+## Which pairs have a recipe
+
+| Stack | Server | Maintained template | `saga init` |
+| --- | --- | --- | --- |
+| `lit-mcp` | `node` | [`lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-node) | offered |
+| `lit-mcp` | `express` | [`lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-express) | offered |
+| `lit-mcp` | `fastify` | [`lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-fastify) | offered |
+| `lit-mcp` | `hono` | [`lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-hono) | offered |
+| `lit-mcp` | `hapi` | [`lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-hapi) | offered |
+| `react-mcp` | `hono` | [`react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/react-hono) | offered |
+
+A pair is listed only while CI qualifies it, and a qualified pair is not automatically offered by `saga init`: that command offers the pairs in its own list. A recipe is not a claim about any other pair, and no full matrix is claimed.
+
+### Required servers without a recipe yet
+
+Every required server target has a qualified template above.
+
+## The steps, whichever server you use
+
+1. Install the SDK packages the recipe lists from one candidate, together, and keep the `@a2ui/markdown-it` override in your root `package.json`.
+2. Decide who is asking. Your application authenticates the request (`server/verifier.ts` is the seam for your identity provider) and gives SAGA the result only through the transport’s per-request auth, as in the identity handoff below. A protected operation that receives no verified identity does not run; a declared public operation needs none and is given none.
+3. Read the built HTML before listening. The preparation snippet defines `view` from `options.html` and its actual filename (`index.html` in the starter); `server/main.ts` reads that file. Prepare it once and reuse it in each request factory.
+4. Register the operations your backend exposes. The handler makes your own authorization decision for that request’s identity, and the projection copies the public fields out of the record by name.
+5. Build the view with your own catalog and serve it as the operation’s view resource, as the starter does. The view’s address preserves its filename and fingerprints its final bytes, so rebuild the view and restart the server together.
+6. Attach each action to the rendered control it belongs to. The layout names no action; the attachment is application code.
+
+CI qualifies the starter’s listener and operations against real MCP clients. That qualification belongs to the starter: attaching the same lines to your application does not inherit it. Test your own authentication, authorization and refusal paths in your application.
+
+## `node` with `lit-mcp`
+
+Template: [`templates/lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-node). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-node/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/lit-node/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth; no tool argument can name an account.
+const decision = await authenticate(req, options.verifier, lifetime);
+if (!decision.ok) {
+  res
+    .writeHead(
+      decision.status,
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+    )
+    .end();
+  return;
+}
+Object.assign(req, { auth: decision.authInfo });
+```
+
+### Register a protected operation
+
+From `templates/lit-node/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-node/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+
+## `express` with `lit-mcp`
+
+Template: [`templates/lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-express). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-express/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/lit-express/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth (`req.auth`); no tool argument can name an account.
+const identify: RequestHandler = async (req, res, next) => {
+  const decision = await authenticate(req, options.verifier, lifetimeOf(res));
+  if (!decision.ok) {
+    res
+      .writeHead(
+        decision.status,
+        decision.challenge === undefined
+          ? {}
+          : { 'WWW-Authenticate': decision.challenge },
+      )
+      .end();
+    return;
+  }
+  req.auth = decision.authInfo;
+  next();
+};
+```
+
+### Register a protected operation
+
+From `templates/lit-express/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-express/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+
+## `fastify` with `lit-mcp`
+
+Template: [`templates/lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-fastify). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-fastify/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/lit-fastify/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built or any body is read. The verified context
+// travels to the tool only as the transport's per-request auth; no tool argument can name an account.
+const identityHandoff = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const decision = await authenticate(
+    request.raw,
+    options.verifier,
+    lifetimeOf(request),
+  );
+  if (!decision.ok) {
+    if (decision.challenge !== undefined)
+      reply.header('WWW-Authenticate', decision.challenge);
+    return reply.code(decision.status).send();
+  }
+  Object.assign(request.raw, { auth: decision.authInfo });
+};
+```
+
+### Register a protected operation
+
+From `templates/lit-fastify/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-fastify/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+
+## `hono` with `lit-mcp`
+
+Template: [`templates/lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-hono/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/lit-hono/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth; no tool argument can name an account.
+const decision = await authenticate(
+  c.req.header('authorization'),
+  options.verifier,
+  lifetime,
+);
+if (!decision.ok)
+  return new Response(null, {
+    status: decision.status,
+    headers:
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+  });
+return serve(c, account, decision.authInfo);
+```
+
+### Register a protected operation
+
+From `templates/lit-hono/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-hono/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+
+## `hapi` with `lit-mcp`
+
+Template: [`templates/lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/lit-hapi). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/bridge.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/lit-hapi/server/listener.ts`:
+
+```ts
+// Both endpoint registrations below keep one persistent handler and reuse this immutable view.
+const view = prepareStarterView(options.html, options.filename);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/lit-hapi/server/listener.ts`:
+
+```ts
+// Hapi's authentication strategy snapshots the verified credential before the body wait.
+// The bridge carries that request's auth to this factory and the Node transport; SAGA's
+// identityOf hook reads only that auth. No argument or previous request names an account.
+createServer: ({ lifetime, authInfo }) => {
+  if (authInfo === undefined)
+    throw new Error(
+      'The protected route did not establish request identity.',
+    );
+  return createAccountServer({
+    view,
+    lifetime,
+    authorize: options.authorize,
+  });
+},
+```
+
+### Register a protected operation
+
+From `templates/lit-hapi/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/lit-hapi/src/view.ts`:
+
+```ts
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+
+## `hono` with `react-mcp`
+
+Template: [`templates/react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/templates/react-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/react`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/react-hono/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/react-hono/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth; no tool argument can name an account.
+const decision = await authenticate(
+  c.req.header('authorization'),
+  options.verifier,
+  lifetime,
+);
+if (!decision.ok)
+  return new Response(null, {
+    status: decision.status,
+    headers:
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+  });
+return serve(c, account, decision.authInfo);
+```
+
+### Register a protected operation
+
+From `templates/react-hono/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/react-hono/src/view.tsx`:
+
+```tsx
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```

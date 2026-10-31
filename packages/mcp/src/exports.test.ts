@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
+import * as fetchHosting from '@saga-a2ui/mcp/server/http';
 import * as policy from '@saga-a2ui/mcp/policy';
 import * as server from '@saga-a2ui/mcp/server';
 import * as view from '@saga-a2ui/mcp/view';
@@ -56,6 +57,35 @@ const RENDERER =
 const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 
 describe('package subpath exports', () => {
+  it('isolates the local Node listener behind its own server subpath', async () => {
+    const { modules } = await bundle('@saga-a2ui/mcp/server/node', 'node');
+    expect(modules.some((id) => id.endsWith('/server/node/listener.ts'))).toBe(
+      true,
+    );
+    expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
+  });
+
+  it('offers Fetch hosting behind its own subpath: no listener, no filesystem, no renderer', async () => {
+    expect(Object.keys(fetchHosting).sort()).toEqual([
+      'McpFetchConfigurationError',
+      'createMcpFetchApp',
+    ]);
+    const { modules, code } = await bundle(
+      '@saga-a2ui/mcp/server/http',
+      'node',
+    );
+    expect(modules.some((id) => id.endsWith('/server/http/fetch-app.ts'))).toBe(
+      true,
+    );
+    expect(modules.filter((id) => id.includes('/server/node/'))).toEqual([]);
+    expect(modules.filter((id) => /node-server/.test(id))).toEqual([]);
+    expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
+    expect(code).not.toMatch(
+      /from ['"]node:(http|https|http2|net|tls|dgram|fs|os|child_process)['"]/,
+    );
+    expect(code).not.toMatch(/\bprocess\.env\b/);
+  });
+
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
@@ -74,6 +104,7 @@ describe('package subpath exports', () => {
     ]);
     expect(Object.keys(view).sort()).toEqual([
       'ViewStartFailure',
+      'conversationFromApp',
       'deliveredResultFromToolResult',
       'hostLinksFromApp',
       'readingProfile',
@@ -143,7 +174,7 @@ describe('package subpath exports', () => {
         /\/packages\/(components|lit|react|lynx)\//.test(id),
       ),
     ).toEqual([]);
-    // The host link contract is a type here; the view supplies an implementation of it.
+    // The host link and conversation contracts are types here; the view supplies an implementation of it.
     expect(modules.filter((id) => id.includes('/packages/core/'))).toEqual([]);
   });
 

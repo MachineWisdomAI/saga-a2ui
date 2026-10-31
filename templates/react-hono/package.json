@@ -1,0 +1,43 @@
+{
+  "name": "saga-react-hono-starter",
+  "private": true,
+  "description": "A SAGA A2UI starter: a React view served by a Hono MCP server.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build:view": "vite build",
+    "build:server": "vite build --config vite.server.config.ts",
+    "build": "npm run build:view && npm run build:server",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
+    "start": "node dist/server.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@saga-a2ui/components": "*",
+    "@saga-a2ui/core": "*",
+    "@saga-a2ui/mcp": "*",
+    "@saga-a2ui/react": "*",
+    "@saga-a2ui/react-mcp-stack": "*",
+    "hono": "4.13.13",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "2.3.3"
+  },
+  "overrides": {
+    "@a2ui/markdown-it": "0.2.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

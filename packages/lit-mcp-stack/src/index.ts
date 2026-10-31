@@ -28,6 +28,12 @@ export type { ToolInput, ToolResult } from '@saga-a2ui/mcp/view';
 export { readingProfile, type ReadingProfile } from '@saga-a2ui/mcp/view';
 // The link opener a running view hands its actions, for an optional card the catalog includes.
 export type { HostLinks } from '@saga-a2ui/core/host-links';
+// The conversation a running view hands its actions, and the results of adding a message to it.
+export type {
+  AppendResult,
+  Conversation,
+  RequestOutcome,
+} from '@saga-a2ui/core/conversation';
 // The authoring surface of an own-catalog application: the layout and its schemas.
 export { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 export type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';

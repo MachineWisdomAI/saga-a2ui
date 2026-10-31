@@ -1,10 +1,14 @@
-# saga a2ui - a framework for building agentic apps with A2UI and MCP
+# saga a2ui — Framework for building agentic apps with A2UI and MCP Apps.
 
 ![saga a2ui: the Wyrm dragon and wordmark](assets/brand/readme-banner.png)
 
-**Bring your services to AI assistants and agents, including Alexa+, ChatGPT, Claude and more, with less engineering work.**
+**Reach users through their AI assistants and agents.**
 
-saga a2ui combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom AI](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
+saga means Simple Agentic Apps. It combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
+
+[Framework website](https://saga-ai.dev/) · [Example applications and source](https://github.com/MachineWisdomAI/saga-a2ui-examples) · [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md)
+
+Hosted examples consume the SDK packages; their application source is maintained in the examples repository.
 
 [Meet the adopters building with saga a2ui](ADOPTERS.md).
 
@@ -26,7 +30,7 @@ The [action guide](docs/actions.md) follows a notes application through these in
 
 Start with a Node, Express, Fastify, Hono or Hapi backend, or [add saga a2ui to an existing service](docs/attach-to-existing-backend.md). saga a2ui carries the verified request identity through to your application, where your server checks permissions and performs the operation.
 
-Application processing, MCP integration, components and React bindings have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
+Application processing, MCP integration, components and the React and Lit renderer integrations have separate packages, so you can choose the parts your application uses and review their dependencies. The [package guide](packages/README.md) explains their responsibilities and how they fit together.
 
 ### Content controls for the application you are building
 
@@ -38,7 +42,7 @@ Your application chooses which links may open and which image hosts are allowed.
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.
 
-From a source checkout, with Node 22.12.0 or newer and npm:
+From a source checkout, with Node 22.23.3 or newer and npm:
 
 ```sh
 npm ci
@@ -54,7 +58,12 @@ For a browser walkthrough of actions and their implementation, try the [interact
 
 ## Build your application
 
-Follow [Getting started](docs/getting-started.md) for a starter project or an existing-backend integration. The Lit renderer powers the demo and starter templates; the React integration provides action controls and FaithfulCard.
+React and Lit are both supported application paths. Their MCP stacks provide typed surfaces, action controls and the optional FaithfulCard application, with framework-specific rendering and lifecycle integration. Choose the stack that matches your application. Start with [Getting started](docs/getting-started.md), which covers what every application needs, then follow one of two tracks:
+
+- [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md): build a game in your own app directory with npm packages, then play against Claude or ChatGPT. To try a finished, hosted version first, see the [hosted game and its source](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game).
+- [Build the notes application with Lit](docs/build-notes-with-lit.md): a view composed with the Lit stack, leading into the [action guide](docs/actions.md).
+
+To add the React stack to an application you already have, use the [React integration guide](docs/react-consumers.md). [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and five of the six generated starters use Lit, and one starter uses React on Hono; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 
@@ -63,7 +72,7 @@ The seven-package public release set includes the Lit and React renderers and th
 - [Action guide](docs/actions.md): connect interactions to application behavior.
 - [Development reference](docs/development-reference.md#local-development): build and test the SDK.
 - [Candidate updates and rollback](docs/candidate-update-and-rollback.md): keep installed packages and views together.
-- [Host compatibility](docs/2026-10-19_host-compatibility-observations_v1.md): choose a host for your application.
+- [Host compatibility](docs/host-compatibility.md): choose a host for your application.
 - [Blueprints](blueprints/README.md#find-a-design): explore the architecture and component contracts.
 - [Building with saga a2ui](ADOPTERS.md): IASER's Ansari integration and how to share your application.
 
@@ -81,7 +90,7 @@ My perspective on content safety comes from AMP and Gmail Add-ons, alongside fiv
 
 ## Work with Machine Wisdom AI
 
-saga a2ui is maintained by [Machine Wisdom AI](https://machine-wisdom.ai) for its clients.
+saga a2ui is maintained by [Machine Wisdom](https://machine-wisdom.ai) for its clients.
 
 [Talk to Machine Wisdom AI](https://machine-wisdom.ai) about bringing your services to Alexa+, ChatGPT, Claude and more, or join saga a2ui adopters by following the [Quick Start guide](docs/getting-started.md).
 
