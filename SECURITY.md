@@ -115,11 +115,13 @@ dependency selection. A report must identify:
 - validation performed and important limitations.
 
 For dependencies, a report must use current authoritative advisory and package
-evidence. A newer version existing is not itself a finding. Report a direct
-runtime dependency, development dependency, CI action, or actionable
-transitive advisory only when the selected version is affected and the
-repository can reduce the risk through a direct dependency or workflow update,
-an owned integration change, or a proportionate compensating control.
+evidence. A newer version existing is not itself a finding. A direct runtime
+dependency, development dependency, CI action, or actionable transitive
+advisory is reportable when the selected version is affected, the risk applies
+to a supported repository use or integration, and the reachable impact is
+consequential. Fix availability determines the disposition, not reportability.
+An applicable risk without a compatible effective repair remains unresolved;
+the absence of a remedy does not make it not applicable.
 
 Development and CI dependencies are reportable when their reachable use can
 compromise developer execution, CI credentials, release artifacts, or
@@ -170,6 +172,21 @@ reachability, impact, compensating controls, compatibility or usability cost,
 and a trigger for reconsideration are stated. “Difficult to fix” or “unlikely”
 alone is not suppression authority.
 
+The investigating agent establishes applicability and reachability, runs the
+smallest useful probe, and records each disposition as `fixed`, `mitigated`,
+`not applicable`, `duplicate`, or `unresolved`. Public-safe problem statements,
+fixes, verification, and remaining limits belong in the SDK issue or pull
+request under the [contribution review rules](CONTRIBUTING.md#review). Sensitive
+internal coordination and detailed evidence stay in the existing private
+Backstage delivery record; external reporters do not need Backstage access.
+
+A mitigation requires evidence that it reduces the demonstrated risk;
+compatibility or usability cost alone does not establish mitigation. Missing
+technical evidence remains unresolved. Independent agent evidence may
+challenge a disposition, but it is not a security certificate or a new
+approval gate. Escalate only a genuine product or compatibility tradeoff with
+a concrete recommendation, or an action that requires separate authority.
+
 ## Known Limitations and Compensating Controls
 
 Dependency safety is time-sensitive. A scan must state when registry,
@@ -198,6 +215,21 @@ host/renderer combination.
 ## Reporting Security Issues
 
 Do not put credentials, personal information, private service responses, or
-unnecessary exploitable details in public issues. Maintainers should use a
-restricted private coordination channel for sensitive reports until a public
-reporting route is established.
+unnecessary exploitable details in public issues. The intended confidential
+external route is [GitHub private vulnerability reporting](https://github.com/MachineWisdomAI/saga-a2ui/security/advisories/new):
+from the repository's **Security** tab, choose **Report a vulnerability**.
+
+This route is operational only while private vulnerability reporting is
+enabled and the maintainer's ordinary GitHub security notifications are
+monitored. Verify both before relying on it. If the option is unavailable, the
+repository does not currently offer an operational confidential route for an
+external reporter; do not redirect that reporter to private Backstage records
+or ask them to disclose sensitive details publicly.
+
+Keep reporter discussion in the SDK's private security advisory. Use the
+existing private Backstage delivery record for internal coordination and keep
+the public SDK issue or pull request independently understandable with
+public-safe evidence and limitations. When an embargoed source repair is
+needed, use GitHub's temporary private security fork until coordinated
+disclosure makes the ordinary public pull request appropriate. Do not promise
+a response time that the project has not established.
