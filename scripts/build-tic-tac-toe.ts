@@ -1,3 +1,4 @@
+import { examplePin, tutorialGameSource } from './stage-tutorial-game.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -14,8 +15,8 @@ import {
   type SdkPackage,
 } from './packed-consumer.js';
 
-// Qualification build of examples/tic-tac-toe, the way an application outside this repository
-// would receive SAGA: the example is copied into a clean directory, the SDK packages are installed
+// Qualification build of the pinned external tic-tac-toe application, the way an application outside this repository
+// would receive saga: the example is copied into a clean directory, the SDK packages are installed
 // into it from packed candidate tarballs (no registry), and the example's own scripts and
 // configuration build it (see packed-consumer.ts). The application supplies its game store and
 // operations to the SDK local listener.
@@ -24,7 +25,7 @@ import {
 //
 // Building the candidate is not publishing anything.
 
-export const ticTacToeSource = path.join(repoRoot, 'examples', 'tic-tac-toe');
+export const ticTacToeSource = tutorialGameSource;
 export const ticTacToeDist = path.join(
   repoRoot,
   'apps',
@@ -209,7 +210,7 @@ export async function buildTicTacToeInto(
       packedTarballSha256: built.sdk.tarballSha256,
       builtView: { sha256: sha256(built.view) },
       builtServer: { sha256: sha256(built.server) },
-      source: path.relative(repoRoot, ticTacToeSource),
+      source: examplePin,
     };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });

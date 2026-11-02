@@ -31,7 +31,7 @@ The current seven-package release set is an RC published under `next`: `@saga-a2
 Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This registry path configures an existing application; the local demonstration in the [Lit track](build-notes-with-lit.md#start-from-the-demo) is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 
 ```json
-{"overrides": {"@a2ui/markdown-it": "0.2.1"}}
+{"overrides": {"@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"}}
 ```
 
 A2UI 0.13.0 permits a newer Markdown package whose peer requirements target A2UI 0.14.0. The override keeps the supported combination together. It belongs at the consumer root; a dependency's own override is not inherited.

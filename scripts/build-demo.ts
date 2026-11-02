@@ -310,7 +310,9 @@ export function writeDownload(
         scripts: DOWNLOAD_SCRIPTS,
         engines: { node: '>=22.12.0' },
         dependencies,
-        overrides: { '@a2ui/markdown-it': '0.2.1' },
+        overrides: JSON.parse(
+          fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+        ).overrides,
       },
       null,
       2,

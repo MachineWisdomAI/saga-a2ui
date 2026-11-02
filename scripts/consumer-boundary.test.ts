@@ -599,7 +599,6 @@ describe('the repository consumers hold application meaning only', () => {
       'examples/answer-consumer/server/answer-server.ts',
       'examples/pack1-consumer/server/notes-server.ts',
       'examples/react-card-consumer/server/card-server.ts',
-      'examples/tic-tac-toe/server/operations.ts',
       'demo/lit-node/server/demo-server.ts',
       'apps/lit-host/src/mcp/server.ts',
       'apps/lit-host/src/playback/playback-server.ts',

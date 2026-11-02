@@ -8,9 +8,11 @@ import {
 import { ActionsScope, type ReactActions } from '@saga-a2ui/react/actions';
 import type { ServerTransport } from '@saga-a2ui/core/actions';
 import type { Conversation } from '@saga-a2ui/core/conversation';
+import type { HostLinks } from '@saga-a2ui/core/host-links';
 import type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 import {
   conversationFromApp,
+  hostLinksFromApp,
   type HostContext,
   type ToolInput,
   type ToolResult,
@@ -41,6 +43,8 @@ import type { ErrorPhase } from './start-failure.js';
 export interface ViewHost {
   /** The way an action reaches the application’s server, through the host. */
   readonly server: ServerTransport<ServerReply>;
+  /** The one way to ask the host to open a link, for example the destination of a `SagaAttribution`. Ends with the view. */
+  readonly links: HostLinks;
   /** The one way to add a message to the conversation, optionally with context for the assistant. Ends with the view. */
   readonly conversation: Conversation;
 }
@@ -151,6 +155,7 @@ export function startA2uiViewOn<TData>(
                 callServerTool: (request, requestOptions) =>
                   app.callServerTool(request, requestOptions),
               },
+              links: hostLinksFromApp(app, lifetime.signal),
               conversation: conversationFromApp(app, lifetime.signal),
             }),
           )

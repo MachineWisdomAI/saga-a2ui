@@ -2,9 +2,11 @@
 
 Build a React game that you play inside Claude or ChatGPT. You click a square to place X; the assistant plays O. A local server checks every move and keeps the board up to date.
 
-You’ll create an app in your own directory, install SAGA from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
+You’ll create an app in your own directory, install saga from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
+
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/6431e6a984c88eca6904b75b760a57d0e2edde16/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
 
 ## Before you start
 
@@ -22,7 +24,7 @@ Install Node.js 22.23.3 or newer and `cloudflared`. You also need a text editor,
 | Zod | Checks that tool inputs and results have the shapes the game expects. | [Zod basics](https://zod.dev/basics) |
 | MCP and MCP Apps | Let the assistant call your server’s tools and display an interactive card in the conversation. | [MCP introduction](https://modelcontextprotocol.io/docs/getting-started/intro) and [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) |
 | A2UI | Describes the board’s components and data bindings so a renderer can display them. | [A2UI concepts](https://a2ui.org/concepts/overview/) |
-| SAGA React MCP stack | Connects your React components, server operations, and conversation actions to the host. | [SAGA React integration](react-consumers.md) |
+| saga React MCP stack | Connects your React components, server operations, and conversation actions to the host. | [saga React integration](react-consumers.md) |
 | Claude or ChatGPT | Hosts the card and supplies the assistant that plays O. | [Claude custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) or [ChatGPT custom MCP servers](https://developers.openai.com/plugins/deploy/connect-chatgpt) |
 | Cloudflare Quick Tunnel | Gives the local server a temporary HTTPS address that the host can reach, without a Cloudflare account or domain. | [Install cloudflared](https://developers.cloudflare.com/tunnel/downloads/) and [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) |
 
@@ -42,11 +44,11 @@ The game has no sign-in. Anyone with the tunnel address can create a game, and a
 
 Follow [Connect a React component to a server result](tic-tac-toe/1-first-card.md). You will generate a React/TypeScript project with Vite, add an operation that returns a message, and display that result in a React component. The lesson includes the installation and build commands; run them in your own app directory.
 
-The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.9.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
+The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.11.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
 
-The npm override for `@a2ui/markdown-it` selects the dependency version used to qualify this package combination. It does not remove the inherited advisories below.
+The lesson's consumer-root overrides keep `@a2ui/markdown-it` at the compatible version and replace vulnerable DOMPurify and Hono dependencies with patched versions. Keep them when regenerating your lockfile; see the [complete override recipe](public-install.md#install-one-stack-plus-framework-peers).
 
-With these versions, npm reports advisories inherited through A2UI’s Zod 3 and DOMPurify dependencies. The game’s tool schemas use Zod 4.6.7; its own React catalog does not bundle DOMPurify or render HTML from the model. The installed dependencies still carry those advisories. See the [Zod advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) and [DOMPurify advisory](https://github.com/advisories/GHSA-cg2g-xh64-v4q7). Do not force Zod 4 into A2UI’s Zod 3 dependency: their APIs differ.
+A2UI's Zod 3 dependency still carries the [resource-consumption advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The game's tool schemas use Zod 4.6.7; its own React catalog does not bundle DOMPurify or render HTML from the model. Do not force Zod 4 into A2UI's Zod 3 dependency: their APIs differ.
 
 Keep the generated `package-lock.json` in your project. Use `npm ci` for later installs from that lockfile.
 
@@ -134,7 +136,7 @@ When the host reopens a card, the board reads its game before enabling any squar
 
 ![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](../diagrams/tic-tac-toe-turn-loop.svg)
 
-The app owns the game rules, storage, React components, and action definitions. SAGA validates the operation inputs and results, connects the view to the host, and supplies the action and conversation APIs. `src/surface.ts` describes the layout; `src/catalog.tsx` implements its components in React; `src/actions.ts` gives the buttons their behavior.
+The app owns the game rules, storage, React components, and action definitions. saga validates the operation inputs and results, connects the view to the host, and supplies the action and conversation APIs. `src/surface.ts` describes the layout; `src/catalog.tsx` implements its components in React; `src/actions.ts` gives the buttons their behavior.
 
 ## 4. Add a move list
 

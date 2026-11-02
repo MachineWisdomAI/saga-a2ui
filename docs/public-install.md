@@ -23,32 +23,50 @@ npm view @saga-a2ui/lit-mcp-stack dist-tags --json
 npm view @saga-a2ui/react-mcp-stack dist-tags --json
 ```
 
-The current RC is `0.9.0-rc.1` for all seven packages, verified on 29 October 2026. The recipes below pin those versions. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/343) records the source revision, registry integrity and anonymous installation checks. `next` selects these versions; `latest` was not changed by this release.
+The current RC is `0.11.0-rc.1` for all seven packages, published on 30 October 2026 and verified against the registry the same day. The recipes below pin those versions. `next` selects these versions; `latest` was not changed by this release.
+
+The registry's own record of each version is the receipt. Open `https://registry.npmjs.org/@saga-a2ui/<package>/0.11.0-rc.1` (or the package's page on npmjs.com) to see its `dist.integrity`; the values should equal these:
+
+| Package | `dist.integrity` of `0.11.0-rc.1` |
+| --- | --- |
+| `@saga-a2ui/core` | `sha512-Uq3UjKlvU1TZAFfM+e/fIEP9BtaoQpjYEXrqOdVzKkUIrHiQ0YbioUIdaGXvpFSRS0Z4t3ENRex5kpcXptivBQ==` |
+| `@saga-a2ui/components` | `sha512-2rseheJBxV9g9AA9jXOS7rQrhZtNFM/0q4kuH+ml8J7VAUUt9YNQ/broVf0c5reixP+PT+happXme1ihLH4J8w==` |
+| `@saga-a2ui/mcp` | `sha512-JYZS4LoDX65mk/8Ym5MEOAuhvbYRMSIFOeAH4O/41QC1OqYdeRupHHYRY9SIUbrrovpG8RrsecCrNbq0Pizj+g==` |
+| `@saga-a2ui/lit` | `sha512-qM2H+NT9VLsi86epaHvwQdNh/VeyKUrzVn2E3lkOF4u/B+Km/ySJf4/JPz+4EKv2nilbv0ZnH22JqgufHz/Ntw==` |
+| `@saga-a2ui/react` | `sha512-cOrMbqRNdcxiBu71rkQYYS2QMQewqFWCOqzll+TM9ZO/VXHHwPsGfwYK8ADXwApEa692dL2epaKf1E+lazQK6g==` |
+| `@saga-a2ui/lit-mcp-stack` | `sha512-KE6J1YRuh+AA2Wip2Wlu3/XIrEeAdvzrWxJQkjv3YJbDTW0P3rJM1r7L1yE9wDm7lm66tzm8ekerXx6PTNOCSg==` |
+| `@saga-a2ui/react-mcp-stack` | `sha512-abrfDAynzpTCXqm+HcMiIEF69eFnnzFUgnrzIkw9Rad45MYPv86T6YRZQXX6dxzAW09hyYzz7dqm/sfmHK3t1Q==` |
+
+Both recipes below were run from empty directories with `npm` 10 and installed these exact versions from the registry, with every package in the resulting lockfile resolved from `registry.npmjs.org`.
 
 A stack pins its SDK siblings, so its patch version can differ from theirs. For another release, confirm the stack version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
 
 ## Install one stack plus framework peers
 
-At your application's root, preserve existing overrides and add:
+At your application's root, preserve existing overrides and add the following. If the application already directly declares any of these three packages, use the same exact specifier in its dependency field too; npm rejects a direct dependency and override with different specifiers (EOVERRIDE).
 
 ```json
 {
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"
   }
 }
 ```
 
+The DOMPurify and Hono overrides replace vulnerable transitive versions pinned or permitted by upstream dependencies. npm applies overrides only from the application root; the SDK cannot impose them through its own manifest. Regenerate the application's lockfile after changing them.
+
+A2UI still requires Zod 3, which is covered by [the Zod resource-consumption advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The available upstream fix is in Zod 4; forcing it into the A2UI v3 context breaks schema compatibility. These overrides do not resolve that advisory. Bound untrusted request sizes at the application's ingress while that dependency remains in use.
+
 For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.9.0-rc.1 lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.11.0-rc.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.9.0-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.11.0-rc.1 react@19.3.1 react-dom@19.3.1
 ```
 
 Commit the application lockfile. Each stack declares its SAGA siblings as regular dependencies with exact pins, so the application does not declare those packages separately. Use the stack root for an application-owned catalog and `/faithful-card` for a card application; `/server` is composed separately and stays out of browser bundles. A stack's server entry requires the full application's framework peers.

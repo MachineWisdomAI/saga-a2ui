@@ -89,7 +89,7 @@ jobs:
       - name: Install SDK workspace dependencies
         run: npm ci
       - name: Fetch bundled plugin branding
-        run: git lfs pull --include='assets/brand/plugin-icon.svg'
+        run: git lfs pull --include='assets/brand/plugin/*.png'
       # The Lynx fixture is its own project with its own lockfile, outside the SDK workspace (see README).
       - name: Install standalone Lynx fixture dependencies
         run: npm ci --prefix apps/lynx-fixture

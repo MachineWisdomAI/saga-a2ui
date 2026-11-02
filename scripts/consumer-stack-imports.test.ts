@@ -105,11 +105,6 @@ const UNITS: readonly Unit[] = [
     directory: 'examples/react-card-consumer',
     roles: every(stack('react')),
   },
-  {
-    name: 'examples/tic-tac-toe',
-    directory: 'examples/tic-tac-toe',
-    roles: every(stack('react')),
-  },
 ];
 
 /** Every module specifier a text of code imports, exports from or loads, comments blanked. */

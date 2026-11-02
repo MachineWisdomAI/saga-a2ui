@@ -4,7 +4,7 @@ Work in a feature branch or dedicated worktree and open a pull request. Keep eac
 
 Read [AGENTS.md](AGENTS.md) for repository rules and [CODING_STANDARDS.md](CODING_STANDARDS.md) for package ownership, module interfaces, and TypeScript design. Use normal TypeScript and renderer tools. Record the checks actually run; package installation, local rendering and real-host behavior are separate evidence.
 
-Use [Getting started](docs/getting-started.md) for setup and the [development reference](docs/development-reference.md#local-development) for build and test commands. Do not publish placeholder packages. Follow [the version policy](docs/version-policy.md) when introducing an owned version and for every subsequent bump.
+Use [Getting started](docs/getting-started.md) for setup and the [development reference](docs/development-reference.md#local-development) for build and test commands. Use [private development builds](docs/candidate-update-and-rollback.md#use-unpublished-source-in-another-application) for unpublished consumer integration; public RCs follow [RC selection](docs/release-packages.md#select-a-public-release-candidate). Follow [the version policy](docs/version-policy.md) when introducing an owned version and for every subsequent bump.
 
 Keep private customer material, credentials, business records and internal planning out of this repository, including its history. Contributions must have appropriate redistribution rights; retain third-party license obligations.
 

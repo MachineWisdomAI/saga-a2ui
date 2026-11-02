@@ -30,3 +30,5 @@ Requests have a 1 MiB body limit. The default budgets are 3 seconds per operatio
 `close()` cancels active requests, closes the MCP handler and releases the listening port. Repeated calls reuse the same shutdown. The application owns process signals and calls `close()` when appropriate; the SDK does not install signal handlers.
 
 This listener supplies no sign-in or authorization. Use it for local development and disposable tutorial data. Making it reachable through a tunnel makes its public operations reachable too. Existing applications that need their own routes, authentication or deployment policy should use the [existing-backend recipes](attach-to-existing-backend.md).
+
+To serve the same operations from a Cloudflare Worker, or behind a Node listener you choose, use [Fetch hosting](fetch-mcp-hosting.md).

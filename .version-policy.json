@@ -368,7 +368,14 @@
     "package.json",
     "package-lock.json",
     "tsconfig.json",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "scripts/stage-tutorial-game.ts",
+    "scripts/tic-tac-toe-source.json",
+    "docs.json",
+    ".mintignore",
+    "scripts/docs-probe.ts",
+    "scripts/docs-release.ts",
+    "scripts/docs-release/**"
   ],
   "release_paths": [
     "templates/lit-*/**",

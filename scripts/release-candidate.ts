@@ -18,11 +18,11 @@ import {
 } from './packed-consumer.js';
 
 // PACK2: prepares the release candidate of the owned packages as CI artifacts and says exactly what
-// it is. It packs the five packages with the candidate prerelease identity (see `candidateVersion`),
+// it is. It packs the seven packages with the candidate prerelease identity (see `candidateVersion`),
 // checks that every consumer build installed exactly those tarballs, installs them with the real
 // package manager into a clean directory, records the matched package/resource/catalog set and the
 // tested recipe, and can check an installed set against that record. It publishes nothing: the
-// tarballs stay `private`, so `npm publish` refuses them, and the files go only to the output
+// tarballs stay private and target an invalid registry, and the files go only to the output
 // directory, which CI uploads as a workflow artifact.
 //
 //   npm run build                                  # builds the consumers whose identities are checked
@@ -1078,7 +1078,7 @@ function expectedFrom(record: {
 }
 
 const USAGE =
-  'usage: release-candidate.ts pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
+  'usage: release-candidate.ts tarballs --out NEW_DIR | pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
 
 interface VerifiedRecord {
   readonly version: string;
@@ -1167,6 +1167,43 @@ export function verifyCommand(argv: readonly string[]): VerifyOutcome {
 
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
+  if (command === 'tarballs') {
+    const output = path.resolve(required(rest, '--out'));
+    // A fresh directory keeps the previous install's artifacts available for rollback.
+    fs.mkdirSync(output);
+    const work = createWorkDirectory('saga-local-tarballs-');
+    try {
+      const source = sourceRevision();
+      const packages = packSdkPackages(
+        work,
+        SDK_PACKAGES,
+        path.join(output, 'packages'),
+        candidateVersion(source.commit, source.dirty),
+      );
+      const root = readJson<{ overrides: Record<string, unknown> }>(
+        path.join(repoRoot, 'package.json'),
+      );
+      const overrides = {
+        ...root.overrides,
+        ...Object.fromEntries(
+          packages.map((one) => [
+            `@saga-a2ui/${one.name}`,
+            `file:${one.tarball}`,
+          ]),
+        ),
+      };
+      fs.writeFileSync(
+        path.join(output, 'npm-overrides.json'),
+        `${JSON.stringify({ source, overrides }, null, 2)}\n`,
+      );
+      console.log(
+        `Private development tarballs in ${output}. Nothing published; application qualification has not run.`,
+      );
+      return 0;
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
+  }
   if (command === 'pack') {
     const record = writeCandidate(path.resolve(required(rest, '--out')));
     const install = (

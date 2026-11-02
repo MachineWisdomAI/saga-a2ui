@@ -15,17 +15,18 @@ Accept npm's prompt to install `create-vite` if it appears. If you already have 
 
 [Vite's React/TypeScript generator](https://vite.dev/guide/#scaffolding-your-first-vite-project) creates the package file, compiler configuration, React entry point and lint setup. Keep that configuration. We will replace its demo counter and add the parts that connect the app to an MCP host. All commands below run from this app directory. Continue with the installation commands below; the generator’s suggested `npm run dev` starts a standalone website, while this app opens in Claude or ChatGPT.
 
-SAGA's supported A2UI dependency combination needs one npm override. Set it before installing:
+saga's supported dependency combination needs compatibility and security overrides. Set them before installing:
 
 ```sh
-npm pkg set 'overrides.@a2ui/markdown-it=0.2.1'
+npm pkg set 'overrides.@a2ui/markdown-it=0.2.1' \
+  'overrides.dompurify=3.4.17' 'overrides.@hono/node-server=2.1.5'
 ```
 
 Install the stack, the React version it supports, and the MCP server and schema libraries used by your operations:
 
 ```sh
 npm install --save-exact --strict-peer-deps \
-  @saga-a2ui/react-mcp-stack@0.9.0-rc.1 \
+  @saga-a2ui/react-mcp-stack@0.11.0-rc.1 \
   react@19.3.1 react-dom@19.3.1 \
   @modelcontextprotocol/server@2.3.1 zod@4.6.7
 ```
@@ -41,7 +42,7 @@ npm install --save-dev --save-exact --strict-peer-deps \
   eslint-plugin-react-refresh@0.4.24 globals@16.5.0 typescript-eslint@8.46.4
 ```
 
-Keep Vite's generated `.gitignore`, which excludes `node_modules` and `dist`, and the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the Markdown override.
+Keep Vite's generated `.gitignore`, which excludes `node_modules` and `dist`, and the generated `package-lock.json`; subsequent installations use `npm ci`. The [main guide's dependency notes](../build-tic-tac-toe-with-react.md#1-create-the-app) explain the inherited audit warnings and the consumer-root overrides.
 
 ## 2. Return a message from the server
 
@@ -110,13 +111,13 @@ export function createGameServer({
 }
 ```
 
-`output` describes the structured result: an object with a `message` string. SAGA checks it before returning the response. `view` attaches the HTML that the host should open with this tool's result. The annotations describe the operation's effects to the host; this first version only displays a message. The named failures provide the safe text to use when the operation cannot return a valid result.
+`output` describes the structured result: an object with a `message` string. saga checks it before returning the response. `view` attaches the HTML that the host should open with this tool's result. The annotations describe the operation's effects to the host; this first version only displays a message. The named failures provide the safe text to use when the operation cannot return a valid result.
 
-The operation uses Zod from `zod` for its tool schemas. The React catalog in the next section uses `z` from the SAGA stack, whose schema API matches A2UI's catalog types.
+The operation uses Zod from `zod` for its tool schemas. The React catalog in the next section uses `z` from the saga stack, whose schema API matches A2UI's catalog types.
 
 ## 3. Display that message in React
 
-Create `src/view.tsx`. The component at the start is ordinary React: it renders a paragraph from a `text` prop. `createComponentImplementation` gives that component a name and a prop schema so SAGA can use it in a layout. A catalog is the collection of components that this view allows; for now, it contains only `Message`.
+Create `src/view.tsx`. The component at the start is ordinary React: it renders a paragraph from a `text` prop. `createComponentImplementation` gives that component a name and a prop schema so saga can use it in a layout. A catalog is the collection of components that this view allows; for now, it contains only `Message`.
 
 The layout has one data field, `message`, and one component. `bind: { text: 'message' }` connects that field to the paragraph's `text` prop.
 
@@ -256,11 +257,11 @@ export default defineConfig({
 });
 ```
 
-`ssr` selects the server entry. `noExternal: true` bundles its dependencies, including the TypeScript source shipped by SAGA. `emptyOutDir: false` preserves the HTML that the view build already wrote. The result is `dist/index.html` beside `dist/server.mjs`, which is where `server/main.ts` reads it.
+`ssr` selects the server entry. `noExternal: true` bundles its dependencies, including the TypeScript source shipped by saga. `emptyOutDir: false` preserves the HTML that the view build already wrote. The result is `dist/index.html` beside `dist/server.mjs`, which is where `server/main.ts` reads it.
 
 Make two small changes to Vite's generated compiler configuration:
 
-- In both `tsconfig.app.json` and `tsconfig.node.json`, set `erasableSyntaxOnly` to `false`. The current SAGA packages use TypeScript constructor parameter properties, which Vite compiles; this option otherwise prohibits that syntax. Keep `strict: true`.
+- In both `tsconfig.app.json` and `tsconfig.node.json`, set `erasableSyntaxOnly` to `false`. The current saga packages use TypeScript constructor parameter properties, which Vite compiles; this option otherwise prohibits that syntax. Keep `strict: true`.
 - In `tsconfig.node.json`, replace its `include` list with `["vite.config.ts", "vite.server.config.ts", "server"]` so typechecking covers your server too.
 
 Add the scripts with npm rather than rewriting `package.json`:

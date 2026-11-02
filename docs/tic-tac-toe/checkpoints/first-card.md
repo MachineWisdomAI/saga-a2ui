@@ -22,7 +22,7 @@ These are the files after [the first lesson](../1-first-card.md). Vite generates
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",
-    "@saga-a2ui/react-mcp-stack": "0.9.0-rc.1",
+    "@saga-a2ui/react-mcp-stack": "0.11.0-rc.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zod": "4.6.7"
@@ -43,7 +43,9 @@ These are the files after [the first lesson](../1-first-card.md). Vite generates
     "vite-plugin-singlefile": "2.3.3"
   },
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1",
+    "dompurify": "3.4.17",
+    "@hono/node-server": "2.1.5"
   }
 }
 ```
