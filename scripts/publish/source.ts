@@ -51,7 +51,9 @@ function headCommit(directory: string): string | null {
 function findGitDir(start: string): string | null {
   for (let current = start; ; current = path.dirname(current)) {
     const candidate = path.join(current, '.git');
-    const stat = statOrNull(candidate);
+    // A symbolic link in place of `.git` is not something Git creates; do not follow it.
+    const stat = lstatOrNull(candidate);
+    if (stat?.isSymbolicLink() === true) return null;
     if (stat?.isDirectory() === true) return candidate;
     if (stat?.isFile() === true) {
       const pointer = /^gitdir:\s*(.+)$/m.exec(readSmall(candidate));
@@ -64,10 +66,28 @@ function findGitDir(start: string): string | null {
 
 /** The directory that holds shared references: the repository itself, or the main one for a linked worktree. */
 function commonDirOf(gitDir: string): string {
-  const pointer = statOrNull(path.join(gitDir, 'commondir'));
-  return pointer?.isFile() === true
-    ? path.resolve(gitDir, readSmall(path.join(gitDir, 'commondir')).trim())
-    : gitDir;
+  const pointer = readInside(gitDir, 'commondir');
+  return pointer === null ? gitDir : path.resolve(gitDir, pointer.trim());
+}
+
+/**
+ * The text of the regular file `relative` under `root`, or `null` when it is absent, is not a
+ * regular file, or is reached through a symbolic link at any step below `root`. Following a link
+ * would let a lower-trust directory make this reader copy an arbitrary local file that merely
+ * looks like a commit identifier into publication evidence. Repository metadata that Git itself
+ * writes contains no such links.
+ */
+function readInside(root: string, relative: string): string | null {
+  let current = root;
+  const parts = relative.split('/');
+  for (const [index, part] of parts.entries()) {
+    current = path.join(current, part);
+    const stat = lstatOrNull(current);
+    if (stat === null || stat.isSymbolicLink()) return null;
+    const last = index === parts.length - 1;
+    if (last ? !stat.isFile() : !stat.isDirectory()) return null;
+  }
+  return readSmall(current);
 }
 
 /** The text a reference holds: its loose file, or its line in `packed-refs`. */
@@ -78,12 +98,12 @@ function readReference(
 ): string | null {
   // `HEAD` is private to a worktree; every other reference is shared.
   const home = name === 'HEAD' ? gitDir : commonDir;
-  const loose = path.join(home, name);
-  if (statOrNull(loose)?.isFile() === true) return readSmall(loose).trim();
+  const loose = readInside(home, name);
+  if (loose !== null) return loose.trim();
   if (name === 'HEAD') return null;
-  const packed = path.join(commonDir, 'packed-refs');
-  if (statOrNull(packed)?.isFile() !== true) return null;
-  for (const line of readSmall(packed).split('\n')) {
+  const packedText = readInside(commonDir, 'packed-refs');
+  if (packedText === null) return null;
+  for (const line of packedText.split('\n')) {
     const separator = line.indexOf(' ');
     if (
       separator > 0 &&
@@ -108,9 +128,9 @@ function isSafeReferenceName(name: string): boolean {
   );
 }
 
-function statOrNull(file: string): fs.Stats | null {
+function lstatOrNull(file: string): fs.Stats | null {
   try {
-    return fs.statSync(file);
+    return fs.lstatSync(file);
   } catch {
     return null;
   }

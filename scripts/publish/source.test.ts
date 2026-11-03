@@ -135,6 +135,74 @@ describe('sourceOf', () => {
     expect(sourceOf(linked).revision).toBe(COMMIT);
   });
 
+  describe('metadata reached through symbolic links', () => {
+    const SECRET = 'c'.repeat(64);
+
+    /** A file outside the repository that is shaped like a commit identifier. */
+    function external(): string {
+      const file = path.join(scratch(), 'secret');
+      write(file, `${SECRET}\n`);
+      return file;
+    }
+
+    it('does not record an external file reached by a loose reference link', () => {
+      const root = scratch();
+      write(path.join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      fs.mkdirSync(path.join(root, '.git', 'refs', 'heads'), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        external(),
+        path.join(root, '.git', 'refs', 'heads', 'main'),
+      );
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+
+    it('does not record an external file reached by a linked directory component', () => {
+      const root = scratch();
+      const outside = scratch();
+      write(path.join(outside, 'main'), `${SECRET}\n`);
+      write(path.join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      fs.mkdirSync(path.join(root, '.git', 'refs'), { recursive: true });
+      fs.symlinkSync(outside, path.join(root, '.git', 'refs', 'heads'));
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+
+    it('does not record an external file reached by a head link', () => {
+      const root = scratch();
+      fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+      fs.symlinkSync(external(), path.join(root, '.git', 'HEAD'));
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+
+    it('does not record an external file reached by a packed-refs link', () => {
+      const root = scratch();
+      const packed = path.join(scratch(), 'packed-refs');
+      write(packed, `${SECRET} refs/heads/main\n`);
+      write(path.join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      fs.symlinkSync(packed, path.join(root, '.git', 'packed-refs'));
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+
+    it('does not follow a commondir link to another repository', () => {
+      const root = scratch();
+      const other = scratch();
+      write(path.join(other, 'refs', 'heads', 'topic'), `${COMMIT}\n`);
+      const gitdir = path.join(root, '.git');
+      write(path.join(gitdir, 'HEAD'), 'ref: refs/heads/topic\n');
+      fs.symlinkSync(other, path.join(gitdir, 'commondir'));
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+
+    it('does not follow a link in place of the repository directory', () => {
+      const root = scratch();
+      const real = scratch();
+      write(path.join(real, 'HEAD'), `${COMMIT}\n`);
+      fs.symlinkSync(real, path.join(root, '.git'));
+      expect(sourceOf(root)).toEqual({ revision: null, dirty: null });
+    });
+  });
+
   it.each([
     ['no repository', () => scratch()],
     [
