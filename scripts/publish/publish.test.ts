@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import type { FetchLike } from '@modelcontextprotocol/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   startListener,
   type Listener,
@@ -14,6 +14,7 @@ import {
   prepareStarter,
   type BuiltStarter,
 } from '../build-starter.js';
+import { ByteBudget, DEFAULT_TOTAL_BYTES } from '../maintainer-network.js';
 import { createWorkDirectory } from '../packed-consumer.js';
 import { runCli } from '../saga.js';
 import type { ValidatorLoad } from './chatgpt.js';
@@ -25,7 +26,7 @@ import {
   editing,
   here,
   listing,
-  pinFixtureTools,
+  fixtureCallsFile,
   png,
   recordOf,
   root,
@@ -44,6 +45,7 @@ import {
   sha256,
   type PublicationRecord,
 } from './record.js';
+import { discoverEndpoint, toolDigest } from './endpoint.js';
 import { iconProblem } from './images.js';
 import { readZip } from './zip.js';
 
@@ -1086,7 +1088,7 @@ describe('what cannot be concluded is never a pass', () => {
 });
 
 describe('tool calls', () => {
-  it('discovery calls no tool even when the release input declares fixture calls', async () => {
+  it('discovery calls no tool, whatever else is on the command line', async () => {
     const seen = wire();
     expect((await check(copyFixture(), { wire: seen })).code).toBe(0);
     expect(seen.methods.filter((method) => method === 'tools/call')).toEqual(
@@ -1094,13 +1096,14 @@ describe('tool calls', () => {
     );
   });
 
-  it('--invoke-fixture calls exactly the declared read-only tool, records only a digest of its result, and labels it fixture evidence', async () => {
+  it('--invoke-fixture calls exactly the tool its calls file authorizes, records only a digest of its result, and labels it fixture evidence', async () => {
     const seen = wire();
     const cwd = workspace();
     const app = copyFixture();
-    await pinFixtureTools(app);
+    const calls = await fixtureCallsFile();
     const run = await prepare(app, 'publication', { cwd, wire: seen }, [
       '--invoke-fixture',
+      calls,
     ]);
 
     expect(run.code, run.out).toBe(0);
@@ -1109,6 +1112,7 @@ describe('tool calls', () => {
     ).toHaveLength(1);
     expect(run.out).toMatch(/fixture evidence, not a real-host observation/);
     const record = recordOf(path.join(cwd, 'publication'));
+    expect(record.fixture.declared).toBe(1);
     expect(record.fixture.invoked).toBe(true);
     expect(record.fixture.invocations).toEqual([
       {
@@ -1121,10 +1125,78 @@ describe('tool calls', () => {
     expect(record.endpoint.toolCallsDuringDiscovery).toBe(0);
   });
 
-  it('refuses a declared call that does not name the digest of the tool definition, whatever the endpoint asserts', async () => {
+  it('the release input chooses no call: a fixture section in it is refused, and no tool is called', async () => {
     const seen = wire();
+    const app = copyFixture();
+    const found = await discoverEndpoint(PUBLISHED, { fetch: wire().fetch });
+    if (found.kind !== 'discovered') throw new Error(found.reason);
+    editInput(app, (input) => {
+      input.fixture = {
+        calls: [
+          {
+            tool: 'get_status',
+            toolSha256: toolDigest(found.snapshot.tools[0]!),
+            arguments: {},
+          },
+        ],
+      };
+    });
+    const run = await check(app, { wire: seen });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/fixture/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses a calls file that does not pin the digest of the tool definition, whatever the endpoint asserts', async () => {
+    const seen = wire();
+    const file = path.join(workspace(), 'unpinned.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: 'saga-fixture-calls/1',
+        calls: [{ tool: 'get_status', arguments: {} }],
+      }),
+    );
     const run = await check(copyFixture(), { wire: seen }, [
       '--invoke-fixture',
+      file,
+    ]);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/cannot be used/);
+    expect(run.out).toMatch(/toolSha256/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses a calls file that is missing, malformed or in another format, without a call', async () => {
+    const dir = workspace();
+    const malformed = path.join(dir, 'malformed.json');
+    fs.writeFileSync(malformed, '{');
+    const foreign = path.join(dir, 'foreign.json');
+    fs.writeFileSync(foreign, JSON.stringify({ calls: [] }));
+    for (const file of [path.join(dir, 'absent.json'), malformed, foreign]) {
+      const seen = wire();
+      const run = await check(copyFixture(), { wire: seen }, [
+        '--invoke-fixture',
+        file,
+      ]);
+      expect(run.code).toBe(1);
+      expect(run.out).toMatch(/fixture calls file cannot be used/);
+      expect(seen.methods).not.toContain('tools/call');
+    }
+  });
+
+  it('refuses a call when the endpoint now advertises another definition than the one pinned', async () => {
+    const calls = await fixtureCallsFile();
+    const seen = wire((method, response) =>
+      method === 'tools/list'
+        ? redescribe(response, 'Now does more')
+        : response,
+    );
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
     ]);
 
     expect(run.code).toBe(1);
@@ -1132,61 +1204,68 @@ describe('tool calls', () => {
     expect(seen.methods).not.toContain('tools/call');
   });
 
-  it('refuses a call when the endpoint now advertises another definition than the one pinned', async () => {
-    const app = copyFixture();
-    await pinFixtureTools(app);
-    const seen = wire((method, response) =>
-      method === 'tools/list'
-        ? redescribe(response, 'Now does more')
-        : response,
-    );
-    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
-
-    expect(run.code).toBe(1);
-    expect(run.out).toMatch(/get_status: refused/);
-    expect(seen.methods).not.toContain('tools/call');
-  });
-
   it('does not let a read-only assertion stand in for the pinned digest', async () => {
-    const app = copyFixture();
     const readOnly = (method: string, response: Response) =>
       method === 'tools/list'
         ? redescribe(response, undefined, true)
         : response;
-    await pinFixtureTools(app, readOnly);
+    const calls = await fixtureCallsFile({ rewrite: readOnly });
     // The pin matches, but the endpoint no longer asserts the hint: the hint can only narrow the call.
     const seen = wire((method, response) =>
       method === 'tools/list'
         ? redescribe(response, undefined, false)
         : response,
     );
-    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
     expect(run.out).toMatch(/get_status: refused/);
     expect(seen.methods).not.toContain('tools/call');
   });
 
-  it('refuses to call a declared tool the endpoint does not advertise', async () => {
+  it('refuses to call an authorized tool the endpoint does not advertise', async () => {
     const seen = wire();
-    const app = copyFixture();
-    editInput(
-      app,
-      (input) =>
-        (input.fixture.calls = [{ tool: 'delete_everything', arguments: {} }]),
-    );
-    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
+    const calls = await fixtureCallsFile({
+      calls: [{ tool: 'delete_everything', arguments: {} }],
+    });
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
 
     expect(run.code).toBe(1);
     expect(run.out).toMatch(/delete_everything: refused/);
     expect(seen.methods).not.toContain('tools/call');
   });
 
-  it('--invoke-fixture without declared calls fails instead of silently doing nothing', async () => {
-    const app = copyFixture();
-    editInput(app, (input) => delete input.fixture);
-    const run = await check(app, {}, ['--invoke-fixture']);
-    expect(run.code).toBe(1);
-    expect(run.out).toMatch(/declares no fixture\.calls/);
+  it('--invoke-fixture needs its calls file', async () => {
+    const run = await check(copyFixture(), {}, ['--invoke-fixture']);
+    expect(run.code).not.toBe(0);
+    expect(run.err).toMatch(/invoke-fixture/);
   });
+
+  it('draws discovery and the fixture run on one network allowance', async () => {
+    const calls = await fixtureCallsFile();
+    // What discovery alone reads from the fixture endpoint.
+    const measured = new ByteBudget();
+    expect((await check(copyFixture(), { networkBudget: measured })).code).toBe(
+      0,
+    );
+    const discovered = DEFAULT_TOTAL_BYTES - measured.remaining;
+    expect(discovered).toBeGreaterThan(0);
+
+    // An allowance that discovery alone nearly spends leaves the fixture run only the remainder.
+    const seen = wire();
+    const run = await check(
+      copyFixture(),
+      { wire: seen, networkBudget: new ByteBudget(discovered + 1) },
+      ['--invoke-fixture', calls],
+    );
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/get_status: error/);
+    expect(seen.methods).not.toContain('tools/call');
+  }, 30_000);
 });
 
 /** The tools/list answer with the first tool's description or read-only hint changed, as an endpoint could change what it says. */
@@ -1307,7 +1386,7 @@ describe('network admission of the endpoint', () => {
     expect(run.err + run.out).toMatch(/cannot be read: It is larger than/);
   });
 
-  it('refuses a release input that lists more views or fixture calls than the tool reads', async () => {
+  it('refuses a release input that lists more views than the tool reads', async () => {
     const app = copyFixture();
     editInput(
       app,
@@ -1318,15 +1397,49 @@ describe('network admission of the endpoint', () => {
         )),
     );
     expect((await check(app, {})).err).toMatch(/build\.views/);
-    const calls = copyFixture();
-    editInput(
-      calls,
-      (input) =>
-        (input.fixture.calls = Array.from({ length: 51 }, () => ({
+  });
+
+  it('refuses a calls file that lists more fixture calls than the tool makes', async () => {
+    const file = path.join(workspace(), 'many.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: 'saga-fixture-calls/1',
+        calls: Array.from({ length: 51 }, () => ({
           tool: 'get_status',
-        }))),
+          toolSha256: '0'.repeat(64),
+        })),
+      }),
     );
-    expect((await check(calls, {})).err).toMatch(/fixture\.calls/);
+    const seen = wire();
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      file,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/calls/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('counts a served view in bytes, not characters, before it allocates', async () => {
+    // 3,000,000 characters of three UTF-8 bytes each: under the limit as characters, over it as bytes.
+    const from = vi.spyOn(Buffer, 'from');
+    try {
+      const run = await check(copyFixture(), {
+        wire: editing('resources/read', (result) => {
+          result.contents[0].text = '€'.repeat(3_000_000);
+        }),
+      });
+      expect(run.out).toMatch(/It is larger than 8388608 bytes/);
+      const allocated = from.mock.results.flatMap((one) =>
+        one.type === 'return' && Buffer.isBuffer(one.value)
+          ? [one.value.length]
+          : [],
+      );
+      expect(Math.max(0, ...allocated)).toBeLessThanOrEqual(8 * 1024 * 1024);
+    } finally {
+      from.mockRestore();
+    }
   });
 
   it('refuses a built view larger than the tool reads without reading it', async () => {

@@ -16,7 +16,8 @@ npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-
 ```
 
 Options: `--against DIR` compares with an earlier output and fails when its evidence is stale;
-`--invoke-fixture` calls the tools the release input declares under `fixture.calls`;
+`--invoke-fixture FILE` calls the tools your own `saga-fixture-calls/1` file authorizes (see
+below; the release input chooses no call);
 `--bearer-env NAME` reads a bearer credential from that environment variable for a read-only look
 at a protected endpoint. A verdict other than `ready` exits 1.
 
@@ -27,7 +28,7 @@ the smallest input that carries what the host needs and nothing it does not: the
 `publisher` (who the listing belongs to; the operator running the tool and the SDK's npm publisher
 are never substituted for it) with credited `contributors` kept apart, the listing text and links,
 PNG or SVG `assets`, the `build` directory and its view files, the `endpoint`, and optional
-`review`, `publication` and `fixture` sections. Paths are relative to the file. It holds no
+`review` and `publication` sections. Paths are relative to the file. It holds no
 credential; reviewer credentials, authentication and publisher verification stay in the host's
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
@@ -276,12 +277,25 @@ destructive annotation.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
   discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
   not read is not certified. A definite failure among what was read still blocks.
-- Fixture invocation (`--invoke-fixture`): only the declared calls (at most 50, with arguments of at
-  most 16 KiB each), and only to a tool the release input pins by `toolSha256` (the digest the
-  record reports for that tool) whose definition the endpoint still advertises unchanged and with
-  `readOnlyHint: true`. The digest is the authority; the hint can only narrow it. Anything else is
-  refused without a call. Only a digest of each result is kept, and it is labelled fixture evidence,
-  separate from real-host observations.
+- Fixture invocation (`--invoke-fixture FILE`): only the calls in your own calls file (at most 50,
+  with arguments of at most 16 KiB each), and only to a tool the file pins by `toolSha256` (the
+  digest the record reports for that tool) whose definition the endpoint still advertises unchanged
+  and with `readOnlyHint: true`. The digest is the authority; the hint can only narrow it. Anything
+  else is refused without a call. Only a digest of each result is kept, and it is labelled fixture
+  evidence, separate from real-host observations.
+
+  The calls file is the maintainer's, not the application's: the release input and the endpoint it
+  names are lower-trust than the person running the command, so neither chooses a tool, its
+  arguments or the definition it is called against. Keep the file outside the application's tree
+  and read each digest from a record you reviewed. The format is JSON, and the file is read like any
+  other input, sized before it is read:
+
+  ```json
+  {
+    "format": "saga-fixture-calls/1",
+    "calls": [{ "tool": "get_status", "toolSha256": "<64 hex digits>", "arguments": {} }]
+  }
+  ```
 
 ## Network admission
 
@@ -299,9 +313,11 @@ wrote:
 - **Credential.** `--bearer-env` gives the bearer to this module, which attaches it to the first
   request to the endpoint's own origin and nowhere else.
 - **Operations.** Discovery authorizes no tool call. A fixture call needs the exact name and digest
-  the release input pins; what the endpoint advertises about a tool never adds to that.
+  the maintainer's own calls file pins; neither the release input nor what the endpoint advertises
+  about a tool adds to that.
 - **Size.** Each response is counted as it streams, against a per-response limit and one allowance
-  shared by everything a command reads; lists an endpoint returns are cut at 200 items per page. A
+  shared by everything one assessment reads (discovery and the fixture run draw on the same
+  allowance); lists an endpoint returns are cut at 200 items per page. A
   file the release input names is sized before it is read (`bounded-read.ts`): the input itself
   (1 MiB), each built view (8 MiB, 64 MiB together), an earlier output and an application asset.
 

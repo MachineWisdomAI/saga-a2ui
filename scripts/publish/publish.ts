@@ -21,6 +21,8 @@ import {
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
 import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
+import { ByteBudget } from '../maintainer-network.js';
+import { loadFixtureCalls, type FixtureCall } from './fixture-calls.js';
 import { runHandoff, type HandoffRequest } from './handoff.js';
 import {
   discoverEndpoint,
@@ -74,7 +76,11 @@ export interface PublishRequest {
   readonly out?: string | undefined;
   /** An earlier output directory to compare with; changed inputs make its evidence stale. */
   readonly against?: string | undefined;
-  readonly invokeFixture: boolean;
+  /**
+   * `--invoke-fixture FILE`: the maintainer's own `saga-fixture-calls/1` file (fixture-calls.ts), the
+   * only source of tool-call authority. Without it no tool is called.
+   */
+  readonly invokeFixture?: string | undefined;
   /** The name of an environment variable holding a bearer credential for read-only discovery of a protected endpoint. */
   readonly bearerEnv?: string | undefined;
 }
@@ -88,6 +94,8 @@ export interface PublishIo {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for the endpoint. Defaults to the platform's `fetch`. */
   readonly fetch?: FetchLike | undefined;
+  /** What all responses of one assessment may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly networkBudget?: ByteBudget | undefined;
   /** The ChatGPT manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
@@ -529,6 +537,9 @@ async function assess(
         ),
   );
 
+  // One allowance for everything this assessment reads from the network: discovery and a fixture run
+  // draw on the same budget, so neither can spend what the other was promised.
+  const budget = io.networkBudget ?? new ByteBudget();
   let discovery: Discovery;
   const discoverable = /^https?:$/.test(safeProtocol(input.endpoint.url));
   if (!discoverable)
@@ -542,6 +553,7 @@ async function assess(
       fetch: io.fetch,
       signal: io.signal,
       bearer,
+      budget,
     });
   if (discovery.kind === 'discovered') {
     const partial = discovery.snapshot.truncated;
@@ -651,19 +663,25 @@ async function assess(
   });
   findings.push(...prepared.findings);
 
-  // Fixture invocation: only when asked, only what the release input declares.
-  const declared = input.fixture?.calls ?? [];
+  // Fixture invocation: only when asked, and only the calls the maintainer's own file authorizes.
+  // The release input and the endpoint are lower-trust than the maintainer and choose no call.
+  let declared: readonly FixtureCall[] = [];
   let invocations: FixtureInvocation[] = [];
-  if (request.invokeFixture) {
-    if (declared.length === 0) {
+  if (request.invokeFixture !== undefined) {
+    const loadedCalls = loadFixtureCalls(
+      path.resolve(io.cwd, request.invokeFixture),
+    );
+    if (!loadedCalls.ok) {
       findings.push(
         fail(
           'fixture.invocation',
-          '--invoke-fixture was given but the release input declares no fixture.calls.',
-          'Declare the fixture calls to make, or omit --invoke-fixture.',
+          '--invoke-fixture was given but its fixture calls file cannot be used.',
+          'Name a saga-fixture-calls/1 file that lists the calls to make, or omit --invoke-fixture.',
+          loadedCalls.problem,
         ),
       );
     } else if (discovery.kind !== 'discovered') {
+      declared = loadedCalls.calls;
       findings.push(
         unknown(
           'fixture.invocation',
@@ -672,11 +690,12 @@ async function assess(
         ),
       );
     } else {
+      declared = loadedCalls.calls;
       invocations = await invokeFixture(
         input.endpoint.url,
         declared,
         discovery.snapshot.tools,
-        { fetch: io.fetch, signal: io.signal, bearer },
+        { fetch: io.fetch, signal: io.signal, bearer, budget },
       );
       const bad = invocations.filter((one) => one.outcome !== 'ok');
       findings.push(
@@ -734,7 +753,7 @@ async function assess(
       },
       fixture: {
         declared: declared.length,
-        invoked: request.invokeFixture && invocations.length > 0,
+        invoked: request.invokeFixture !== undefined && invocations.length > 0,
         invocations,
       },
       artifact,

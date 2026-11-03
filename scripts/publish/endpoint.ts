@@ -17,7 +17,8 @@ import { canonicalDigest, sha256, type FixtureInvocation } from './record.js';
 // Discovery is read-only by construction: its session authorizes no tool, so it can perform
 // `initialize`, `tools/list`, `resources/list` and `resources/read` and nothing else. Calling a tool is
 // `invokeFixture`, a separate function the caller runs only when the maintainer asked for it. The
-// release input must name each tool and the digest of the definition it expects; the endpoint's own
+// maintainer's own calls file must name each tool and the digest of the definition it expects (the
+// release input, which the endpoint's owner may control, names none); the endpoint's own
 // `readOnlyHint` is a further condition and never the authority.
 // Whatever cannot be read (a timeout, a refusal, an authentication challenge) is reported as not
 // discovered; the caller turns that into an unknown finding, never a pass.
@@ -151,8 +152,9 @@ function bytesOfContents(contents: {
   text?: unknown;
   blob?: unknown;
 }): Uint8Array | 'too-large' | undefined {
+  // UTF-8 is up to three bytes per UTF-16 code unit, so the size is measured in bytes, never in `length`.
   if (typeof contents.text === 'string')
-    return contents.text.length > MAX_RESOURCE_BYTES
+    return Buffer.byteLength(contents.text, 'utf8') > MAX_RESOURCE_BYTES
       ? 'too-large'
       : Buffer.from(contents.text, 'utf8');
   if (typeof contents.blob === 'string')
@@ -295,7 +297,7 @@ export async function discoverEndpoint(
 export const toolDigest = (tool: AdvertisedTool): string =>
   canonicalDigest(tool);
 
-/** One fixture call a release input declares: the tool, the digest of the definition it was written against, and its arguments. */
+/** One fixture call the maintainer authorized (`fixture-calls.ts`): the tool, the digest of the definition it was reviewed against, and its arguments. */
 export interface DeclaredCall {
   readonly tool: string;
   /** The `sha256` the record reports for the tool (`endpoint.tools`). Without it the call is refused. */
@@ -304,10 +306,11 @@ export interface DeclaredCall {
 }
 
 /**
- * Calls the declared fixture tools. Only a maintainer's explicit request reaches this function. A
- * call is made only when the release input names the tool and the digest of the definition it was
- * written against, and the endpoint now advertises exactly that definition: what a peer says about
- * itself cannot add a tool to the calls that run. A tool that does not also advertise
+ * Calls the fixture tools the maintainer authorized. Only a maintainer's explicit request, with a
+ * calls file of the maintainer's own, reaches this function; the release input and the endpoint
+ * choose no call. A call is made only when the maintainer's file names the tool and the digest of the
+ * definition it was reviewed against, and the endpoint now advertises exactly that definition: what a
+ * peer says about itself cannot add a tool to the calls that run. A tool that does not also advertise
  * `readOnlyHint: true` is refused, so a fixture run cannot cause a domain effect through a tool whose
  * effects the endpoint does not rule out (the hint can only narrow what the digest authorizes). Only a
  * digest of each result is kept: the content may be domain data.

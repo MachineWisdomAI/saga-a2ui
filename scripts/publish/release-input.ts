@@ -20,9 +20,6 @@ import { sha256 } from './record.js';
 
 export const RELEASE_INPUT_FORMAT = 'saga-publication/1';
 
-const MAX_FIXTURE_CALLS = 50;
-const MAX_ARGUMENT_CHARS = 16 * 1024;
-
 const person = z.strictObject({ name: z.string(), url: z.string().optional() });
 
 const testCase = z.strictObject({
@@ -201,32 +198,8 @@ export const ReleaseInputSchema = z.strictObject({
         .optional(),
     })
     .optional(),
-  /** Tool calls `--invoke-fixture` may make against a test fixture. Declaring them calls nothing. */
-  fixture: z
-    .strictObject({
-      calls: z
-        .array(
-          z.strictObject({
-            tool: z.string(),
-            /** The `sha256` the record reports for this tool. A call is made only when the endpoint still advertises that exact definition. */
-            toolSha256: z
-              .string()
-              .regex(/^[0-9a-f]{64}$/)
-              .optional(),
-            arguments: z
-              .record(z.string(), z.unknown())
-              .refine(
-                (value) => JSON.stringify(value).length <= MAX_ARGUMENT_CHARS,
-                {
-                  message: `arguments are longer than ${MAX_ARGUMENT_CHARS} characters`,
-                },
-              )
-              .optional(),
-          }),
-        )
-        .max(MAX_FIXTURE_CALLS),
-    })
-    .optional(),
+  // There is deliberately no field here that chooses a tool call: this file is lower-trust than the
+  // maintainer, so call authority comes from the maintainer's own file (fixture-calls.ts).
 });
 
 export type ReleaseInput = z.infer<typeof ReleaseInputSchema>;

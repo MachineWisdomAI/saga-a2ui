@@ -117,6 +117,8 @@ for (const [address, prefix] of [
   ['::', 128],
   ['::1', 128],
   ['64:ff9b::', 96],
+  // RFC 8215 local-use translation: it embeds any IPv4 address, loopback and private ones included.
+  ['64:ff9b:1::', 48],
   ['100::', 64],
   ['2001::', 23],
   ['2001:db8::', 32],
