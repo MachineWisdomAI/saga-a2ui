@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import {
+  InputRefused,
+  MAX_RELEASE_INPUT_BYTES,
+  MAX_VIEWS,
+  readBounded,
+} from './bounded-read.js';
 import { sha256 } from './record.js';
 
 // The one file a maintainer writes to prepare an application for a host directory (CLI3 #66):
@@ -13,6 +19,9 @@ import { sha256 } from './record.js';
 // Every path is relative to the directory holding this file.
 
 export const RELEASE_INPUT_FORMAT = 'saga-publication/1';
+
+const MAX_FIXTURE_CALLS = 50;
+const MAX_ARGUMENT_CHARS = 16 * 1024;
 
 const person = z.strictObject({ name: z.string(), url: z.string().optional() });
 
@@ -147,7 +156,13 @@ export const ReleaseInputSchema = z.strictObject({
     /** The built application. */
     directory: z.string(),
     /** The built view files (inside `directory`) the endpoint serves as MCP App resources. */
-    views: z.array(z.string()).min(1),
+    views: z
+      .array(z.string())
+      .min(1)
+      .max(MAX_VIEWS)
+      .refine((views) => new Set(views).size === views.length, {
+        message: 'a view is listed twice',
+      }),
   }),
   endpoint: z.strictObject({
     /** The deployed MCP endpoint people reach: stable, public and HTTPS. */
@@ -189,12 +204,27 @@ export const ReleaseInputSchema = z.strictObject({
   /** Tool calls `--invoke-fixture` may make against a test fixture. Declaring them calls nothing. */
   fixture: z
     .strictObject({
-      calls: z.array(
-        z.strictObject({
-          tool: z.string(),
-          arguments: z.record(z.string(), z.unknown()).optional(),
-        }),
-      ),
+      calls: z
+        .array(
+          z.strictObject({
+            tool: z.string(),
+            /** The `sha256` the record reports for this tool. A call is made only when the endpoint still advertises that exact definition. */
+            toolSha256: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/)
+              .optional(),
+            arguments: z
+              .record(z.string(), z.unknown())
+              .refine(
+                (value) => JSON.stringify(value).length <= MAX_ARGUMENT_CHARS,
+                {
+                  message: `arguments are longer than ${MAX_ARGUMENT_CHARS} characters`,
+                },
+              )
+              .optional(),
+          }),
+        )
+        .max(MAX_FIXTURE_CALLS),
     })
     .optional(),
 });
@@ -222,11 +252,14 @@ export type ReleaseInputResult =
 export function loadReleaseInput(file: string): ReleaseInputResult {
   let bytes: Buffer;
   try {
-    bytes = fs.readFileSync(file);
+    bytes = readBounded(file, MAX_RELEASE_INPUT_BYTES);
   } catch (error) {
     return {
       ok: false,
-      problem: `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).`,
+      problem:
+        error instanceof InputRefused
+          ? `The release input ${file} cannot be read: ${error.message}`
+          : `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).`,
     };
   }
   let value: unknown;

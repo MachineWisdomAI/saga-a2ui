@@ -11,6 +11,13 @@ import {
   sameDirectory,
   type OutputFile,
 } from '../starter-template.js';
+import {
+  FileBudget,
+  MAX_RECORD_BYTES,
+  MAX_VIEW_BYTES,
+  MAX_VIEW_TOTAL_BYTES,
+  readBounded,
+} from './bounded-read.js';
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
 import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
@@ -144,6 +151,7 @@ function readBuild(loaded: LoadedReleaseInput): {
     };
   }
   const problems: string[] = [];
+  const viewBudget = new FileBudget(MAX_VIEW_TOTAL_BYTES);
   const views = build.views.map((file): BuiltView => {
     const missing: BuiltView = {
       file,
@@ -160,7 +168,7 @@ function readBuild(loaded: LoadedReleaseInput): {
       if (real !== realBuild && !real.startsWith(`${realBuild}${path.sep}`))
         throw new Error('is outside the build directory');
       if (!fs.statSync(real).isFile()) throw new Error('is not a file');
-      const data = fs.readFileSync(real);
+      const data = readBounded(real, MAX_VIEW_BYTES, viewBudget);
       if (data.length === 0) throw new Error('is empty');
       return {
         file,
@@ -861,7 +869,10 @@ function isGeneratedOutput(directory: string): boolean {
     return (
       (
         JSON.parse(
-          fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8'),
+          readBounded(
+            path.join(directory, RECORD_FILE),
+            MAX_RECORD_BYTES,
+          ).toString('utf8'),
         ) as { format?: unknown }
       ).format === RECORD_FORMAT
     );

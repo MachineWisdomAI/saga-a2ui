@@ -276,9 +276,38 @@ destructive annotation.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
   discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
   not read is not certified. A definite failure among what was read still blocks.
-- Fixture invocation (`--invoke-fixture`): only the declared calls, and only to a tool that
-  advertises `readOnlyHint: true`; others are refused without a call. Only a digest of each result
-  is kept, and it is labelled fixture evidence, separate from real-host observations.
+- Fixture invocation (`--invoke-fixture`): only the declared calls (at most 50, with arguments of at
+  most 16 KiB each), and only to a tool the release input pins by `toolSha256` (the digest the
+  record reports for that tool) whose definition the endpoint still advertises unchanged and with
+  `readOnlyHint: true`. The digest is the authority; the hint can only narrow it. Anything else is
+  refused without a call. Only a digest of each result is kept, and it is labelled fixture evidence,
+  separate from real-host observations.
+
+## Network admission
+
+Every request the publication tool and `scripts/docs-probe.ts` make goes through one module,
+`scripts/maintainer-network.ts`; neither command constructs an MCP transport or calls `fetch` itself.
+The module admits a request or refuses it with a fixed message that carries nothing the remote side
+wrote:
+
+- **Destination.** HTTPS only, no credentials in the URL, a public-looking host name and no IP
+  literal. A refused endpoint is not contacted, and no bearer is sent to it.
+- **Connected address.** The host name is resolved inside the connection, and an answer outside the
+  public range refuses the connection, so the address that was checked is the address that is used.
+- **Redirects.** Followed only for an uncredentialed `GET` or `HEAD`, at most three, and each hop is
+  admitted again. A request that carries a bearer is never redirected.
+- **Credential.** `--bearer-env` gives the bearer to this module, which attaches it to the first
+  request to the endpoint's own origin and nowhere else.
+- **Operations.** Discovery authorizes no tool call. A fixture call needs the exact name and digest
+  the release input pins; what the endpoint advertises about a tool never adds to that.
+- **Size.** Each response is counted as it streams, against a per-response limit and one allowance
+  shared by everything a command reads; lists an endpoint returns are cut at 200 items per page. A
+  file the release input names is sized before it is read (`bounded-read.ts`): the input itself
+  (1 MiB), each built view (8 MiB, 64 MiB together), an earlier output and an application asset.
+
+If a refusal needs repairing, change `RefusalKind`, the address list or `createAdmittedFetch` in
+`maintainer-network.ts` (or the limits in `bounded-read.ts`); there is no second copy of a rule to
+keep in step. Tests replace only the lowest layer (the connector), never the rules.
 
 ## Recorded decisions
 

@@ -10,6 +10,7 @@ import {
   type Listener,
 } from '../../templates/lit-node/server/listener.js';
 import { runCli, type Environment } from '../saga.js';
+import { discoverEndpoint, toolDigest } from './endpoint.js';
 import type { ValidatorLoad } from './chatgpt.js';
 import type { PluginValidator } from './claude-plugin.js';
 import { publicationTool } from './publish.js';
@@ -190,6 +191,27 @@ export function wire(
       return rewrite(method, response);
     },
   };
+}
+
+/**
+ * Pins each declared fixture call to the definition the fixture endpoint serves (`toolSha256`), as a
+ * maintainer does after reading the record's tool digests. `rewrite` is the same edit the run under
+ * test will see, so a pin can be made against a definition and the run against another.
+ */
+export async function pinFixtureTools(
+  app: string,
+  rewrite?: Parameters<typeof wire>[0],
+): Promise<void> {
+  const found = await discoverEndpoint(PUBLISHED, {
+    fetch: wire(rewrite).fetch,
+  });
+  if (found.kind !== 'discovered') throw new Error(found.reason);
+  editInput(app, (input) => {
+    for (const call of input.fixture.calls) {
+      const tool = found.snapshot.tools.find((one) => one.name === call.tool);
+      if (tool !== undefined) call.toolSha256 = toolDigest(tool);
+    }
+  });
 }
 
 export interface Run {

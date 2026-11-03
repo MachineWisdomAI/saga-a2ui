@@ -148,7 +148,11 @@ argument, search results can include pages of every release, listed by path but 
 is not a retrieved page, so the probe reads the page. `pages` fetches each page's hosted Markdown and
 fails on a page that is not served or whose fenced code blocks differ from the committed ones; it
 ignores the `theme` attribute the platform adds to a block's info string. `compare` lists changed and unchanged pages and
-exits 1 when a page could not be read. The probe writes nothing to the site. Its tests in
+exits 1 when a page could not be read. The probe writes nothing to the site. It contacts only a public
+HTTPS host, re-admits each redirect, limits every response it reads, and calls only a search tool and a
+read-only filesystem tool whose names match the patterns written in `docs-probe.ts` (or are given with
+`--search-tool` and `--read-tool`); the endpoint's own descriptions never add a tool. The rules are in
+`scripts/maintainer-network.ts`, described in `scripts/publish/README.md`. The probe's tests in
 `scripts/docs-probe.test.ts` use local stand-ins, so they show how the probe judges a response, not
 what the hosted site returns.
 

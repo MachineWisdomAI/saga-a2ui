@@ -25,6 +25,7 @@ import {
   editing,
   here,
   listing,
+  pinFixtureTools,
   png,
   recordOf,
   root,
@@ -1096,12 +1097,11 @@ describe('tool calls', () => {
   it('--invoke-fixture calls exactly the declared read-only tool, records only a digest of its result, and labels it fixture evidence', async () => {
     const seen = wire();
     const cwd = workspace();
-    const run = await prepare(
-      copyFixture(),
-      'publication',
-      { cwd, wire: seen },
-      ['--invoke-fixture'],
-    );
+    const app = copyFixture();
+    await pinFixtureTools(app);
+    const run = await prepare(app, 'publication', { cwd, wire: seen }, [
+      '--invoke-fixture',
+    ]);
 
     expect(run.code, run.out).toBe(0);
     expect(
@@ -1119,6 +1119,50 @@ describe('tool calls', () => {
     ]);
     // Discovery itself still made no call.
     expect(record.endpoint.toolCallsDuringDiscovery).toBe(0);
+  });
+
+  it('refuses a declared call that does not name the digest of the tool definition, whatever the endpoint asserts', async () => {
+    const seen = wire();
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+    ]);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/get_status: refused/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses a call when the endpoint now advertises another definition than the one pinned', async () => {
+    const app = copyFixture();
+    await pinFixtureTools(app);
+    const seen = wire((method, response) =>
+      method === 'tools/list'
+        ? redescribe(response, 'Now does more')
+        : response,
+    );
+    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/get_status: refused/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('does not let a read-only assertion stand in for the pinned digest', async () => {
+    const app = copyFixture();
+    const readOnly = (method: string, response: Response) =>
+      method === 'tools/list'
+        ? redescribe(response, undefined, true)
+        : response;
+    await pinFixtureTools(app, readOnly);
+    // The pin matches, but the endpoint no longer asserts the hint: the hint can only narrow the call.
+    const seen = wire((method, response) =>
+      method === 'tools/list'
+        ? redescribe(response, undefined, false)
+        : response,
+    );
+    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
+    expect(run.out).toMatch(/get_status: refused/);
+    expect(seen.methods).not.toContain('tools/call');
   });
 
   it('refuses to call a declared tool the endpoint does not advertise', async () => {
@@ -1142,6 +1186,158 @@ describe('tool calls', () => {
     const run = await check(app, {}, ['--invoke-fixture']);
     expect(run.code).toBe(1);
     expect(run.out).toMatch(/declares no fixture\.calls/);
+  });
+});
+
+/** The tools/list answer with the first tool's description or read-only hint changed, as an endpoint could change what it says. */
+async function redescribe(
+  response: Response,
+  description?: string,
+  readOnlyHint?: boolean,
+): Promise<Response> {
+  const body = (await response.json()) as {
+    result: { tools: { description?: string; annotations?: object }[] };
+  };
+  const [tool] = body.result.tools;
+  if (tool !== undefined) {
+    if (description !== undefined) tool.description = description;
+    if (readOnlyHint !== undefined)
+      tool.annotations = { ...tool.annotations, readOnlyHint };
+  }
+  return new Response(JSON.stringify(body), {
+    status: response.status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+describe('network admission of the endpoint', () => {
+  const contacted = (): { urls: string[]; wire: Wire } => {
+    const urls: string[] = [];
+    return {
+      urls,
+      wire: {
+        methods: [],
+        fetch: async (url) => {
+          urls.push(String(url));
+          return new Response('unreachable', { status: 503 });
+        },
+      },
+    };
+  };
+
+  it.each([
+    'https://127.0.0.1/status/mcp',
+    'https://localhost/status/mcp',
+    'https://169.254.169.254/latest/meta-data',
+    'http://notes.example.com/status/mcp',
+    'https://user:pw@notes.example.com/status/mcp',
+  ])('sends nothing, and no credential, to %s', async (url) => {
+    const app = copyFixture();
+    editInput(app, (input) => (input.endpoint.url = url));
+    const seen = contacted();
+    const run = await check(
+      app,
+      {
+        wire: seen.wire,
+        environment: { NOTES_TOKEN: 'discovery-credential-0123456789' },
+      },
+      ['--bearer-env', 'NOTES_TOKEN'],
+    );
+    expect(run.code).toBe(1);
+    expect(seen.urls).toEqual([]);
+    expect(run.out).toMatch(/endpoint\.discovery/);
+    expect(run.out).not.toContain('discovery-credential-0123456789');
+  });
+
+  it('never moves the credential to another origin when the endpoint redirects', async () => {
+    const urls: string[] = [];
+    const authorizations: (string | null)[] = [];
+    const redirecting: Wire = {
+      methods: [],
+      fetch: async (url, init) => {
+        urls.push(String(url));
+        authorizations.push(new Headers(init?.headers).get('authorization'));
+        return new Response(null, {
+          status: 307,
+          headers: { location: 'https://collector.example.net/steal' },
+        });
+      },
+    };
+    const run = await check(
+      copyFixture(),
+      {
+        wire: redirecting,
+        environment: { NOTES_TOKEN: 'discovery-credential-0123456789' },
+      },
+      ['--bearer-env', 'NOTES_TOKEN'],
+    );
+    expect(run.code).toBe(1);
+    expect(urls).toEqual([PUBLISHED]);
+    expect(authorizations).toEqual(['Bearer discovery-credential-0123456789']);
+    expect(run.out).toContain('A redirect was refused.');
+    expect(run.out).not.toContain('discovery-credential-0123456789');
+  });
+
+  it('reads no more of an oversized answer than the limit and says it could not read the endpoint', async () => {
+    const oversized: Wire = {
+      methods: [],
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              controller.enqueue(new Uint8Array(1024 * 1024));
+            },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+    };
+    const run = await check(copyFixture(), { wire: oversized });
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/larger than the limit this tool reads/);
+  });
+
+  it('refuses a release input larger than the tool reads, before parsing it', async () => {
+    const app = copyFixture();
+    fs.writeFileSync(
+      release(app),
+      JSON.stringify({ padding: 'x'.repeat(2 * 1024 * 1024) }),
+    );
+    const run = await check(app, {});
+    expect(run.code).toBe(1);
+    expect(run.err + run.out).toMatch(/cannot be read: It is larger than/);
+  });
+
+  it('refuses a release input that lists more views or fixture calls than the tool reads', async () => {
+    const app = copyFixture();
+    editInput(
+      app,
+      (input) =>
+        (input.build.views = Array.from(
+          { length: 201 },
+          (_, i) => `view-${i}.html`,
+        )),
+    );
+    expect((await check(app, {})).err).toMatch(/build\.views/);
+    const calls = copyFixture();
+    editInput(
+      calls,
+      (input) =>
+        (input.fixture.calls = Array.from({ length: 51 }, () => ({
+          tool: 'get_status',
+        }))),
+    );
+    expect((await check(calls, {})).err).toMatch(/fixture\.calls/);
+  });
+
+  it('refuses a built view larger than the tool reads without reading it', async () => {
+    const app = copyFixture();
+    fs.writeFileSync(
+      path.join(app, 'build', 'view.html'),
+      Buffer.alloc(9 * 1024 * 1024, 'a'),
+    );
+    const run = await check(app, {});
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/view\.html It is larger than 8388608 bytes/);
   });
 });
 

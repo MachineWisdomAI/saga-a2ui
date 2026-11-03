@@ -1,5 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import {
+  MAX_ARCHIVE_BYTES,
+  MAX_RECORD_BYTES,
+  readBounded,
+} from './bounded-read.js';
 import {
   ARCHIVE_FILES,
   RECORD_FILE,
@@ -36,7 +40,10 @@ export function readPreviousOutput(directory: string): PreviousOutput {
   let record: PublicationRecord;
   let recordSha256: string;
   try {
-    const bytes = fs.readFileSync(path.join(directory, RECORD_FILE));
+    const bytes = readBounded(
+      path.join(directory, RECORD_FILE),
+      MAX_RECORD_BYTES,
+    );
     record = JSON.parse(bytes.toString('utf8')) as PublicationRecord;
     recordSha256 = sha256(bytes);
   } catch {
@@ -64,7 +71,7 @@ export function readPreviousOutput(directory: string): PreviousOutput {
     };
   let bytes: Buffer;
   try {
-    bytes = fs.readFileSync(path.join(directory, file));
+    bytes = readBounded(path.join(directory, file), MAX_ARCHIVE_BYTES);
   } catch {
     return {
       kind: 'found',

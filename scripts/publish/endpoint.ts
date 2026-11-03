@@ -1,31 +1,40 @@
+import type { FetchLike } from '@modelcontextprotocol/client';
 import {
-  Client,
-  StreamableHTTPClientTransport,
-  type FetchLike,
-} from '@modelcontextprotocol/client';
+  ByteBudget,
+  MAX_PAGE_ITEMS,
+  openAdmittedMcp,
+  refusalOf,
+  type AdmittedMcp,
+} from '../maintainer-network.js';
 import { canonicalDigest, sha256, type FixtureInvocation } from './record.js';
 
 // Reading a deployed MCP endpoint for a publication check (CLI3 #66).
 //
-// Discovery is read-only by construction: it performs `initialize`, `tools/list`, `resources/list`
-// and `resources/read`, and nothing in this file's discovery path can issue `tools/call`. Calling a
-// tool is `invokeFixture`, a separate function the caller runs only when the maintainer asked for
-// it, and it refuses any tool that does not advertise `readOnlyHint: true`.
+// Network authority comes from `../maintainer-network.ts`: the destination, the connected address,
+// redirects, the bearer, the size of what is read and the tools that may be called are all admitted
+// there. This file decides only what to read and how to describe it.
+//
+// Discovery is read-only by construction: its session authorizes no tool, so it can perform
+// `initialize`, `tools/list`, `resources/list` and `resources/read` and nothing else. Calling a tool is
+// `invokeFixture`, a separate function the caller runs only when the maintainer asked for it. The
+// release input must name each tool and the digest of the definition it expects; the endpoint's own
+// `readOnlyHint` is a further condition and never the authority.
 // Whatever cannot be read (a timeout, a refusal, an authentication challenge) is reported as not
 // discovered; the caller turns that into an unknown finding, never a pass.
 
-const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_PAGES = 20;
 const MAX_RESOURCES = 50;
 const MAX_RESOURCE_BYTES = 8 * 1024 * 1024;
 
 export interface DiscoveryOptions {
-  /** The network seam. Tests route a published URL to a local listener; the command line uses the platform's `fetch`. */
+  /** The connector seam. Tests route a published URL to a local listener; the command line uses the pinned HTTPS connector. */
   readonly fetch?: FetchLike | undefined;
   readonly signal?: AbortSignal | undefined;
-  /** A bearer credential for a read-only look at a protected endpoint. It is sent and never stored or written. */
+  /** A bearer credential for a read-only look at a protected endpoint. It is sent to the endpoint's own origin and never stored or written. */
   readonly bearer?: string | undefined;
   readonly timeoutMs?: number | undefined;
+  /** What all responses of one assessment may add up to; discovery and a fixture run share it. */
+  readonly budget?: ByteBudget | undefined;
 }
 
 /** A tool exactly as the endpoint advertised it. */
@@ -68,26 +77,20 @@ export type Discovery =
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
-function budget(options: DiscoveryOptions): AbortSignal {
-  const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  return options.signal === undefined
-    ? timeout
-    : AbortSignal.any([options.signal, timeout]);
-}
-
-async function connect(
+function connect(
   url: string,
   options: DiscoveryOptions,
-): Promise<Client> {
-  const client = new Client({ name: 'saga-publish-check', version: '0.0.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(url), {
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    ...(options.bearer === undefined
-      ? {}
-      : { authProvider: { token: async () => options.bearer } }),
+  authorizedTools: readonly string[],
+): Promise<AdmittedMcp> {
+  return openAdmittedMcp(url, {
+    clientName: 'saga-publish-check',
+    authorizedTools,
+    connector: options.fetch,
+    bearer: options.bearer,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+    budget: options.budget,
   });
-  await client.connect(transport, { signal: budget(options) });
-  return client;
 }
 
 /**
@@ -100,6 +103,9 @@ function describeFailure(error: unknown): {
   reason: string;
   authenticationRequired: boolean;
 } {
+  const refused = refusalOf(error);
+  if (refused !== undefined)
+    return { reason: refused.message, authenticationRequired: false };
   const message = error instanceof Error ? error.message : String(error);
   const name = error instanceof Error ? error.name : '';
   const authenticationRequired =
@@ -140,87 +146,86 @@ function describeFailure(error: unknown): {
   };
 }
 
+/** The bytes of served contents, or `'too-large'` when the encoded form already exceeds the bound, before anything is decoded. */
 function bytesOfContents(contents: {
   text?: unknown;
   blob?: unknown;
-}): Uint8Array | undefined {
+}): Uint8Array | 'too-large' | undefined {
   if (typeof contents.text === 'string')
-    return Buffer.from(contents.text, 'utf8');
+    return contents.text.length > MAX_RESOURCE_BYTES
+      ? 'too-large'
+      : Buffer.from(contents.text, 'utf8');
   if (typeof contents.blob === 'string')
-    return Buffer.from(contents.blob, 'base64');
+    return (contents.blob.length / 4) * 3 > MAX_RESOURCE_BYTES
+      ? 'too-large'
+      : Buffer.from(contents.blob, 'base64');
   return undefined;
 }
 
-/** Reads at most `maxPages` pages of a paginated list. `more` is whether the server still offered another page when the bound was reached. */
+/** Reads at most `maxPages` pages of a paginated list. `more` is whether the server still offered another page when the bound was reached; `capped` whether a page held more items than are read. */
 async function walkPages<T>(
   maxPages: number,
   fetchPage: (cursor: string | undefined) => Promise<{
     readonly items: readonly T[];
     readonly nextCursor?: string | undefined;
+    readonly capped: boolean;
   }>,
-): Promise<{ items: T[]; more: boolean }> {
+): Promise<{ items: T[]; more: boolean; capped: boolean }> {
   const items: T[] = [];
   let cursor: string | undefined;
+  let capped = false;
   for (let page = 0; page < maxPages; page += 1) {
     const read = await fetchPage(cursor);
     items.push(...read.items);
+    capped ||= read.capped;
     cursor = read.nextCursor;
-    if (cursor === undefined) return { items, more: false };
+    if (cursor === undefined) return { items, more: false, capped };
   }
-  return { items, more: true };
+  return { items, more: true, capped };
 }
 
 export async function discoverEndpoint(
   url: string,
   options: DiscoveryOptions = {},
 ): Promise<Discovery> {
-  let client: Client | undefined;
+  let session: AdmittedMcp | undefined;
   try {
-    client = await connect(url, options);
-    const signal = budget(options);
+    session = await connect(url, options, []);
+    const mcp = session;
     // The bounds stay, but a bound that was hit is said so: what was not read is not certified.
-    // Pages are requested one at a time by this function. The SDK's own list methods, called without a
-    // cursor, walk the pages themselves under their own cap and end a walk on a repeated page, so a
-    // server that never stops offering pages would look complete.
+    // Pages are requested one at a time by this function, so a server that never stops offering pages
+    // cannot look complete.
     const truncated: string[] = [];
     const tools: AdvertisedTool[] = [];
-    if (client.getServerCapabilities()?.tools !== undefined) {
+    if (mcp.hasTools) {
       const walked = await walkPages(MAX_PAGES, async (cursor) => {
-        const page = await client!.request(
-          {
-            method: 'tools/list',
-            params: cursor === undefined ? {} : { cursor },
-          },
-          { signal },
-        );
-        return {
-          items: page.tools as unknown as AdvertisedTool[],
-          nextCursor: page.nextCursor,
-        };
+        const page = await mcp.listTools(cursor);
+        return { ...page, items: page.items as readonly AdvertisedTool[] };
       });
       tools.push(...walked.items);
       if (walked.more)
         truncated.push(
           `tools/list still offered another page after ${MAX_PAGES} pages, so some tool definitions were not read.`,
         );
+      if (walked.capped)
+        truncated.push(
+          `tools/list returned more than ${MAX_PAGE_ITEMS} tools in a page, so some tool definitions were not read.`,
+        );
     }
     const listedResources: { uri: string; mimeType?: string | undefined }[] =
       [];
-    if (client.getServerCapabilities()?.resources !== undefined) {
-      const walked = await walkPages(MAX_PAGES, async (cursor) => {
-        const page = await client!.request(
-          {
-            method: 'resources/list',
-            params: cursor === undefined ? {} : { cursor },
-          },
-          { signal },
-        );
-        return { items: page.resources, nextCursor: page.nextCursor };
-      });
+    if (mcp.hasResources) {
+      const walked = await walkPages(MAX_PAGES, (cursor) =>
+        mcp.listResources(cursor),
+      );
       listedResources.push(...walked.items);
       if (walked.more)
         truncated.push(
           `resources/list still offered another page after ${MAX_PAGES} pages, so some resources were not listed.`,
+        );
+      if (walked.capped)
+        truncated.push(
+          `resources/list returned more than ${MAX_PAGE_ITEMS} resources in a page, so some resources were not listed.`,
         );
     }
     const resources: ServedResource[] = [];
@@ -234,10 +239,9 @@ export async function discoverEndpoint(
       );
     for (const listed of viewResources.slice(0, MAX_RESOURCES)) {
       try {
-        const read = await client.readResource({ uri: listed.uri }, { signal });
+        const contentsList = await mcp.readResource(listed.uri);
         const contents =
-          read.contents.find((one) => one.uri === listed.uri) ??
-          read.contents[0];
+          contentsList.find((one) => one.uri === listed.uri) ?? contentsList[0];
         const bytes =
           contents === undefined ? undefined : bytesOfContents(contents);
         if (contents === undefined || bytes === undefined) {
@@ -245,13 +249,13 @@ export async function discoverEndpoint(
             uri: listed.uri,
             reason: 'The endpoint returned no content for it.',
           });
-        } else if (bytes.length > MAX_RESOURCE_BYTES) {
+        } else if (bytes === 'too-large' || bytes.length > MAX_RESOURCE_BYTES) {
           unreadable.push({
             uri: listed.uri,
             reason: `It is larger than ${MAX_RESOURCE_BYTES} bytes.`,
           });
         } else {
-          const meta = (contents as { _meta?: unknown })._meta;
+          const meta = contents._meta;
           resources.push({
             uri: listed.uri,
             mimeType: contents.mimeType ?? listed.mimeType ?? null,
@@ -261,21 +265,19 @@ export async function discoverEndpoint(
           });
         }
       } catch (error) {
+        // An exhausted allowance ends discovery; any other failure belongs to this view alone.
+        if (refusalOf(error)?.kind === 'total-limit') throw error;
         unreadable.push({
           uri: listed.uri,
           reason: describeFailure(error).reason,
         });
       }
     }
-    const server = client.getServerVersion();
     return {
       kind: 'discovered',
       snapshot: {
-        server:
-          server === undefined
-            ? null
-            : { name: server.name, version: server.version },
-        instructions: client.getInstructions() ?? null,
+        server: mcp.server,
+        instructions: mcp.instructions,
         tools,
         resources,
         unreadable,
@@ -285,7 +287,7 @@ export async function discoverEndpoint(
   } catch (error) {
     return { kind: 'not-discovered', ...describeFailure(error) };
   } finally {
-    await client?.close().catch(() => undefined);
+    await session?.close();
   }
 }
 
@@ -293,32 +295,47 @@ export async function discoverEndpoint(
 export const toolDigest = (tool: AdvertisedTool): string =>
   canonicalDigest(tool);
 
+/** One fixture call a release input declares: the tool, the digest of the definition it was written against, and its arguments. */
+export interface DeclaredCall {
+  readonly tool: string;
+  /** The `sha256` the record reports for the tool (`endpoint.tools`). Without it the call is refused. */
+  readonly toolSha256?: string | undefined;
+  readonly arguments?: Readonly<Record<string, unknown>> | undefined;
+}
+
 /**
  * Calls the declared fixture tools. Only a maintainer's explicit request reaches this function. A
- * tool that does not advertise `readOnlyHint: true` is refused without a call, so a fixture run
- * cannot cause a domain effect through a tool whose effects the endpoint does not rule out. Only a
+ * call is made only when the release input names the tool and the digest of the definition it was
+ * written against, and the endpoint now advertises exactly that definition: what a peer says about
+ * itself cannot add a tool to the calls that run. A tool that does not also advertise
+ * `readOnlyHint: true` is refused, so a fixture run cannot cause a domain effect through a tool whose
+ * effects the endpoint does not rule out (the hint can only narrow what the digest authorizes). Only a
  * digest of each result is kept: the content may be domain data.
  */
 export async function invokeFixture(
   url: string,
-  calls: readonly {
-    readonly tool: string;
-    readonly arguments?: Readonly<Record<string, unknown>> | undefined;
-  }[],
+  calls: readonly DeclaredCall[],
   advertised: readonly AdvertisedTool[],
   options: DiscoveryOptions = {},
 ): Promise<FixtureInvocation[]> {
+  const isAuthorized = (call: DeclaredCall): boolean => {
+    const tool = advertised.find((one) => one.name === call.tool);
+    return (
+      tool !== undefined &&
+      call.toolSha256 !== undefined &&
+      toolDigest(tool) === call.toolSha256 &&
+      isRecord(tool.annotations) &&
+      tool.annotations.readOnlyHint === true
+    );
+  };
+  const authorized = [
+    ...new Set(calls.filter(isAuthorized).map((call) => call.tool)),
+  ];
   const results: FixtureInvocation[] = [];
-  let client: Client | undefined;
+  let session: AdmittedMcp | undefined;
   try {
     for (const call of calls) {
-      const tool = advertised.find((one) => one.name === call.tool);
-      const annotations = tool === undefined ? undefined : tool.annotations;
-      if (
-        tool === undefined ||
-        !isRecord(annotations) ||
-        annotations.readOnlyHint !== true
-      ) {
+      if (!isAuthorized(call)) {
         results.push({
           tool: call.tool,
           outcome: 'refused',
@@ -327,11 +344,10 @@ export async function invokeFixture(
         continue;
       }
       try {
-        client ??= await connect(url, options);
-        const result = await client.callTool(
-          { name: call.tool, arguments: { ...call.arguments } },
-          { signal: budget(options) },
-        );
+        session ??= await connect(url, options, authorized);
+        const result = await session.callTool(call.tool, {
+          ...call.arguments,
+        });
         results.push({
           tool: call.tool,
           outcome: result.isError === true ? 'error' : 'ok',
@@ -345,7 +361,7 @@ export async function invokeFixture(
       }
     }
   } finally {
-    await client?.close().catch(() => undefined);
+    await session?.close();
   }
   return results;
 }
