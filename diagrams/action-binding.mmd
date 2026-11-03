@@ -1,7 +1,8 @@
 graph TD
   A["1. Construction<br/>immutable definition, no invocation state"] --> B["2. Exact instance binding<br/>handle.bindAction on one instance"]
-  B --> C{"Event admitted?<br/>stale installation, then revalidate<br/>active invocation, then busy policy"}
-  C -- "no" --> Z["Ignored, reported to observer"]
+  B --> C{"Event admitted?<br/>live binding, then revalidate<br/>active invocation, then busy policy"}
+  C -- "busy / ignore" --> Z["No new invocation; busy telemetry"]
+  C -- "ended binding" --> X["No new work"]
   C -- "yes" --> D["3. Event turn: input, atActivation<br/>synchronous, same call stack"]
   D --> E["4. Prerequisites<br/>sequential, may refuse"]
   E --> F["5. Handler<br/>abort signal, work deadline"]

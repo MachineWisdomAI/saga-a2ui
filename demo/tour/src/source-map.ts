@@ -238,8 +238,8 @@ export const GUIDES = {
     heading: 'The notes example',
   },
   hosts: {
-    label: 'Host compatibility observations',
-    path: 'docs/2026-10-19_host-compatibility-observations_v1.md',
+    label: 'Host compatibility',
+    path: 'docs/host-compatibility.md',
   },
 } as const satisfies Record<string, GuideLink>;
 

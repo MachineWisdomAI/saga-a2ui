@@ -1,19 +1,12 @@
-graph TD
-  V["Lit: view and player"]
-  H["Host: MCP Apps bridge"]
-  I["App: verified identity"]
-  E["App: current entitlement"]
-  S["App: media service"]
-  D["SAGA: input and host checks"]
-  P["SAGA: recipient projections"]
-  M["Host: model context"]
-  V -->|"Play: episode ID"| H
-  H -->|"Authenticated request"| I
-  I -->|"Principal"| D
-  D -->|"Valid; supported"| E
-  E -->|"Authorized issue"| S
-  S -->|"Capability"| P
-  P -->|"Via host: view-only"| V
-  P -->|"Via host: safe outcome"| M
-  V -->|"Acquire: recipient proof TBD"| S
-  S -->|"Checked acquisition: bytes"| V
+flowchart TD
+  V["Application controller and player<br/>Lit or React view"] -->|"episode ID; public key metadata"| H["Host MCP Apps bridge"]
+  H -->|"authenticated request"| I["Application listener<br/>verified request identity"]
+  I --> E["Application Play handler<br/>validated input and current entitlement"]
+  E -->|"authorized issue"| S["Application media service<br/>recipient-bound capability"]
+  S --> P["Application validates<br/>separate recipient projections"]
+  P -->|"via host: private grant"| V
+  P -->|"via host: safe outcome"| M["Model context"]
+  V -->|"capability and fresh key proof"| S
+  S -->|"current entitlement, then bytes"| V
+  SDK["SAGA action, request<br/>and view lifetimes"] -.-> V
+  SDK -.-> E

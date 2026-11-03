@@ -67,20 +67,22 @@ const REGION =
 export interface Snippet {
   readonly name: string;
   readonly file: string;
+  /** The language of the file it comes from, which is the language a guide shows it in. */
+  readonly language: 'ts' | 'tsx';
   readonly text: string;
 }
 
 /**
  * Cuts every `// #region saga-snippet:<name>` ... `// #endregion saga-snippet:<name>` out of the
- * template's TypeScript files. The text is the template's own lines, unchanged and not dedented,
- * so a guide that shows it shows exactly what the tested starter contains. An unclosed,
- * unopened, mismatched or repeated region is an error: a snippet that silently differs from its
- * source is the failure this exists to prevent.
+ * template's TypeScript files (`.ts` and `.tsx`). The text is the template's own lines, unchanged
+ * and not dedented, so a guide that shows it shows exactly what the tested starter contains. An
+ * unclosed, unopened, mismatched or repeated region is an error: a snippet that silently differs
+ * from its source is the failure this exists to prevent.
  */
 export function extractSnippets(template: string): Snippet[] {
   const found: Snippet[] = [];
   for (const file of templateFiles(template).filter((one) =>
-    one.endsWith('.ts'),
+    /\.tsx?$/.test(one),
   )) {
     let open: { readonly name: string; readonly lines: string[] } | undefined;
     for (const line of fs
@@ -108,7 +110,12 @@ export function extractSnippets(template: string): Snippet[] {
           throw new TemplateError(
             `${file}: the end of snippet "${name}" does not match an open snippet.`,
           );
-        found.push({ name, file, text: open.lines.join('\n') });
+        found.push({
+          name,
+          file,
+          language: file.endsWith('.tsx') ? 'tsx' : 'ts',
+          text: open.lines.join('\n'),
+        });
         open = undefined;
       }
     }
@@ -121,8 +128,9 @@ export function extractSnippets(template: string): Snippet[] {
 }
 
 /**
- * Writes each snippet as `<name>.ts` into a directory that does not exist yet, so a guide or the
- * CLI can include the files rather than retype them. It never overwrites.
+ * Writes each snippet as `<name>.ts` (`<name>.tsx` when it comes from a `.tsx` file) into a
+ * directory that does not exist yet, so a guide or the CLI can include the files rather than
+ * retype them. It never overwrites.
  */
 export function writeSnippets(template: string, destination: string): string[] {
   const target = path.resolve(destination);
@@ -130,7 +138,7 @@ export function writeSnippets(template: string, destination: string): string[] {
   const snippets = extractSnippets(template);
   fs.mkdirSync(target, { recursive: true });
   return snippets.map((snippet) => {
-    const out = path.join(target, `${snippet.name}.ts`);
+    const out = path.join(target, `${snippet.name}.${snippet.language}`);
     fs.writeFileSync(out, `${snippet.text}\n`, { flag: 'wx' });
     return out;
   });

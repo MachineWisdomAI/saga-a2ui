@@ -241,7 +241,7 @@ test.describe('reading order, limits and links', () => {
       'not renderer parity with Lit',
     );
     await expect(page.getByTestId('renderer-evidence')).toContainText(
-      'no React starter, template or CLI pair',
+      'not the React starter',
     );
     expect(await page.locator('body').innerText()).not.toMatch(/lynx/i);
   });

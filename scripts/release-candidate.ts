@@ -18,11 +18,11 @@ import {
 } from './packed-consumer.js';
 
 // PACK2: prepares the release candidate of the owned packages as CI artifacts and says exactly what
-// it is. It packs the five packages with the candidate prerelease identity (see `candidateVersion`),
+// it is. It packs the seven packages with the candidate prerelease identity (see `candidateVersion`),
 // checks that every consumer build installed exactly those tarballs, installs them with the real
 // package manager into a clean directory, records the matched package/resource/catalog set and the
 // tested recipe, and can check an installed set against that record. It publishes nothing: the
-// tarballs stay `private`, so `npm publish` refuses them, and the files go only to the output
+// tarballs stay private and target an invalid registry, and the files go only to the output
 // directory, which CI uploads as a workflow artifact.
 //
 //   npm run build                                  # builds the consumers whose identities are checked
@@ -36,6 +36,8 @@ export const SDK_PACKAGES: readonly SdkPackage[] = [
   'components',
   'mcp',
   'react',
+  'lit-mcp-stack',
+  'react-mcp-stack',
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -508,7 +510,7 @@ export function combinationRecords(
       id: `notes-${id}`,
       description:
         id === 'own'
-          ? 'The notes application with its own catalog alone (no optional components package installed), with the non-playback server action (archive).'
+          ? 'The notes application with its own catalog alone (its emitted bundle holds no optional component; the stack that starts it declares the components package, so the installed tree has it), with the non-playback server action (archive).'
           : 'The same application with the optional FaithfulCard rendering each note body, with the same server action.',
       packages: [...consumer.installedPackages].sort(),
       resources: [builtResource('notes view', consumer.builtPage.path)],
@@ -712,6 +714,20 @@ export interface CandidateInputs {
   readonly generatedAt: string;
 }
 
+/** What a candidate says it is and how it relates to earlier artifacts; `candidate.json` stores it and `CANDIDATE.md` prints it. */
+export function candidateProvenance() {
+  return {
+    status: 'unreleased candidate',
+    statement:
+      'A candidate is a build of one revision for qualification. It is not a release: producing it publishes, tags and deploys nothing, its tarballs are private copies, and its version exists only in these artifacts.',
+    predecessor: {
+      registryUpgradeExercised: false,
+      statement:
+        'Public npm releases of SAGA packages already exist, including 0.1.0-rc.1 of core, components, mcp and react; this record does not list or inventory them. A candidate is a separate artifact with a candidate-only version and does not supersede or upgrade any of them. Update and rollback are rehearsed between candidate builds only (scripts/release-candidate.test.ts, candidate:rehearse); no upgrade from a registry release was exercised. Candidate qualification is a local source rehearsal: it is not a promoted artifact, an anonymous registry install or acceptance in a real host.',
+    },
+  };
+}
+
 export function candidateRecord(
   inputs: CandidateInputs,
 ): Record<string, unknown> {
@@ -756,17 +772,10 @@ export function candidateRecord(
   );
   return {
     format: 1,
-    status: 'unreleased candidate',
-    statement:
-      'A candidate is a build of one revision for qualification. It is not a release: nothing is published, tagged or deployed, the packages remain private, and the version below exists only in these artifacts.',
+    ...candidateProvenance(),
     generatedAt: inputs.generatedAt,
     source: inputs.revision,
     version,
-    predecessor: {
-      published: null,
-      statement:
-        'This is the first candidate. No SAGA package has ever been published, so no earlier release exists and no upgrade from one was tested. The update and rollback sequence is rehearsed between two candidate builds only (scripts/release-candidate.test.ts).',
-    },
     recipe: {
       node: {
         testedHere: process.version,
@@ -1069,7 +1078,7 @@ function expectedFrom(record: {
 }
 
 const USAGE =
-  'usage: release-candidate.ts pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
+  'usage: release-candidate.ts tarballs --out NEW_DIR | pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
 
 interface VerifiedRecord {
   readonly version: string;
@@ -1158,6 +1167,43 @@ export function verifyCommand(argv: readonly string[]): VerifyOutcome {
 
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
+  if (command === 'tarballs') {
+    const output = path.resolve(required(rest, '--out'));
+    // A fresh directory keeps the previous install's artifacts available for rollback.
+    fs.mkdirSync(output);
+    const work = createWorkDirectory('saga-local-tarballs-');
+    try {
+      const source = sourceRevision();
+      const packages = packSdkPackages(
+        work,
+        SDK_PACKAGES,
+        path.join(output, 'packages'),
+        candidateVersion(source.commit, source.dirty),
+      );
+      const root = readJson<{ overrides: Record<string, unknown> }>(
+        path.join(repoRoot, 'package.json'),
+      );
+      const overrides = {
+        ...root.overrides,
+        ...Object.fromEntries(
+          packages.map((one) => [
+            `@saga-a2ui/${one.name}`,
+            `file:${one.tarball}`,
+          ]),
+        ),
+      };
+      fs.writeFileSync(
+        path.join(output, 'npm-overrides.json'),
+        `${JSON.stringify({ source, overrides }, null, 2)}\n`,
+      );
+      console.log(
+        `Private development tarballs in ${output}. Nothing published; application qualification has not run.`,
+      );
+      return 0;
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
+  }
   if (command === 'pack') {
     const record = writeCandidate(path.resolve(required(rest, '--out')));
     const install = (

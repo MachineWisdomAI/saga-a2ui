@@ -218,13 +218,15 @@ test('after host teardown a late result changes nothing', async ({ page }) => {
   await expect(card(view)).toContainText('before teardown');
 
   await page.evaluate(() => window.teardownView?.());
+  await expect(card(view)).toHaveCount(0); // the stack retires the view once and unmounts it
   const late = await call('after teardown');
   await deliver(page, late).catch(() => undefined);
   await deliver(page, { isError: true, content: [] }).catch(() => undefined);
   await page.waitForTimeout(300);
-  await expect(card(view)).toContainText('before teardown');
+  await expect(card(view)).toHaveCount(0);
+  await expect(view.getByText('before teardown')).toHaveCount(0);
   await expect(view.getByText('after teardown')).toHaveCount(0);
-  await expect(view.getByTestId('answer-status')).toHaveText('Answer');
+  await expect(view.getByTestId('answer-status')).toHaveCount(0);
 });
 
 test('remounting the page delivers each result once', async ({ page }) => {

@@ -9,9 +9,9 @@ import {
 } from './player-renderer.js';
 import {
   createContentPolicy,
+  embedContentPolicy,
   type ContentPolicy,
 } from '@saga-a2ui/components/faithful-card';
-import { embedPolicy } from '../src/content/embedded-policy.js';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../src/mcp/dev-auth.js';
 import {
   acquireMedia,
@@ -193,7 +193,7 @@ async function mountPlayer(
   const { contentPolicy } = options;
   const hosted = contentPolicy
     ? {
-        html: embedPolicy(content.text, contentPolicy),
+        html: embedContentPolicy(content.text, contentPolicy),
         csp: {
           ...content._meta.ui.csp,
           resourceDomains: contentPolicy.resource.resourceDomains,

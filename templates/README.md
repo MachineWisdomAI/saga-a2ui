@@ -12,12 +12,15 @@ generated from the qualified templates by `npm run guide:recipes`; adding a temp
 | [`lit-node`](lit-node/) | `lit-mcp` (Lit view, MCP delivery) | `node` (`@modelcontextprotocol/node` 2.1.1) | Qualified in CI: [`scripts/starter.test.ts`](../scripts/starter.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-express`](lit-express/) | `lit-mcp` (Lit view, MCP delivery) | `express` (`@modelcontextprotocol/express` 2.0.2, `express` 5.3.0) | Qualified in CI: [`scripts/starter-express.test.ts`](../scripts/starter-express.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-fastify`](lit-fastify/) | `lit-mcp` (Lit view, MCP delivery) | `fastify` (`@modelcontextprotocol/fastify` 2.0.1, `fastify` 5.12.7) | Qualified in CI: [`scripts/starter-fastify.test.ts`](../scripts/starter-fastify.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
-| [`lit-hono`](lit-hono/) | `lit-mcp` (Lit view, MCP delivery) | `hono` (`@modelcontextprotocol/hono` 2.0.2 with `hono` 4.13.13 and `@hono/node-server` 1.19.17) | Qualified in CI: [`scripts/starter-hono.test.ts`](../scripts/starter-hono.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
+| [`lit-hono`](lit-hono/) | `lit-mcp` (Lit view, MCP delivery) | `hono` (`@modelcontextprotocol/hono` 2.0.2 with `hono` 4.13.13 and `@hono/node-server` 2.1.5) | Qualified in CI: [`scripts/starter-hono.test.ts`](../scripts/starter-hono.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 | [`lit-hapi`](lit-hapi/README.md) | `lit-mcp` (Lit view, MCP delivery) | `hapi` (SAGA-maintained [bridge](lit-hapi/server/bridge.ts) over `@modelcontextprotocol/node` 2.1.1, Hapi 21.4.10) | Qualified in CI: [`scripts/starter-hapi.test.ts`](../scripts/starter-hapi.test.ts), [`scripts/starter-hapi-identity.test.ts`](../scripts/starter-hapi-identity.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
+| [`react-hono`](react-hono/) | `react-mcp` (React view, MCP delivery) | `hono` (the same `@modelcontextprotocol/hono` 2.0.2, `hono` 4.13.13 and `@hono/node-server` 2.1.5 as `lit-hono`) | Qualified in CI: [`scripts/starter-react-hono.test.ts`](../scripts/starter-react-hono.test.ts), [`scripts/starter-hono.test.ts`](../scripts/starter-hono.test.ts) and [`apps/lit-host/e2e/starter.spec.ts`](../apps/lit-host/e2e/starter.spec.ts) |
 
 The synthetic demonstration of the `lit-node` pair is [`demo/lit-node`](../demo/lit-node/README.md): it imports this template's request-authentication files as they ship and keeps every identity and fixture in its own directory.
 
 `lit-hono` is `lit-node` with only the server adapter files replaced (`server/listener.ts`, `server/authenticate.ts`, `package.json` and its README); a test fails if any other file differs.
+
+`react-hono` is the same application with a React view: its `server/` (and the server build files `tsconfig.server.json` and `vite.server.config.ts`) is the `lit-hono` text, byte for byte, and `scripts/starter-hono.test.ts` fails if either copy changes alone. Its `src/` is written in `.tsx` against `@saga-a2ui/react-mcp-stack` and keeps the same public status, protected account operation (the verifier refuses every credential) and local "Clear the note" action. Each template declares in `src/contract.ts` the `VIEW_MARKER` its built page must contain, which the shared `server/operations.ts` checks before listening (`<starter-app` for a Lit template, `<div id="root"` for a React template).
 
 [`lit-hapi`](lit-hapi/README.md#existing-hapi-app-register-an-endpoint) is maintained here too: it reuses the bridge over the official Node/server SDK,
 with Hapi route authentication and request-local immutable identity. [The bridge](lit-hapi/server/bridge.ts) owns
@@ -48,7 +51,7 @@ complete copy a developer can own, so the files a server framework does not chan
 ```sh
 npx tsx scripts/build-starter.ts                      # export, install packed candidate tarballs, build every qualified template; apps/lit-host/dist/starters/<template>
 npx tsx scripts/build-starter.ts --template lit-hono      # one of them
-npx tsx scripts/starter-snippets.ts                   # list the attach-to-an-existing-backend snippets (--template lit-express or lit-hono for the other pairs)
+npx tsx scripts/starter-snippets.ts                   # list the attach-to-an-existing-backend snippets (--template lit-express, lit-hono or react-hono for the other pairs)
 npx tsx scripts/starter-snippets.ts --out DIR         # write them as files into a new directory
 npx tsx scripts/starter-snippets.ts --template lit-fastify   # the Fastify pair's snippets
 npx tsx scripts/starter-snippets.ts --template lit-hono   # choose another template (default lit-node)
@@ -65,9 +68,9 @@ yields to the event loop between files, which a synchronous copy cannot do.
 npx tsx scripts/saga.ts init --a2ui-stack lit-mcp --server node ./my-app   # a new project from a qualified pair
 ```
 
-`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all five
-templates (`lit-node`, `lit-express`, `lit-fastify`, `lit-hono`, `lit-hapi`) are offered, each with `--a2ui-stack lit-mcp` and its
-own `--server`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
+`scripts/saga.ts` offers the pairs listed in its `SUPPORTED_PAIRS`, not every directory here: today all six
+templates are offered. `lit-node`, `lit-express`, `lit-fastify`, `lit-hono` and `lit-hapi` each take `--a2ui-stack lit-mcp` and
+their own `--server`; `react-hono` takes `--a2ui-stack react-mcp --server hono`. When a pair is qualified, its owner adds one row there; while it fails, the row is removed.
 
 `saga demo --a2ui-stack lit-mcp --server node ./my-demo` is a different thing from a starter: it creates the
 standalone demonstration (`demo/lit-node`, DEMO1) of the pair `DEMO_TEMPLATE` names. Its synthetic accounts and

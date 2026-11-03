@@ -1,0 +1,57 @@
+{
+  "name": "@saga-a2ui/lit-mcp-stack",
+  "private": false,
+  "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./faithful-card": "./src/faithful-card/index.ts",
+    "./content-policy": "./src/content-policy/index.ts",
+    "./server": "./src/server/index.ts",
+    "./server/http": "./src/server/http/index.ts",
+    "./server/node": "./src/server/node/index.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test-support.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@a2ui/lit": "0.13.0",
+    "@a2ui/web_core": "0.13.0",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@saga-a2ui/components": "0.11.1-rc.1",
+    "@saga-a2ui/core": "0.11.1-rc.1",
+    "@saga-a2ui/lit": "0.11.1-rc.1",
+    "@saga-a2ui/mcp": "0.11.1-rc.1",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "jsdom": "28.1.0",
+    "lit": "^3.3.3",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  },
+  "version": "0.11.1-rc.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MachineWisdomAI/saga-a2ui.git",
+    "directory": "packages/lit-mcp-stack"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  }
+}

@@ -43,12 +43,39 @@ import {
   sha256,
   type PublicationRecord,
 } from './record.js';
+import { iconProblem } from './images.js';
 import { readZip } from './zip.js';
 
 // `saga publish check|prepare --target chatgpt` as a maintainer runs it, on the fixture application of
 // harness.ts.
 
 const ARCHIVE_FILE = ARCHIVE_FILES.chatgpt;
+
+// The canonical dragon artwork (assets/brand/plugin/README.md): each branding field, its file, and
+// the SHA-256 recorded for provenance. Replacing a file is a change to this table and that README.
+const BRAND = path.join(here, '..', '..', 'assets', 'brand', 'plugin');
+const FIELDS = [
+  'composerIcon',
+  'composerIconDark',
+  'logo',
+  'logoDark',
+] as const;
+const BUNDLED: Record<(typeof FIELDS)[number], string> = {
+  composerIcon: 'composer-icon-light.png',
+  composerIconDark: 'composer-icon-dark.png',
+  logo: 'logo-light.png',
+  logoDark: 'logo-dark.png',
+};
+const DIGESTS: Record<string, string> = {
+  'composer-icon-light.png':
+    '59b21877707e9f3ae59c47ea5a00bed4938a0c7a99903a555155f06b6ae61a2d',
+  'composer-icon-dark.png':
+    '87f6878befdebe02ef954dbd2c92a47c0a84f803033ae0da279f031d93ea7013',
+  'logo-light.png':
+    '66f444d50e29b7317bbf0a0743fa08630239e7f2e17f022d25dc042e01c7e95c',
+  'logo-dark.png':
+    '3dab20a89fd8318abab9b83ab6490162ab5ccc4d0157a37d2af3afbd4e59c07c',
+};
 
 const release = (app: string): string =>
   path.join(app, 'saga-publication.json');
@@ -91,6 +118,177 @@ const prepare = (
   );
 
 describe('a ready application', () => {
+  it('packages SAGA branding when the application supplies no assets', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      delete input.assets;
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(run.code, run.out + run.err).toBe(0);
+    const out = path.join(cwd, 'publication');
+    const entries = readZip(fs.readFileSync(path.join(out, ARCHIVE_FILE)));
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    const branding = manifest.extensions['com.openai'].interface;
+    expect(branding.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    expect(branding.composerIconDark).toBe(
+      './assets/saga-a2ui/composer-icon-dark.png',
+    );
+    expect(branding.logo).toBe('./assets/saga-a2ui/logo-light.png');
+    expect(branding.logoDark).toBe('./assets/saga-a2ui/logo-dark.png');
+    // The real bytes of the canonical dragon artwork are in the package, and nothing else is.
+    for (const field of FIELDS)
+      expect(files.get(branding[field].slice(2))).toEqual(
+        fs.readFileSync(path.join(BRAND, BUNDLED[field])),
+      );
+    expect(
+      entries.filter((entry) => entry.path.startsWith('assets/')),
+    ).toHaveLength(4);
+    expect(status(recordOf(out), 'package.assets')).toBe('pass');
+  });
+
+  describe('the bundled dragon artwork', () => {
+    const header = (file: string) => {
+      const data = fs.readFileSync(path.join(BRAND, file));
+      // IHDR: width, height, bit depth, color type.
+      return {
+        data,
+        width: data.readUInt32BE(16),
+        height: data.readUInt32BE(20),
+        colorType: data[25],
+      };
+    };
+
+    it('is real PNG data of the canonical files, not a Git LFS pointer', () => {
+      for (const [field, file] of Object.entries(BUNDLED)) {
+        const { data } = header(file);
+        expect(data.subarray(0, 8), field).toEqual(
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        );
+        expect(sha256(data), file).toBe(DIGESTS[file]);
+        expect(iconProblem(file, data), file).toBeNull();
+      }
+    });
+
+    it('gives each field the treatment its surface needs', () => {
+      // Composer icons are transparent squares (an alpha channel, or a palette with a tRNS chunk);
+      // logos are solid tiles (no alpha channel, no transparency chunk).
+      const transparent = (data: Buffer, colorType: number | undefined) =>
+        colorType === 4 ||
+        colorType === 6 ||
+        data.includes(Buffer.from('tRNS', 'latin1'));
+      for (const file of [
+        'composer-icon-light.png',
+        'composer-icon-dark.png',
+      ]) {
+        const { data, width, height, colorType } = header(file);
+        expect([width, height], file).toEqual([128, 128]);
+        expect(transparent(data, colorType), file).toBe(true);
+      }
+      for (const file of ['logo-light.png', 'logo-dark.png']) {
+        const { data, width, height, colorType } = header(file);
+        expect([width, height], file).toEqual([512, 512]);
+        expect(transparent(data, colorType), file).toBe(false);
+      }
+      // The light and dark artwork are different files.
+      expect(DIGESTS['composer-icon-light.png']).not.toBe(
+        DIGESTS['composer-icon-dark.png'],
+      );
+      expect(DIGESTS['logo-light.png']).not.toBe(DIGESTS['logo-dark.png']);
+    });
+  });
+
+  it('defaults a dark field with its light field and lets a supplied dark file win', async () => {
+    const app = copyFixture();
+    fs.copyFileSync(
+      path.join(app, 'assets/logo.svg'),
+      path.join(app, 'assets/logo-night.svg'),
+    );
+    editInput(app, (input) => {
+      input.assets = { logoDark: 'assets/logo-night.svg' };
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const out = path.join(cwd, 'publication');
+    const files = new Map(
+      readZip(fs.readFileSync(path.join(out, ARCHIVE_FILE))).map((entry) => [
+        entry.path,
+        entry.data,
+      ]),
+    );
+    const branding = JSON.parse(files.get('plugin.json')!.toString())
+      .extensions['com.openai'].interface;
+    expect(branding.logo).toBe('./assets/saga-a2ui/logo-light.png');
+    expect(branding.logoDark).toBe('./assets/logo-night.svg');
+    expect(branding.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    expect(branding.composerIconDark).toBe(
+      './assets/saga-a2ui/composer-icon-dark.png',
+    );
+    // The overridden dark logo displaces the bundled one.
+    expect(files.has('assets/saga-a2ui/logo-dark.png')).toBe(false);
+    expect(files.get('assets/logo-night.svg')).toEqual(
+      fs.readFileSync(path.join(app, 'assets/logo-night.svg')),
+    );
+    expect(status(recordOf(out), 'package.assets')).toBe('pass');
+  });
+
+  it('keeps application branding whole, adding no SAGA dark artwork', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const entries = readZip(
+      fs.readFileSync(path.join(cwd, 'publication', ARCHIVE_FILE)),
+    );
+    const manifest = JSON.parse(
+      entries.find((entry) => entry.path === 'plugin.json')!.data.toString(),
+    );
+    const branding = manifest.extensions['com.openai'].interface;
+    expect(branding.logo).toBe('./assets/logo.svg');
+    expect(branding.composerIcon).toBe('./assets/icon.svg');
+    expect(branding.logoDark).toBeUndefined();
+    expect(branding.composerIconDark).toBeUndefined();
+    expect(
+      entries.some((entry) => entry.path.startsWith('assets/saga-a2ui/')),
+    ).toBe(false);
+  });
+
+  it('keeps a supplied logo while defaulting an omitted composer icon', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      input.assets = { logo: 'assets/logo.svg' };
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const entries = readZip(
+      fs.readFileSync(path.join(cwd, 'publication', ARCHIVE_FILE)),
+    );
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    expect(manifest.extensions['com.openai'].interface.logo).toBe(
+      './assets/logo.svg',
+    );
+    expect(manifest.extensions['com.openai'].interface.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    // The supplied logo has no dark file, so the dragon's dark logo is not paired with it.
+    expect(
+      manifest.extensions['com.openai'].interface.logoDark,
+    ).toBeUndefined();
+    expect(files.has('assets/saga-a2ui/logo-dark.png')).toBe(false);
+    expect(files.get('assets/logo.svg')).toEqual(
+      fs.readFileSync(path.join(app, 'assets/logo.svg')),
+    );
+  });
+
   it('check passes every check, reads the endpoint without calling a tool, and writes nothing', async () => {
     const app = copyFixture();
     const cwd = workspace();
@@ -526,6 +724,20 @@ describe('inputs that must prevent a ready claim', () => {
         record.findings.find((finding) => finding.id === 'package.assets')
           ?.detail,
       ).toMatch(/logo\.png is not a valid PNG: it is truncated/);
+    });
+
+    it('a supplied dark logo that is not a valid image, which the bundled dark logo never replaces', async () => {
+      const { record } = await blocked((app) => {
+        fs.writeFileSync(path.join(app, 'assets', 'logo-night.png'), 'x');
+        editInput(
+          app,
+          (input) => (input.assets.logoDark = 'assets/logo-night.png'),
+        );
+      }, 'package.assets');
+      expect(
+        record.findings.find((finding) => finding.id === 'package.assets')
+          ?.detail,
+      ).toMatch(/logo-night\.png is not a valid PNG/);
     });
 
     it('a PNG without its IEND chunk', async () => {

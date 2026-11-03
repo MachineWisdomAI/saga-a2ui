@@ -4,7 +4,7 @@
 
 This document is generated. Each snippet is the maintained starter template’s own text, cut from the files CI builds and qualifies, so it cannot drift from a tested file. The [setup guide](getting-started.md) explains the concepts and the order to read them in.
 
-Attaching SAGA to a backend you already run is an integration you make in your own source. No command edits an existing application: `saga init` creates one new directory and nothing else. The four React/MCP packages are [published on npm](public-install.md). These Lit-based snippets also need the unpublished `@saga-a2ui/lit` package, so install their matched packages from a local candidate (see [Install the packages from a candidate](getting-started.md#install-the-packages-from-a-candidate)).
+Attaching SAGA to a backend you already run is an integration you make in your own source. No command edits an existing application: `saga init` creates one new directory and nothing else. The Lit and React stacks belong to the [public npm release set](public-install.md). These source-based snippets use matched local candidate packages so they can qualify unpublished changes (see [Install the packages from a candidate](getting-started.md#install-the-packages-from-a-candidate)).
 
 ## Which pairs have a recipe
 
@@ -16,6 +16,7 @@ Attaching SAGA to a backend you already run is an integration you make in your o
 | `lit-mcp` | `fastify` | [`lit-fastify`](../templates/lit-fastify/) | offered |
 | `lit-mcp` | `hono` | [`lit-hono`](../templates/lit-hono/) | offered |
 | `lit-mcp` | `hapi` | [`lit-hapi`](../templates/lit-hapi/) | offered |
+| `react-mcp` | `hono` | [`react-hono`](../templates/react-hono/) | offered |
 <!-- /pairs -->
 
 A pair is listed only while CI qualifies it, and a qualified pair is not automatically offered by `saga init`: that command offers the pairs in its own list. A recipe is not a claim about any other pair, and no full matrix is claimed.
@@ -40,7 +41,7 @@ CI qualifies the starter’s listener and operations against real MCP clients. T
 <!-- recipe:lit-node -->
 ## `node` with `lit-mcp`
 
-Template: [`templates/lit-node`](../templates/lit-node/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+Template: [`templates/lit-node`](../templates/lit-node/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -148,11 +149,11 @@ From `templates/lit-node/src/view.ts`:
 ```ts
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
-attach: (view) => {
-  stopWatching.push(
-    view.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -161,7 +162,7 @@ attach: (view) => {
 <!-- recipe:lit-express -->
 ## `express` with `lit-mcp`
 
-Template: [`templates/lit-express`](../templates/lit-express/). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+Template: [`templates/lit-express`](../templates/lit-express/). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -272,11 +273,11 @@ From `templates/lit-express/src/view.ts`:
 ```ts
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
-attach: (view) => {
-  stopWatching.push(
-    view.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -285,7 +286,7 @@ attach: (view) => {
 <!-- recipe:lit-fastify -->
 ## `fastify` with `lit-mcp`
 
-Template: [`templates/lit-fastify`](../templates/lit-fastify/). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+Template: [`templates/lit-fastify`](../templates/lit-fastify/). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -396,11 +397,11 @@ From `templates/lit-fastify/src/view.ts`:
 ```ts
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
-attach: (view) => {
-  stopWatching.push(
-    view.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -409,7 +410,7 @@ attach: (view) => {
 <!-- recipe:lit-hono -->
 ## `hono` with `lit-mcp`
 
-Template: [`templates/lit-hono`](../templates/lit-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+Template: [`templates/lit-hono`](../templates/lit-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -518,11 +519,11 @@ From `templates/lit-hono/src/view.ts`:
 ```ts
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
-attach: (view) => {
-  stopWatching.push(
-    view.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
@@ -531,7 +532,7 @@ attach: (view) => {
 <!-- recipe:lit-hapi -->
 ## `hapi` with `lit-mcp`
 
-Template: [`templates/lit-hapi`](../templates/lit-hapi/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/mcp`.
+Template: [`templates/lit-hapi`](../templates/lit-hapi/). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/bridge.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -630,12 +631,134 @@ From `templates/lit-hapi/src/view.ts`:
 ```ts
 // Runs once for each presented surface. The same definition could be attached to any number
 // of controls; here it is attached directly to the one rendered Clear control.
-attach: (view) => {
-  stopWatching.push(
-    view.watchById(CLEAR_ID, ActionButton, (handle) => {
-      bindings.push(handle.bindAction('activate', actions.clearNote));
-    }),
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
   );
 },
 ```
 <!-- /recipe:lit-hapi -->
+
+<!-- recipe:react-hono -->
+## `hono` with `react-mcp`
+
+Template: [`templates/react-hono`](../templates/react-hono/). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/react`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react-mcp-stack`.
+
+The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
+
+### Prepare the view and endpoint handlers once
+
+From `templates/react-hono/server/listener.ts`:
+
+```ts
+const view = prepareStarterView(options.html, options.filename);
+const status = createEndpoint(
+  (lifetime) => createStatusServer({ view, lifetime }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+const account = createEndpoint(
+  (lifetime) =>
+    createAccountServer({ view, lifetime, authorize: options.authorize }),
+  { maxRequestBodySize: MAX_REQUEST_BYTES },
+);
+```
+
+### Hand the verified identity to the transport
+
+From `templates/react-hono/server/listener.ts`:
+
+```ts
+// Who is asking is decided before any server is built. The verified context travels to the tool
+// only as the transport's per-request auth; no tool argument can name an account.
+const decision = await authenticate(
+  c.req.header('authorization'),
+  options.verifier,
+  lifetime,
+);
+if (!decision.ok)
+  return new Response(null, {
+    status: decision.status,
+    headers:
+      decision.challenge === undefined
+        ? {}
+        : { 'WWW-Authenticate': decision.challenge },
+  });
+return serve(c, account, decision.authInfo);
+```
+
+### Register a protected operation
+
+From `templates/react-hono/server/operations.ts`:
+
+```ts
+/**
+ * A protected operation. The listener verified the request and the transport hands that context
+ * to `identity`; with none the handler never runs. `handle` makes the application's own
+ * authorization decision for this request's identity, then returns a record, and `project` copies
+ * the public fields out of it by name.
+ */
+export function createAccountServer({
+  view,
+  lifetime,
+  authorize,
+}: AccountServerOptions): McpServer {
+  const server = new McpServer({
+    name: 'saga-starter-account',
+    version: '0.0.0',
+  });
+  registerProtectedOperation(
+    server,
+    {
+      name: ACCOUNT_TOOL,
+      title: 'Show my account',
+      description: 'Shows the account the server verified for this request.',
+      annotations: READ_ONLY,
+      input: z.strictObject({}),
+      output: AccountOutputSchema,
+      view,
+      failures: {
+        absent: TEXT.noAccount,
+        unavailable: TEXT.unavailable,
+        invalidOutput: TEXT.invalidOutput,
+        signInRequired: TEXT.signInRequired,
+      },
+      identity: identityOf,
+      async handle(_input, identity, request) {
+        // Replace this with a call to your backend. The decision to answer is made here, for this request.
+        if (
+          !(await request.within('authorization', (signal) =>
+            authorize(identity, signal),
+          ))
+        )
+          return { kind: 'refused', text: TEXT.notAllowed };
+        return { kind: 'record', record: identity };
+      },
+      project: (record) => ({
+        text: 'Signed in.',
+        data: { accountId: record.accountId },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+```
+
+### Attach an action to a rendered control
+
+From `templates/react-hono/src/view.tsx`:
+
+```tsx
+// Runs once for each presented surface. The same definition could be attached to any number
+// of controls; here it is attached directly to the one rendered Clear control.
+attach: (surfaceView) => {
+  surfaceView.watchById(
+    CLEAR_ID,
+    ActionButton,
+    (handle) => void handle.bindAction('activate', actions.clearNote),
+  );
+},
+```
+<!-- /recipe:react-hono -->

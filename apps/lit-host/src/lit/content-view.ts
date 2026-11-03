@@ -1,17 +1,12 @@
+import { type HostLinks } from '@saga-a2ui/core/host-links';
 import {
-  createFaithfulCardReader,
-  createImageConsentScope,
-  establishImageEnforcement,
-  type HostLinks,
-} from '@saga-a2ui/components/faithful-card';
-import {
-  documentContentSecurityPolicies,
+  createFaithfulCardView,
   type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
 import {
-  CONTENT_POLICY_ELEMENT_ID,
-  policyFromEmbedded,
-} from '../content/embedded-policy.js';
+  contentPolicyFromDocument,
+  documentContentSecurityPolicies,
+} from '@saga-a2ui/lit-mcp-stack/faithful-card';
 
 /**
  * The episode consumer's trusted card settings: CommonMark, and a description bound of 2,000
@@ -36,23 +31,15 @@ export function contentViewFromDocument(
   doc: Document,
   hostLinks: HostLinks,
 ): DocumentContentView {
-  const created = policyFromEmbedded(
-    doc.getElementById(CONTENT_POLICY_ELEMENT_ID)?.textContent ?? null,
-  );
+  const created = contentPolicyFromDocument(doc);
   if (!created.ok) return { ok: false, message: created.failure.message };
-  const reader = createFaithfulCardReader(EPISODE_CARD_SETTINGS);
-  if (!reader.ok) return { ok: false, message: reader.failure.message };
   return {
     ok: true,
-    view: {
-      reader: reader.reader,
+    view: createFaithfulCardView({
+      ...EPISODE_CARD_SETTINGS,
       policy: created.policy,
+      contentSecurityPolicies: documentContentSecurityPolicies(doc),
       hostLinks,
-      imageEnforcement: establishImageEnforcement(
-        created.policy,
-        documentContentSecurityPolicies(doc),
-      ),
-      consent: createImageConsentScope(),
-    },
+    }),
   };
 }

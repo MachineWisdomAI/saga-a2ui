@@ -1,9 +1,15 @@
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
+import * as fetchHosting from '@saga-a2ui/mcp/server/http';
 import * as policy from '@saga-a2ui/mcp/policy';
 import * as server from '@saga-a2ui/mcp/server';
 import * as view from '@saga-a2ui/mcp/view';
+import {
+  checkPackageDirection,
+  directionViolations,
+  readPackage,
+} from '../../../scripts/package-direction.js';
 
 // The package is consumed through its installed subpath exports, the way an application does, and
 // the module graph behind each export is bundled to show what a consumer would really pull in.
@@ -51,20 +57,60 @@ const RENDERER =
 const SERVER_ONLY = /node_modules\/@modelcontextprotocol\/(server|node)\//;
 
 describe('package subpath exports', () => {
+  it('isolates the local Node listener behind its own server subpath', async () => {
+    const { modules } = await bundle('@saga-a2ui/mcp/server/node', 'node');
+    expect(modules.some((id) => id.endsWith('/server/node/listener.ts'))).toBe(
+      true,
+    );
+    expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
+  });
+
+  it('offers Fetch hosting behind its own subpath: no listener, no filesystem, no renderer', async () => {
+    expect(Object.keys(fetchHosting).sort()).toEqual([
+      'McpFetchConfigurationError',
+      'createMcpFetchApp',
+    ]);
+    const { modules, code } = await bundle(
+      '@saga-a2ui/mcp/server/http',
+      'node',
+    );
+    expect(modules.some((id) => id.endsWith('/server/http/fetch-app.ts'))).toBe(
+      true,
+    );
+    expect(modules.filter((id) => id.includes('/server/node/'))).toEqual([]);
+    expect(modules.filter((id) => /node-server/.test(id))).toEqual([]);
+    expect(modules.filter((id) => RENDERER.test(id))).toEqual([]);
+    expect(code).not.toMatch(
+      /from ['"]node:(http|https|http2|net|tls|dgram|fs|os|child_process)['"]/,
+    );
+    expect(code).not.toMatch(/\bprocess\.env\b/);
+  });
+
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
       'OperationConfigurationError',
+      'RequestLifetimeAttachmentError',
       'StageFailure',
       'assertBudgetSettings',
+      'attachRequestLifetime',
       'createServerBudgets',
+      'operationViewFromHtml',
       'registerProtectedOperation',
       'registerPublicOperation',
       'throwIfEnded',
       'valueOrThrow',
       'viewUriForHtml',
     ]);
-    expect(Object.keys(view).sort()).toEqual(['connectToolResultView']);
+    expect(Object.keys(view).sort()).toEqual([
+      'ViewStartFailure',
+      'conversationFromApp',
+      'deliveredResultFromToolResult',
+      'hostLinksFromApp',
+      'readingProfile',
+      'runToolResultView',
+      'startOwnSizing',
+    ]);
     expect(Object.keys(policy).sort()).toEqual([
       'CLOSED_VIEW_CSP',
       'DEFAULT_OPERATION_MS',
@@ -121,8 +167,61 @@ describe('package subpath exports', () => {
     expect(code).not.toMatch(/node:[a-z_/]+/);
   });
 
+  it('keep the view export free of the card and renderer packages: delivery depends on core only', async () => {
+    const { modules } = await bundle('@saga-a2ui/mcp/view', 'browser');
+    expect(
+      modules.filter((id) =>
+        /\/packages\/(components|lit|react|lynx)\//.test(id),
+      ),
+    ).toEqual([]);
+    // The host link and conversation contracts are types here; the view supplies an implementation of it.
+    expect(modules.filter((id) => id.includes('/packages/core/'))).toEqual([]);
+  });
+
   it('keep the policy export free of every runtime dependency', async () => {
     const { modules } = await bundle('@saga-a2ui/mcp/policy', 'browser');
     expect(modules.filter((id) => id.includes('node_modules'))).toEqual([]);
+  });
+});
+
+describe('dependency direction', () => {
+  it('imports core only: no components, renderer or stack', () => {
+    const { files, violations } = checkPackageDirection('mcp');
+    // The source was really read.
+    expect(files).toBeGreaterThan(5);
+    expect(violations).toEqual([]);
+  });
+
+  it.each([
+    [
+      "import { createFaithfulCardView } from '@saga-a2ui/lit/faithful-card';",
+      'a renderer package',
+    ],
+    [
+      "import { createContentPolicy } from '@saga-a2ui/components/faithful-card';",
+      'the components package',
+    ],
+    ["import { createElement } from 'react';", 'a renderer'],
+  ])(
+    'fails for a deliberate wrong-direction change: %s (%s)',
+    (line, _what) => {
+      const { manifest, files } = readPackage('mcp');
+      const mutant = { path: 'src/mutant.ts', text: `${line}\n` };
+      const found = directionViolations('mcp', manifest, [...files, mutant]);
+      expect(found.map((one) => one.where)).toEqual(['src/mutant.ts']);
+    },
+  );
+
+  it('fails for a wrong-direction dependency declared in the manifest', () => {
+    const { manifest, files } = readPackage('mcp');
+    const wrong = 'react';
+    const found = directionViolations(
+      'mcp',
+      { ...manifest, dependencies: { ...manifest.dependencies, [wrong]: '*' } },
+      files,
+    );
+    expect(found.map((one) => one.where)).toEqual([
+      'package.json dependencies',
+    ]);
   });
 });

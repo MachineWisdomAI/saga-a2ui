@@ -13,6 +13,7 @@ export const QUALIFIED_STARTERS = [
   'lit-fastify',
   'lit-hono',
   'lit-hapi',
+  'react-hono',
 ] as const;
 
 export type QualifiedStarter = (typeof QUALIFIED_STARTERS)[number];

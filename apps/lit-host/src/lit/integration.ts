@@ -1,5 +1,5 @@
-import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
+import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9'; // saga-boundary: integration-import the panel is the application's own component, authored against upstream's component API
+import { Catalog } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value
 import { defineElements } from '@saga-a2ui/lit';
 import { html, nothing } from 'lit';
 import { SAGA_CATALOG_ID, SagaPanelApi } from '../saga-panel/contract.js';
@@ -15,6 +15,8 @@ export class SagaPanelElement extends A2uiLitElement<typeof SagaPanelApi> {
     const props = this.controller?.props;
     if (!props) return nothing;
     const title = String(props.title ?? '');
+    // No title means no episode: the panel draws nothing, so a failure leaves no stale panel.
+    if (title === '') return nothing;
     const description =
       props.description === undefined ? '' : String(props.description);
     return html`<section data-testid="panel">

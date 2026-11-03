@@ -73,15 +73,10 @@ test.describe('ordinary and hostile descriptions', () => {
   }) => {
     const { view, frame } = await open(page, { description: 'short' });
     await expect(view.getByTestId('card-content')).toHaveText('short');
-    await frame.evaluate(() =>
-      window.sagaSend?.({
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId: 'fixture',
-          path: '/description',
-          value: 'a'.repeat(2001),
-        },
-      }),
+    await frame.evaluate(
+      (description) =>
+        window.sagaUpdatePanel?.({ title: 'Episode title', description }),
+      'a'.repeat(2001),
     );
     await expect(view.getByTestId('card-failure')).toContainText('too long');
     await expect(view.getByTestId('card-failure')).toContainText('2001');
@@ -95,14 +90,7 @@ test.describe('ordinary and hostile descriptions', () => {
     const send = (value: string) =>
       frame.evaluate(
         (description) =>
-          window.sagaSend?.({
-            version: 'v0.9',
-            updateDataModel: {
-              surfaceId: 'fixture',
-              path: '/description',
-              value: description,
-            },
-          }),
+          window.sagaUpdatePanel?.({ title: 'Episode title', description }),
         value,
       );
     await send('> '.repeat(19) + 'visible-word');
@@ -231,13 +219,10 @@ test.describe('Standard links go only through the host callback', () => {
     await view.getByRole('button', { name: /guide/ }).click();
     await expect.poll(() => openLinkCalls.length).toBe(1);
     await frame.evaluate(() =>
-      window.sagaSend?.({
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId: 'fixture',
-          path: '/description',
-          value: 'Read the [guide](https://docs.example.com/guide?a=1) today.',
-        },
+      window.sagaUpdatePanel?.({
+        title: 'Episode title',
+        description:
+          'Read the [guide](https://docs.example.com/guide?a=1) today.',
       }),
     );
     release?.();

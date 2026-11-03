@@ -1,17 +1,28 @@
 import {
   A2uiLitElement,
+  actionButtonEntry,
   basicCatalog,
+  Catalog,
+  CommonSchemas,
+  z,
   type LitComponentApi,
-} from '@a2ui/lit/v0_9';
-import { actionButtonEntry } from '@saga-a2ui/lit/actions';
+} from '@saga-a2ui/lit-mcp-stack';
 import { html, nothing } from 'lit';
-import { LineApi } from './notes-line.js';
+import { LINE_KINDS } from './notes-line.js';
+import { CATALOG_ID } from './notes-surface.js';
 
 // The application-owned catalog of the Lit consumers. `Line` is the application's own component:
-// its contract (notes-line.ts) is shared with the React catalog. Layout, rows and lists come from
+// its roles (notes-line.ts) are shared with the React catalog. Layout, rows and lists come from
 // upstream's basic catalog; `ActionButton` is SAGA's opt-in control. Nothing else is in the
 // catalog, and in particular no SAGA optional component: the second consumer adds one
 // (main-card.ts) and this file stays as it is.
+
+const LineApi = {
+  name: 'Line',
+  schema: z
+    .object({ text: CommonSchemas.DynamicString, kind: z.enum(LINE_KINDS) })
+    .strict(),
+};
 
 class LineElement extends A2uiLitElement<typeof LineApi> {
   protected readonly api = LineApi;
@@ -51,3 +62,12 @@ export const ownEntries: readonly LitComponentApi[] = [
   Line,
   actionButtonEntry,
 ];
+
+/** One catalog entry: what a consumer may add to the catalog (the second consumer adds the card). */
+export type CatalogEntry = LitComponentApi;
+
+/** The catalog the stack presents the layout over: this application's entries and any a consumer adds. */
+export const notesCatalog = (
+  extra: readonly CatalogEntry[] = [],
+): Catalog<LitComponentApi> =>
+  new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [...ownEntries, ...extra]);

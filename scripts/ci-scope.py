@@ -17,6 +17,9 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".i
 
 def documentation_path(name):
     path = Path(name)
+    # This artwork is executable input to publication packages, not a documentation illustration.
+    if name.startswith("assets/brand/plugin/"):
+        return False
     # Retained evidence and generated deliverables may need executable qualification.
     if name.startswith(("docs/evidence/", "docs/artifacts/")):
         return False

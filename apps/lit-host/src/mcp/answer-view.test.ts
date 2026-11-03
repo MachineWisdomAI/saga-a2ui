@@ -1,16 +1,11 @@
-import { App } from '@modelcontextprotocol/ext-apps';
-import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { InMemoryTransport } from '@modelcontextprotocol/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ANSWER_UNAVAILABLE_TEXT } from './answer.js';
-import {
-  connectAnswerView,
-  type AnswerViewConnection,
-  type AnswerViewState,
-} from './answer-view.js';
+import { createAnswerView, type AnswerViewState } from './answer-view.js';
 
-// The answer view's delivery rules, exercised with a real `App` and `AppBridge` joined by an
-// in-memory transport. The observable result is the sequence of states the view asks to show.
+// What the answer view decides about each notification it is given. Delivery order, holding early
+// notifications and ending are the stack's (packages/*-mcp-stack tests); the page that composes
+// them is exercised in a real browser by e2e/answer-view.spec.ts. The observable result here is the
+// sequence of states the view asks to show.
 
 const answerResult = (question: string, answer: string) => ({
   content: [{ type: 'text' as const, text: answer }],
@@ -20,54 +15,16 @@ const failureResult = (text: string) => ({
   isError: true,
   content: [{ type: 'text' as const, text }],
 });
+const asked = (question: unknown) => ({ arguments: { question } });
 
-interface Harness {
-  readonly bridge: AppBridge;
-  readonly states: AnswerViewState[];
-  last(): AnswerViewState | undefined;
-  connect(
-    onInitialized?: (bridge: AppBridge) => void,
-  ): Promise<AnswerViewConnection>;
-}
-
-const toClean: { app: App; bridge: AppBridge }[] = [];
-
-function harness(): Harness {
-  const app = new App(
-    { name: 'test-answer-view', version: '0.0.0' },
-    {},
-    { autoResize: false },
-  );
-  const bridge = new AppBridge(
-    null,
-    { name: 'test-host', version: '0.0.0' },
-    {},
-  );
-  toClean.push({ app, bridge });
+function harness() {
   const states: AnswerViewState[] = [];
   return {
-    bridge,
+    view: createAnswerView((state) => void states.push(state)),
     states,
     last: () => states.at(-1),
-    async connect(onInitialized) {
-      const [viewSide, hostSide] = InMemoryTransport.createLinkedPair();
-      bridge.oninitialized = () => onInitialized?.(bridge);
-      await bridge.connect(hostSide);
-      return connectAnswerView({
-        app,
-        transport: viewSide,
-        show: (state) => states.push(state),
-      });
-    },
   };
 }
-
-afterEach(async () => {
-  for (const { app, bridge } of toClean.splice(0)) {
-    await app.close().catch(() => undefined);
-    await bridge.close().catch(() => undefined);
-  }
-});
 
 const answered = (question: string, answer: string): AnswerViewState => ({
   kind: 'answer',
@@ -75,148 +32,96 @@ const answered = (question: string, answer: string): AnswerViewState => ({
 });
 
 describe('binding an answer to its question', () => {
-  it('shows an answer with the question it carries when no input was seen first', async () => {
+  it('shows an answer with the question it carries when no input was seen first', () => {
     const h = harness();
-    await h.connect(
-      (bridge) => void bridge.sendToolResult(answerResult('Early?', 'Yes.')),
-    );
-    await expect.poll(() => h.last()).toEqual(answered('Early?', 'Yes.'));
-    expect(h.states).toHaveLength(1);
+    h.view.onToolResult(answerResult('Early?', 'Yes.'));
+    expect(h.states).toEqual([answered('Early?', 'Yes.')]);
   });
 
-  it('waits on the asked question, then shows its answer', async () => {
+  it('waits on the asked question, then shows its answer', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolInput({ arguments: { question: 'Why?' } });
-    await expect
-      .poll(() => h.last())
-      .toEqual({ kind: 'waiting', question: 'Why?' });
-    await h.bridge.sendToolResult(answerResult('Why?', 'Because.'));
-    await expect.poll(() => h.last()).toEqual(answered('Why?', 'Because.'));
+    h.view.onToolInput(asked('Why?'));
+    expect(h.last()).toEqual({ kind: 'waiting', question: 'Why?' });
+    h.view.onToolResult(answerResult('Why?', 'Because.'));
+    expect(h.last()).toEqual(answered('Why?', 'Because.'));
   });
 
-  it('ignores an answer to a different question and keeps waiting for the one asked', async () => {
+  it('ignores an answer to a different question and keeps waiting for the one asked', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolInput({ arguments: { question: 'First?' } });
-    await h.bridge.sendToolResult(answerResult('First?', 'One.'));
-    await expect.poll(() => h.last()).toEqual(answered('First?', 'One.'));
-    await h.bridge.sendToolInput({ arguments: { question: 'Second?' } });
-    await expect
-      .poll(() => h.last())
-      .toEqual({ kind: 'waiting', question: 'Second?' });
-
-    // A late delivery of the first answer must not replace what is being waited for.
-    await h.bridge.sendToolResult(answerResult('First?', 'One.'));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    h.view.onToolInput(asked('First?'));
+    h.view.onToolResult(answerResult('First?', 'One.'));
+    expect(h.last()).toEqual(answered('First?', 'One.'));
+    h.view.onToolInput(asked('Second?'));
     expect(h.last()).toEqual({ kind: 'waiting', question: 'Second?' });
 
-    await h.bridge.sendToolResult(answerResult('Second?', 'Two.'));
-    await expect.poll(() => h.last()).toEqual(answered('Second?', 'Two.'));
+    // A late delivery of the first answer must not replace what is being waited for.
+    h.view.onToolResult(answerResult('First?', 'One.'));
+    expect(h.last()).toEqual({ kind: 'waiting', question: 'Second?' });
+
+    h.view.onToolResult(answerResult('Second?', 'Two.'));
+    expect(h.last()).toEqual(answered('Second?', 'Two.'));
   });
 
-  it('compares the question exactly, not after trimming or case folding', async () => {
+  it('compares the question exactly, not after trimming or case folding', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolInput({ arguments: { question: 'Why?' } });
-    await h.bridge.sendToolResult(answerResult('why?', 'Lower.'));
-    await h.bridge.sendToolResult(answerResult('Why? ', 'Padded.'));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(h.last()).toEqual({ kind: 'waiting', question: 'Why?' });
+    h.view.onToolInput(asked('Why?'));
+    h.view.onToolResult(answerResult('why?', 'Lower.'));
+    h.view.onToolResult(answerResult('Why? ', 'Padded.'));
+    expect(h.states).toEqual([{ kind: 'waiting', question: 'Why?' }]);
   });
 
-  it('clears the previous answer as soon as a different question starts', async () => {
+  it('clears the previous answer as soon as a different question starts', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(answerResult('Old?', 'Old answer.'));
-    await expect.poll(() => h.last()).toEqual(answered('Old?', 'Old answer.'));
-    await h.bridge.sendToolInput({ arguments: { question: 'New?' } });
-    await expect
-      .poll(() => h.last())
-      .toEqual({ kind: 'waiting', question: 'New?' });
+    h.view.onToolResult(answerResult('Old?', 'Old answer.'));
+    expect(h.last()).toEqual(answered('Old?', 'Old answer.'));
+    h.view.onToolInput(asked('New?'));
+    expect(h.last()).toEqual({ kind: 'waiting', question: 'New?' });
   });
 
-  it('keeps an answer shown when the input for that same question arrives after it', async () => {
+  it('keeps an answer shown when the input for that same question arrives after it', () => {
     const h = harness();
-    await h.connect(
-      (bridge) => void bridge.sendToolResult(answerResult('Same?', 'Yes.')),
-    );
-    await expect.poll(() => h.last()).toEqual(answered('Same?', 'Yes.'));
-    await h.bridge.sendToolInput({ arguments: { question: 'Same?' } });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(h.last()).toEqual(answered('Same?', 'Yes.'));
+    h.view.onToolResult(answerResult('Same?', 'Yes.'));
+    h.view.onToolInput(asked('Same?'));
+    expect(h.states).toEqual([answered('Same?', 'Yes.')]);
   });
 });
 
-describe('repeated and late deliveries', () => {
-  it('shows a repeated identical answer once', async () => {
+describe('repeated deliveries', () => {
+  it('shows a repeated identical answer once', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolInput({ arguments: { question: 'Again?' } });
-    await h.bridge.sendToolResult(answerResult('Again?', 'Once.'));
-    await h.bridge.sendToolResult(answerResult('Again?', 'Once.'));
-    await expect.poll(() => h.last()).toEqual(answered('Again?', 'Once.'));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(h.states.filter((state) => state.kind === 'answer')).toHaveLength(1);
+    h.view.onToolInput(asked('Again?'));
+    h.view.onToolResult(answerResult('Again?', 'Once.'));
+    h.view.onToolResult(answerResult('Again?', 'Once.'));
+    expect(h.states.filter((state) => state.kind === 'answer')).toEqual([
+      answered('Again?', 'Once.'),
+    ]);
   });
 
-  it('replaces an answer with a different answer to the same question', async () => {
+  it('replaces an answer with a different answer to the same question', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(answerResult('Q?', 'First.'));
-    await h.bridge.sendToolResult(answerResult('Q?', 'Second.'));
-    await expect.poll(() => h.last()).toEqual(answered('Q?', 'Second.'));
-  });
-
-  it('ignores deliveries after the view is disposed', async () => {
-    const h = harness();
-    const view = await h.connect();
-    await h.bridge.sendToolResult(answerResult('Q?', 'Shown.'));
-    await expect.poll(() => h.last()).toEqual(answered('Q?', 'Shown.'));
-    view.dispose();
-    await h.bridge
-      .sendToolResult(answerResult('Q?', 'Late.'))
-      .catch(() => undefined);
-    await h.bridge
-      .sendToolInput({ arguments: { question: 'Later?' } })
-      .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(h.states).toEqual([answered('Q?', 'Shown.')]);
-  });
-
-  it('ignores deliveries after the host asks the view to tear down', async () => {
-    const h = harness();
-    await h.connect();
-    await h.bridge.teardownResource({});
-    await h.bridge
-      .sendToolResult(answerResult('Q?', 'Late.'))
-      .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(h.states).toEqual([]);
+    h.view.onToolResult(answerResult('Q?', 'First.'));
+    h.view.onToolResult(answerResult('Q?', 'Second.'));
+    expect(h.last()).toEqual(answered('Q?', 'Second.'));
   });
 });
 
 describe('failures', () => {
-  it('shows a known safe failure text verbatim, drops the answer, and recovers on the next valid answer', async () => {
+  it('shows a known safe failure text verbatim, drops the answer, and recovers on the next valid answer', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(answerResult('Q?', 'Shown.'));
-    await expect.poll(() => h.last()).toEqual(answered('Q?', 'Shown.'));
-    await h.bridge.sendToolResult(failureResult(ANSWER_UNAVAILABLE_TEXT));
-    await expect
-      .poll(() => h.last())
-      .toEqual({ kind: 'problem', message: ANSWER_UNAVAILABLE_TEXT });
-    await h.bridge.sendToolResult(answerResult('Q?', 'Recovered.'));
-    await expect.poll(() => h.last()).toEqual(answered('Q?', 'Recovered.'));
+    h.view.onToolResult(answerResult('Q?', 'Shown.'));
+    h.view.onToolResult(failureResult(ANSWER_UNAVAILABLE_TEXT));
+    expect(h.last()).toEqual({
+      kind: 'problem',
+      message: ANSWER_UNAVAILABLE_TEXT,
+    });
+    h.view.onToolResult(answerResult('Q?', 'Recovered.'));
+    expect(h.last()).toEqual(answered('Q?', 'Recovered.'));
   });
 
-  it('never shows failure text it does not recognise', async () => {
+  it('never shows failure text it does not recognise', () => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(
-      failureResult('database exploded: canary-secret'),
-    );
-    await expect.poll(() => h.last()?.kind).toBe('problem');
+    h.view.onToolResult(failureResult('database exploded: canary-secret'));
+    expect(h.last()?.kind).toBe('problem');
     expect(JSON.stringify(h.states)).not.toContain('canary-secret');
   });
 
@@ -240,28 +145,26 @@ describe('failures', () => {
       'an empty answer',
       { content: [], structuredContent: { question: 'Q?', answer: '' } },
     ],
-  ])('treats %s as a problem and shows none of it', async (_name, result) => {
+  ])('treats %s as a problem and shows none of it', (_name, result) => {
     const h = harness();
-    await h.connect();
-    await h.bridge.sendToolResult(answerResult('Q?', 'Shown.'));
-    await h.bridge.sendToolResult(result);
-    await expect.poll(() => h.last()?.kind).toBe('problem');
+    h.view.onToolResult(answerResult('Q?', 'Shown.'));
+    h.view.onToolResult(result);
+    expect(h.last()?.kind).toBe('problem');
     expect(JSON.stringify(h.last())).not.toContain('canary-extra');
   });
 
   it.each([
     ['a missing question', { arguments: {} }],
-    ['a non-string question', { arguments: { question: 7 } }],
-    ['an empty question', { arguments: { question: '' } }],
+    ['a non-string question', asked(7)],
+    ['an empty question', asked('')],
   ])(
     'treats an input with %s as a problem and clears what was shown',
-    async (_name, input) => {
+    (_name, input) => {
       const h = harness();
-      await h.connect();
-      await h.bridge.sendToolResult(answerResult('Q?', 'Shown.'));
-      await expect.poll(() => h.last()).toEqual(answered('Q?', 'Shown.'));
-      await h.bridge.sendToolInput(input);
-      await expect.poll(() => h.last()?.kind).toBe('problem');
+      h.view.onToolResult(answerResult('Q?', 'Shown.'));
+      expect(h.last()).toEqual(answered('Q?', 'Shown.'));
+      h.view.onToolInput(input);
+      expect(h.last()?.kind).toBe('problem');
     },
   );
 });

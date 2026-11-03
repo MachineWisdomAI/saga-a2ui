@@ -45,7 +45,13 @@ export const demoSource = path.join(repoRoot, 'demo', 'lit-node');
 export const demoDist = path.join(repoRoot, 'apps', 'lit-host', 'dist', 'demo');
 
 /** The installed SDK packages the demonstration imports. */
-export const DEMO_SDK_PACKAGES = ['core', 'lit', 'components', 'mcp'] as const;
+export const DEMO_SDK_PACKAGES = [
+  'core',
+  'lit',
+  'components',
+  'mcp',
+  'lit-mcp-stack',
+] as const;
 /** Packages the demonstration's own sources import, besides the SDK packages, plus the build tooling its Vite configurations load. */
 export const DEMO_OWN_DEPENDENCIES = [
   '@a2ui/lit',
@@ -304,7 +310,9 @@ export function writeDownload(
         scripts: DOWNLOAD_SCRIPTS,
         engines: { node: '>=22.12.0' },
         dependencies,
-        overrides: { '@a2ui/markdown-it': '0.2.1' },
+        overrides: JSON.parse(
+          fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+        ).overrides,
       },
       null,
       2,

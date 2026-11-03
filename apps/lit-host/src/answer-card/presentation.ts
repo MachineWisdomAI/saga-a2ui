@@ -1,48 +1,24 @@
-import type { A2uiMessage } from '@a2ui/web_core/v0_9';
+import { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 import type { AnswerViewState } from '../mcp/answer-view.js';
 import { ANSWER_CATALOG_ID } from './contract.js';
 
 export const ANSWER_SURFACE_ID = 'answer';
 
-/** Creates the card; each field binds to the data model. */
-export const answerSurface = [
-  {
-    version: 'v0.9',
-    createSurface: {
-      surfaceId: ANSWER_SURFACE_ID,
-      catalogId: ANSWER_CATALOG_ID,
-    },
-  },
-  {
-    version: 'v0.9',
-    updateComponents: {
-      surfaceId: ANSWER_SURFACE_ID,
-      components: [
-        {
-          id: 'root',
-          component: 'AnswerCard',
-          state: { path: '/state' },
-          status: { path: '/status' },
-          question: { path: '/question' },
-          answer: { path: '/answer' },
-        },
-      ],
-    },
-  },
-] satisfies readonly A2uiMessage[];
+const AnswerCardDataSchema = z.object({
+  state: z.enum(['waiting', 'answer', 'problem']),
+  status: z.string(),
+  question: z.string(),
+  answer: z.string(),
+});
+export type AnswerCardData = z.infer<typeof AnswerCardDataSchema>;
 
 /**
  * The whole card for one view state. Every field is replaced, so nothing of a previous question,
  * answer or problem can remain beside a new state. The values are inert text wherever they came from.
  */
-export function answerCardData(state: AnswerViewState): readonly A2uiMessage[] {
-  const value = { state: state.kind, ...fields(state) };
-  return [
-    {
-      version: 'v0.9',
-      updateDataModel: { surfaceId: ANSWER_SURFACE_ID, value },
-    },
-  ];
+export function answerCardData(state: AnswerViewState): AnswerCardData {
+  return { state: state.kind, ...fields(state) };
 }
 
 function fields(state: AnswerViewState): {
@@ -70,3 +46,20 @@ function fields(state: AnswerViewState): {
       return { status: state.message, question: '', answer: '' };
   }
 }
+
+/** Creates the card; each field binds to the data model. It opens waiting for a question. */
+export const answerLayout = defineSurface({
+  surfaceId: ANSWER_SURFACE_ID,
+  catalogId: ANSWER_CATALOG_ID,
+  data: AnswerCardDataSchema,
+  initial: answerCardData({ kind: 'waiting' }),
+  root: {
+    component: 'AnswerCard',
+    bind: {
+      state: 'state',
+      status: 'status',
+      question: 'question',
+      answer: 'answer',
+    },
+  },
+});

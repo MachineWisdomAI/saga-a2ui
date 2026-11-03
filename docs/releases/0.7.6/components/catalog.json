@@ -1,0 +1,346 @@
+{
+  "schema": 1,
+  "release": {
+    "version": "0.7.6",
+    "channel": "stable",
+    "revision": "5995b1f0d2703f69582aa5def3db65cdea0967fc",
+    "source": "https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc",
+    "route": "/docs/releases/0.7.6/components/index"
+  },
+  "components": [
+    {
+      "id": "faithful-card",
+      "name": "FaithfulCard",
+      "summary": "A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible.",
+      "renderers": ["Lit", "React"],
+      "entries": [
+        {
+          "package": "@saga-a2ui/components",
+          "version": "0.7.6",
+          "import": "@saga-a2ui/components/faithful-card",
+          "role": "Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/components/src/faithful-card/index.ts",
+          "exports": {
+            "values": [
+              "CONTENT_POLICY_ELEMENT_ID",
+              "DEFAULT_CONTENT_POLICY",
+              "FAITHFUL_CARD_CATALOG_ID",
+              "FAITHFUL_CARD_CONTRACT_VERSION",
+              "FAITHFUL_CARD_STYLING",
+              "FaithfulCardApi",
+              "FaithfulCardApp",
+              "MAX_IMAGE_HOSTS",
+              "MAX_NESTING_LEVEL",
+              "cardData",
+              "cardLayout",
+              "closesWithParagraph",
+              "contentPolicyFromEmbedded",
+              "createCardView",
+              "createContentPolicy",
+              "createFaithfulCardReader",
+              "createImageConsentScope",
+              "describeContentFailure",
+              "embedContentPolicy",
+              "establishImageEnforcement",
+              "readCardResult",
+              "requestLinkOpen",
+              "resourcePermissionsOf"
+            ],
+            "types": [
+              "BlockNode",
+              "BlockedPresentation",
+              "CardAppIdentity",
+              "CardAppPolicySource",
+              "CardAppReaderOptions",
+              "CardAppTexts",
+              "CardContent",
+              "CardData",
+              "CardResultOutcome",
+              "CardResultReader",
+              "CardViewParts",
+              "CardViewSettings",
+              "ConsentSubscription",
+              "ContentFailure",
+              "ContentLevel",
+              "ContentPolicy",
+              "CreatePolicyResult",
+              "CreateReaderResult",
+              "FaithfulCardAppBuilder",
+              "FaithfulCardAppDefinition",
+              "FaithfulCardContent",
+              "FaithfulCardReader",
+              "FaithfulCardSettings",
+              "ImageConsent",
+              "ImageConsentScope",
+              "ImageConsentState",
+              "ImageContext",
+              "ImageDecision",
+              "ImageEnforcement",
+              "ImageOffer",
+              "InlineNode",
+              "InterpretedCard",
+              "LinkDecision",
+              "MarkdownDialect",
+              "MarkdownFragments",
+              "PolicyConfiguration",
+              "PolicyFailure",
+              "ReadResult",
+              "ReaderFailure",
+              "ResourcePolicy",
+              "TableAlignment",
+              "TableCell"
+            ]
+          },
+          "stylesheet": null
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "version": "0.7.6",
+          "import": "@saga-a2ui/react/faithful-card",
+          "role": "React rendering, catalog entry and trusted settings provider",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react/src/faithful-card/index.ts",
+          "exports": {
+            "values": [
+              "FaithfulCard",
+              "FaithfulCardProvider",
+              "FaithfulCardSurface",
+              "createFaithfulCardView",
+              "faithfulCardEntry",
+              "openFaithfulCardSurface",
+              "useHostLink"
+            ],
+            "types": [
+              "CardSurface",
+              "FaithfulCardProps",
+              "FaithfulCardView",
+              "HostLink",
+              "HostLinkOutcome"
+            ]
+          },
+          "stylesheet": "@saga-a2ui/react/faithful-card.css"
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "version": null,
+          "import": "@saga-a2ui/lit/faithful-card",
+          "role": "Lit rendering, catalog entry and content view",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit/src/faithful-card/index.ts",
+          "exports": {
+            "values": [
+              "CONTENT_VIEW_REQUEST",
+              "ContentViewRequest",
+              "FaithfulCardContentElement",
+              "FaithfulCardElement",
+              "bindHostLink",
+              "createFaithfulCardView",
+              "faithfulCardEntry",
+              "openFaithfulCardSurface",
+              "provideContentView",
+              "registerFaithfulCard",
+              "requestContentView"
+            ],
+            "types": [
+              "CardSurface",
+              "ContentView",
+              "HostLinkBinding",
+              "HostLinkOutcome"
+            ]
+          },
+          "stylesheet": null
+        },
+        {
+          "package": "@saga-a2ui/react-mcp-stack",
+          "version": "0.7.6",
+          "import": "@saga-a2ui/react-mcp-stack/faithful-card",
+          "role": "Starts a FaithfulCard application in React over MCP Apps",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react-mcp-stack/src/faithful-card/index.ts",
+          "exports": {
+            "values": [
+              "FaithfulCardApp",
+              "StartError",
+              "StartFailure",
+              "readingProfile",
+              "startFaithfulCardApp",
+              "useHostLink"
+            ],
+            "types": [
+              "CardChromeProps",
+              "CardContent",
+              "CardResultOutcome",
+              "CardResultReader",
+              "CardViewState",
+              "DeliveredResult",
+              "ErrorPhase",
+              "FaithfulCardAppDefinition",
+              "HostLink",
+              "HostLinkOutcome",
+              "ReadingProfile",
+              "RunningView",
+              "StartFailureKind",
+              "StartFaithfulCardOptions",
+              "StartMisuse"
+            ]
+          },
+          "stylesheet": "@saga-a2ui/react-mcp-stack/faithful-card.css"
+        },
+        {
+          "package": "@saga-a2ui/lit-mcp-stack",
+          "version": null,
+          "import": "@saga-a2ui/lit-mcp-stack/faithful-card",
+          "role": "Starts a FaithfulCard application in Lit over MCP Apps",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit-mcp-stack/src/faithful-card/index.ts",
+          "exports": {
+            "values": [
+              "FaithfulCardApp",
+              "StartError",
+              "StartFailure",
+              "bindHostLink",
+              "contentPolicyFromDocument",
+              "documentContentSecurityPolicies",
+              "readingProfile",
+              "startFaithfulCardApp"
+            ],
+            "types": [
+              "CardChrome",
+              "CardChromeParts",
+              "CardContent",
+              "CardResultOutcome",
+              "CardResultReader",
+              "CardViewState",
+              "DeliveredResult",
+              "ErrorPhase",
+              "FaithfulCardAppDefinition",
+              "HostLinkBinding",
+              "HostLinkOutcome",
+              "ReadingProfile",
+              "RunningView",
+              "StartFailureKind",
+              "StartFaithfulCardOptions",
+              "StartMisuse"
+            ]
+          },
+          "stylesheet": null
+        }
+      ],
+      "preview": {
+        "caption": "A FaithfulCard declared in an A2UI layout and bound to the body of a note.",
+        "source": "examples/pack1-consumer/src/main-card.ts",
+        "from": "const body = {",
+        "to": "} as const;",
+        "language": "ts",
+        "code": "const body = {\n  id: 'note-body',\n  component: 'FaithfulCard',\n  contractVersion: 1,\n  markdown: { path: 'body' },\n} as const;"
+      },
+      "route": "/docs/releases/0.7.6/components/faithful-card",
+      "usage": [
+        {
+          "label": "Style the FaithfulCard",
+          "route": "/docs/releases/0.7.6/guides/faithful-card-styling"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host.",
+          "route": "/docs/releases/0.7.6/guides/faithful-card-styling#qualification"
+        },
+        {
+          "statement": "The dated host observations used standalone probes that did not use SAGA's React adapter or MCP adapter, so they do not qualify this component in a host.",
+          "route": "/docs/releases/0.7.6/guides/host-compatibility-observations"
+        }
+      ]
+    },
+    {
+      "id": "action-button",
+      "name": "ActionButton",
+      "summary": "A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.",
+      "renderers": ["Lit", "React"],
+      "entries": [
+        {
+          "package": "@saga-a2ui/core",
+          "version": "0.7.6",
+          "import": "@saga-a2ui/core/actions/action-button-schema",
+          "role": "Renderer-neutral contract of the control: a strict schema with no action property",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/core/src/actions/action-button-schema.ts",
+          "exports": { "values": ["ActionButtonApi"], "types": [] },
+          "stylesheet": null
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "version": "0.7.6",
+          "import": "@saga-a2ui/react/actions",
+          "role": "React control and action setup",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react/src/actions/index.ts",
+          "exports": {
+            "values": [
+              "ActionButton",
+              "ActionButtonEntry",
+              "ActionsScope",
+              "InstanceHostProvider",
+              "createReactActions",
+              "useActionSetup"
+            ],
+            "types": [
+              "ActionButtonActivation",
+              "ActionButtonEvents",
+              "ReactActions",
+              "ReactActionsOptions"
+            ]
+          },
+          "stylesheet": null
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "version": null,
+          "import": "@saga-a2ui/lit/actions",
+          "role": "Lit control and action setup",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit/src/actions/index.ts",
+          "exports": {
+            "values": [
+              "ActionButton",
+              "ActionButtonElement",
+              "actionButtonEntry",
+              "createLitActions"
+            ],
+            "types": [
+              "ActionButtonActivation",
+              "ActionButtonEvents",
+              "LitActionsOptions"
+            ]
+          },
+          "stylesheet": null
+        }
+      ],
+      "preview": {
+        "caption": "Two ActionButton instances in a row of the notes application's layout. Neither names an action.",
+        "source": "examples/pack1-consumer/src/notes-surface.ts",
+        "from": "id: 'note-actions',",
+        "to": "text: 'Archive',",
+        "before": 1,
+        "after": 1,
+        "language": "ts",
+        "code": "{\n  id: 'note-actions',\n  component: 'Row',\n  children: ['row-read', 'row-archive'],\n},\n{\n  id: 'row-read',\n  component: 'ActionButton',\n  child: 'row-read-label',\n},\n{\n  id: 'row-read-label',\n  component: 'Line',\n  kind: 'body',\n  text: 'Mark read',\n},\n{\n  id: 'row-archive',\n  component: 'ActionButton',\n  child: 'row-archive-label',\n},\n{\n  id: 'row-archive-label',\n  component: 'Line',\n  kind: 'body',\n  text: 'Archive',\n},"
+      },
+      "route": "/docs/releases/0.7.6/components/action-button",
+      "usage": [],
+      "qualification": [
+        {
+          "statement": "No guide of this release records a renderer or host qualification for this control.",
+          "route": null
+        }
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "name": "SagaAttribution",
+      "reason": "`@saga-a2ui/react/attribution` is not an export of the packages at this revision. The credit component first appears in a later release."
+    },
+    {
+      "name": "Typed surfaces",
+      "reason": "`Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout."
+    },
+    {
+      "name": "Layout and basic components",
+      "reason": "Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward. The SDK does not document them as its own."
+    }
+  ]
+}

@@ -175,6 +175,7 @@ describe('the download', () => {
       'components',
       'core',
       'lit',
+      'lit-mcp-stack',
       'mcp',
     ]);
     // The recorded digests are those of the files in the download.

@@ -1,5 +1,5 @@
-import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9';
-import { Catalog } from '@a2ui/web_core/v0_9';
+import { A2uiLitElement, type LitComponentApi } from '@a2ui/lit/v0_9'; // saga-boundary: integration-import the answer card is the application's own component, authored against upstream's component API
+import { Catalog } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the application builds its own catalog from upstream's catalog value
 import { defineElements } from '@saga-a2ui/lit';
 import { html, nothing } from 'lit';
 import { ANSWER_CATALOG_ID, AnswerCardApi } from '../answer-card/contract.js';
@@ -36,14 +36,14 @@ const AnswerCard: LitComponentApi = {
   element: AnswerCardElement,
 };
 
-/** The answer view's own catalog: one component, no functions. */
+/** The answer view's own catalog: one component, no functions. The stack defines its element. */
 export const answerCatalog = new Catalog<LitComponentApi>(
   ANSWER_CATALOG_ID,
   'v0.9',
   [AnswerCard],
 );
 
-/** Explicit setup: defines the catalog's custom element. Repeating it is harmless. */
+/** Explicit setup for a page that does not start the view through the stack: defines the catalog's element. */
 export function registerAnswerElements(): void {
   defineElements([AnswerCard]);
 }
