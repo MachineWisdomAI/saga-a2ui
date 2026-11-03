@@ -220,7 +220,11 @@ function assemble(context: TargetContext): Assembled {
 
   let icon: DossierFile | undefined;
   if (connector.icon !== undefined) {
-    const read = readApplicationFile(loaded.directory, connector.icon);
+    const read = readApplicationFile(
+      loaded.directory,
+      connector.icon,
+      loaded.localBudget,
+    );
     if (read.ok) {
       const file = `assets/icon${path.extname(connector.icon).toLowerCase()}`;
       entries.push({ path: file, data: read.data });
@@ -241,7 +245,11 @@ function assemble(context: TargetContext): Assembled {
         });
         return;
       }
-      const read = readApplicationFile(loaded.directory, shot.file);
+      const read = readApplicationFile(
+        loaded.directory,
+        shot.file,
+        loaded.localBudget,
+      );
       if (!read.ok) {
         unreadable.push({ source: shot.file, reason: read.reason });
         return;
@@ -274,7 +282,12 @@ function assemble(context: TargetContext): Assembled {
   const bundle =
     bundleInput === undefined
       ? undefined
-      : assembleBundle(input, bundleInput, loaded.directory);
+      : assembleBundle(
+          input,
+          bundleInput,
+          loaded.directory,
+          loaded.localBudget,
+        );
   if (bundle !== undefined) entries.push(...bundle.entries);
 
   const { publisher } = input;

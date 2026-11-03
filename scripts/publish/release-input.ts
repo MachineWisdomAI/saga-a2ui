@@ -8,6 +8,7 @@ import {
   readBounded,
 } from './bounded-read.js';
 import { sha256 } from './record.js';
+import type { FileBudget } from './bounded-read.js';
 
 // The one file a maintainer writes to prepare an application for a host directory (CLI3 #66):
 // `saga-publication.json`, kept beside the application's source. It names the built application and
@@ -216,16 +217,21 @@ export interface LoadedReleaseInput {
   readonly directory: string;
   /** Digest of the file's bytes: any edit makes earlier evidence stale. */
   readonly sha256: string;
+  /** What every local file of this command may add up to, made once at the command's entry. */
+  readonly localBudget: FileBudget;
 }
 
 export type ReleaseInputResult =
   | { readonly ok: true; readonly loaded: LoadedReleaseInput }
   | { readonly ok: false; readonly problem: string };
 
-export function loadReleaseInput(file: string): ReleaseInputResult {
+export function loadReleaseInput(
+  file: string,
+  localBudget: FileBudget,
+): ReleaseInputResult {
   let bytes: Buffer;
   try {
-    bytes = readBounded(file, MAX_RELEASE_INPUT_BYTES);
+    bytes = readBounded(file, MAX_RELEASE_INPUT_BYTES, localBudget);
   } catch (error) {
     return {
       ok: false,
@@ -261,6 +267,7 @@ export function loadReleaseInput(file: string): ReleaseInputResult {
       input: parsed.data,
       directory: path.dirname(path.resolve(file)),
       sha256: sha256(bytes),
+      localBudget,
     },
   };
 }

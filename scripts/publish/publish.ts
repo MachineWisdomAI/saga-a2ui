@@ -16,6 +16,7 @@ import {
   MAX_RECORD_BYTES,
   MAX_VIEW_BYTES,
   MAX_VIEW_TOTAL_BYTES,
+  preparationBudget,
   readBounded,
 } from './bounded-read.js';
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
@@ -96,6 +97,8 @@ export interface PublishIo {
   readonly fetch?: FetchLike | undefined;
   /** What all responses of one assessment may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
   readonly networkBudget?: ByteBudget | undefined;
+  /** What all local files of one command may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly localBudget?: FileBudget | undefined;
   /** The ChatGPT manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
@@ -176,7 +179,12 @@ function readBuild(loaded: LoadedReleaseInput): {
       if (real !== realBuild && !real.startsWith(`${realBuild}${path.sep}`))
         throw new Error('is outside the build directory');
       if (!fs.statSync(real).isFile()) throw new Error('is not a file');
-      const data = readBounded(real, MAX_VIEW_BYTES, viewBudget);
+      const data = readBounded(
+        real,
+        MAX_VIEW_BYTES,
+        viewBudget,
+        loaded.localBudget,
+      );
       if (data.length === 0) throw new Error('is empty');
       return {
         file,
@@ -670,6 +678,7 @@ async function assess(
   if (request.invokeFixture !== undefined) {
     const loadedCalls = loadFixtureCalls(
       path.resolve(io.cwd, request.invokeFixture),
+      loaded.localBudget,
     );
     if (!loadedCalls.ok) {
       findings.push(
@@ -783,7 +792,10 @@ async function assess(
       };
   const extra: Finding[] = [];
   if (request.against !== undefined) {
-    const previous = readPreviousOutput(path.resolve(io.cwd, request.against));
+    const previous = readPreviousOutput(
+      path.resolve(io.cwd, request.against),
+      loaded.localBudget,
+    );
     if (previous.kind === 'missing') {
       extra.push(
         fail(
@@ -876,7 +888,10 @@ const GENERATED_FILES = new Set<string>([
 ]);
 
 /** Whether `directory` is something this tool generated: a real directory holding only its own files and a record in its format. */
-function isGeneratedOutput(directory: string): boolean {
+function isGeneratedOutput(
+  directory: string,
+  localBudget: FileBudget,
+): boolean {
   try {
     if (!fs.lstatSync(directory).isDirectory()) return false;
     const names = fs.readdirSync(directory);
@@ -891,6 +906,7 @@ function isGeneratedOutput(directory: string): boolean {
           readBounded(
             path.join(directory, RECORD_FILE),
             MAX_RECORD_BYTES,
+            localBudget,
           ).toString('utf8'),
         ) as { format?: unknown }
       ).format === RECORD_FORMAT
@@ -910,6 +926,7 @@ async function writeOutput(
   target: string,
   files: readonly OutputFile[],
   signal: AbortSignal | undefined,
+  localBudget: FileBudget,
 ): Promise<void> {
   if (!fs.existsSync(target) && !isSymlink(target)) {
     await createDirectoryInterruptibly(target, files, { signal });
@@ -925,7 +942,7 @@ async function writeOutput(
   const earlier = statDirectory(target);
   if (
     earlier === undefined ||
-    !isGeneratedOutput(target) ||
+    !isGeneratedOutput(target, localBudget) ||
     !isSameDirectory(statDirectory(target), earlier)
   ) {
     throw new TemplateError(
@@ -951,7 +968,7 @@ async function writeOutput(
   if (
     staged === undefined ||
     !isSameDirectory(statDirectory(target), earlier) ||
-    !isGeneratedOutput(target)
+    !isGeneratedOutput(target, localBudget)
   ) {
     discardStaging();
     throw replaced();
@@ -1120,7 +1137,10 @@ async function execute(
     );
     return EXIT_INTERRUPTED;
   }
-  const loaded = loadReleaseInput(path.resolve(io.cwd, request.release));
+  const loaded = loadReleaseInput(
+    path.resolve(io.cwd, request.release),
+    io.localBudget ?? preparationBudget(),
+  );
   if (!loaded.ok) {
     io.stderr(
       `saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`,
@@ -1173,7 +1193,12 @@ async function execute(
     if (archive !== null)
       files.push({ path: target.archiveFile, content: () => archive });
     try {
-      await writeOutput(destination, files, io.signal);
+      await writeOutput(
+        destination,
+        files,
+        io.signal,
+        loaded.loaded.localBudget,
+      );
     } catch (error) {
       if (error instanceof ExportInterrupted) {
         io.stderr(

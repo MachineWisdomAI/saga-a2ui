@@ -27,6 +27,7 @@ const reasonOf = (error: unknown): string =>
 export function readApplicationFile(
   directory: string,
   source: string,
+  budget: FileBudget,
 ): FileRead {
   try {
     const file = path.resolve(directory, source);
@@ -38,7 +39,7 @@ export function readApplicationFile(
       throw new Error('It is outside the directory of the release input.');
     return {
       ok: true,
-      data: readBounded(real, MAX_APPLICATION_FILE_BYTES),
+      data: readBounded(real, MAX_APPLICATION_FILE_BYTES, budget),
     };
   } catch (error) {
     return { ok: false, reason: reasonOf(error) };
@@ -62,6 +63,7 @@ const MAX_TREE_BYTES = 5 * 1024 * 1024;
 export function readApplicationTree(
   directory: string,
   source: string,
+  budget: FileBudget,
 ): TreeRead {
   try {
     const root = fs.realpathSync(directory);
@@ -72,7 +74,7 @@ export function readApplicationTree(
     if (!realTop.startsWith(`${root}${path.sep}`))
       throw new Error('It is outside the directory of the release input.');
     const files: { path: string; data: Buffer }[] = [];
-    const budget = new FileBudget(MAX_TREE_BYTES);
+    const treeBudget = new FileBudget(MAX_TREE_BYTES);
     const walk = (current: string, prefix: string): void => {
       for (const entry of fs
         .readdirSync(current, { withFileTypes: true })
@@ -89,7 +91,7 @@ export function readApplicationTree(
           // The allowance is taken before a file is allocated, so a large file is never read.
           let data: Buffer;
           try {
-            data = readBounded(full, MAX_TREE_BYTES, budget);
+            data = readBounded(full, MAX_TREE_BYTES, treeBudget, budget);
           } catch (error) {
             if (error instanceof InputRefused)
               throw new Error(

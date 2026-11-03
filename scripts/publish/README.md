@@ -320,6 +320,11 @@ wrote:
   allowance); lists an endpoint returns are cut at 200 items per page. A
   file the release input names is sized before it is read (`bounded-read.ts`): the input itself
   (1 MiB), each built view (8 MiB, 64 MiB together), an earlier output and an application asset.
+  Every local file one command reads (the release input, the fixture calls file, views, application
+  files and trees, an earlier record and archive) also draws on one allowance of 256 MiB, made at the
+  command's entry and carried on the loaded release input, so categories that are each within their
+  own limit cannot add up to more. The per-file and per-tree limits stay as the narrower bounds.
+  The documentation probe requests at most four pages at once (`PAGE_CONCURRENCY`).
 
 If a refusal needs repairing, change `RefusalKind`, the address list or `createAdmittedFetch` in
 `maintainer-network.ts` (or the limits in `bounded-read.ts`); there is no second copy of a rule to

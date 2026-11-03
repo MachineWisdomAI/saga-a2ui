@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/client/validators/ajv';
 import { readApplicationFile } from './application-files.js';
+import type { FileBudget } from './bounded-read.js';
 import { iconProblem } from './images.js';
 import type {
   ChatgptReleaseInput,
@@ -188,6 +189,7 @@ export interface AssembledPackage {
 export function assemblePackage(
   input: ChatgptReleaseInput,
   directory: string,
+  localBudget: FileBudget,
 ): AssembledPackage {
   const { listing } = input;
   const assetFields = {
@@ -215,7 +217,7 @@ export function assemblePackage(
     }
     stored.set(entryPath, source);
     // An asset is copied into a package that is published, so it must come from the application's own directory.
-    const read = readApplicationFile(directory, source);
+    const read = readApplicationFile(directory, source, localBudget);
     if (read.ok) entries.push({ path: entryPath, data: read.data });
     else unreadableAssets.push({ source, reason: read.reason });
   }
@@ -859,7 +861,11 @@ export function chatgptTarget(
           'The release input has no listing, which the chatgpt target needs.',
         );
       const findings: Finding[] = [];
-      const assembled = assemblePackage(input, context.loaded.directory);
+      const assembled = assemblePackage(
+        input,
+        context.loaded.directory,
+        context.loaded.localBudget,
+      );
       if (assembled.unreadableAssets.length > 0) {
         findings.push(
           fail(

@@ -6,6 +6,7 @@ import { candidateVersion, sourceRevision } from './packed-consumer.js';
 import type { StagedDemo } from './build-demo.js';
 import type { ByteBudget } from './maintainer-network.js';
 import type { FetchLike } from '@modelcontextprotocol/client';
+import type { FileBudget } from './publish/bounded-read.js';
 import type { ValidatorLoad } from './publish/chatgpt.js';
 import type { PluginValidator } from './publish/claude-plugin.js';
 import type { HandoffAction, HandoffRequest } from './publish/handoff.js';
@@ -80,6 +81,8 @@ export interface PublicationSupport {
   readonly fetch?: FetchLike | undefined;
   /** What all responses of one assessment may add up to; a test supplies a smaller one. */
   readonly networkBudget?: ByteBudget | undefined;
+  /** What all local files of one command may add up to; a test supplies a smaller one. */
+  readonly localBudget?: FileBudget | undefined;
   /** The ChatGPT manifest validators; the pinned official schemas when absent. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle; Claude Code's `claude plugin validate` when absent. */
@@ -585,6 +588,7 @@ const publishIo = (support: PublicationSupport, environment: Environment) => ({
   environment: support.environment,
   fetch: support.fetch,
   networkBudget: support.networkBudget,
+  localBudget: support.localBudget,
   validators: support.validators,
   pluginValidator: support.pluginValidator,
   now: support.now,

@@ -510,6 +510,40 @@ export function normalizeHosts(markdown: string): string {
   );
 }
 
+/** How many pages are requested at once. The byte budget bounds content; this bounds open requests and response objects. */
+export const PAGE_CONCURRENCY = 4;
+
+/**
+ * Applies `work` to each item with at most `limit` running at a time. Results keep the order of
+ * `items`. The first failure is thrown once the calls already started have settled, and no later
+ * item is started.
+ */
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failure: { readonly error: unknown } | undefined;
+  const worker = async (): Promise<void> => {
+    while (failure === undefined && next < items.length) {
+      const index = next;
+      next += 1;
+      try {
+        results[index] = await work(items[index] as T, index);
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker),
+  );
+  if (failure !== undefined) throw failure.error;
+  return results;
+}
+
 /** Hashes the hosted Markdown of each listed page. Mintlify serves any page's source at `<url>.md`. */
 export async function snapshotPages(
   site: string,
@@ -518,25 +552,23 @@ export async function snapshotPages(
 ): Promise<PageSnapshot> {
   const fetchPage = hostedFetch(connector);
   const base = site.replace(/\/+$/, '');
-  const entries = await Promise.all(
-    pages.map(async (page) => {
-      const response = await fetchPage(`${base}/${page}.md`, {
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-      });
-      const text = await bodyText(response);
-      const body = response.ok ? normalizeHosts(text) : null;
-      return [
-        page,
-        {
-          status: response.status,
-          sha256:
-            body === null
-              ? null
-              : createHash('sha256').update(body).digest('hex'),
-        },
-      ] as const;
-    }),
-  );
+  const entries = await mapBounded(pages, PAGE_CONCURRENCY, async (page) => {
+    const response = await fetchPage(`${base}/${page}.md`, {
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+    const text = await bodyText(response);
+    const body = response.ok ? normalizeHosts(text) : null;
+    return [
+      page,
+      {
+        status: response.status,
+        sha256:
+          body === null
+            ? null
+            : createHash('sha256').update(body).digest('hex'),
+      },
+    ] as const;
+  });
   return { site: base, pages: Object.fromEntries(entries) };
 }
 
@@ -590,8 +622,10 @@ export async function checkPages(
 ): Promise<PageCheck[]> {
   const fetchPage = hostedFetch(connector);
   const base = site.replace(/\/+$/, '');
-  return Promise.all(
-    pages.map(async (page): Promise<PageCheck> => {
+  return mapBounded(
+    pages,
+    PAGE_CONCURRENCY,
+    async (page): Promise<PageCheck> => {
       const expected = fencedBlocks(readCommitted(page));
       const response = await fetchPage(`${base}/${page}.md`, {
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
@@ -616,7 +650,7 @@ export async function checkPages(
         firstDifference,
         passed: response.ok && firstDifference === null,
       };
-    }),
+    },
   );
 }
 

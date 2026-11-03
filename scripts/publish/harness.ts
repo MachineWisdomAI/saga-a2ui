@@ -12,6 +12,7 @@ import {
 import type { ByteBudget } from '../maintainer-network.js';
 import { runCli, type Environment } from '../saga.js';
 import { discoverEndpoint, toolDigest } from './endpoint.js';
+import type { FileBudget } from './bounded-read.js';
 import type { ValidatorLoad } from './chatgpt.js';
 import type { PluginValidator } from './claude-plugin.js';
 import { publicationTool } from './publish.js';
@@ -245,6 +246,7 @@ export interface Options {
   readonly cwd?: string;
   readonly wire?: Wire;
   readonly networkBudget?: ByteBudget;
+  readonly localBudget?: FileBudget;
   readonly validators?: ValidatorLoad;
   readonly pluginValidator?: PluginValidator;
   readonly environment?: Record<string, string>;
@@ -270,6 +272,7 @@ export async function saga(
       environment: options.environment ?? {},
       fetch: (options.wire ?? wire()).fetch,
       networkBudget: options.networkBudget,
+      localBudget: options.localBudget,
       validators: options.validators,
       pluginValidator: options.pluginValidator,
       now: options.now,

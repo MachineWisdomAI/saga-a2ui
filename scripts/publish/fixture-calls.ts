@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { InputRefused, readBounded } from './bounded-read.js';
+import { InputRefused, readBounded, type FileBudget } from './bounded-read.js';
 
 // The fixture calls `saga publish check|prepare --invoke-fixture FILE` may make (CLI3 #66).
 //
@@ -47,10 +47,13 @@ export type FixtureCallsResult =
   | { readonly ok: false; readonly problem: string };
 
 /** Reads the maintainer's fixture calls. The text of a problem is fixed wording and never the file's own content. */
-export function loadFixtureCalls(file: string): FixtureCallsResult {
+export function loadFixtureCalls(
+  file: string,
+  localBudget: FileBudget,
+): FixtureCallsResult {
   let bytes: Buffer;
   try {
-    bytes = readBounded(file, MAX_FIXTURE_CALLS_BYTES);
+    bytes = readBounded(file, MAX_FIXTURE_CALLS_BYTES, localBudget);
   } catch (error) {
     return {
       ok: false,

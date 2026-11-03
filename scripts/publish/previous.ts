@@ -1,8 +1,11 @@
 import path from 'node:path';
 import {
   MAX_ARCHIVE_BYTES,
+  InputRefused,
   MAX_RECORD_BYTES,
+  preparationBudget,
   readBounded,
+  type FileBudget,
 } from './bounded-read.js';
 import {
   ARCHIVE_FILES,
@@ -36,13 +39,18 @@ export type PreviousOutput =
 
 const ARCHIVE_NAMES: readonly string[] = Object.values(ARCHIVE_FILES);
 
-export function readPreviousOutput(directory: string): PreviousOutput {
+/** `localBudget` is the command's allowance; a command that reads only this output (a handoff) gets its own. */
+export function readPreviousOutput(
+  directory: string,
+  localBudget: FileBudget = preparationBudget(),
+): PreviousOutput {
   let record: PublicationRecord;
   let recordSha256: string;
   try {
     const bytes = readBounded(
       path.join(directory, RECORD_FILE),
       MAX_RECORD_BYTES,
+      localBudget,
     );
     record = JSON.parse(bytes.toString('utf8')) as PublicationRecord;
     recordSha256 = sha256(bytes);
@@ -71,14 +79,21 @@ export function readPreviousOutput(directory: string): PreviousOutput {
     };
   let bytes: Buffer;
   try {
-    bytes = readBounded(path.join(directory, file), MAX_ARCHIVE_BYTES);
-  } catch {
+    bytes = readBounded(
+      path.join(directory, file),
+      MAX_ARCHIVE_BYTES,
+      localBudget,
+    );
+  } catch (error) {
     return {
       kind: 'found',
       record,
       recordSha256,
       intact: false,
-      problem: `The record names ${file}, which is missing.`,
+      problem:
+        error instanceof InputRefused
+          ? `The record names ${file}, which cannot be read: ${error.message}`
+          : `The record names ${file}, which is missing.`,
     };
   }
   return sha256(bytes) === record.artifact.sha256

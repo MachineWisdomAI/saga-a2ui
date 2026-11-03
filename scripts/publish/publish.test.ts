@@ -45,6 +45,15 @@ import {
   sha256,
   type PublicationRecord,
 } from './record.js';
+import {
+  readApplicationFile,
+  readApplicationTree,
+} from './application-files.js';
+import {
+  FileBudget,
+  MAX_PREPARATION_BYTES,
+  readBounded,
+} from './bounded-read.js';
 import { discoverEndpoint, toolDigest } from './endpoint.js';
 import { iconProblem } from './images.js';
 import { readZip } from './zip.js';
@@ -1266,6 +1275,99 @@ describe('tool calls', () => {
     expect(run.out).toMatch(/get_status: error/);
     expect(seen.methods).not.toContain('tools/call');
   }, 30_000);
+});
+
+describe('the local input allowance', () => {
+  it('draws the release input, a view, the assets and the fixture calls on one allowance', async () => {
+    const calls = await fixtureCallsFile();
+    // What a whole run reads from disk when every category is within its own limit.
+    const measured = new FileBudget(MAX_PREPARATION_BYTES);
+    expect(
+      (
+        await check(copyFixture(), { localBudget: measured }, [
+          '--invoke-fixture',
+          calls,
+        ])
+      ).code,
+    ).toBe(0);
+    const read = MAX_PREPARATION_BYTES - measured.remaining;
+    expect(read).toBeGreaterThan(0);
+
+    // One byte less than the run needs: no single file is over any limit, yet the last read is refused.
+    const seen = wire();
+    const run = await check(
+      copyFixture(),
+      { wire: seen, localBudget: new FileBudget(read - 1) },
+      ['--invoke-fixture', calls],
+    );
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/files together are too large/);
+    expect(seen.methods).not.toContain('tools/call');
+  }, 30_000);
+
+  it('refuses a release input that the allowance cannot hold', async () => {
+    const run = await check(copyFixture(), { localBudget: new FileBudget(1) });
+    expect(run.code).not.toBe(0);
+    expect(run.err).toMatch(/files together are too large/);
+  });
+
+  it('counts an earlier output against the same allowance', async () => {
+    const out = path.join(workspace(), 'earlier');
+    expect((await prepare(copyFixture(), out)).code).toBe(0);
+    const measured = new FileBudget(MAX_PREPARATION_BYTES);
+    const base = await check(copyFixture(), { localBudget: measured }, [
+      '--against',
+      out,
+    ]);
+    expect(base.code).toBe(0);
+    const read = MAX_PREPARATION_BYTES - measured.remaining;
+    const refused = await check(
+      copyFixture(),
+      { localBudget: new FileBudget(read - 1) },
+      ['--against', out],
+    );
+    expect(refused.code).toBe(1);
+    expect(refused.out).toMatch(/record\.integrity/);
+    expect(refused.out).toMatch(/files together are too large/);
+  }, 30_000);
+
+  it('lets several individually valid trees and files exhaust one allowance', () => {
+    const app = workspace();
+    for (const name of ['a', 'b', 'c'])
+      (fs.mkdirSync(path.join(app, name), { recursive: true }),
+        fs.writeFileSync(path.join(app, name, 'f.txt'), Buffer.alloc(1000)));
+    fs.writeFileSync(path.join(app, 'readme.md'), Buffer.alloc(1000));
+    const shared = new FileBudget(3500);
+    expect(readApplicationTree(app, 'a', shared).ok).toBe(true);
+    expect(readApplicationTree(app, 'b', shared).ok).toBe(true);
+    expect(readApplicationFile(app, 'readme.md', shared).ok).toBe(true);
+    // 500 bytes remain: the next tree is within its own 5 MiB limit but not within what is left.
+    expect(shared.remaining).toBe(500);
+    const refused = readApplicationTree(app, 'c', shared);
+    expect(refused.ok).toBe(false);
+    expect(shared.remaining).toBe(500);
+  });
+
+  it('refuses before allocating when any one allowance cannot hold the file', () => {
+    const file = path.join(workspace(), 'big.bin');
+    fs.writeFileSync(file, Buffer.alloc(4096));
+    const allocate = vi.spyOn(Buffer, 'allocUnsafe');
+    try {
+      const roomy = new FileBudget(1_000_000);
+      const tight = new FileBudget(4095);
+      expect(() => readBounded(file, 1_000_000, roomy, tight)).toThrow(
+        /together are too large/,
+      );
+      expect(allocate).not.toHaveBeenCalled();
+      // A refusal takes nothing from either allowance.
+      expect(roomy.remaining).toBe(1_000_000);
+      expect(tight.remaining).toBe(4095);
+      expect(readBounded(file, 1_000_000, roomy, undefined)).toHaveLength(4096);
+      expect(roomy.remaining).toBe(1_000_000 - 4096);
+    } finally {
+      allocate.mockRestore();
+    }
+  });
 });
 
 /** The tools/list answer with the first tool's description or read-only hint changed, as an endpoint could change what it says. */
