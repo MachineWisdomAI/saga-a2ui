@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,6 +22,7 @@ import {
   type EndpointSnapshot,
 } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
+import { sourceOf } from './source.js';
 import {
   ARCHIVE_FILES,
   RECORD_FILE,
@@ -250,23 +250,6 @@ function installedVersion(directory: string, name: string): string | null {
       // not here; look one level up
     }
     if (path.dirname(current) === current) return null;
-  }
-}
-
-function sourceOf(directory: string): PublicationRecord['source'] {
-  const git = (args: string[]): string =>
-    execFileSync('git', args, {
-      cwd: directory,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  try {
-    return {
-      revision: git(['rev-parse', 'HEAD']),
-      dirty: git(['status', '--porcelain=v1', '--untracked-files=no']) !== '',
-    };
-  } catch {
-    return { revision: null, dirty: null };
   }
 }
 
