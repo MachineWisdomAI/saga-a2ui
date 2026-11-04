@@ -23,8 +23,10 @@ import { secretKinds } from './secrets.js';
 // host's portal, so the work can be interrupted, resumed and handed to someone else without a
 // second upload and without a prepared package ever being mistaken for a live listing.
 //
-// It calls no network and no host. There is no submission API here, no hosted service and no
-// credential: the maintainer submits in the portal as the intended publisher, and this module
+// Apart from `begin`, it calls no network and no host. `begin` assesses the release again as `check`
+// does: it reads the application's endpoint, and calls a tool there only for a fixture calls file the
+// maintainer names. No action here calls a host directory. There is no submission API here, no hosted
+// service and no credential: the maintainer submits in the portal as the intended publisher, and this module
 // writes down the attempt before and the portal's reference after.
 //
 // The record is a directory of numbered event files, appended and never rewritten:
@@ -540,7 +542,9 @@ function freshnessOf(
   if (current.kind === 'missing')
     return { kind: 'unusable', problem: current.problem };
   if (!current.intact) return { kind: 'unusable', problem: current.problem };
-  const changes = staleness(begin.release, current.record);
+  const changes = staleness(begin.release, current.record, {
+    historicalPin: true,
+  });
   if (current.record.verdict !== 'ready')
     changes.push(
       `the current preparation is ${current.record.verdict}, not ready`,

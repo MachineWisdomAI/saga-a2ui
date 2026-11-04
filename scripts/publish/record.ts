@@ -205,6 +205,13 @@ export interface PublicationRecord {
   };
   readonly fixture: {
     readonly declared: number;
+    /**
+     * The canonical digest of the calls the maintainer declared (each tool, the `toolSha256` it was
+     * reviewed against and its arguments, in order), or `null` when none were. Only the digest is
+     * kept, never the arguments: they may hold domain data. It binds the results below to the calls
+     * that produced them, because two different calls can return the same result.
+     */
+    readonly callsSha256: string | null;
     readonly invoked: boolean;
     readonly invocations: readonly FixtureInvocation[];
   };

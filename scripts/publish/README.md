@@ -167,7 +167,9 @@ and, much later, a listing someone can install. `handoff` is the record of that 
 of your choosing, so it can stop at any point (a closed browser, a colleague taking over, a timeout whose
 outcome nobody saw) and resume without a second upload and without a prepared package, a submission or an
 approval being mistaken for a live listing. Apart from `begin`, which assesses the release again
-(below), it reads and writes local files only. It calls no host, has no submission interface, hosting or credential of its own, and submits nothing: the
+(below), every action reads and writes local files only and makes no network call. `begin` reads the
+application's own endpoint as `check` does, and calls a tool there only for a fixture calls file you name.
+No action calls a host directory, and the command has no submission interface, hosting or credential of its own, and submits nothing: the
 publisher submits by hand in the host's documented flow
 ([ChatGPT](https://developers.openai.com/plugins/deploy/submission),
 [Claude](https://claude.com/docs/connectors/building/submission), portal
@@ -197,12 +199,16 @@ fixture invocation and the package digest). What is pinned is the fresh assessme
 record. A prepared output that was edited, or that the release has moved on from, is refused with what
 differs.
 
-The fixture invocation is part of that comparison: the calls declared, whether they ran, and the digest
-of each result. A preparation made with `--invoke-fixture` begins only with the same fixture file and
-the same results, so omitting the fixture, a changed result or a failing call is refused, and a fixture
-given over a preparation made without one is refused as well. A preparation made without a fixture still
-begins without one, and the handoff records that no fixture ran. A handoff begun before the fixture was
-pinned holds no fixture section, and `status --prepared` has nothing of it to compare.
+The fixture invocation is part of that comparison: a digest of the calls declared (each tool, the
+definition digest it is pinned to and its arguments, in order), whether they ran, and the digest of each
+result. Only the digest of the calls is recorded, never the arguments. A preparation made with
+`--invoke-fixture` begins only with the same declared calls and the same results, so omitting the
+fixture, a changed result, a failing call or a call with other arguments (even one that returns the same
+result) is refused, and a fixture given over a preparation made without one is refused as well. A
+preparation made without a fixture still begins without one, and the handoff records that no fixture
+ran. Every record `prepare` writes holds the fixture section, so a prepared record without it is
+refused, whether or not `--invoke-fixture` is given. Only the pinned release of a handoff begun before
+the section was pinned may lack it, and `status --prepared` has nothing of it to compare.
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
 digest in its record) and whose verdict is `ready`, checks it against that fresh assessment, and pins the assessment: the host (target, directory name,

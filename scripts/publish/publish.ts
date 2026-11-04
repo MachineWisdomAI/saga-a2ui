@@ -772,6 +772,7 @@ async function assess(
       },
       fixture: {
         declared: declared.length,
+        callsSha256: declaredCallsDigest(declared),
         invoked: request.invokeFixture !== undefined && invocations.length > 0,
         invocations,
       },
@@ -1156,6 +1157,22 @@ async function reassessRelease(
       problem: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * The digest that identifies the calls a maintainer declared: tool, reviewed definition digest and
+ * arguments, in the order given. The arguments are digested and never recorded (they may hold domain
+ * data). `null` when no call was declared.
+ */
+function declaredCallsDigest(calls: readonly FixtureCall[]): string | null {
+  if (calls.length === 0) return null;
+  return canonicalDigest(
+    calls.map((call) => ({
+      tool: call.tool,
+      toolSha256: call.toolSha256,
+      arguments: call.arguments ?? {},
+    })),
+  );
 }
 
 /** The target a request names, built with the seams this run was given, or `undefined` when no such target exists. */

@@ -14,6 +14,7 @@ import {
   type Options,
   type Run,
 } from './harness.js';
+import { staleness } from './previous.js';
 import { ARCHIVE_FILES, RECORD_FILE, sha256 } from './record.js';
 
 // `saga publish handoff` as a maintainer runs it (CLI5 #68), on the fixture application of harness.ts:
@@ -627,8 +628,144 @@ describe('beginning a handoff', () => {
       expect(s.assessed).not.toContain('tools/call');
       expect(events(cwd)[0]!.release.fixture).toEqual({
         declared: 0,
+        callsSha256: null,
         invoked: false,
         invocations: [],
+      });
+    });
+
+    /** Removes the fixture section from a prepared record by hand; the package is untouched, so its digest still matches. */
+    function withoutFixtureSection(cwd: string, out: string): void {
+      const file = path.join(cwd, out, RECORD_FILE);
+      const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+        string,
+        any
+      >;
+      expect(record.fixture).toBeDefined();
+      delete record.fixture;
+      fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+    }
+
+    it('does not begin from a prepared record whose fixture section was removed, with the fixture or without it', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      withoutFixtureSection(cwd, out);
+
+      for (const extra of [[], ['--invoke-fixture', calls]]) {
+        const s = session(cwd, app);
+        const run = await s.run(beginArgs(out, ...extra));
+        expect(run.code, run.out + run.err).toBe(1);
+        expect(run.err).toMatch(/does not match the release as assessed now/);
+        expect(run.err).toMatch(
+          /the fixture evidence is missing from the earlier record/,
+        );
+        expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+      }
+    });
+
+    it('does not begin from a fixtureless prepared record whose fixture section was removed', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      withoutFixtureSection(cwd, out);
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(
+        /the fixture evidence is missing from the earlier record/,
+      );
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the declared call has other arguments, though it returns the same result', async () => {
+      // An endpoint that ignores its arguments answers every call alike.
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile();
+      const made = await prepare(
+        app,
+        'chatgpt',
+        'publication',
+        { cwd, wire: wire(answering('same answer')) },
+        ['--invoke-fixture', calls],
+      );
+      expect(made.code, made.out + made.err).toBe(0);
+      const other = await fixtureCallsFile({
+        calls: [{ tool: 'get_status', arguments: { verbose: true } }],
+      });
+      const s = session(cwd, app);
+      const run = await s.run(
+        beginArgs('publication', '--invoke-fixture', other),
+        { wire: wire(answering('same answer')) },
+      );
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('pins a digest of the declared calls and keeps the arguments out of every record', async () => {
+      const marker = 'argument-marker-7f3a';
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile({
+        calls: [{ tool: 'get_status', arguments: { note: marker } }],
+      });
+      const made = await prepare(
+        app,
+        'chatgpt',
+        'publication',
+        { cwd, wire: wire(answering('same answer')) },
+        ['--invoke-fixture', calls],
+      );
+      expect(made.code, made.out + made.err).toBe(0);
+      const s = session(cwd, app);
+      const run = await s.run(
+        beginArgs('publication', '--invoke-fixture', calls),
+        { wire: wire(answering('same answer')) },
+      );
+      expect(run.code, run.out + run.err).toBe(0);
+
+      const pinned = events(cwd)[0]!.release.fixture;
+      expect(pinned.callsSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(pinned.callsSha256).toBe(
+        recordOf(path.join(cwd, 'publication')).fixture.callsSha256,
+      );
+      const everything = [
+        fs.readFileSync(path.join(cwd, 'publication', RECORD_FILE), 'utf8'),
+        ...fs
+          .readdirSync(path.join(cwd, HANDOFF))
+          .map((name) =>
+            fs.readFileSync(path.join(cwd, HANDOFF, name), 'utf8'),
+          ),
+        run.out,
+        run.err,
+      ].join('\n');
+      expect(everything).not.toContain(marker);
+    });
+
+    describe('comparing a pinned release with a newer preparation', () => {
+      const fixtureSection = {
+        declared: 1,
+        callsSha256: 'a'.repeat(64),
+        invoked: true,
+        invocations: [],
+      };
+
+      it('requires the fixture section of a prepared record, and only a pin from an earlier handoff may lack it', async () => {
+        const { cwd, out } = await preparedWithFixture();
+        const { fixture: _fixture, ...bare } = recordOf(path.join(cwd, out));
+        const current = recordOf(path.join(cwd, out));
+
+        expect(staleness(bare, current)).toEqual([
+          'the fixture evidence is missing from the earlier record',
+        ]);
+        expect(staleness(bare, current, { historicalPin: true })).toEqual([]);
+        expect(staleness(current, current)).toEqual([]);
+        expect(
+          staleness({ ...current, fixture: fixtureSection }, current, {
+            historicalPin: true,
+          }),
+        ).toEqual(['the fixture invocation changed']);
       });
     });
   });
