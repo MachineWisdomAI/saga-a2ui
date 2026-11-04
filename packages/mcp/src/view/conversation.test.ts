@@ -5,7 +5,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { conversationFromApp } from './conversation.js';
+import { CONVERSATION_LIMITS, conversationFromApp } from './conversation.js';
 
 // The conversation, exercised with a real `App` and `AppBridge` joined by an in-memory transport.
 // The host's own handlers are the only place a context update or a message can arrive, so what they
@@ -434,5 +434,188 @@ describe('a view that has ended', () => {
       outcome: 'unavailable',
       stage: 'message',
     });
+  });
+});
+
+describe('admitting payloads before they reach the host', () => {
+  const LIMITS = CONVERSATION_LIMITS;
+  const kinds = (recorded: Recorded[]) => recorded.map((r) => r.kind);
+
+  it('admits a message and a context exactly at the budgets, and sends them unchanged', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const text = 'm'.repeat(LIMITS.messageBytes);
+    const contextText = 'c'.repeat(LIMITS.contextTextBytes);
+    // The walk counts the braces, key, quotes and a separator byte as 9 around the string.
+    const data = { k: 'd'.repeat(LIMITS.contextDataBytes - 9) };
+    await expect(
+      conversationFromApp(app).appendMessage(text, {
+        context: { text: contextText, data },
+      }),
+    ).resolves.toEqual({ outcome: 'appended' });
+    expect(recorded).toEqual([
+      {
+        kind: 'context',
+        params: {
+          content: [{ type: 'text', text: contextText }],
+          structuredContent: data,
+        },
+      },
+      {
+        kind: 'message',
+        params: { role: 'user', content: [{ type: 'text', text }] },
+      },
+    ]);
+  });
+
+  it('counts a message in UTF-8 bytes, not characters', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const fits = '€'.repeat(Math.floor(LIMITS.messageBytes / 3));
+    const tooMuch = '€'.repeat(Math.floor(LIMITS.messageBytes / 3) + 1);
+    await expect(conversationFromApp(app).appendMessage(fits)).resolves.toEqual(
+      { outcome: 'appended' },
+    );
+    await expect(
+      conversationFromApp(app).appendMessage(tooMuch),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'message' });
+    expect(kinds(recorded)).toEqual(['message']);
+  });
+
+  it('refuses an over-budget message without sending it or its context', async () => {
+    const { app, recorded } = await connected(BOTH);
+    await expect(
+      conversationFromApp(app).appendMessage(
+        'x'.repeat(LIMITS.messageBytes + 1),
+        {
+          context: CONTEXT,
+        },
+      ),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'message' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('reports an over-budget message as unavailable when the host has no message capability or the view ended', async () => {
+    const big = 'x'.repeat(LIMITS.messageBytes + 1);
+    const noMessage = await connected({ updateModelContext: {} });
+    await expect(
+      conversationFromApp(noMessage.app).appendMessage(big),
+    ).resolves.toEqual({ outcome: 'unavailable', stage: 'message' });
+    const { app, recorded } = await connected(BOTH);
+    const lifetime = new AbortController();
+    lifetime.abort();
+    await expect(
+      conversationFromApp(app, lifetime.signal).appendMessage(big),
+    ).resolves.toEqual({ outcome: 'unavailable', stage: 'message' });
+    expect(recorded).toEqual([]);
+  });
+
+  describe.each([
+    {
+      what: 'context text',
+      context: { text: 'x'.repeat(LIMITS.contextTextBytes + 1) },
+    },
+    {
+      what: 'structured data larger than its budget',
+      context: {
+        text: 'The board',
+        data: { rows: 'x'.repeat(LIMITS.contextDataBytes) },
+      },
+    },
+    {
+      what: 'structured data made of many small values',
+      context: {
+        text: 'The board',
+        data: { cells: new Array(LIMITS.contextDataBytes).fill(0) },
+      },
+    },
+    {
+      what: 'structured data nested beyond the depth limit',
+      context: {
+        text: 'The board',
+        data: Array.from({ length: 100 }).reduce<Record<string, unknown>>(
+          (inner) => ({ inner }),
+          {},
+        ),
+      },
+    },
+    {
+      what: 'structured data that refers to itself',
+      context: {
+        text: 'The board',
+        data: (() => {
+          const loop: Record<string, unknown> = {};
+          loop.self = loop;
+          return loop;
+        })(),
+      },
+    },
+    {
+      what: 'structured data that a Map hides its size in',
+      context: {
+        text: 'The board',
+        data: { map: new Map([['k', 'x'.repeat(LIMITS.contextDataBytes)]]) },
+      },
+    },
+    {
+      what: 'structured data with a getter that throws',
+      context: {
+        text: 'The board',
+        data: {
+          get boom(): never {
+            throw new Error('nope');
+          },
+        },
+      },
+    },
+  ])('an over-budget context: $what', ({ context }) => {
+    it('is refused at the context stage by default, and nothing is sent', async () => {
+      const { app, recorded } = await connected(BOTH);
+      await expect(
+        conversationFromApp(app).appendMessage('Your move', { context }),
+      ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+      expect(recorded).toEqual([]);
+    });
+
+    it('is skipped when best effort, and the message is still sent', async () => {
+      const { app, recorded } = await connected(BOTH);
+      await expect(
+        conversationFromApp(app).appendMessage('Your move', {
+          context: { ...context, bestEffort: true },
+        }),
+      ).resolves.toEqual({ outcome: 'appended', context: 'denied' });
+      expect(kinds(recorded)).toEqual(['message']);
+    });
+  });
+
+  it('does not walk far into an enormous array before refusing it', async () => {
+    const { app, recorded } = await connected(BOTH);
+    let visited = 0;
+    const huge = new Proxy([] as unknown[], {
+      get(target, key, receiver) {
+        if (key === 'length') return 1e9;
+        if (typeof key === 'string' && /^\d+$/.test(key)) {
+          visited += 1;
+          return 0;
+        }
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+      has: () => true,
+    });
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data: { huge } },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(visited).toBeLessThanOrEqual(LIMITS.contextDataBytes);
+    expect(recorded).toEqual([]);
+  });
+
+  it('keeps unavailable ahead of a refusal when the context capability is withheld', async () => {
+    const { app, recorded } = await connected({ message: {} });
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'x'.repeat(LIMITS.contextTextBytes + 1) },
+      }),
+    ).resolves.toEqual({ outcome: 'unavailable', stage: 'context' });
+    expect(recorded).toEqual([]);
   });
 });

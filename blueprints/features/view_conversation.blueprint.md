@@ -117,7 +117,7 @@ export const NO_CONVERSATION: Conversation; // every call resolves {outcome: 'un
 | Outcome | Meaning |
 | --- | --- |
 | `appended` | The host accepted the message. It does not show that the assistant replied, or what it said. |
-| `denied` | The host refused the request, for example because the person declined or a policy blocked it. |
+| `denied` | The host refused the request, for example because the person declined or a policy blocked it, or the delivery refused a payload over its size budget before sending it. |
 | `unavailable` | The host advertises no capability for the request, or the view has ended. That request was not sent. |
 | `failed` | The request could not complete, for example because the connection was lost or it timed out. |
 
@@ -138,6 +138,8 @@ The verbs describe the conversation, not one delivery protocol:
 | --- | --- | --- |
 | MCP Apps | With `context`: `ui/update-model-context` first, `text` as a content block and `data` as `structuredContent`, only when `getHostCapabilities().updateModelContext` is present. Then `ui/message` with role `"user"` and one text content block, only when `getHostCapabilities().message` is present. | Proposed |
 | A2A | One `message/send` with a `Message` of role `"user"` in the view's current `contextId`. `context` would become a data part on that message. | Not proposed; the [A2A delivery issue](https://github.com/MachineWisdomAI/saga-a2ui/issues/198) owns it |
+
+**Payload budgets.** The delivery admits a payload before it dispatches anything, so a view cannot hand the host an unbounded one. The MCP Apps implementation limits the message text to 16 KiB and the context text to 16 KiB, both in UTF-8 bytes, and the structured context data to 64 KiB of JSON-like size. The data must be plain objects, arrays and primitives, with at most 32 levels of nesting and no cycles. The check stops reading once a budget is passed. An over-budget message resolves `denied` at the message stage with nothing sent, not even its context. An over-budget context resolves `denied` at the context stage and follows the ordinary context rules, so `bestEffort` still sends the message. The delivery never truncates or rewrites a payload: the application owns the wording and the meaning. No supported host publishes a smaller limit, so these are the SDK's own; reassess them if every supported host publishes and enforces one.
 
 **Trust.** Context comes from the view. It is a snapshot that helps the assistant, not authority. The server still validates every move, including its `expectedMoveNumber`.
 
@@ -183,6 +185,7 @@ Its server stays authoritative over application state. An appended message is a 
   - Only `ui/message` is recorded.
   - The result is `{outcome: 'appended', context: <that outcome>}`.
 - **Message refused or failing.** An `isError` answer resolves `denied` and a rejected request resolves `failed`, both at the message stage. A missing `message` capability resolves `unavailable` at the message stage.
+- **Payload budgets.** A message, a context text or context data over its budget sends nothing and resolves `denied` at the stage described above; a payload exactly at the budget is sent unchanged, and sizes count UTF-8 bytes.
 - **Ended view.** Aborting the lifetime before or during either request resolves `unavailable`, sends nothing further and ignores the late answer.
 - **Parity.** The same cases pass through `ViewHost.conversation` from both stacks, in Chromium against the local MCP Apps host fixture (`apps/lit-host/e2e/host-fixture`).
 - **Exports and boundary.** Each package's `exports.test.ts` lists the new entries, and consumer code reaches the capability without importing the bridge.
