@@ -50,6 +50,18 @@ function isIssuedFor(resource: unknown, expected: URL): boolean {
   return !named.includes('#') && named === expected.href;
 }
 
+/**
+ * Whether a value is a usable timestamp in seconds: a finite number no larger in magnitude than
+ * the largest integer a double holds exactly. Fractions are allowed (`Date.now() / 1000`).
+ */
+function isSafeSeconds(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= Number.MAX_SAFE_INTEGER
+  );
+}
+
 /** Who is calling, as established by the verifier for exactly one request. */
 export interface VerifiedIdentity {
   readonly accountId: string;
@@ -173,10 +185,12 @@ export async function authenticate(
     return { ok: false, status: 500, error: 'server_error', fault: error };
   }
   if (gate.aborted) return { ok: false, status: 500, error: 'server_error' }; // a late identity is dropped, never snapshotted
-  if (
-    typeof authInfo.expiresAt !== 'number' ||
-    authInfo.expiresAt <= nowSeconds()
-  ) {
+  // Every comparison with NaN is false, and nothing is later than Infinity, so a non-finite
+  // reading on either side would read as "not expired" forever. Both must be finite and safe.
+  const now = nowSeconds();
+  if (!isSafeSeconds(now))
+    return { ok: false, status: 500, error: 'server_error' };
+  if (!isSafeSeconds(authInfo.expiresAt) || authInfo.expiresAt <= now) {
     return reject(requirement, 401, 'invalid_token', 'Token has expired');
   }
   if (!isIssuedFor(authInfo.resource, requirement.resource)) {
