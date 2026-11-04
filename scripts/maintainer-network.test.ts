@@ -1,19 +1,28 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { FetchLike } from '@modelcontextprotocol/client';
-import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
-import { describe, expect, it } from 'vitest';
+import {
+  type FetchLike,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
+import {
+  createMcpHandler,
+  fromJsonSchema,
+  McpServer,
+} from '@modelcontextprotocol/server';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   admitUrl,
   ByteBudget,
   createAdmittedFetch,
   createConnector,
+  createMcpClient,
   isAdmittedAddress,
   MAX_PAGE_ITEMS,
   NetworkRefused,
   openAdmittedMcp,
   refusalOf,
+  SchemaIdentifierValidator,
 } from './maintainer-network.js';
 
 // The admission boundary of every maintainer network command. Each case states the request the
@@ -479,5 +488,156 @@ describe('MCP operations', () => {
     });
     expect(await refusal(() => session)).toBe('redirect');
     expect(seenAuth).toEqual(['Bearer synthetic-bearer-0123456789']);
+  });
+});
+
+// A peer's tool list carries JSON Schemas that the MCP client compiles with its bundled engine before
+// a call, once a listing is cached. That engine parses every schema identifier and reference with a
+// URI parser this repository does not control, so identifiers are constrained before compilation: a
+// plain absolute or relative URI reference, optionally with a fragment. Anything else refuses that
+// one tool, is never compiled, and the peer's other tools keep working.
+describe('remote schema identifiers', () => {
+  const URL_ = 'https://peer.example.test/mcp';
+  // The peer's own server compiles what it registers, so the hostile schema is substituted in the
+  // `tools/list` answer on the wire, as a peer that does not use this SDK would send it.
+  const peer = (called: string[], outputSchema: Record<string, unknown>) => {
+    const handler = createMcpHandler(() => {
+      const server = new McpServer({ name: 'peer', version: '1.0.0' });
+      server.registerTool(
+        'probe',
+        {
+          inputSchema: z.object({}),
+          outputSchema: fromJsonSchema({ type: 'object' }),
+        },
+        () => (
+          called.push('probe'),
+          { content: [{ type: 'text', text: 'done' }], structuredContent: {} }
+        ),
+      );
+      return server;
+    });
+    const substitute = (message: unknown): unknown => {
+      const tools = (message as { result?: { tools?: unknown } } | null)?.result
+        ?.tools;
+      if (Array.isArray(tools))
+        for (const tool of tools as Record<string, unknown>[])
+          tool.outputSchema = { type: 'object', ...outputSchema };
+      return message;
+    };
+    return async (url: string | URL, init?: RequestInit) => {
+      const response = await handler.fetch(new Request(url, init));
+      const text = await response.text();
+      const body = text.startsWith('{')
+        ? JSON.stringify(substitute(JSON.parse(text)))
+        : text.replace(
+            /^data: (\{.*\})$/gm,
+            (_line, json: string) =>
+              `data: ${JSON.stringify(substitute(JSON.parse(json)))}`,
+          );
+      return new Response(body, {
+        status: response.status,
+        headers: response.headers,
+      });
+    };
+  };
+  // Lists through the client, which caches the listing the client then compiles a call's schema from.
+  const call = async (outputSchema: Record<string, unknown>) => {
+    const called: string[] = [];
+    const client = createMcpClient('test');
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(URL_), {
+        fetch: peer(called, outputSchema),
+      }),
+    );
+    try {
+      await client.listTools();
+      let outcome = 'admitted';
+      try {
+        await client.callTool({ name: 'probe', arguments: {} });
+      } catch (error) {
+        outcome = String((error as Error).message);
+      }
+      return { outcome, called };
+    } finally {
+      await client.close();
+    }
+  };
+  const REFUSED =
+    /^Tool 'probe' has an invalid outputSchema: A tool schema names itself/;
+
+  it.each([
+    [
+      'a percent-encoded dot segment in $id',
+      { $id: 'https://peer.example.test/a/%2e%2e/b' },
+    ],
+    ['a dot segment in $id', { $id: 'https://peer.example.test/a/../b' }],
+    [
+      'a scheme that is not http or https in $id',
+      { $id: 'javascript:alert(1)' },
+    ],
+    ['a percent-encoded scheme in $id', { $id: 'ja%76ascript:alert(1)' }],
+    ['credentials in $id', { $id: 'https://user:pw@peer.example.test/s' }],
+    ['a colon in the first segment of a relative $id', { $id: 'a:b/c' }],
+    ['a query in $id', { $id: 'https://peer.example.test/s?x=1' }],
+    ['a backslash in $id', { $id: 'https://peer.example.test\\s' }],
+    ['a non-string $id', { $id: { nested: true } }],
+    ['an unsafe $ref', { properties: { a: { $ref: 'x:y/../z' } } }],
+    [
+      'an unsafe $ref below $defs',
+      { $defs: { n: { items: { $ref: '../../a' } } } },
+    ],
+    ['an unsafe $dynamicRef', { properties: { a: { $dynamicRef: 'a:b' } } }],
+    ['an unsafe $schema', { $schema: 'x:y/%2e%2e' }],
+    ['an unsafe $anchor', { properties: { a: { $anchor: 'a b' } } }],
+    [
+      'an identifier inside an array of subschemas',
+      { allOf: [{ $id: 'a:b' }] },
+    ],
+  ])('refuses %s before the engine compiles it', async (_label, schema) => {
+    const { outcome, called } = await call(schema);
+    expect(outcome).toMatch(REFUSED);
+    expect(called).toEqual([]);
+  });
+
+  it('still calls a tool whose schema uses ordinary identifiers', async () => {
+    const { outcome, called } = await call({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      $id: 'https://peer.example.test/schemas/out.json',
+      $defs: { n: { $anchor: 'node', type: 'object' } },
+      properties: {
+        a: { $ref: '#/$defs/n' },
+        b: { $id: 'item.json', type: 'string' },
+        c: { $ref: 'item.json' },
+        e: { $ref: '#node' },
+        // Property names and data that merely look like keywords are not identifiers.
+        $id: { type: 'string' },
+        $ref: { type: 'string' },
+        d: { const: { $id: 'a:b' }, default: { $ref: '../x' } },
+      },
+    });
+    expect(called).toEqual(['probe']);
+    expect(outcome).toBe('admitted');
+  });
+
+  it('compiles no peer schema in a session, which lists with a raw request', async () => {
+    const called: string[] = [];
+    const compile = vi.spyOn(
+      SchemaIdentifierValidator.prototype,
+      'getValidator',
+    );
+    const session = await openAdmittedMcp(URL_, {
+      clientName: 'test',
+      connector: peer(called, { $id: 'javascript:alert(1)' }),
+      authorizedTools: ['probe'],
+    });
+    try {
+      expect((await session.listTools()).items).toHaveLength(1);
+      expect((await session.callTool('probe', {})).isError).not.toBe(true);
+      expect(called).toEqual(['probe']);
+      expect(compile).not.toHaveBeenCalled();
+    } finally {
+      compile.mockRestore();
+      await session.close();
+    }
   });
 });

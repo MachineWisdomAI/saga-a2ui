@@ -7,7 +7,11 @@ import {
   Client,
   StreamableHTTPClientTransport,
   type FetchLike,
+  type JsonSchemaType,
+  type JsonSchemaValidator,
+  type jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/client/validators/ajv';
 
 // The one place where a maintainer command (`saga publish`, `docs-probe`) obtains network authority.
 //
@@ -26,6 +30,12 @@ import {
 //     request to the origin it was bound to;
 //   - operations: an MCP session can call only the tools its caller names exactly, and that is a
 //     local decision; what the endpoint advertises or asserts about a tool never adds to it;
+//   - schemas: the JSON Schemas an endpoint lists for its tools are compiled by the MCP client's
+//     bundled engine, which parses every identifier and reference with a URI parser this repository does
+//     not control. A session lists with a raw request, which the client does not cache, so it compiles
+//     no peer schema today; `createMcpClient` still gives the client a compile gate that admits only
+//     plain identifiers (`SchemaIdentifierValidator`), so a change that starts caching a listing cannot
+//     hand the engine an identifier it was not meant to parse;
 //   - size and time: every response body is counted as it streams, against a per-response limit and one
 //     remaining budget shared by everything the command reads, and the lists an endpoint returns are
 //     capped. A diagnostic is a fixed kind, never text the remote side wrote.
@@ -42,7 +52,8 @@ export type RefusalKind =
   | 'redirect'
   | 'body-limit'
   | 'total-limit'
-  | 'operation';
+  | 'operation'
+  | 'schema';
 
 const REFUSALS: Readonly<Record<RefusalKind, string>> = {
   scheme: 'The URL is not an absolute HTTPS URL.',
@@ -54,6 +65,8 @@ const REFUSALS: Readonly<Record<RefusalKind, string>> = {
   'body-limit': 'A response is larger than the limit this tool reads.',
   'total-limit': 'The responses together are larger than this tool reads.',
   operation: 'That operation is not authorized for this session.',
+  schema:
+    'A tool schema names itself or a reference in a form this tool does not read.',
 };
 
 /** A request this module refused. The text is fixed; nothing a remote side wrote is carried in it. */
@@ -390,6 +403,112 @@ export function createAdmittedFetch(
   };
 }
 
+// --- Schema identifiers --------------------------------------------------------------------------
+
+// One path segment: no percent-encoding, no colon (a colon in a first segment reads as a scheme) and
+// no delimiter that changes what a parser would split. "." and ".." are tested separately.
+const SEGMENT = /^[A-Za-z0-9._~!$&'()*+,;=@-]+$/;
+const HOST = /^(?:[A-Za-z0-9-]+\.)*[A-Za-z0-9-]+(?::[0-9]{1,5})?$/;
+// Pointer text and anchors after "#": no whitespace, control character or backslash.
+const FRAGMENT = /^[A-Za-z0-9._~!$&'()*+,;=:@/?%-]*$/;
+const ANCHOR = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+const MAX_IDENTIFIER_LENGTH = 2048;
+
+const segmentsAdmitted = (path: string): boolean =>
+  path
+    .split('/')
+    .every((part, index, all) =>
+      part === ''
+        ? index === 0 || index === all.length - 1
+        : part !== '.' && part !== '..' && SEGMENT.test(part),
+    );
+
+/**
+ * Whether a schema `$id`, `$ref`, `$dynamicRef` or `$schema` value is a plain URI reference: an
+ * `http(s)` URI of a bare host and path, or a relative reference whose path has no dot segment, colon,
+ * query, credential or percent-encoding, optionally followed by a fragment. Anything a URI parser
+ * would have to interpret differently from a person reading it is refused.
+ */
+export function isPlainSchemaReference(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length > MAX_IDENTIFIER_LENGTH)
+    return false;
+  const hash = value.indexOf('#');
+  const base = hash < 0 ? value : value.slice(0, hash);
+  if (hash >= 0 && !FRAGMENT.test(value.slice(hash + 1))) return false;
+  const absolute = /^https?:\/\/([^/]*)(.*)$/i.exec(base);
+  if (absolute !== null)
+    return HOST.test(absolute[1] ?? '') && segmentsAdmitted(absolute[2] ?? '');
+  return segmentsAdmitted(base);
+}
+
+const REFERENCE_KEYWORDS = ['$id', '$ref', '$dynamicRef', '$schema'] as const;
+const ANCHOR_KEYWORDS = ['$anchor', '$dynamicAnchor'] as const;
+// Keywords whose value maps names to schemas, and whose value is data a schema only describes.
+const SCHEMA_MAPS = new Set([
+  'properties',
+  'patternProperties',
+  '$defs',
+  'definitions',
+  'dependentSchemas',
+  'dependencies',
+]);
+const DATA_KEYWORDS = new Set(['enum', 'const', 'default', 'examples']);
+
+/** Whether every schema identifier, reference and anchor in a tool's JSON Schema is plain. */
+export function hasPlainSchemaIdentifiers(schema: unknown): boolean {
+  const pending: { value: unknown; keywords: boolean }[] = [
+    { value: schema, keywords: true },
+  ];
+  for (let one = pending.pop(); one !== undefined; one = pending.pop()) {
+    const { value, keywords } = one;
+    if (typeof value !== 'object' || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) pending.push({ value: item, keywords: true });
+      continue;
+    }
+    const node = value as Record<string, unknown>;
+    if (keywords) {
+      for (const key of REFERENCE_KEYWORDS)
+        if (key in node && !isPlainSchemaReference(node[key])) return false;
+      for (const key of ANCHOR_KEYWORDS)
+        if (
+          key in node &&
+          !(typeof node[key] === 'string' && ANCHOR.test(node[key]))
+        )
+          return false;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (keywords && DATA_KEYWORDS.has(key)) continue;
+      pending.push({
+        value: child,
+        keywords: !(keywords && SCHEMA_MAPS.has(key)),
+      });
+    }
+  }
+  return true;
+}
+
+/**
+ * The validator provider the MCP client compiles a peer's tool schemas with: the client's own engine,
+ * reached only for a schema whose identifiers are plain. A refusal is a fixed {@link NetworkRefused}
+ * that the client reports for that one tool before any request is sent.
+ */
+export class SchemaIdentifierValidator implements jsonSchemaValidator {
+  readonly #engine = new AjvJsonSchemaValidator();
+  getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
+    if (!hasPlainSchemaIdentifiers(schema)) throw new NetworkRefused('schema');
+    return this.#engine.getValidator<T>(schema);
+  }
+}
+
+/** The one MCP client of a maintainer command: it compiles a peer's tool schemas only through {@link SchemaIdentifierValidator}. */
+export function createMcpClient(name: string): Client {
+  return new Client(
+    { name, version: '0.0.0' },
+    { jsonSchemaValidator: new SchemaIdentifierValidator() },
+  );
+}
+
 // --- MCP session ---------------------------------------------------------------------------------
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -473,7 +592,7 @@ export async function openAdmittedMcp(
     options.authorizedTools.some((one) =>
       typeof one === 'string' ? one === name : one.test(name),
     );
-  const client = new Client({ name: options.clientName, version: '0.0.0' });
+  const client = createMcpClient(options.clientName);
   const transport = new StreamableHTTPClientTransport(admitted, {
     fetch: createAdmittedFetch({
       ...options,

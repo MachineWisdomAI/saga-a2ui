@@ -73,5 +73,5 @@ second status.
 
 The starter pins the tested recipe exactly: `express` 5.3.0, `@modelcontextprotocol/express` 2.0.2
 (peers `express` `^4.18.0 || ^5.0.0` and `@modelcontextprotocol/server` `^2.3.0`),
-`@modelcontextprotocol/node` 2.1.1 and `@modelcontextprotocol/server` 2.3.1, on Node 22.12 or newer.
+`@modelcontextprotocol/node` 2.1.1 and `@modelcontextprotocol/server` 2.4.0, on Node 22.12 or newer.
 Express 4 satisfies the adapter's peer range but is not the tested recipe.

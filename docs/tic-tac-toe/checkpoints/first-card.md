@@ -21,7 +21,7 @@ These are the files after [the first lesson](../1-first-card.md). Vite generates
     "start": "node dist/server.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "@saga-a2ui/react-mcp-stack": "0.11.0-rc.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
