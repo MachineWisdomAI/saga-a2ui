@@ -141,13 +141,14 @@ Repair a defect there, not at a call site.
   (plus the repository license and notices) from the working tree, so an untracked or ignored file cannot
   enter a tarball whatever a package's `files` list selects; Git LFS content is the working tree's, as a
   clean checkout smudges it. `release.json` records, per package, `sourceSha256` (the staged tracked
-  content) and `excludedUntracked` (untracked files left out). The `dirty` flag still means tracked files
+  content) and `excludedUntracked` (files Git does not track, ignored ones included, left out). The `dirty` flag still means tracked files
   differ from the commit; a dirty build remains preparation only.
 - **Output.** `release:pack`, `candidate:pack`, the `tarballs` command of `scripts/release-candidate.ts` and `candidate:rehearse`
   create their output directory or authenticate it (a real directory, never a link, owned by the running
   user), keep its identity, and check it before every removal or write. `packages` below it must be a real
   directory; `candidate:pack` empties it and refuses the repository root as the output. Fixed files such
-  as `candidate.json` replace their leaf through a temporary file and are never written through a link.
+  as `candidate.json` and every packed tarball replace their leaf through a temporary file and are never written
+  through a link: `npm pack` writes into a private scratch directory, never into the output.
 - **Formatter.** `npm run format` and the pre-commit hook refuse a selected path that is a link, a special
   file or outside the checkout, and replace a file through a temporary file after checking that it is the
   file that was read.

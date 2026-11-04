@@ -5,7 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type InlineConfig, type PluginOption } from 'vite';
-import { UnsafePath, readContainedFile } from './owned-filesystem.js';
+import {
+  OwnedDirectory,
+  UnsafePath,
+  readContainedFile,
+} from './owned-filesystem.js';
 
 // Installs the SDK packages the way an application receives them, without a registry: each package
 // is packed with `npm pack`, the tarball is unpacked into the node_modules of a clean directory
@@ -69,7 +73,7 @@ export interface PackedPackage {
   readonly manifest: PackedManifest;
   /** SHA-256 over the Git-tracked package files (path and content) the tarball was built from. */
   readonly sourceSha256: string;
-  /** Untracked files below the package directory that were left out of the tarball. */
+  /** Files below the package directory that Git does not track (untracked and ignored alike) and that were left out of the tarball. */
   readonly excludedUntracked: readonly string[];
 }
 
@@ -194,7 +198,7 @@ export function candidateManifest(
 export function packSdkPackages(
   work: string,
   packages: readonly SdkPackage[],
-  destination: string,
+  destination: string | OwnedDirectory,
   version: string,
 ): PackedPackage[] {
   const siblingVersions = Object.fromEntries(
@@ -218,7 +222,7 @@ export function packSdkPackages(
 /** Pack enrolled release manifests unchanged except for license-file inclusion. Never publishes. */
 export function packReleasePackages(
   work: string,
-  destination: string,
+  destination: string | OwnedDirectory,
 ): PackedPackage[] {
   const packages: readonly SdkPackage[] = [
     'core',
@@ -296,7 +300,7 @@ function trackedEntries(root: string, pathspec: string): TrackedEntry[] {
  * package's `files` list selects. Each file is read from the working tree through the contained
  * reader (so a file replaced by a link is refused); a tracked file the working tree has changed or
  * deleted is what `sourceRevision` reports as dirty. Returns the identity of what was staged and
- * the untracked files left out. Git LFS content is the working tree's, exactly as a clean checkout
+ * the files below `subdirectory` that Git does not track, ignored ones included, left out. Git LFS content is the working tree's, exactly as a clean checkout
  * of the commit smudges it.
  */
 export function stageTrackedFiles(
@@ -321,11 +325,11 @@ export function stageTrackedFiles(
       .update(createHash('sha256').update(data).digest())
       .update('\n');
   }
+  // No `--exclude-standard`: an ignored file is left out of the tarball too, so it is named too.
   const excludedUntracked = gitIn(root, [
     'ls-files',
     '-z',
     '--others',
-    '--exclude-standard',
     '--',
     subdirectory,
   ])
@@ -345,13 +349,20 @@ function stageTrackedFile(file: string, staged: string): void {
 function packPackages(
   work: string,
   packages: readonly SdkPackage[],
-  destination: string,
+  destination: string | OwnedDirectory,
   prepare: (
     manifest: Record<string, unknown>,
     notices: string[],
   ) => Record<string, unknown>,
 ): PackedPackage[] {
-  fs.mkdirSync(destination, { recursive: true });
+  // The output directory keeps its identity through every write. `npm pack` never touches it: it
+  // packs into a private scratch directory, and each tarball then replaces its fixed leaf through
+  // a temporary file and a rename, so a link or file already at that leaf is replaced, never
+  // written through.
+  const output =
+    destination instanceof OwnedDirectory
+      ? destination
+      : OwnedDirectory.create(destination);
   return packages.map((name) => {
     const staged = path.join(work, 'staged', name);
     const { sourceSha256, excludedUntracked } = stageTrackedFiles(
@@ -370,16 +381,18 @@ function packPackages(
     ) as Record<string, unknown>;
     const prepared = prepare(manifest, notices);
     fs.writeFileSync(manifestPath, JSON.stringify(prepared));
+    const scratch = fs.mkdtempSync(path.join(work, 'tarball-'));
     const report = JSON.parse(
       execFileSync(
         'npm',
-        ['pack', '--json', '--silent', '--pack-destination', destination],
+        ['pack', '--json', '--silent', '--pack-destination', scratch],
         { cwd: staged, encoding: 'utf8' },
       ),
     ) as Record<string, PackedTarball> | PackedTarball[];
     const packed = Object.values(report)[0]!;
-    const tarball = path.join(destination, packed.filename);
-    const bytes = fs.readFileSync(tarball);
+    const bytes = readContainedFile(scratch, packed.filename);
+    output.writeFile(packed.filename, bytes);
+    const tarball = path.join(output.path, packed.filename);
     return {
       name,
       version: prepared.version as string,

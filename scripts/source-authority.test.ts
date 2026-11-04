@@ -149,6 +149,23 @@ describe('a release artifact is built from tracked files only', () => {
     ).not.toBe(first.sourceSha256);
   });
 
+  it('names an ignored file among those left out, not only an unignored untracked one', () => {
+    const root = repository();
+    fs.appendFileSync(
+      path.join(root, '.git/info/exclude'),
+      'packages/demo/generated.txt\n',
+    );
+    fs.writeFileSync(path.join(root, 'packages/demo/generated.txt'), 'built');
+    fs.writeFileSync(path.join(root, 'packages/demo/src/shadow.ts'), '');
+    const destination = fresh();
+    const staged = stageTrackedFiles(root, 'packages/demo', destination);
+    expect(staged.excludedUntracked).toEqual([
+      'generated.txt',
+      'src/shadow.ts',
+    ]);
+    expect(fs.existsSync(path.join(destination, 'generated.txt'))).toBe(false);
+  });
+
   it('refuses a tracked file that the working tree has replaced with a link', () => {
     const root = repository();
     const outside = path.join(fresh(), 'outside.txt');
@@ -199,6 +216,31 @@ describe('release commands own the directory they empty and write', () => {
     expect(() => prepareReleasePackages(out)).toThrow(/not a real directory/);
     expect(fs.readdirSync(target)).toEqual(['keep.txt']);
   });
+
+  it('release:pack replaces a tarball leaf that is a link and writes nothing through it, and reuses a legitimate output', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, '..', 'packages/core/package.json'),
+        'utf8',
+      ),
+    ) as { version: string };
+    const leaf = `saga-a2ui-core-${manifest.version}.tgz`;
+    const target = victim();
+    const outside = path.join(target, 'keep.txt');
+    const out = fresh();
+    fs.mkdirSync(path.join(out, 'packages'));
+    fs.symlinkSync(outside, path.join(out, 'packages', leaf));
+    const first = prepareReleasePackages(out);
+    expect(fs.readFileSync(outside, 'utf8')).toBe('keep');
+    const written = path.join(out, 'packages', leaf);
+    expect(fs.lstatSync(written).isSymbolicLink()).toBe(false);
+    expect(fs.lstatSync(written).isFile()).toBe(true);
+    const core = first.packages.find((one) => one.name === 'core');
+    expect(core?.bytes).toBe(fs.statSync(written).size);
+    // The same output directory is reusable: a second run replaces the regular files in place.
+    expect(prepareReleasePackages(out).packages).toHaveLength(7);
+    expect(fs.readdirSync(path.join(out, 'packages'))).toHaveLength(7);
+  }, 120_000);
 
   it('candidate:pack refuses a packages directory that is a link and empties nothing behind it', () => {
     const target = victim();

@@ -947,7 +947,7 @@ export function writeCandidate(requested: string): Record<string, unknown> {
   const version = candidateVersion(revision.commit, revision.dirty);
   const work = createWorkDirectory('saga-candidate-');
   try {
-    const packages = out.resetChild('packages').path;
+    const packages = out.resetChild('packages');
     const packed = packSdkPackages(work, SDK_PACKAGES, packages, version);
 
     const clean = path.join(work, 'consumer');
@@ -1176,7 +1176,7 @@ function main(argv: string[]): number {
       const packages = packSdkPackages(
         work,
         SDK_PACKAGES,
-        path.join(output, 'packages'),
+        owned.ensureChild('packages'),
         candidateVersion(source.commit, source.dirty),
       );
       const root = readJson<{ overrides: Record<string, unknown> }>(

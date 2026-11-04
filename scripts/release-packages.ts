@@ -24,10 +24,7 @@ export function prepareReleasePackages(requested: string): {
   const work = createWorkDirectory('saga-release-');
   try {
     const source = sourceRevision();
-    const packages = packReleasePackages(
-      work,
-      output.ensureChild('packages').path,
-    );
+    const packages = packReleasePackages(work, output.ensureChild('packages'));
     output.writeFile(
       'release.json',
       `${JSON.stringify({ source, packages }, null, 2)}\n`,
@@ -50,6 +47,6 @@ if (
     0,
   );
   console.log(
-    `Packed ${packages.length} release artifacts in ${output}; source ${source.commit}${source.dirty ? ' (dirty; rebuild from the reviewed commit)' : ''}${left > 0 ? `; ${left} untracked file(s) left out (named in release.json)` : ''}. Nothing published.`,
+    `Packed ${packages.length} release artifacts in ${output}; source ${source.commit}${source.dirty ? ' (dirty; rebuild from the reviewed commit)' : ''}${left > 0 ? `; ${left} untracked or ignored file(s) left out (named in release.json)` : ''}. Nothing published.`,
   );
 }
