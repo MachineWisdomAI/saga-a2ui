@@ -250,6 +250,32 @@ describe('verifier work is bounded independently of the request', () => {
     }
   });
 
+  it('never starts verifier work for a request whose gate has already aborted, and leaves the whole cap to live requests', async () => {
+    const tokens: string[] = [];
+    const verifier: OAuthTokenVerifier = {
+      verifyAccessToken: (token: string) => {
+        tokens.push(token);
+        return new Promise<AuthInfo>(() => undefined); // ignores its signal, never answers
+      },
+    };
+    const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+    for (let n = 0; n < 100; n += 1)
+      expect(
+        await authenticate(
+          request,
+          verifier,
+          requirement,
+          AbortSignal.abort(),
+          () => NOW,
+        ),
+      ).toMatchObject({ ok: false, status: 500 });
+    expect(tokens).toEqual([]); // the application verifier was never called
+
+    for (let n = 0; n < 64; n += 1)
+      void authenticate(request, verifier, requirement, gate, () => NOW);
+    expect(tokens).toHaveLength(64); // all 64 slots were still free
+  });
+
   it('keeps accepting credentials from a verifier that answers, however many requests came before', async () => {
     const verifier = verifierOf(info(new URL(SUBSCRIPTIONS)));
     for (let n = 0; n < 200; n += 1) {

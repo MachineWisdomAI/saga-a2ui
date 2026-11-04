@@ -119,6 +119,10 @@ const bounded = new WeakMap<object, BoundedVerifier<unknown>>();
  * Wrapping the same verifier object again with default limits returns the wrapper it already made, so a
  * caller that cannot tell whether it was given a bounded verifier still shares one cap.
  *
+ * A call whose signal is already aborted is refused before it takes a slot or reaches the verifier: it
+ * rejects with the signal's own reason. Cancellation that arrives after the call started is passed on to
+ * the verifier as described below.
+ *
  * A rejection, including a synchronous throw, passes through unchanged. Each call holds one slot from
  * the moment it starts until the verifier settles it, whoever is still waiting. At the abandonment
  * deadline the signal aborts and the wait rejects with `VerifierAbandonedError`, so a caller is never
@@ -138,6 +142,10 @@ export function boundVerifier<T>(
 
   const result: BoundedVerifier<T> = {
     verifyAccessToken(token, signal) {
+      // A caller that has already given up gets no work started and takes no capacity: a verifier that
+      // ignores its signal would otherwise hold a slot for an answer nobody will read. The refusal is the
+      // caller's own cancellation, not a verifier failure.
+      if (signal?.aborted) return Promise.reject(signal.reason);
       if (running >= maxConcurrent)
         return Promise.reject(new VerifierSaturatedError());
       running += 1;
@@ -162,8 +170,7 @@ export function boundVerifier<T>(
           stopForwarding();
         };
 
-        if (signal?.aborted) forward();
-        else signal?.addEventListener('abort', forward, { once: true });
+        signal?.addEventListener('abort', forward, { once: true });
 
         let work: Promise<T>;
         try {

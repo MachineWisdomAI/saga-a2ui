@@ -126,7 +126,9 @@ describe('boundVerifier cancellation', () => {
     caller.abort();
     await expect(call).rejects.toThrow('stopped');
     await settle();
-    const again = bounded.verifyAccessToken('u', AbortSignal.abort()); // slot is free: this reaches the verifier
+    const second = new AbortController();
+    const again = bounded.verifyAccessToken('u', second.signal); // slot is free: this reaches the verifier
+    second.abort(); // cancellation after live admission still propagates
     await expect(again).rejects.toThrow('stopped');
     expect(reached).toBe(2);
   });
@@ -223,13 +225,71 @@ describe('boundVerifier cancellation', () => {
     expect(reached).toBe(4);
   });
 
-  it('does not call a verifier whose caller has already given up with a live slot leaked', async () => {
+  it('refuses a caller that has already given up: no verifier call and no slot taken', async () => {
+    const { calls, verifier } = manual();
+    const bounded = boundVerifier(verifier, { maxConcurrent: 1 });
+    const reason = new Error('stage over');
+    const caller = new AbortController();
+    caller.abort(reason);
+
+    await expect(bounded.verifyAccessToken('t', caller.signal)).rejects.toBe(
+      reason,
+    );
+    await expect(
+      bounded.verifyAccessToken('t', AbortSignal.abort()),
+    ).rejects.toMatchObject({ name: 'AbortError' }); // the default reason is passed through
+    expect(calls).toHaveLength(0); // the application was never called
+
+    // The whole cap is still available to a live request.
+    const live = bounded.verifyAccessToken('live');
+    expect(calls.map((call) => call.token)).toEqual(['live']);
+    calls[0]?.resolve('ok');
+    await expect(live).resolves.toBe('ok');
+  });
+
+  it('refuses pre-aborted callers repeatedly without ever consuming capacity, even against a noncooperative verifier', async () => {
+    const { calls, verifier } = manual();
+    const bounded = boundVerifier(verifier, { maxConcurrent: 2 });
+    for (let i = 0; i < 10; i += 1)
+      await expect(
+        bounded.verifyAccessToken(`gone-${i}`, AbortSignal.abort()),
+      ).rejects.toBeDefined();
+    expect(calls).toHaveLength(0);
+
+    // Both slots are still free for live requests.
+    void bounded.verifyAccessToken('a').catch(() => undefined);
+    void bounded.verifyAccessToken('b').catch(() => undefined);
+    expect(calls.map((call) => call.token)).toEqual(['a', 'b']);
+    await expect(bounded.verifyAccessToken('c')).rejects.toBeInstanceOf(
+      VerifierSaturatedError,
+    );
+  });
+
+  it('refuses a pre-aborted caller even when the cap is full', async () => {
+    const { calls, verifier } = manual();
+    const bounded = boundVerifier(verifier, { maxConcurrent: 1 });
+    void bounded.verifyAccessToken('busy').catch(() => undefined);
+    const gone = new Error('gone');
+    const caller = new AbortController();
+    caller.abort(gone);
+    await expect(bounded.verifyAccessToken('t', caller.signal)).rejects.toBe(
+      gone,
+    ); // the caller's own cancellation, not a verifier failure
+    expect(calls).toHaveLength(1);
+  });
+
+  it('still propagates cancellation that arrives after live admission', async () => {
     const { calls, verifier } = manual();
     const bounded = boundVerifier(verifier, { maxConcurrent: 1 });
     const caller = new AbortController();
-    caller.abort();
     void bounded.verifyAccessToken('t', caller.signal).catch(() => undefined);
-    expect(calls[0]?.signal?.aborted).toBe(true); // the verifier is told at once
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    caller.abort(new Error('later'));
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    await expect(bounded.verifyAccessToken('u')).rejects.toBeInstanceOf(
+      VerifierSaturatedError,
+    ); // the work is still running: its slot is retained
   });
 });
 
