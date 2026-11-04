@@ -4,11 +4,11 @@ import {
   type McpHandlerRequestOptions,
   type McpServer,
 } from '@modelcontextprotocol/server';
-import type { RequestLifetime } from '../lifetime.js';
+import type { RequestLifetime } from './lifetime.js';
 
 /** One endpoint's persistent handler, admission association, notification bus and capacity. */
 export function createEndpoint(
-  build: (lifetime: RequestLifetime) => McpServer,
+  build: (lifetime: RequestLifetime) => McpServer | Promise<McpServer>,
   options: CreateMcpHandlerOptions = {},
 ) {
   const admissions = new WeakMap<Request, RequestLifetime>();
