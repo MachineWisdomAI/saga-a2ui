@@ -63,6 +63,14 @@ The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
   identity and documentation date, and the pending handoff. It has no timestamp, so unchanged
   inputs reproduce it too.
 
+  The source revision is read from the application directory's `.git` files (`HEAD`, the branch it
+  names, `packed-refs`, a linked worktree's pointer); Git is never run there, because a repository
+  can name programs in its own configuration and the release input chooses the directory. For the
+  same reason none of those files is read through a symbolic link, so a link cannot make another
+  local file become `source.revision`, and `source.dirty` is always `null`: whether tracked files
+  differ from the commit is not established. `source.revision` is `null` when no readable
+  repository is found.
+
 Any failed check leaves only `findings.json`: no package that could be mistaken for a complete one.
 The output is a new directory, or a directory this tool generated earlier, replaced only after the
 new output is fully written beside it. An interrupt (SIGINT or SIGTERM) leaves nothing new and the
