@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -37,6 +36,7 @@ import {
   type BuiltStarter,
 } from './build-starter.js';
 import { createWorkDirectory } from './packed-consumer.js';
+import { RawHttpConnection, type RawResponse } from './raw-http-connection.js';
 import type { QualifiedStarter } from './qualified-starters.js';
 
 // Qualifies a server pair of the `lit-mcp` stack: a maintained starter template (templates/lit-node
@@ -875,91 +875,191 @@ export function qualifyStarter(
       });
     });
 
-    /**
-     * POSTs `sent` of a body declared as 1000 bytes on a raw socket and reports whether the listener
-     * answered, and whether it closed the socket within `windowMs`, without the body ever finishing.
-     */
-    function unfinishedBody(
-      target: string,
-      host: string | undefined,
-      extraHeaders: readonly string[],
-      windowMs: number,
-    ): Promise<{ status: number | undefined; closed: boolean }> {
-      const url = new URL(target);
-      return new Promise((resolve) => {
-        const socket = net.connect(Number(url.port), url.hostname);
-        const outcome: { status: number | undefined; closed: boolean } = {
-          status: undefined,
-          closed: false,
-        };
-        let head = '';
-        const timer = setTimeout(() => {
-          socket.destroy();
-          resolve(outcome);
-        }, windowMs);
-        socket.on('data', (chunk) => {
-          head += chunk.toString('latin1');
-          const match = /^HTTP\/1\.1 (\d{3})/.exec(head);
-          if (match) outcome.status = Number(match[1]);
-        });
-        socket.on('error', () => undefined);
-        socket.once('close', () => {
-          outcome.closed = true;
-          clearTimeout(timer);
-          resolve(outcome);
-        });
-        socket.write(
-          [
-            `POST ${url.pathname} HTTP/1.1`,
-            `Host: ${host ?? url.host}`,
-            'Content-Type: application/json',
-            'Content-Length: 1000',
-            ...extraHeaders,
-            '',
-            '{',
-          ].join('\r\n'),
-        );
-      });
-    }
-
     // An answer given before the body has arrived (a refusal, a missing route, a missing credential)
-    // must not leave the connection waiting for the rest of a body that never comes.
+    // must not leave the connection waiting for the rest of a body that never comes. These cases read
+    // the answer off a real TCP connection, framing included: it must be whole, and the same answer
+    // the listener gives when the whole body is delivered, before the connection closes.
     // Hapi's own router answers an unknown path, and only after it has read the payload under its own
     // bounded payload timeout; the plugin owns the routes it registers, not that fallback.
-    it.each(
-      (
-        [
-          ['an untrusted Host', 'status', 'untrusted.example', 403],
-          ['an unknown path', 'elsewhere', undefined, 404],
-          ['a missing credential', 'account', undefined, 401],
-        ] as const
-      ).filter(
-        ([, where]) => !(template === 'lit-hapi' && where === 'elsewhere'),
-      ),
-    )(
-      'closes the connection after refusing %s while the request body is incomplete',
-      async (_label, where, host, expected) => {
+    type RefusalPlace = 'status' | 'account' | 'elsewhere';
+    const REFUSALS: readonly (readonly [
+      label: string,
+      place: RefusalPlace,
+      host: string | undefined,
+      status: number,
+    ])[] = [
+      ['an untrusted Host', 'status', 'untrusted.example', 403],
+      ['an unknown path', 'elsewhere', undefined, 404],
+      ['a missing credential', 'account', undefined, 401],
+    ];
+    const refusalPlaces = REFUSALS.filter(
+      ([, place]) => !(template === 'lit-hapi' && place === 'elsewhere'),
+    );
+
+    function refusalTarget(listener: Listener, place: RefusalPlace): string {
+      return place === 'status'
+        ? listener.statusUrl
+        : place === 'account'
+          ? listener.accountUrl
+          : new URL('/elsewhere', listener.statusUrl).href;
+    }
+
+    /** What the listener answers to the same refusal when the request body is delivered whole. */
+    async function wholeAnswer(
+      target: string,
+      host: string | undefined,
+    ): Promise<RawResponse> {
+      const connection = await RawHttpConnection.open(target);
+      try {
+        connection.request('POST', target, {
+          host,
+          declaredLength: 1,
+          body: '{',
+        });
+        return await connection.readResponse(3_000);
+      } finally {
+        connection.destroy();
+      }
+    }
+
+    /** The parts of an answer that say what was decided; connection housekeeping and the date are left out. */
+    function decided(response: RawResponse): {
+      status: number;
+      body: string;
+      challenge: string | undefined;
+      type: string | undefined;
+      allow: string | undefined;
+    } {
+      return {
+        status: response.status,
+        body: response.body,
+        challenge: response.headers['www-authenticate'],
+        type: response.headers['content-type'],
+        allow: response.headers['allow'],
+      };
+    }
+
+    it.each(refusalPlaces)(
+      'answers %s completely, then closes the connection, while the request body is incomplete',
+      async (_label, place, host, status) => {
         const { listener, calls } = await start();
-        const target =
-          where === 'status'
-            ? listener.statusUrl
-            : where === 'account'
-              ? listener.accountUrl
-              : new URL('/elsewhere', listener.statusUrl).href;
-        const outcome = await unfinishedBody(target, host, [], 3_000);
-        expect(outcome.status).toBe(expected);
-        expect(outcome.closed).toBe(true);
-        expect(calls.authorize).toBe(0);
+        const target = refusalTarget(listener, place);
+        const expected = await wholeAnswer(target, host);
+        expect(expected.status).toBe(status);
+
+        const connection = await RawHttpConnection.open(target);
+        try {
+          connection.request('POST', target, {
+            host,
+            declaredLength: 1000,
+            body: '{',
+          });
+          // The whole response, with its framing, arrives although the body never finishes.
+          const refused = await connection.readResponse(3_000);
+          expect(decided(refused)).toEqual(decided(expected));
+          const answered = Date.now();
+
+          // Then the listener drops the connection, within a bounded time, writing nothing more.
+          expect(await connection.waitForClose(3_000)).toBe(true);
+          expect(Date.now() - answered).toBeLessThan(2_500);
+          expect(connection.pending).toBe('');
+          expect(calls.authorize).toBe(0);
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    // Hapi closes the connection itself whenever it answers with the payload unread, whether or not the
+    // rest of the body then arrives, so a kept connection is not something its refusals promise. The
+    // other starters run the SDK's close-after-answer step, which keeps a connection whose body
+    // finishes in time; this case holds that to the same-socket standard.
+    it.skipIf(template === 'lit-hapi')(
+      'keeps the connection when the rest of a refused request body arrives promptly, and answers the next requests on it',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const expectedHost = await wholeAnswer(
+          listener.statusUrl,
+          'untrusted.example',
+        );
+        const expectedCredential = await wholeAnswer(
+          listener.accountUrl,
+          undefined,
+        );
+
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, { declaredLength: 3, body: '{' });
+          const first = await connection.readResponse(3_000);
+          expect(first.status).toBe(404);
+
+          // The rest of the declared body arrives inside the drain window; it is consumed, not parsed as a request.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          connection.write('  ');
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          expect(connection.pending).toBe('');
+          expect(connection.isClosed).toBe(false);
+
+          // The same socket then carries two more refusals and a served call, each answered whole and for itself.
+          const port = connection.localPort;
+          connection.request('POST', listener.statusUrl, {
+            host: 'untrusted.example',
+            declaredLength: 1,
+            body: '{',
+          });
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedHost),
+          );
+          connection.request('POST', listener.accountUrl, {
+            declaredLength: 1,
+            body: '{',
+          });
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedCredential),
+          );
+          const call = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: { name: 'get_status', arguments: {} },
+          });
+          connection.request('POST', listener.statusUrl, {
+            headers: ['Accept: application/json, text/event-stream'],
+            declaredLength: Buffer.byteLength(call),
+            body: call,
+          });
+          const served = await connection.readResponse(5_000);
+          expect(served.status).toBe(200);
+          expect(served.body).toContain('running');
+          expect(connection.localPort).toBe(port);
+
+          // Nothing else was written, and the connection is still open well past the drain window.
+          expect(await connection.waitForClose(800)).toBe(false);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
       },
     );
 
     it('keeps serving other callers after refusing a request whose body never finished', async () => {
       const { listener } = await start();
-      await unfinishedBody(listener.statusUrl, 'untrusted.example', [], 800);
-      const result = await (
-        await connect(listener.statusUrl)
-      ).callTool({ name: 'get_status', arguments: {} });
-      expect(result.structuredContent).toEqual({ status: 'running' });
+      const stalled = await RawHttpConnection.open(listener.statusUrl);
+      try {
+        stalled.request('POST', listener.statusUrl, {
+          host: 'untrusted.example',
+          declaredLength: 1000,
+          body: '{',
+        });
+        expect((await stalled.readResponse(3_000)).status).toBe(403);
+        const result = await (
+          await connect(listener.statusUrl)
+        ).callTool({ name: 'get_status', arguments: {} });
+        expect(result.structuredContent).toEqual({ status: 'running' });
+      } finally {
+        stalled.destroy();
+      }
     });
 
     it('a finite response that cannot be delivered in time is destroyed, not left holding the connection', async () => {

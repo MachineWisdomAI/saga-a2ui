@@ -223,7 +223,65 @@ describe('local MCP request admission', () => {
   });
 
   // An early refusal answers before the body has arrived. The unread remainder must not keep the
-  // connection open until Node's own (much longer) request timeout.
+  // connection open until Node's own (much longer) request timeout, and the refusal itself must be a
+  // whole, correct answer delivered before the connection goes. Node's HTTP client parses the framing,
+  // so a response that ended (`end`) arrived complete; the socket's own close is observed separately.
+  interface Exchange {
+    status?: number;
+    allow?: string;
+    body: string;
+    /** When the whole response had arrived, if it did. */
+    endedAt?: number;
+    /** When the socket closed, if it did within the window. */
+    closedAt?: number;
+  }
+
+  /** POSTs to `path` on a fresh connection, declaring `declared` body bytes and writing only `sent`. */
+  async function refusedOnce(
+    listenerUrl: string,
+    path: string,
+    headers: Record<string, string>,
+    declared: number,
+    sent: string,
+    windowMs: number,
+  ): Promise<Exchange> {
+    const { request } = await import('node:http');
+    return new Promise<Exchange>((resolve) => {
+      const outcome: Exchange = { body: '' };
+      const req = request(new URL(path, listenerUrl), {
+        method: 'POST',
+        agent: false,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(declared),
+          ...headers,
+        },
+      });
+      const finish = () => {
+        clearTimeout(timer);
+        req.destroy();
+        resolve(outcome);
+      };
+      const timer = setTimeout(finish, windowMs);
+      // The socket's own close, not the response's: the response also closes when it ends.
+      req.on('socket', (socket) =>
+        socket.once('close', () => {
+          outcome.closedAt = Date.now();
+          finish();
+        }),
+      );
+      req.on('response', (res) => {
+        outcome.status = res.statusCode;
+        outcome.allow = res.headers.allow;
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => (outcome.body += chunk));
+        res.on('end', () => (outcome.endedAt = Date.now()));
+      });
+      req.on('error', () => undefined);
+      req.write(sent);
+    });
+  }
+
   it.each([
     ['an untrusted Host', '/mcp', { Host: 'untrusted.example' }, 403],
     [
@@ -234,9 +292,8 @@ describe('local MCP request admission', () => {
     ],
     ['an unknown path', '/other', {}, 404],
   ] as const)(
-    'closes the connection after refusing %s while the body is incomplete',
+    'delivers the whole answer to %s, then closes the connection while the body is incomplete',
     async (_label, path, headers, expected) => {
-      const { request } = await import('node:http');
       let builds = 0;
       const listener = await startLocalMcpServer({
         port: 0,
@@ -248,50 +305,118 @@ describe('local MCP request admission', () => {
         },
       });
       try {
-        const seen = await new Promise<{ status?: number; closed: boolean }>(
-          (resolve) => {
-            const outcome: { status?: number; closed: boolean } = {
-              closed: false,
-            };
-            const req = request(new URL(path, listener.url), {
-              method: 'POST',
-              agent: false,
-              headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': '1000',
-              },
-            });
-            for (const [name, value] of Object.entries(headers))
-              req.setHeader(name, value);
-            const finish = () => {
-              clearTimeout(timer);
-              req.destroy();
-              resolve(outcome);
-            };
-            const timer = setTimeout(finish, 1_500);
-            // The socket's own close, not the response's: the response also closes when it ends.
-            req.on('socket', (socket) =>
-              socket.once('close', () => {
-                outcome.closed = true;
-                finish();
-              }),
-            );
-            req.on('response', (res) => {
-              outcome.status = res.statusCode;
-              res.resume();
-            });
-            req.on('error', () => undefined);
-            req.write('{');
-          },
+        // The same refusal when the body is delivered whole: the answer the stalled one must match.
+        const whole = await refusedOnce(
+          listener.url,
+          path,
+          headers,
+          1,
+          '{',
+          1_500,
+        );
+        const seen = await refusedOnce(
+          listener.url,
+          path,
+          headers,
+          1000,
+          '{',
+          1_500,
         );
         expect(seen.status).toBe(expected);
-        expect(seen.closed).toBe(true);
+        expect(seen.body).toBe(whole.body);
+        expect(seen.allow).toBe(whole.allow);
+        // Complete before the close, then closed.
+        expect(seen.endedAt).toBeDefined();
+        expect(seen.closedAt).toBeDefined();
+        expect(seen.closedAt).toBeGreaterThanOrEqual(seen.endedAt ?? Infinity);
         expect(builds).toBe(0);
       } finally {
         await listener.close();
       }
     },
   );
+
+  it('keeps the connection and answers the next requests on it when a refused body completes promptly', async () => {
+    const { Agent, request } = await import('node:http');
+    const listener = await startLocalMcpServer({
+      port: 0,
+      createServer() {
+        return new McpServer({ name: 'refusal-control', version: '1.0.0' });
+      },
+    });
+    // One socket for everything below: a second request that needed a new one would not be reuse.
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    try {
+      const send = (
+        path: string,
+        headers: Record<string, string>,
+        declared: number,
+        first: string,
+        rest?: Promise<string>,
+      ) =>
+        new Promise<{
+          status?: number;
+          body: string;
+          reused: boolean;
+          ended: boolean;
+        }>((resolve, reject) => {
+          const req = request(new URL(path, listener.url), {
+            method: 'POST',
+            agent,
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': String(declared),
+              ...headers,
+            },
+          });
+          const seen = {
+            status: undefined as number | undefined,
+            body: '',
+            reused: false,
+            ended: false,
+          };
+          req.on('error', reject);
+          req.on('response', (res) => {
+            seen.status = res.statusCode;
+            seen.reused = req.reusedSocket;
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => (seen.body += chunk));
+            res.on('end', () => {
+              seen.ended = true;
+              resolve(seen);
+            });
+          });
+          req.write(first);
+          // The rest of the declared body arrives after the answer, inside the drain window.
+          if (rest) void rest.then((more) => req.end(more));
+          else if (declared === first.length) req.end();
+        });
+
+      // The unknown path is answered while two of its three body bytes are still to come.
+      const later = new Promise<string>((resolve) =>
+        setTimeout(() => resolve('  '), 100),
+      );
+      const first = await send('/other', {}, 3, '{', later);
+      expect(first.status).toBe(404);
+      expect(first.ended).toBe(true);
+      await later;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The same socket then answers two more refusals, each whole and for itself.
+      const second = await send('/mcp', { Host: 'untrusted.example' }, 1, '{');
+      expect(second.status).toBe(403);
+      expect(second.ended).toBe(true);
+      expect(second.reused).toBe(true);
+      const third = await send('/other', {}, 2, '{}');
+      expect(third.status).toBe(404);
+      expect(third.ended).toBe(true);
+      expect(third.reused).toBe(true);
+      expect(second.body).not.toBe('');
+    } finally {
+      agent.destroy();
+      await listener.close();
+    }
+  });
 
   it('keeps serving a well-formed request after refusing one with an incomplete body', async () => {
     const { request } = await import('node:http');
