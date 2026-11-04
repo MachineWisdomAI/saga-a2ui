@@ -1,4 +1,13 @@
 export {
+  DEFAULT_MAX_CONCURRENT_VERIFICATIONS,
+  DEFAULT_VERIFIER_ABANDON_MS,
+  VerifierSaturatedError,
+  boundVerifier,
+  type BoundedVerifier,
+  type CancellableVerifier,
+  type VerifierLimits,
+} from './bounded-verifier.js';
+export {
   BudgetConfigurationError,
   StageFailure,
   assertBudgetSettings,

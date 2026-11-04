@@ -140,3 +140,66 @@ describe('protected resource binding', () => {
     expect(asPlayback).toMatchObject({ ok: false, status: 401 });
   });
 });
+
+describe('verifier work is bounded independently of the request', () => {
+  const request = { headers: { authorization: 'Bearer token' } };
+
+  it('gives the verifier the gate as its cancellation signal', () => {
+    let received: AbortSignal | undefined;
+    const controller = new AbortController();
+    const verifier = {
+      verifyAccessToken: (_token: string, signal?: AbortSignal) => {
+        received = signal;
+        return new Promise<AuthInfo>(() => undefined);
+      },
+    } as OAuthTokenVerifier;
+    void authenticate(
+      request,
+      verifier,
+      subscriptionsRequirement(SUBSCRIPTIONS),
+      controller.signal,
+      () => NOW,
+    );
+    expect(received?.aborted).toBe(false);
+    controller.abort();
+    expect(received?.aborted).toBe(true);
+  });
+
+  it('stops calling a verifier that ignores its signal once too many abandoned calls are running, and answers 500, not 401', async () => {
+    let calls = 0;
+    const verifier: OAuthTokenVerifier = {
+      verifyAccessToken: () => {
+        calls += 1;
+        return new Promise<AuthInfo>(() => undefined);
+      },
+    };
+    const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+    for (let n = 0; n < 64; n += 1)
+      void authenticate(request, verifier, requirement, gate, () => NOW);
+    expect(calls).toBe(64);
+
+    const refused = await authenticate(
+      request,
+      verifier,
+      requirement,
+      gate,
+      () => NOW,
+    );
+    expect(refused).toMatchObject({ ok: false, status: 500 });
+    expect(calls).toBe(64); // the 65th credential never reached the application
+  });
+
+  it('keeps accepting credentials from a verifier that answers, however many requests came before', async () => {
+    const verifier = verifierOf(info(new URL(SUBSCRIPTIONS)));
+    for (let n = 0; n < 200; n += 1) {
+      const decision = await authenticate(
+        request,
+        verifier,
+        subscriptionsRequirement(SUBSCRIPTIONS),
+        gate,
+        () => NOW,
+      );
+      expect(decision.ok).toBe(true);
+    }
+  });
+});

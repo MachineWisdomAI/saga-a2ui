@@ -20,6 +20,12 @@ import {
 // is refused for every request.
 //
 // A verifier throws `OAuthError(OAuthErrorCode.InvalidToken, ...)` for a credential it does not accept.
+//
+// The listener calls the verifier through `boundVerifier`: at most 64 calls run at once (a full cap
+// answers 503 without calling you), and a call that has not settled after 30 seconds is abandoned. The
+// call also receives an `AbortSignal` as an optional second argument, aborted when the request stops
+// waiting. Declare `verifyAccessToken(token, signal?: AbortSignal)` and pass the signal to your
+// identity provider's client (for example `fetch(url, { signal })`) so abandoned work actually stops.
 
 export const verifier: OAuthTokenVerifier = {
   async verifyAccessToken() {

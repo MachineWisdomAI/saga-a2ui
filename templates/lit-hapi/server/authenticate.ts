@@ -4,7 +4,7 @@ import {
   type AuthInfo,
   type OAuthTokenVerifier,
 } from '@modelcontextprotocol/server';
-import type { RequestLifetime } from '@saga-a2ui/mcp/server';
+import { boundVerifier, type RequestLifetime } from '@saga-a2ui/mcp/server';
 import { identityOf } from './identity.js';
 
 // APPLICATION-OWNED request authentication for the protected endpoint. A verifier (verifier.ts)
@@ -67,7 +67,10 @@ const refuse = (
  * Checks the value of the `Authorization` header: a bearer credential the verifier accepts, not expired,
  * issued for `resource`, carrying `ACCOUNT_SCOPE` and naming an account. Anything else is refused before any protected
  * work. The verifier runs as the request's `authentication` stage, so a verifier that never
- * answers cannot hold the request past its budget.
+ * answers cannot hold the request past its budget. `boundVerifier` also caps how many calls may be
+ * running at once (a full cap is a 503, never a queue), aborts the `signal` it passes to the verifier
+ * when the stage ends, and frees a call's slot after a hard limit, so work the request abandoned
+ * cannot pile up.
  */
 export async function authenticate(
   header: string | undefined,
@@ -81,8 +84,8 @@ export async function authenticate(
   if (!match?.[1]) return refuse(401, 'invalid_token');
 
   const token = match[1];
-  const verified = await lifetime.run('authentication', () =>
-    verifier.verifyAccessToken(token),
+  const verified = await lifetime.run('authentication', (scope) =>
+    boundVerifier(verifier).verifyAccessToken(token, scope.signal),
   );
   if (!verified.ok) {
     // A verifier that rejects the credential is a 401; one that fails or runs out of time is not the caller's fault.

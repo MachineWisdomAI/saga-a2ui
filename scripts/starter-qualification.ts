@@ -651,6 +651,35 @@ export function qualifyStarter(
       expect(result.structuredContent).toEqual({ status: 'running' });
     });
 
+    it('hands the verifier a signal that aborts when its stage ends, and bounds how many abandoned calls pile up', async () => {
+      const signals: (AbortSignal | undefined)[] = [];
+      const { listener, calls } = await start({
+        budgets: { operationMs: 100, requestMs: 1_000 },
+        verifier: (counted) => ({
+          // Ignores its signal and never answers: the request stops waiting, the call keeps running.
+          verifyAccessToken: (_token, signal?: AbortSignal) => {
+            counted.verifier += 1;
+            signals.push(signal);
+            return new Promise<AuthInfo>(() => undefined);
+          },
+        }),
+      });
+      const flood = await Promise.all(
+        Array.from({ length: 80 }, () =>
+          rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+        ),
+      );
+      expect(flood.every((response) => response.status === 503)).toBe(true); // refused, not 401 and never accepted
+      expect(calls.verifier).toBeLessThanOrEqual(64); // the rest never reached the application's verifier
+      expect(calls.verifier).toBeGreaterThan(0);
+      expect(signals.every((signal) => signal?.aborted === true)).toBe(true); // each abandoned call was told to stop
+
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
+      expect(result.structuredContent).toEqual({ status: 'running' }); // the public endpoint is unaffected
+    });
+
     it('refuses an invalid budget before it opens a port', async () => {
       await expect(
         entry.startListener({
