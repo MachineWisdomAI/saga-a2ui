@@ -51,6 +51,7 @@ import {
 } from './record.js';
 import { loadReleaseInput, type LoadedReleaseInput } from './release-input.js';
 import { redactSecrets, secretKinds } from './secrets.js';
+import { terminalText } from '../terminal-text.mjs';
 import type { Evidence, PublicationTarget } from './target.js';
 
 // `saga publish check|prepare` (CLI3 #66, CLI4 #67): validates a built application, its deployed
@@ -1060,7 +1061,10 @@ function report(record: PublicationRecord, request: PublishRequest): string {
  * The same `io` whose two output channels pass everything through `redactSecrets` first, with the
  * credential supplied for discovery as a literal. Every line this command prints, a finding, an
  * error or a path, goes through it, so no reporting path can disclose a credential that an
- * endpoint echoed or an input carried, whatever wording produced it.
+ * endpoint echoed or an input carried, whatever wording produced it. Redaction comes first and
+ * the terminal-safe rendering last: an endpoint's server and tool names, a file name and an
+ * analyzer's report are chosen by someone else, and their control characters are written out
+ * (SECURITY.md invariant 6) so they cannot act on the terminal or CI log that shows them.
  */
 function withRedactedOutput(
   io: PublishIo,
@@ -1071,8 +1075,8 @@ function withRedactedOutput(
   const literals = supplied === undefined || supplied === '' ? [] : [supplied];
   return {
     ...io,
-    stdout: (text) => io.stdout(redactSecrets(text, literals)),
-    stderr: (text) => io.stderr(redactSecrets(text, literals)),
+    stdout: (text) => io.stdout(terminalText(redactSecrets(text, literals))),
+    stderr: (text) => io.stderr(terminalText(redactSecrets(text, literals))),
   };
 }
 

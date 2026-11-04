@@ -365,6 +365,8 @@
     "scripts/request-consumer/**",
     "scripts/starter-snippets.ts",
     "scripts/starter-template.ts",
+    "scripts/terminal-text.d.mts",
+    "scripts/terminal-text.mjs",
     "scripts/verify.ts",
     ".fava-trails.yaml",
     ".nvmrc",

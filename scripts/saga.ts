@@ -12,6 +12,7 @@ import type { PluginValidator } from './publish/claude-plugin.js';
 import type { HandoffAction, HandoffRequest } from './publish/handoff.js';
 import type { PublicationTool, PublishRequest } from './publish/publish.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
+import { terminalText } from './terminal-text.mjs';
 import {
   ExportInterrupted,
   TemplateError,
@@ -641,8 +642,16 @@ async function handoff(
 /** Runs one command line and returns the process exit code: 0 done (a publish verdict of ready), 1 refused, failed or not ready, 2 not understood, 130 interrupted. */
 export async function runCli(
   argv: readonly string[],
-  environment: Environment,
+  unsafe: Environment,
 ): Promise<number> {
+  // The one terminal boundary of the command: whatever a command prints, including a path, an
+  // option value, an error message and everything the publication tooling reports (after its own
+  // redaction), has its control characters written out (SECURITY.md invariant 6).
+  const environment: Environment = {
+    ...unsafe,
+    stdout: (text) => unsafe.stdout(terminalText(text)),
+    stderr: (text) => unsafe.stderr(terminalText(text)),
+  };
   const command = parseCommandLine(argv);
   switch (command.kind) {
     case 'help':

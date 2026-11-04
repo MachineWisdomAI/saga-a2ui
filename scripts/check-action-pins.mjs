@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { terminalValue } from './terminal-text.mjs';
 import { fileURLToPath } from 'node:url';
 import {
   LineCounter,
@@ -244,7 +245,8 @@ function main() {
     console.error(
       'Workflow actions must be pinned to a reviewed full commit SHA:',
     );
-    for (const problem of problems) console.error(`  ${problem}`);
+    for (const problem of problems)
+      console.error(`  ${terminalValue(problem)}`);
     return 1;
   }
   console.log(

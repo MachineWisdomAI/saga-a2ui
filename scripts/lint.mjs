@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { terminalText } from './terminal-text.mjs';
 
 // Orchestrate established analyzers only; no custom source analysis or automatic fixing.
 const args = process.argv.slice(2);
@@ -58,16 +59,23 @@ try {
     const result = spawnSync(command, parameters, {
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
+      // The output below is written out control character by control character, so colour codes
+      // would only make it harder to read.
+      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: undefined },
     });
-    process.stdout.write(result.stdout ?? '');
-    process.stderr.write(result.stderr ?? '');
+    // Analyzer output repeats repository file names, which anyone who can change the repository
+    // chooses: it is written out before it reaches a terminal or CI log (SECURITY.md invariant 6).
+    process.stdout.write(terminalText(result.stdout ?? ''));
+    process.stderr.write(terminalText(result.stderr ?? ''));
     const failed =
       result.error ||
       result.signal ||
       result.status === null ||
       result.status > 1;
     if (failed) {
-      const message = `${name} analyzer execution failed: ${result.error?.message ?? result.signal ?? `exit ${result.status}`}`;
+      const message = terminalText(
+        `${name} analyzer execution failed: ${result.error?.message ?? result.signal ?? `exit ${result.status}`}`,
+      );
       console.error(message);
       if (process.env.GITHUB_ACTIONS === 'true')
         console.log(
@@ -97,6 +105,8 @@ try {
   if (!code.length && !workflows.length)
     console.log('No relevant lint inputs; no analyzers started.');
 } catch (error) {
-  console.error(`Lint analyzer execution failed: ${error.message}`);
+  console.error(
+    terminalText(`Lint analyzer execution failed: ${error.message}`),
+  );
   process.exitCode = 2;
 }
