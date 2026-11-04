@@ -5,7 +5,7 @@
     "package": "@modelcontextprotocol/node",
     "version": "2.1.1"
   },
-  "sdkPackages": ["core", "lit", "mcp"],
+  "sdkPackages": ["core", "lit", "components", "mcp", "lit-mcp-stack"],
   "snippets": [
     "prepare-view",
     "register-protected-operation",

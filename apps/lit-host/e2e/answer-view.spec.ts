@@ -216,12 +216,14 @@ for (const mode of ['json', 'event-stream'] as const) {
         'Answer to Second?',
       );
 
-      // Teardown retires the connection: a result delivered afterwards is not shown.
+      // Teardown retires the view: the answer leaves the page, and a result delivered
+      // afterwards is not shown.
       await page.evaluate(() => window.teardownView?.());
+      await expect(view.getByTestId('answer-text')).toHaveCount(0);
       await sendResult(page, first).catch(() => undefined);
-      await expect(view.getByTestId('answer-text')).toHaveText(
-        'Answer to Second?',
-      );
+      await page.waitForTimeout(300);
+      await expect(view.getByTestId('answer-text')).toHaveCount(0);
+      await expect(view.getByTestId('answer-root')).toHaveCount(0);
       expect(questionsAsked).toEqual(['First?', 'Second?']);
       await client.close();
     });

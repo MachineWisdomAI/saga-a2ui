@@ -16,7 +16,8 @@ npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-
 ```
 
 Options: `--against DIR` compares with an earlier output and fails when its evidence is stale;
-`--invoke-fixture` calls the tools the release input declares under `fixture.calls`;
+`--invoke-fixture FILE` calls the tools your own `saga-fixture-calls/1` file authorizes (see
+below; the release input chooses no call);
 `--bearer-env NAME` reads a bearer credential from that environment variable for a read-only look
 at a protected endpoint. A verdict other than `ready` exits 1.
 
@@ -27,14 +28,26 @@ the smallest input that carries what the host needs and nothing it does not: the
 `publisher` (who the listing belongs to; the operator running the tool and the SDK's npm publisher
 are never substituted for it) with credited `contributors` kept apart, the listing text and links,
 PNG or SVG `assets`, the `build` directory and its view files, the `endpoint`, and optional
-`review`, `publication` and `fixture` sections. Paths are relative to the file. It holds no
+`review` and `publication` sections. Paths are relative to the file. It holds no
 credential; reviewer credentials, authentication and publisher verification stay in the host's
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
 `listing` and `assets` (with `review` and `publication`) belong to the ChatGPT target, and a `claude`
-section belongs to the Claude target. Each target needs only its own: a release input for Claude alone
-has no `listing`, and the `chatgpt` target says so and prepares nothing when `listing` or `assets` is
-missing. `claude` is the one section whose missing fields are findings instead of a parse error
+section belongs to the Claude target. The ChatGPT target requires `listing`. Branding is optional:
+each of `assets.logo`, `assets.composerIcon`, `assets.logoDark` and `assets.composerIconDark` that
+you omit uses the bundled SAGA A2UI dragon, in the light or dark artwork that suits the field (the
+composer icons are the transparent head crop of the mark; the logos are the full mark on a solid tile; see
+[`assets/brand/plugin`](../../assets/brand/plugin/README.md)). A dark default follows its light
+field: `logoDark` and `composerIconDark` default to the dragon only when `logo` or `composerIcon`
+also uses the dragon, so your own light branding is never paired with SAGA's dark artwork. Supply
+your own paths to use your application's branding; an application that supplies a light file and
+no dark file gets no dark variant. Supplied files are preserved, and an invalid supplied file
+remains an error. These defaults
+affect newly prepared ChatGPT packages; they do not update an installed App or establish how a host
+renders an existing connection. Claude submissions still use their own supplied connector icon.
+The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
+`git lfs pull --include='assets/brand/plugin/*.png'` before preparing a default-branded package.
+`claude` is the one section whose missing fields are findings instead of a parse error
 (below), so a maintainer sees every missing piece at once.
 
 ## What is produced (ChatGPT)
@@ -50,6 +63,14 @@ missing. `claude` is the one section whose missing fields are findings instead o
   resource, the package digest and every file's digest, the deployment identity, the validator
   identity and documentation date, and the pending handoff. It has no timestamp, so unchanged
   inputs reproduce it too.
+
+  The source revision is read from the application directory's `.git` files (`HEAD`, the branch it
+  names, `packed-refs`, a linked worktree's pointer); Git is never run there, because a repository
+  can name programs in its own configuration and the release input chooses the directory. For the
+  same reason none of those files is read through a symbolic link, so a link cannot make another
+  local file become `source.revision`, and `source.dirty` is always `null`: whether tracked files
+  differ from the commit is not established. `source.revision` is `null` when no readable
+  repository is found.
 
 Any failed check leaves only `findings.json`: no package that could be mistaken for a complete one.
 The output is a new directory, or a directory this tool generated earlier, replaced only after the
@@ -152,14 +173,16 @@ publisher submits by hand in the host's documented flow
 [Claude](https://claude.com/docs/connectors/building/submission), portal
 <https://claude.ai/directory/manage>).
 
-```sh
-saga publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
-saga publish handoff status              --handoff DIR [--prepared ./publication-now]
-saga publish handoff attempt             --handoff DIR --prepared ./publication-now
-saga publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
-saga publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
-saga publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
-saga publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
+From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
+
+```text
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
+npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
+npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff void-attempt        --handoff DIR --inspected "<what you looked at in the host>" [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --state in-review|changes-requested|approved|rejected [--reference REF] [--observed-at TIME]
+npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
@@ -262,9 +285,58 @@ destructive annotation.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
   discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
   not read is not certified. A definite failure among what was read still blocks.
-- Fixture invocation (`--invoke-fixture`): only the declared calls, and only to a tool that
-  advertises `readOnlyHint: true`; others are refused without a call. Only a digest of each result
-  is kept, and it is labelled fixture evidence, separate from real-host observations.
+- Fixture invocation (`--invoke-fixture FILE`): only the calls in your own calls file (at most 50,
+  with arguments of at most 16 KiB each), and only to a tool the file pins by `toolSha256` (the
+  digest the record reports for that tool) whose definition the endpoint still advertises unchanged
+  and with `readOnlyHint: true`. The digest is the authority; the hint can only narrow it. Anything
+  else is refused without a call. Only a digest of each result is kept, and it is labelled fixture
+  evidence, separate from real-host observations.
+
+  The calls file is the maintainer's, not the application's: the release input and the endpoint it
+  names are lower-trust than the person running the command, so neither chooses a tool, its
+  arguments or the definition it is called against. Keep the file outside the application's tree
+  and read each digest from a record you reviewed. The format is JSON, and the file is read like any
+  other input, sized before it is read:
+
+  ```json
+  {
+    "format": "saga-fixture-calls/1",
+    "calls": [{ "tool": "get_status", "toolSha256": "<64 hex digits>", "arguments": {} }]
+  }
+  ```
+
+## Network admission
+
+Every request the publication tool and `scripts/docs-probe.ts` make goes through one module,
+`scripts/maintainer-network.ts`; neither command constructs an MCP transport or calls `fetch` itself.
+The module admits a request or refuses it with a fixed message that carries nothing the remote side
+wrote:
+
+- **Destination.** HTTPS only, no credentials in the URL, a public-looking host name and no IP
+  literal. A refused endpoint is not contacted, and no bearer is sent to it.
+- **Connected address.** The host name is resolved inside the connection, and an answer outside the
+  public range refuses the connection, so the address that was checked is the address that is used.
+- **Redirects.** Followed only for an uncredentialed `GET` or `HEAD`, at most three, and each hop is
+  admitted again. A request that carries a bearer is never redirected.
+- **Credential.** `--bearer-env` gives the bearer to this module, which attaches it to the first
+  request to the endpoint's own origin and nowhere else.
+- **Operations.** Discovery authorizes no tool call. A fixture call needs the exact name and digest
+  the maintainer's own calls file pins; neither the release input nor what the endpoint advertises
+  about a tool adds to that.
+- **Size.** Each response is counted as it streams, against a per-response limit and one allowance
+  shared by everything one assessment reads (discovery and the fixture run draw on the same
+  allowance); lists an endpoint returns are cut at 200 items per page. A
+  file the release input names is sized before it is read (`bounded-read.ts`): the input itself
+  (1 MiB), each built view (8 MiB, 64 MiB together), an earlier output and an application asset.
+  Every local file one command reads (the release input, the fixture calls file, views, application
+  files and trees, an earlier record and archive) also draws on one allowance of 256 MiB, made at the
+  command's entry and carried on the loaded release input, so categories that are each within their
+  own limit cannot add up to more. The per-file and per-tree limits stay as the narrower bounds.
+  The documentation probe requests at most four pages at once (`PAGE_CONCURRENCY`).
+
+If a refusal needs repairing, change `RefusalKind`, the address list or `createAdmittedFetch` in
+`maintainer-network.ts` (or the limits in `bounded-read.ts`); there is no second copy of a rule to
+keep in step. Tests replace only the lowest layer (the connector), never the rules.
 
 ## Recorded decisions
 

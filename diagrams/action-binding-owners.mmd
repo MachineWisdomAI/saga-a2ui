@@ -1,0 +1,9 @@
+graph TD
+  Definition["One archiveNote definition"] --> Alpha["Alpha button binding"]
+  Definition --> Beta["Beta button binding"]
+  Alpha --> A["Alpha invocation"]
+  Beta --> B["Beta invocation"]
+  A --> RequestA["Archive Alpha request"]
+  B --> RequestB["Archive Beta request"]
+  RequestA --> Server["Application server authorizes each request"]
+  RequestB --> Server

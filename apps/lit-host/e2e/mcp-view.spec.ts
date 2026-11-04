@@ -193,7 +193,7 @@ test('an error result clears the rendered title and explains the problem', async
 
   await expect(view.getByTestId('view-problem')).toBeVisible();
   await expect(view.getByTestId('panel-title')).toHaveCount(0);
-  await expect(view.locator('a2ui-surface')).toHaveCount(0);
+  await expect(view.getByTestId('panel')).toHaveCount(0);
 });
 
 test.describe('result lifecycle through the bridge', () => {
@@ -257,7 +257,7 @@ test.describe('result lifecycle through the bridge', () => {
       await expect(view.getByTestId('view-problem')).toBeVisible();
       await expect(view.getByTestId('view-problem')).not.toBeEmpty();
       await expect(view.getByTestId('panel-title')).toHaveCount(0);
-      await expect(view.locator('a2ui-surface')).toHaveCount(0);
+      await expect(view.getByTestId('panel')).toHaveCount(0);
 
       await sendRaw(page, episode('Recovered title'));
       await expect(view.getByTestId('panel-title')).toHaveText(
@@ -277,7 +277,10 @@ test.describe('result lifecycle through the bridge', () => {
     await sendRaw(page, episode('After teardown')).catch(() => undefined);
     await sendRaw(page, { isError: true, content: [] }).catch(() => undefined);
     await page.waitForTimeout(300);
-    await expect(view.getByTestId('panel-title')).toHaveText('Before teardown');
+    // Ending the view retires it: the panel leaves the page, and neither later result shows
+    // anything, a problem included.
+    await expect(view.getByTestId('panel-title')).toHaveCount(0);
+    await expect(view.locator('saga-app > *')).toHaveCount(0);
     await expect(view.getByTestId('view-problem')).toBeHidden();
   });
 
@@ -323,11 +326,13 @@ test.describe('result lifecycle through the bridge', () => {
     );
     await expect(first.getByTestId('panel-title')).toHaveText('First view');
 
-    // Host teardown of the first view: it ignores what follows, the second keeps working.
+    // Host teardown of the first view: it is retired and shows nothing more, whatever follows;
+    // the second keeps working.
     await page.evaluate(() => window.teardownView?.());
     await send(undefined, episode('After teardown')).catch(() => undefined);
     await page.waitForTimeout(300);
-    await expect(first.getByTestId('panel-title')).toHaveText('First view');
+    await expect(first.getByTestId('panel-title')).toHaveCount(0);
+    await expect(first.locator('saga-app > *')).toHaveCount(0);
     await expect(second.getByTestId('panel-title')).toHaveText(
       'Second view, newer',
     );

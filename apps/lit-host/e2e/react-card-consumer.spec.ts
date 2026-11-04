@@ -556,8 +556,10 @@ for (const brand of BRAND_NAMES) {
         page.frames().filter((frame) => frame !== page.mainFrame()),
       ).toHaveLength(1);
 
-      // A host teardown stops delivery: a late result, valid or not, changes nothing.
+      // A host teardown ends the view: the stack unmounts it once, and a late result, valid or not,
+      // reaches nothing.
       await page.evaluate(() => window.teardownView?.());
+      await expect(reload.view.getByTestId('card-root')).toHaveCount(0);
       await deliver(page, await served.call('after teardown')).catch(
         () => undefined,
       );
@@ -565,16 +567,20 @@ for (const brand of BRAND_NAMES) {
         () => undefined,
       );
       await page.waitForTimeout(300);
-      await expect(content(reload.view)).toContainText('after the reload');
       await expect(reload.view.getByText('after teardown')).toHaveCount(0);
-      await expect(status(reload.view)).toHaveText('Answer');
+      await expect(reload.view.getByText('after the reload')).toHaveCount(0);
+      await expect(status(reload.view)).toHaveCount(0);
+      await expect(reload.view.locator('main')).toHaveCount(0);
 
-      // The page going away unmounts the card.
-      await reload.frame.evaluate(() =>
+      // The page going away unmounts the card, too.
+      const last = await session.mount(served);
+      await deliver(page, await served.call('before the page goes'));
+      await expect(content(last.view)).toContainText('before the page goes');
+      await last.frame.evaluate(() =>
         window.dispatchEvent(new Event('pagehide')),
       );
-      await expect(reload.view.getByTestId('card-root')).toHaveCount(0);
-      await expect(reload.view.locator('main')).toHaveCount(0);
+      await expect(last.view.getByTestId('card-root')).toHaveCount(0);
+      await expect(last.view.locator('main')).toHaveCount(0);
     });
 
     test('applies the brand through the card tokens and its own trusted font, with one stylesheet from the installed package', async ({
@@ -726,6 +732,7 @@ for (const brand of BRAND_NAMES) {
         'core',
         'mcp',
         'react',
+        'react-mcp-stack',
       ]);
       for (const hash of Object.values(identity.packedTarballSha256))
         expect(hash).toMatch(/^[0-9a-f]{64}$/);
@@ -1206,7 +1213,7 @@ test('Strict image consent ends when the host tears the view down', async ({
 
   await page.evaluate(() => window.teardownView?.());
   await expect(content(view).getByTestId('md-image')).toHaveCount(0); // the view's consent scope was retired
-  await expect(view.getByTestId('images-toggle')).toBeDisabled();
+  await expect(view.getByTestId('images-toggle')).toHaveCount(0); // and the card is unmounted with it
 });
 
 test('Strict image consent ends when a new tool result replaces the selection, even with equal Markdown, and a fresh press can grant again', async ({

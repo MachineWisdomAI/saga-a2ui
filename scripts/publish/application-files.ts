@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  FileBudget,
+  InputRefused,
+  MAX_APPLICATION_FILE_BYTES,
+  readBounded,
+} from './bounded-read.js';
 
 // Reading the application's own files into something that will be published (CLI3 #66, CLI4 #67). A
 // listing asset, a screenshot, a README or a skill is copied into an archive people receive, so it must
@@ -11,14 +17,17 @@ export type FileRead =
   | { readonly ok: false; readonly reason: string };
 
 const reasonOf = (error: unknown): string =>
-  (error as NodeJS.ErrnoException).code === 'ENOENT'
-    ? 'It does not exist.'
-    : (error as Error).message;
+  error instanceof InputRefused
+    ? error.message
+    : (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'It does not exist.'
+      : (error as Error).message;
 
 /** One file named relative to `directory`. */
 export function readApplicationFile(
   directory: string,
   source: string,
+  budget: FileBudget,
 ): FileRead {
   try {
     const file = path.resolve(directory, source);
@@ -28,7 +37,10 @@ export function readApplicationFile(
     const real = fs.realpathSync(file);
     if (!real.startsWith(`${root}${path.sep}`))
       throw new Error('It is outside the directory of the release input.');
-    return { ok: true, data: fs.readFileSync(real) };
+    return {
+      ok: true,
+      data: readBounded(real, MAX_APPLICATION_FILE_BYTES, budget),
+    };
   } catch (error) {
     return { ok: false, reason: reasonOf(error) };
   }
@@ -51,6 +63,7 @@ const MAX_TREE_BYTES = 5 * 1024 * 1024;
 export function readApplicationTree(
   directory: string,
   source: string,
+  budget: FileBudget,
 ): TreeRead {
   try {
     const root = fs.realpathSync(directory);
@@ -61,7 +74,7 @@ export function readApplicationTree(
     if (!realTop.startsWith(`${root}${path.sep}`))
       throw new Error('It is outside the directory of the release input.');
     const files: { path: string; data: Buffer }[] = [];
-    let bytes = 0;
+    const treeBudget = new FileBudget(MAX_TREE_BYTES);
     const walk = (current: string, prefix: string): void => {
       for (const entry of fs
         .readdirSync(current, { withFileTypes: true })
@@ -71,12 +84,21 @@ export function readApplicationTree(
         if (entry.isSymbolicLink()) throw new Error(`${relative} is a link.`);
         if (entry.isDirectory()) walk(full, relative);
         else if (entry.isFile()) {
-          const data = fs.readFileSync(full);
-          bytes += data.length;
-          if (files.length + 1 > MAX_TREE_FILES || bytes > MAX_TREE_BYTES)
+          if (files.length + 1 > MAX_TREE_FILES)
             throw new Error(
               `It holds more than ${MAX_TREE_FILES} files or ${MAX_TREE_BYTES} bytes.`,
             );
+          // The allowance is taken before a file is allocated, so a large file is never read.
+          let data: Buffer;
+          try {
+            data = readBounded(full, MAX_TREE_BYTES, treeBudget, budget);
+          } catch (error) {
+            if (error instanceof InputRefused)
+              throw new Error(
+                `It holds more than ${MAX_TREE_FILES} files or ${MAX_TREE_BYTES} bytes.`,
+              );
+            throw error;
+          }
           files.push({ path: relative, data });
         } else throw new Error(`${relative} is not a regular file.`);
       }

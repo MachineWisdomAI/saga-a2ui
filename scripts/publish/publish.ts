@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,9 +10,19 @@ import {
   sameDirectory,
   type OutputFile,
 } from '../starter-template.js';
+import {
+  FileBudget,
+  MAX_RECORD_BYTES,
+  MAX_VIEW_BYTES,
+  MAX_VIEW_TOTAL_BYTES,
+  preparationBudget,
+  readBounded,
+} from './bounded-read.js';
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
 import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
+import { ByteBudget } from '../maintainer-network.js';
+import { loadFixtureCalls, type FixtureCall } from './fixture-calls.js';
 import { runHandoff, type HandoffRequest } from './handoff.js';
 import {
   discoverEndpoint,
@@ -23,6 +32,7 @@ import {
   type EndpointSnapshot,
 } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
+import { sourceOf } from './source.js';
 import {
   ARCHIVE_FILES,
   RECORD_FILE,
@@ -67,7 +77,11 @@ export interface PublishRequest {
   readonly out?: string | undefined;
   /** An earlier output directory to compare with; changed inputs make its evidence stale. */
   readonly against?: string | undefined;
-  readonly invokeFixture: boolean;
+  /**
+   * `--invoke-fixture FILE`: the maintainer's own `saga-fixture-calls/1` file (fixture-calls.ts), the
+   * only source of tool-call authority. Without it no tool is called.
+   */
+  readonly invokeFixture?: string | undefined;
   /** The name of an environment variable holding a bearer credential for read-only discovery of a protected endpoint. */
   readonly bearerEnv?: string | undefined;
 }
@@ -81,6 +95,10 @@ export interface PublishIo {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for the endpoint. Defaults to the platform's `fetch`. */
   readonly fetch?: FetchLike | undefined;
+  /** What all responses of one assessment may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly networkBudget?: ByteBudget | undefined;
+  /** What all local files of one command may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly localBudget?: FileBudget | undefined;
   /** The ChatGPT manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
@@ -144,6 +162,7 @@ function readBuild(loaded: LoadedReleaseInput): {
     };
   }
   const problems: string[] = [];
+  const viewBudget = new FileBudget(MAX_VIEW_TOTAL_BYTES);
   const views = build.views.map((file): BuiltView => {
     const missing: BuiltView = {
       file,
@@ -160,7 +179,12 @@ function readBuild(loaded: LoadedReleaseInput): {
       if (real !== realBuild && !real.startsWith(`${realBuild}${path.sep}`))
         throw new Error('is outside the build directory');
       if (!fs.statSync(real).isFile()) throw new Error('is not a file');
-      const data = fs.readFileSync(real);
+      const data = readBounded(
+        real,
+        MAX_VIEW_BYTES,
+        viewBudget,
+        loaded.localBudget,
+      );
       if (data.length === 0) throw new Error('is empty');
       return {
         file,
@@ -250,23 +274,6 @@ function installedVersion(directory: string, name: string): string | null {
       // not here; look one level up
     }
     if (path.dirname(current) === current) return null;
-  }
-}
-
-function sourceOf(directory: string): PublicationRecord['source'] {
-  const git = (args: string[]): string =>
-    execFileSync('git', args, {
-      cwd: directory,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  try {
-    return {
-      revision: git(['rev-parse', 'HEAD']),
-      dirty: git(['status', '--porcelain=v1', '--untracked-files=no']) !== '',
-    };
-  } catch {
-    return { revision: null, dirty: null };
   }
 }
 
@@ -521,6 +528,9 @@ async function assess(
         ),
   );
 
+  // One allowance for everything this assessment reads from the network: discovery and a fixture run
+  // draw on the same budget, so neither can spend what the other was promised.
+  const budget = io.networkBudget ?? new ByteBudget();
   let discovery: Discovery;
   const discoverable = /^https?:$/.test(safeProtocol(input.endpoint.url));
   if (!discoverable)
@@ -534,6 +544,7 @@ async function assess(
       fetch: io.fetch,
       signal: io.signal,
       bearer,
+      budget,
     });
   if (discovery.kind === 'discovered') {
     const partial = discovery.snapshot.truncated;
@@ -643,19 +654,26 @@ async function assess(
   });
   findings.push(...prepared.findings);
 
-  // Fixture invocation: only when asked, only what the release input declares.
-  const declared = input.fixture?.calls ?? [];
+  // Fixture invocation: only when asked, and only the calls the maintainer's own file authorizes.
+  // The release input and the endpoint are lower-trust than the maintainer and choose no call.
+  let declared: readonly FixtureCall[] = [];
   let invocations: FixtureInvocation[] = [];
-  if (request.invokeFixture) {
-    if (declared.length === 0) {
+  if (request.invokeFixture !== undefined) {
+    const loadedCalls = loadFixtureCalls(
+      path.resolve(io.cwd, request.invokeFixture),
+      loaded.localBudget,
+    );
+    if (!loadedCalls.ok) {
       findings.push(
         fail(
           'fixture.invocation',
-          '--invoke-fixture was given but the release input declares no fixture.calls.',
-          'Declare the fixture calls to make, or omit --invoke-fixture.',
+          '--invoke-fixture was given but its fixture calls file cannot be used.',
+          'Name a saga-fixture-calls/1 file that lists the calls to make, or omit --invoke-fixture.',
+          loadedCalls.problem,
         ),
       );
     } else if (discovery.kind !== 'discovered') {
+      declared = loadedCalls.calls;
       findings.push(
         unknown(
           'fixture.invocation',
@@ -664,11 +682,12 @@ async function assess(
         ),
       );
     } else {
+      declared = loadedCalls.calls;
       invocations = await invokeFixture(
         input.endpoint.url,
         declared,
         discovery.snapshot.tools,
-        { fetch: io.fetch, signal: io.signal, bearer },
+        { fetch: io.fetch, signal: io.signal, bearer, budget },
       );
       const bad = invocations.filter((one) => one.outcome !== 'ok');
       findings.push(
@@ -726,7 +745,7 @@ async function assess(
       },
       fixture: {
         declared: declared.length,
-        invoked: request.invokeFixture && invocations.length > 0,
+        invoked: request.invokeFixture !== undefined && invocations.length > 0,
         invocations,
       },
       artifact,
@@ -756,7 +775,10 @@ async function assess(
       };
   const extra: Finding[] = [];
   if (request.against !== undefined) {
-    const previous = readPreviousOutput(path.resolve(io.cwd, request.against));
+    const previous = readPreviousOutput(
+      path.resolve(io.cwd, request.against),
+      loaded.localBudget,
+    );
     if (previous.kind === 'missing') {
       extra.push(
         fail(
@@ -849,7 +871,10 @@ const GENERATED_FILES = new Set<string>([
 ]);
 
 /** Whether `directory` is something this tool generated: a real directory holding only its own files and a record in its format. */
-function isGeneratedOutput(directory: string): boolean {
+function isGeneratedOutput(
+  directory: string,
+  localBudget: FileBudget,
+): boolean {
   try {
     if (!fs.lstatSync(directory).isDirectory()) return false;
     const names = fs.readdirSync(directory);
@@ -861,7 +886,11 @@ function isGeneratedOutput(directory: string): boolean {
     return (
       (
         JSON.parse(
-          fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8'),
+          readBounded(
+            path.join(directory, RECORD_FILE),
+            MAX_RECORD_BYTES,
+            localBudget,
+          ).toString('utf8'),
         ) as { format?: unknown }
       ).format === RECORD_FORMAT
     );
@@ -880,6 +909,7 @@ async function writeOutput(
   target: string,
   files: readonly OutputFile[],
   signal: AbortSignal | undefined,
+  localBudget: FileBudget,
 ): Promise<void> {
   if (!fs.existsSync(target) && !isSymlink(target)) {
     await createDirectoryInterruptibly(target, files, { signal });
@@ -895,7 +925,7 @@ async function writeOutput(
   const earlier = statDirectory(target);
   if (
     earlier === undefined ||
-    !isGeneratedOutput(target) ||
+    !isGeneratedOutput(target, localBudget) ||
     !isSameDirectory(statDirectory(target), earlier)
   ) {
     throw new TemplateError(
@@ -921,7 +951,7 @@ async function writeOutput(
   if (
     staged === undefined ||
     !isSameDirectory(statDirectory(target), earlier) ||
-    !isGeneratedOutput(target)
+    !isGeneratedOutput(target, localBudget)
   ) {
     discardStaging();
     throw replaced();
@@ -1090,7 +1120,10 @@ async function execute(
     );
     return EXIT_INTERRUPTED;
   }
-  const loaded = loadReleaseInput(path.resolve(io.cwd, request.release));
+  const loaded = loadReleaseInput(
+    path.resolve(io.cwd, request.release),
+    io.localBudget ?? preparationBudget(),
+  );
   if (!loaded.ok) {
     io.stderr(
       `saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`,
@@ -1143,7 +1176,12 @@ async function execute(
     if (archive !== null)
       files.push({ path: target.archiveFile, content: () => archive });
     try {
-      await writeOutput(destination, files, io.signal);
+      await writeOutput(
+        destination,
+        files,
+        io.signal,
+        loaded.loaded.localBudget,
+      );
     } catch (error) {
       if (error instanceof ExportInterrupted) {
         io.stderr(

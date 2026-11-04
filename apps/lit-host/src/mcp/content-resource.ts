@@ -1,15 +1,12 @@
-import type { ViewCsp } from '@saga-a2ui/mcp/policy';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
-import { embedPolicy } from '../content/embedded-policy.js';
-import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
-
-/** What the MCP server registers: the identity, the document and the host metadata. */
-export interface ContentResource {
-  readonly uri: string;
-  readonly html: string;
-  /** The `_meta.ui.csp` the host reads before mounting. */
-  readonly csp: ViewCsp;
-}
+import {
+  embedContentPolicy,
+  resourcePermissionsOf,
+  type ContentPolicy,
+} from '@saga-a2ui/components/faithful-card';
+import {
+  operationViewFromHtml,
+  type OperationView,
+} from '@saga-a2ui/mcp/server';
 
 /**
  * Derives the episode view resource from one policy. The declared origins and the restrictions
@@ -29,16 +26,11 @@ export function contentResource(
   viewHtml: string,
   policy: ContentPolicy,
   filename = 'view.html',
-): ContentResource {
-  const html = embedPolicy(viewHtml, policy);
-  return {
-    uri: viewUriForHtml(html, filename),
-    html,
-    csp: {
-      connectDomains: [],
-      resourceDomains: policy.resource.resourceDomains,
-      frameDomains: [],
-      baseUriDomains: [],
-    },
-  };
+): OperationView {
+  return operationViewFromHtml({
+    html: embedContentPolicy(viewHtml, policy),
+    filename,
+    title: 'Episode view',
+    csp: resourcePermissionsOf(policy),
+  });
 }

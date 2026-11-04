@@ -17,6 +17,10 @@ export {
   type StageResult,
 } from './lifetime.js';
 export {
+  RequestLifetimeAttachmentError,
+  attachRequestLifetime,
+} from './request-closure.js';
+export {
   OperationConfigurationError,
   registerProtectedOperation,
   registerPublicOperation,
@@ -32,4 +36,5 @@ export {
   type ProtectedOperation,
   type PublicOperation,
 } from './operation.js';
+export { operationViewFromHtml } from './operation-view.js';
 export { viewUriForHtml } from './view-identity.js';

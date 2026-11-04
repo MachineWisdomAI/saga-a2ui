@@ -505,7 +505,7 @@ for (const consumer of consumers) {
       expect(environment.backend.archived).toEqual(['n-2', 'n-1']);
     });
 
-    // The Lit app element offers `ingest`; the React page offers no such handle, and its strict
+    // The Lit app element the stack renders into `notes-app` offers `ingest`; the React page offers no such handle, and its strict
     // control schema is checked on the real React runtime in packages/react (actions.test.ts).
     if (consumer !== 'react')
       test('a layout that names an action or a handler is refused by the installed catalog, and a press sends nothing', async ({
@@ -533,7 +533,7 @@ for (const consumer of consumers) {
         type Ingest = { ok: boolean; failure?: { message: string } };
         const ingest = (messages: unknown[]) =>
           view
-            .locator('notes-app')
+            .locator('notes-app > *')
             .evaluate(
               (element, input) =>
                 (element as unknown as { ingest(i: unknown): Ingest }).ingest(

@@ -20,7 +20,8 @@ import {
   type RequestLifetime,
 } from './lifetime.js';
 
-// Declared MCP operations. The application owns the listener, authentication, domain
+// Declared MCP operations. An operation may present its result in a view or, with `view` omitted,
+// return only data and text; everything else about it is identical (see `register`). The application owns the listener, authentication, domain
 // authorization and every backend effect; it hands this module an operation declaration and an
 // MCP server it created. This module validates the input before the handler runs, waits for the
 // handler only within its bound, projects the handler's record explicitly, validates that
@@ -34,7 +35,11 @@ import {
 // budget. Unreleased preparation slice (CORE1): the full SSE/progress and delayed-completion
 // matrix remains CORE3's.
 
-/** The view the host mounts for an operation's result. The application builds it from its built bundle. */
+/**
+ * The view the host mounts for an operation's result. The application builds it from its built
+ * bundle. An operation that omits it has no view: it is declared and executed identically and
+ * carries no UI association at all.
+ */
 export interface OperationView {
   readonly uri: string;
   /** Resource name shown in `resources/list`. */
@@ -121,7 +126,12 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
   readonly input: Input;
   /** Runtime contract for the structured result. Strict contracts keep private fields out. */
   readonly output: Output;
-  readonly view: OperationView;
+  /**
+   * Optional. Present, the tool is linked to this view and the view is served as a resource.
+   * Omitted, the tool is a plain data operation: no resource is registered and no `_meta.ui`
+   * appears on the tool definition or on any result, successful or failed.
+   */
+  readonly view?: OperationView;
   /**
    * This operation's own limit for its complete handler and projection: the per-operation override
    * of the operation limit. Omitted, the route's or SDK instance's operation limit applies, else
@@ -235,13 +245,14 @@ function assertConfigured(
   needs(isSchema(declaration.input), 'input contract');
   needs(isSchema(declaration.output), 'output contract');
   const view = declaration.view;
+  // Omitting the view is a declaration. A view that is present must be complete.
   needs(
-    view !== undefined &&
-      isText(view.uri) &&
-      isText(view.title) &&
-      typeof view.html === 'string' &&
-      view.csp !== undefined,
-    'view',
+    view === undefined ||
+      (isText(view.uri) &&
+        isText(view.title) &&
+        typeof view.html === 'string' &&
+        view.csp !== undefined),
+    'view (complete, or omitted)',
   );
   const failures = declaration.failures;
   needs(
@@ -423,17 +434,36 @@ function linkedToView(
 }
 
 /**
- * Registers the tool and its view on the server. The server has parsed `args` with the
- * declaration's input contract before `callback` runs, so a wrapper that knows the contract's
- * type states that fact (`args as z.output<Input>`). Structured content leaves `callback` already
- * validated against the declaration's output contract. Every result `callback` returns, success or
- * safe failure, leaves linked to the declaration's view.
+ * Registers the tool, and its view when it has one, on the server. The server has parsed `args`
+ * with the declaration's input contract before `callback` runs, so a wrapper that knows the
+ * contract's type states that fact (`args as z.output<Input>`). Structured content leaves
+ * `callback` already validated against the declaration's output contract.
+ *
+ * With a view, every result `callback` returns, success or safe failure, leaves linked to it.
+ * Without one, the tool is declared on the server with the same title, description, contracts and
+ * annotations and the same callback, and the view is the only thing missing: nothing is linked,
+ * no resource is registered, and `callback` already produces no `_meta`.
  */
 function register(
   server: McpServer,
   declaration: Declaration<z.ZodObject, z.ZodObject>,
   callback: (args: unknown, ctx: ServerContext) => Promise<CallToolResult>,
 ): void {
+  const { view } = declaration;
+  if (view === undefined) {
+    server.registerTool(
+      declaration.name,
+      {
+        title: declaration.title,
+        description: declaration.description,
+        inputSchema: declaration.input,
+        outputSchema: declaration.output,
+        annotations: declaration.annotations,
+      },
+      (args, ctx) => callback(args, ctx),
+    );
+    return;
+  }
   registerAppTool(
     server,
     declaration.name,
@@ -443,12 +473,10 @@ function register(
       inputSchema: declaration.input,
       outputSchema: declaration.output,
       annotations: declaration.annotations,
-      _meta: { ui: { resourceUri: declaration.view.uri } },
+      _meta: { ui: { resourceUri: view.uri } },
     },
-    async (args, ctx) =>
-      linkedToView(await callback(args, ctx), declaration.view),
+    async (args, ctx) => linkedToView(await callback(args, ctx), view),
   );
-  const { view } = declaration;
   registerAppResource(server, view.title, view.uri, {}, async () => ({
     contents: [
       {
@@ -461,7 +489,7 @@ function register(
   }));
 }
 
-/** Declares an explicitly public operation and its view on an application-owned MCP server. */
+/** Declares an explicitly public operation, and its view when it has one, on an application-owned MCP server. */
 export function registerPublicOperation<
   Input extends z.ZodObject,
   Output extends z.ZodObject,
@@ -486,8 +514,8 @@ export function registerPublicOperation<
 
 /**
  * Declares an operation that acts for a verified identity. Registration fails, with the missing
- * requirement named, unless the identity resolver, sign-in failure text, projection and view
- * are all configured. With no acceptable identity the handler never runs, and neither does it for a
+ * requirement named, unless the identity resolver, sign-in failure text and projection
+ * are all configured (and the view, when one is declared). With no acceptable identity the handler never runs, and neither does it for a
  * call that was cancelled or whose request already ended before the handler could start.
  */
 export function registerProtectedOperation<

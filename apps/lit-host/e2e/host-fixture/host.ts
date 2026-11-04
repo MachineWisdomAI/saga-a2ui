@@ -1,6 +1,7 @@
 import {
   AppBridge,
   PostMessageTransport,
+  type McpUiHostContext,
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import type {
   CallToolRequest,
@@ -23,6 +24,24 @@ export interface HostedResource {
   readonly csp: ResourceCsp;
 }
 
+/**
+ * How the host treats one kind of conversation request (`ui/update-model-context`, `ui/message`):
+ * `accept` answers it, `refuse` and `fail` reject or flag it, `withhold` does not advertise the
+ * capability at all (so a correct view never sends it), and `hold` records the request and leaves
+ * it unanswered until `releaseConversation`, which then accepts it. `hold-then-refuse` holds the
+ * same way and refuses when released, which is how a test settles a failed append after the view
+ * has moved on. The context update's result is empty in the bridge, so `refuse` and `fail` both
+ * reject it; a message that is refused is answered with `isError`.
+ */
+export type ConversationBehavior =
+  'accept' | 'refuse' | 'fail' | 'withhold' | 'hold' | 'hold-then-refuse';
+
+/** One conversation request the view made, in the order the host received it. */
+export interface ConversationRequest {
+  readonly kind: 'context' | 'message';
+  readonly params: unknown;
+}
+
 declare global {
   interface Window {
     /**
@@ -36,7 +55,22 @@ declare global {
       options?: {
         resultDuringInitialization?: Parameters<AppBridge['sendToolResult']>[0];
         slot?: string;
+        /** The host context in the initialize response, e.g. the theme the host negotiated. */
+        hostContext?: McpUiHostContext;
+        /**
+         * Offers the conversation capabilities. Each kind is advertised unless its behaviour is
+         * `withhold`; absent, the host offers neither.
+         */
+        conversation?: {
+          context?: ConversationBehavior;
+          message?: ConversationBehavior;
+        };
       },
+    ) => Promise<void>;
+    /** Sends the view in `slot` a partial host-context change (`ui/notifications/host-context-changed`). */
+    changeHostContext?: (
+      change: McpUiHostContext,
+      slot?: string,
     ) => Promise<void>;
     /** Asks the view in `slot` (default: the default slot) to tear down (`ui/resource-teardown`); its iframe stays in place. */
     teardownView?: (slot?: string) => Promise<void>;
@@ -66,11 +100,23 @@ declare global {
     handleOpenLink?: (params: {
       url: string;
     }) => Promise<{ isError?: boolean }>;
+    /** Every conversation request the view in `slot` made, in order, whatever the host answered. */
+    conversationRequests?: (slot?: string) => ConversationRequest[];
+    /** Answers the requests the view in `slot` has left outstanding (behaviour `hold`). */
+    releaseConversation?: (slot?: string) => void;
+    /** The sizes the view in `slot` has told the host (`ui/notifications/size-changed`), in order. */
+    sizeChanges?: (slot?: string) => Array<{ width?: number; height?: number }>;
+    /** How many times the view in `slot` has completed its handshake (`ui/notifications/initialized`). */
+    handshakes?: (slot?: string) => number;
   }
 }
 
 const DEFAULT_SLOT = 'main';
 const bridges = new Map<string, AppBridge>();
+const sizes = new Map<string, Array<{ width?: number; height?: number }>>();
+const handshakeCounts = new Map<string, number>();
+const conversations = new Map<string, ConversationRequest[]>();
+const heldAnswers = new Map<string, Array<() => void>>();
 
 /** The default slot keeps the title every single-view specification locates its frame by. */
 const titleFor = (slot: string) =>
@@ -95,12 +141,51 @@ window.mountView = async (resource, options) => {
   );
 
   const openLink = window.handleOpenLink;
+  const behaviours = options?.conversation;
+  const behaviourOf = (kind: 'context' | 'message'): ConversationBehavior =>
+    behaviours === undefined ? 'withhold' : (behaviours[kind] ?? 'accept');
   const bridge = new AppBridge(
     null,
     { name: 'local-host-fixture', version: '0.0.0' },
-    openLink ? { serverTools: {}, openLinks: {} } : { serverTools: {} },
+    {
+      serverTools: {},
+      ...(openLink ? { openLinks: {} } : {}),
+      ...(behaviourOf('context') === 'withhold'
+        ? {}
+        : { updateModelContext: {} }),
+      ...(behaviourOf('message') === 'withhold' ? {} : { message: {} }),
+    },
+    options?.hostContext ? { hostContext: options.hostContext } : undefined,
   );
   bridges.set(slot, bridge);
+  sizes.set(slot, []);
+  handshakeCounts.set(slot, 0);
+  conversations.set(slot, []);
+  heldAnswers.set(slot, []);
+  const answerConversation = async (
+    kind: 'context' | 'message',
+    params: unknown,
+  ): Promise<{ isError?: boolean }> => {
+    conversations.get(slot)?.push({ kind, params });
+    const behaviour = behaviourOf(kind);
+    if (behaviour === 'hold' || behaviour === 'hold-then-refuse')
+      await new Promise<void>((resolve) =>
+        heldAnswers.get(slot)?.push(resolve),
+      );
+    if (behaviour === 'fail') throw new Error('the host failed the request');
+    if (behaviour === 'refuse' || behaviour === 'hold-then-refuse') {
+      // A context update cannot be answered with `isError`; the host rejects it.
+      if (kind === 'context') throw new Error('the host refused the context');
+      return { isError: true };
+    }
+    return {};
+  };
+  bridge.onupdatemodelcontext = async (params) => {
+    await answerConversation('context', params);
+    return {};
+  };
+  bridge.onmessage = (params) => answerConversation('message', params);
+  bridge.onsizechange = (size) => void sizes.get(slot)?.push(size);
   if (openLink) bridge.onopenlink = ({ url }) => openLink({ url });
   bridge.oncalltool = (params) => {
     if (!window.handleToolCall)
@@ -109,6 +194,7 @@ window.mountView = async (resource, options) => {
   };
   const initialized = new Promise<void>((resolve) => {
     bridge.oninitialized = () => {
+      handshakeCounts.set(slot, (handshakeCounts.get(slot) ?? 0) + 1);
       if (options?.resultDuringInitialization)
         void bridge.sendToolResult(options.resultDuringInitialization);
       resolve();
@@ -127,8 +213,21 @@ window.mountView = async (resource, options) => {
   await initialized;
 };
 
+window.sizeChanges = (slot = DEFAULT_SLOT) => [...(sizes.get(slot) ?? [])];
+window.handshakes = (slot = DEFAULT_SLOT) => handshakeCounts.get(slot) ?? 0;
+window.conversationRequests = (slot = DEFAULT_SLOT) => [
+  ...(conversations.get(slot) ?? []),
+];
+window.releaseConversation = (slot = DEFAULT_SLOT) => {
+  for (const release of heldAnswers.get(slot)?.splice(0) ?? []) release();
+};
+
 window.deliverToolResult = async (result, slot = DEFAULT_SLOT) => {
   await bridgeIn(slot).sendToolResult(result);
+};
+
+window.changeHostContext = async (change, slot = DEFAULT_SLOT) => {
+  await bridgeIn(slot).sendHostContextChange(change);
 };
 
 window.deliverToolInput = async (params, slot = DEFAULT_SLOT) => {

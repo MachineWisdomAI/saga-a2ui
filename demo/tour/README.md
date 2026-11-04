@@ -18,8 +18,9 @@ npm run build:tour        # writes apps/lit-host/dist/tour (ignored)
 
 Open `apps/lit-host/dist/tour/index.html` in a browser, or serve that directory from any static
 host. Node 22.12 or newer builds it. `tour.json` ties the page to the candidate build and the source
-commit its links point at. The repository is private, so those links open for people who have access
-to it.
+commit its links point at. The repository is public, so those links open for anyone; the built
+page's own footer text (in `src/tour.ts`) still says otherwise and is corrected with the next product
+change.
 
 ## What is real and what is simulated
 
@@ -43,10 +44,12 @@ the example. It does not make a simulated answer evidence that any server enforc
 - The tour plays no media, reads no Patreon data and offers no protected content. Episode
   descriptions and Play need the demonstration's server and are not offered.
 - Renderer previews: **Lit** is the full renderer. **React** has bounded evidence (direct action
-  attachment and the notes application in a local fixture host); it is not renderer parity and there
-  is no React starter, template or CLI pair. Lynx delivery was retired and is not offered. A renderer
-  joins the list in `src/scenarios.ts` when its preview works.
-- The SDK is an unpublished candidate. Nothing here says the packages are on a public registry.
+  attachment and the notes application in a local fixture host); it is not renderer parity, and it is
+  not the React starter (`saga init --a2ui-stack react-mcp --server hono`), which is a separate
+  pair. Lynx delivery was retired and is not offered. A renderer joins the list in
+  `src/scenarios.ts` when its preview works.
+- The tour is built from packed candidate tarballs of this source, not from registry packages. Nothing
+  here says the stack packages are on a public registry.
 
 ## Files
 

@@ -258,7 +258,7 @@ describe('the pairs it offers', () => {
     }
   });
 
-  it('offers the five qualified servers for the stack, each on its own maintained template', () => {
+  it('offers the five qualified Lit servers and the React view on Hono, each on its own maintained template', () => {
     expect(
       SUPPORTED_PAIRS.map(
         (pair) => `${pair.stack} on ${pair.server} from ${pair.template}`,
@@ -269,13 +269,24 @@ describe('the pairs it offers', () => {
       'lit-mcp on fastify from lit-fastify',
       'lit-mcp on hono from lit-hono',
       'lit-mcp on hapi from lit-hapi',
+      'react-mcp on hono from react-hono',
     ]);
   });
 
   it.each([
     ['a server with no qualified starter', 'lit-mcp', 'koa'],
-    ['a qualified server for an unqualified stack', 'react-mcp', 'express'],
-    ['another stack on the qualified server', 'react-mcp', 'node'],
+    [
+      'the React stack on a server it is not qualified on',
+      'react-mcp',
+      'express',
+    ],
+    ['the React stack on a server it is not qualified on', 'react-mcp', 'node'],
+    ['the React stack on a server it is not qualified on', 'react-mcp', 'hapi'],
+    [
+      'the Lit stack on a server that is not qualified',
+      'lit-mcp',
+      'react-hono',
+    ],
     ['a stack without its delivery', 'lit', 'node'],
     ['a stack that names no renderer', 'mcp', 'node'],
     ['a server that is only a path', 'lit-mcp', '../node'],

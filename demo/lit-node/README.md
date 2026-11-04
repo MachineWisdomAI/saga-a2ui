@@ -104,5 +104,5 @@ the installed packages, and the views are the application's installed views.
 ## Limits
 
 Loopback only, in memory, one process. The local host fixture is not an assistant host. No OAuth
-flow or registry install is involved, nothing is published or deployed, and the packages remain
-private candidate builds.
+flow or registry install is involved, nothing is published or deployed, and the packages are candidate builds of this source
+(`@saga-a2ui/lit` and `@saga-a2ui/lit-mcp-stack` are private and unpublished).

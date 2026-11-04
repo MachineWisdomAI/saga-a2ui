@@ -1,4 +1,4 @@
-import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'; // saga-boundary: integration-import backend registration of the two app-only tools (session check and archive) with the MCP Apps server API; the @saga-a2ui/mcp/server operations register no app-only tool, and this server module never touches the view bridge
 import {
   McpServer,
   type AuthInfo,

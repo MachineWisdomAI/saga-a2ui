@@ -1,16 +1,10 @@
 flowchart TD
-  app[Application composition] --> catalog[Application catalog and trusted policy]
-  app --> bridge[Public MCP view contract]
-  bridge -->|delivered presentation input| decoder[Core A2UI decoder]
-  decoder -->|validated message cases| session[Core processor session]
-  catalog --> session
-  session -->|surface state| lit[Lit mounting and bindings]
-  lit --> view[Application components and actions]
-  decoder -->|invalid input| fallback[Clear affected view and safe fallback]
-  session -->|rejected update| fallback
-  fallback --> view
-  app --> dispose[Explicit disposal]
-  dispose -->|retire delivery| bridge
-  dispose -->|release subscriptions and state| session
-  dispose -->|unmount| lit
-  lynx[Bounded Lynx Web investigation] -.->|informs neutral contracts| session
+  result[Delivered MCP result] --> reader[Application result reader]
+  reader -->|typed application data| update[Surface update]
+  layout[Application catalog and layout] --> session[SDK session and Lit surface]
+  update -->|valid data| session
+  update -->|rejected data| unchanged[Return failure; retain prior surface]
+  session -->|initial layout cannot open| fallback[Safe fallback]
+  session --> view[Application components and bound actions]
+  dispose[Stack disposal] --> retire[Retire bindings and unmount]
+  retire --> cleanup[Release session and delivery]

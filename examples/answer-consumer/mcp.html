@@ -10,6 +10,26 @@
     <title>Answers</title>
     <style>
       body { margin: 0; }
+      /* The page frame; the brand's CSS properties (see src/branding.ts) fill it in. */
+      answer-view {
+        display: block;
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 1rem;
+        box-sizing: border-box;
+        background: var(--app-surface);
+        color: var(--saga-card-text-color);
+        font-family: var(--saga-card-font-family);
+        line-height: 1.5;
+      }
+      answer-view h1 {
+        margin-block: 0 1rem;
+        color: var(--saga-card-accent-color);
+      }
+      answer-view [role='status'] {
+        min-height: 1.5em;
+        margin-block: 0.5rem;
+      }
     </style>
   </head>
   <body>

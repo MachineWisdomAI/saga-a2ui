@@ -1,0 +1,50 @@
+/*
+ * Presentation of the React SagaAttribution credit. Import it explicitly
+ * (`@saga-a2ui/react/attribution.css`); nothing in the component loads a stylesheet, and every rule
+ * is scoped under `.saga-attribution`, so it cannot restyle the surrounding application.
+ *
+ * The credit is plain secondary text: the application's font and colour, no badge, background,
+ * animation or separator. Keyboard focus keeps a visible outline.
+ *
+ * Tokens. Set any of these on the credit or on an ancestor. Each has a neutral fallback.
+ *   --saga-attribution-font-size    font size (default: 0.875rem)
+ *   --saga-attribution-text-color   text colour (default: inherited)
+ *   --saga-attribution-link-color   colour of the linked name (default: inherited)
+ *   --saga-attribution-margin       margin around the credit (default: 0)
+ *
+ * Semantic classes. The credit's own elements carry these; style them for an application's look.
+ *   .saga-attribution               the credit, a paragraph
+ *   .saga-attribution-link          the name when the host can open it (a button, so it never
+ *                                   navigates by itself)
+ *   .saga-attribution-name          the name when it cannot be activated
+ *   .saga-attribution-destination   that destination, shown as text beside an inert name
+ *   .saga-attribution-status        the readable answer after a request the host did not open
+ */
+.saga-attribution {
+  margin: var(--saga-attribution-margin, 0);
+  font-size: var(--saga-attribution-font-size, 0.875rem);
+  color: var(--saga-attribution-text-color, inherit);
+}
+
+.saga-attribution .saga-attribution-link {
+  font: inherit;
+  color: var(--saga-attribution-link-color, inherit);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.saga-attribution .saga-attribution-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.saga-attribution .saga-attribution-link[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.saga-attribution .saga-attribution-status:not(:empty) {
+  display: block;
+}

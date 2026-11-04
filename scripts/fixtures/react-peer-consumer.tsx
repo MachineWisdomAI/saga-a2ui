@@ -1,5 +1,5 @@
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
-import { connectToolResultView } from '@saga-a2ui/mcp/view';
+import { runToolResultView } from '@saga-a2ui/mcp/view';
 import { createServerBudgets } from '@saga-a2ui/mcp/server';
 import {
   createMessageSession,
@@ -26,10 +26,11 @@ session.onSurfaceCreated((surface) => {
   void element;
 });
 const app = new App({ name: 'synthetic', version: '1' }, {});
-void connectToolResultView({
+void runToolResultView({
   app,
   transport: new PostMessageTransport(window.parent, window.parent),
   onToolResult: () => {},
+  onTeardown: () => {},
 });
 void createServerBudgets();
 void z.object({ question: z.string() });

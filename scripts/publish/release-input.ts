@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import {
+  InputRefused,
+  MAX_RELEASE_INPUT_BYTES,
+  MAX_VIEWS,
+  readBounded,
+} from './bounded-read.js';
 import { sha256 } from './record.js';
+import type { FileBudget } from './bounded-read.js';
 
 // The one file a maintainer writes to prepare an application for a host directory (CLI3 #66):
 // `saga-publication.json`, kept beside the application's source. It names the built application and
@@ -127,11 +134,11 @@ export const ReleaseInputSchema = z.strictObject({
       brandColorDark: z.string().optional(),
     })
     .optional(),
-  /** The ChatGPT listing's PNG or SVG files, copied into the package under `assets/`. Needed with `listing`. */
+  /** Application branding overrides. Omitted fields use SAGA branding; paths are relative to this input. */
   assets: z
     .strictObject({
-      logo: z.string(),
-      composerIcon: z.string(),
+      logo: z.string().optional(),
+      composerIcon: z.string().optional(),
       logoDark: z.string().optional(),
       composerIconDark: z.string().optional(),
     })
@@ -147,7 +154,13 @@ export const ReleaseInputSchema = z.strictObject({
     /** The built application. */
     directory: z.string(),
     /** The built view files (inside `directory`) the endpoint serves as MCP App resources. */
-    views: z.array(z.string()).min(1),
+    views: z
+      .array(z.string())
+      .min(1)
+      .max(MAX_VIEWS)
+      .refine((views) => new Set(views).size === views.length, {
+        message: 'a view is listed twice',
+      }),
   }),
   endpoint: z.strictObject({
     /** The deployed MCP endpoint people reach: stable, public and HTTPS. */
@@ -186,24 +199,14 @@ export const ReleaseInputSchema = z.strictObject({
         .optional(),
     })
     .optional(),
-  /** Tool calls `--invoke-fixture` may make against a test fixture. Declaring them calls nothing. */
-  fixture: z
-    .strictObject({
-      calls: z.array(
-        z.strictObject({
-          tool: z.string(),
-          arguments: z.record(z.string(), z.unknown()).optional(),
-        }),
-      ),
-    })
-    .optional(),
+  // There is deliberately no field here that chooses a tool call: this file is lower-trust than the
+  // maintainer, so call authority comes from the maintainer's own file (fixture-calls.ts).
 });
 
 export type ReleaseInput = z.infer<typeof ReleaseInputSchema>;
-/** A release input that carries the ChatGPT listing and its assets, which the `chatgpt` target needs. */
+/** A release input that carries the listing the ChatGPT target needs. */
 export type ChatgptReleaseInput = ReleaseInput & {
   readonly listing: NonNullable<ReleaseInput['listing']>;
-  readonly assets: NonNullable<ReleaseInput['assets']>;
 };
 export type ClaudeConnectorInput = z.infer<typeof claudeConnector>;
 export type ClaudePluginBundleInput = z.infer<typeof claudePluginBundle>;
@@ -214,20 +217,28 @@ export interface LoadedReleaseInput {
   readonly directory: string;
   /** Digest of the file's bytes: any edit makes earlier evidence stale. */
   readonly sha256: string;
+  /** What every local file of this command may add up to, made once at the command's entry. */
+  readonly localBudget: FileBudget;
 }
 
 export type ReleaseInputResult =
   | { readonly ok: true; readonly loaded: LoadedReleaseInput }
   | { readonly ok: false; readonly problem: string };
 
-export function loadReleaseInput(file: string): ReleaseInputResult {
+export function loadReleaseInput(
+  file: string,
+  localBudget: FileBudget,
+): ReleaseInputResult {
   let bytes: Buffer;
   try {
-    bytes = fs.readFileSync(file);
+    bytes = readBounded(file, MAX_RELEASE_INPUT_BYTES, localBudget);
   } catch (error) {
     return {
       ok: false,
-      problem: `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).`,
+      problem:
+        error instanceof InputRefused
+          ? `The release input ${file} cannot be read: ${error.message}`
+          : `The release input ${file} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}).`,
     };
   }
   let value: unknown;
@@ -256,6 +267,7 @@ export function loadReleaseInput(file: string): ReleaseInputResult {
       input: parsed.data,
       directory: path.dirname(path.resolve(file)),
       sha256: sha256(bytes),
+      localBudget,
     },
   };
 }

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>View lifecycle probe</title>
+  </head>
+  <body>
+    <!-- Controls the test drives to settle the readiness work and end the view by hand. -->
+    <button data-testid="release-ready">Ready work succeeds</button>
+    <button data-testid="fail-ready">Ready work fails</button>
+    <button data-testid="dispose">Dispose</button>
+    <ol data-testid="log"></ol>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -39,7 +39,7 @@ export function blockedFragment(fragment: BlockedFragment): TemplateResult {
   const content = revealed ? source(label) : standIn;
   return block === true
     ? html`<p
-        class="source-block"
+        class="saga-card-source"
         data-testid=${testId}
         data-kind=${kind}
         data-reason=${reason}
@@ -48,6 +48,7 @@ export function blockedFragment(fragment: BlockedFragment): TemplateResult {
         ${content}
       </p>`
     : html`<span
+        class="saga-card-blocked"
         data-testid=${testId}
         data-kind=${kind}
         data-reason=${reason}

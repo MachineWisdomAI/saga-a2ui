@@ -7,3 +7,9 @@ export type {
   ActionButtonEvents,
 } from './action-button.js';
 export { InstanceHostProvider, useActionSetup } from './instance-host.js';
+export {
+  ActionsScope,
+  createReactActions,
+  type ReactActions,
+  type ReactActionsOptions,
+} from './react-actions.js';

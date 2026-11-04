@@ -1,0 +1,25 @@
+sequenceDiagram
+  actor P as Person
+  participant B as Board (A2UI view)
+  participant C as A2A client
+  participant G as Game agent (A2A server)
+  participant S as App API (rules, GameStore)
+  Note over B,G: Architectural sketch: no A2A delivery exists yet.
+  P->>B: clicks a square
+  B->>S: play_move(X, expectedMoveNumber 0)
+  S-->>B: game, move 1
+  B->>B: show X, squares disabled
+  B->>C: appendMessage("Your move in game ...", context: game)
+  C->>G: message/send<br/>role user, current contextId<br/>parts: text, data {game}
+  opt data part missing
+    G->>S: get_game
+    S-->>G: game, move 1
+  end
+  G->>S: play_move(O, expectedMoveNumber 1)
+  S-->>G: game, move 2
+  G-->>C: reply message
+  loop bounded wait, about every 1.5 s
+    B->>S: get_game
+    S-->>B: game, move 2
+  end
+  B->>B: show O, squares enabled for X

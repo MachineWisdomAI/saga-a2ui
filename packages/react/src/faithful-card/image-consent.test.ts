@@ -12,13 +12,18 @@ import type {
   ImageConsent,
   ImageConsentScope,
 } from '@saga-a2ui/components/faithful-card';
+import type { BoundSurface } from '../a2ui.js';
 import { mount, type Mounted } from '../actions/fixture.test-support.js';
 import {
-  dataUpdate,
-  layout,
+  answerCard,
+  answerData,
+  cardsLayout,
+  openCards,
   openSession,
+  rawSurfaceUnder,
   surfaceUnder,
   trusted,
+  type CardData,
   type Session,
   type TrustedOptions,
 } from './fixture.test-support.js';
@@ -35,8 +40,10 @@ import {
 
 let mounted: Mounted | undefined;
 const sessions: Session[] = [];
+const surfaces: BoundSurface<CardData>[] = [];
 afterEach(() => {
   mounted?.unmount();
+  for (const surface of surfaces.splice(0)) surface.dispose();
   for (const session of sessions.splice(0)) session.dispose();
   mounted = undefined;
 });
@@ -605,52 +612,69 @@ describe('source reveal and protected actions', () => {
   });
 });
 
-describe('consent in an A2UI surface', () => {
-  const bound = [
-    {
-      id: 'card',
-      markdown: { path: '/answer' },
-      contractVersion: { path: '/version' },
-    },
-  ];
-  const answer = (markdown: unknown) =>
-    dataUpdate({ answer: markdown, version: 1 });
-
+describe('consent in a bound surface', () => {
   function start(markdown: string, options: TrustedOptions = strictOptions) {
-    const session = openSession([...layout(bound), ...answer(markdown)]);
-    sessions.push(session);
+    const surface = openCards([answerCard], answerData(markdown));
+    surfaces.push(surface);
     const { view, watched, app } = watchedView(options);
     mounted = mount();
-    mounted.render(surfaceUnder(view, session.surface));
-    return { session, watched, app, view: mounted };
+    mounted.render(surfaceUnder(view, surface.handle));
+    return { surface, watched, app, view: mounted };
   }
 
   it('retires the images when the data model replaces the content, and a new press shows the new ones', async () => {
-    const { session, watched, view } = start(withImage());
+    const { surface, watched, view } = start(withImage());
     showImages(view);
     expect(sources(view.container)).toEqual([IMAGE]);
-    await act(async () => session.ingest(answer(withImage(IMAGE_B))));
+    await act(async () => {
+      expect(surface.update(answerData(withImage(IMAGE_B)))).toEqual({
+        ok: true,
+      });
+    });
     expect(watched.grants[0]!.live).toBe(false);
     expect(sources(view.container)).toEqual([]);
     showImages(view);
     expect(sources(view.container)).toEqual([IMAGE_B]);
   });
 
+  it('releases the card’s subscription and grant when the application unmounts its surface, leaving the scope live', () => {
+    const { watched, app, view } = start(withImage());
+    showImages(view);
+    view.render(createElement('p', null, 'the surface is gone'));
+    expect(watched.active()).toBe(0);
+    expect(watched.grants.map((grant) => grant.live)).toEqual([false]);
+    expect(app.retired).toBe(false);
+  });
+});
+
+// Layer A: a component replaced through the raw protocol, which a bound surface does not expose.
+describe('consent in a card whose component the protocol replaces', () => {
+  function start(markdown: string) {
+    const session = openSession(
+      cardsLayout([answerCard], answerData(markdown)),
+    );
+    sessions.push(session);
+    const { view, watched } = watchedView(strictOptions);
+    mounted = mount();
+    mounted.render(rawSurfaceUnder(view, session.surface));
+    return { session, watched, view: mounted };
+  }
+
+  const replaceCard = (text: string) => [
+    {
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 'cards',
+        components: [{ id: 'card', component: 'Text', text }],
+      },
+    },
+  ];
+
   it('retires the grant when A2UI replaces the component, and a control kept from the old node does nothing', async () => {
     const { session, watched, view } = start(withImage());
     const toggle = one(view.container, 'images-toggle');
     showImages(view);
-    await act(async () =>
-      session.ingest([
-        {
-          version: 'v0.9',
-          updateComponents: {
-            surfaceId: 'cards',
-            components: [{ id: 'card', component: 'Text', text: 'plain now' }],
-          },
-        },
-      ]),
-    );
+    await act(async () => session.ingest(replaceCard('plain now')));
     expect(byTestId(view.container, 'card-root')).toEqual([]);
     expect(watched.grants[0]!.live).toBe(false);
     press(view, toggle);
@@ -661,28 +685,11 @@ describe('consent in an A2UI surface', () => {
   it('retires the controls of a disposed node before React has unmounted it, so a press makes no grant', async () => {
     const { session, watched, view } = start(withImage());
     const toggle = one(view.container, 'images-toggle');
-    session.ingest([
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: 'cards',
-          components: [{ id: 'card', component: 'Text', text: 'replaced' }],
-        },
-      },
-    ]);
+    session.ingest(replaceCard('replaced'));
     expect(toggle.isConnected).toBe(true);
     press(view, toggle);
     await view.settle();
     expect(watched.grants).toEqual([]);
     expect(sources(view.container)).toEqual([]);
-  });
-
-  it('releases the card’s subscription and grant when the application unmounts its surface, leaving the scope live', () => {
-    const { watched, app, view } = start(withImage());
-    showImages(view);
-    view.render(createElement('p', null, 'the surface is gone'));
-    expect(watched.active()).toBe(0);
-    expect(watched.grants.map((grant) => grant.live)).toEqual([false]);
-    expect(app.retired).toBe(false);
   });
 });

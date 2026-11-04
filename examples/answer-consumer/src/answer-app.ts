@@ -1,21 +1,41 @@
 import {
+  openFaithfulCardSurface,
   provideContentView,
+  type CardSurface,
   type ContentView,
 } from '@saga-a2ui/lit/faithful-card';
-import { css, html } from 'lit';
+import { LitElement, css, html } from 'lit';
 import type { AnswerFunction } from './answer-function.js';
-import {
-  answerData,
-  answerFrameStyles,
-  createAnswerSurfaceElement,
-} from './answer-surface.js';
 import { applyBranding, type Branding } from './branding.js';
 
-// The standalone page's composition: the shared answer surface (answer-surface.ts), its own chrome
-// (brand, question form, status), and a typed answer function it calls itself. SAGA's card shows
-// the Markdown it is given; it never calls the answer function, never sees the question and never
-// decides what the status says. The page an MCP host mounts (answer-view.ts) has no form and no
-// answer function: the host delivers the answer.
+// The standalone page's composition: SAGA's card surface, its own chrome (brand, question form,
+// status), and a typed answer function it calls itself. SAGA's card shows the Markdown it is
+// given; it never calls the answer function, never sees the question and never decides what the
+// status says. The page an MCP host mounts (mcp-main.ts) has no form and no answer function: the
+// host delivers the answer, and the stack starts the card.
+
+/** The standalone page's frame; the brand's CSS properties (see branding.ts) fill it in. */
+const answerFrameStyles = css`
+  :host {
+    display: block;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 1rem;
+    box-sizing: border-box;
+    background: var(--app-surface);
+    color: var(--saga-card-text-color);
+    font-family: var(--saga-card-font-family);
+    line-height: 1.5;
+  }
+  h1 {
+    margin-block: 0 1rem;
+    color: var(--saga-card-accent-color);
+  }
+  [role='status'] {
+    min-height: 1.5em;
+    margin-block: 0.5rem;
+  }
+`;
 
 export interface AnswerAppDependencies {
   /** The application's backend call. Any implementation of the type can be composed in. */
@@ -26,7 +46,7 @@ export interface AnswerAppDependencies {
 }
 
 export function createAnswerAppElement(deps: AnswerAppDependencies) {
-  class AnswerApp extends createAnswerSurfaceElement() {
+  class AnswerApp extends LitElement {
     static override styles = [
       answerFrameStyles,
       css`
@@ -50,6 +70,8 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
     ];
 
     #endContentView?: () => void;
+    /** Open while the element is in the document; presenting an answer is the one way to change the card. */
+    #card?: CardSurface;
     #status = 'Ask a question.';
     /** Orders questions: an answer that arrives after a newer question was asked is not shown. */
     #asked = 0;
@@ -57,11 +79,14 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
     override connectedCallback() {
       applyBranding(this, deps.branding);
       this.#endContentView = provideContentView(this, deps.content);
+      this.#card = openFaithfulCardSurface();
       super.connectedCallback();
     }
 
     override disconnectedCallback() {
       super.disconnectedCallback();
+      this.#card?.dispose();
+      this.#card = undefined;
       this.#endContentView?.();
       this.#endContentView = undefined;
       this.#asked += 1; // an answer still on its way belongs to a retired element
@@ -76,11 +101,12 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
       const asked = ++this.#asked;
       this.#setStatus('Thinking…');
       // The previous answer goes as soon as a new question is asked: it must not look like the new one's.
-      this.ingest(answerData(''));
+      this.#card?.clear();
       try {
         const answer = await deps.answer(question);
         if (asked !== this.#asked) return;
-        this.ingest(answerData(answer.markdown));
+        const shown = this.#card?.present({ markdown: answer.markdown });
+        if (shown?.ok !== true) throw new Error('the card refused the answer');
         this.#setStatus('Answer');
       } catch {
         if (asked !== this.#asked) return;
@@ -102,7 +128,7 @@ export function createAnswerAppElement(deps: AnswerAppDependencies) {
           <button type="submit">Ask</button>
         </form>
         <p role="status" data-testid="answer-status">${this.#status}</p>
-        ${super.render()}`;
+        ${this.#card?.element}`;
     }
   }
   return AnswerApp;

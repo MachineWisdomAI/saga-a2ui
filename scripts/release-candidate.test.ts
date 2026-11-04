@@ -8,6 +8,8 @@ import {
   SDK_PACKAGES,
   assertInstalledTarballs,
   assertSameRevision,
+  candidateProvenance,
+  candidateSummary,
   checkInstalledCombination,
   checkPagePairing,
   CARRIED_CASES,
@@ -45,7 +47,46 @@ afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 const sha256 = (file: string): string =>
   createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
-it('packs only the four enrolled releases, preserving exact sibling pins, exports and license files', () => {
+it('exports unpublished tarballs and npm overrides without requiring built applications', () => {
+  const output = path.join(work, 'local-development');
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      'scripts/release-candidate.ts',
+      'tarballs',
+      '--out',
+      output,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+  const recipe = JSON.parse(
+    fs.readFileSync(path.join(output, 'npm-overrides.json'), 'utf8'),
+  );
+  for (const name of SDK_PACKAGES) {
+    const spec = recipe.overrides[`@saga-a2ui/${name}`];
+    expect(spec).toMatch(/^file:/);
+    expect(fs.existsSync(spec.slice(5))).toBe(true);
+    const manifest = JSON.parse(
+      spawnSync('tar', ['-xOf', spec.slice(5), 'package/package.json'], {
+        encoding: 'utf8',
+      }).stdout,
+    );
+    expect(manifest.private).toBe(true);
+    expect(manifest.publishConfig.registry).toBe(CANDIDATE_REGISTRY);
+  }
+  expect(recipe.overrides).toMatchObject({
+    '@a2ui/markdown-it': '0.2.1',
+    dompurify: '3.4.17',
+    '@hono/node-server': '2.1.5',
+  });
+  // Packing alone must not claim the installed-application qualification record.
+  expect(fs.existsSync(path.join(output, 'candidate.json'))).toBe(false);
+}, 120_000);
+
+it('packs all seven SDK releases, preserving exact sibling pins, exports and license files', () => {
   const releases = packReleasePackages(
     path.join(work, 'release'),
     path.join(work, 'release-tarballs'),
@@ -55,6 +96,9 @@ it('packs only the four enrolled releases, preserving exact sibling pins, export
     'components',
     'mcp',
     'react',
+    'react-mcp-stack',
+    'lit',
+    'lit-mcp-stack',
   ]);
   const versions = Object.fromEntries(
     releases.map((one) => [`@saga-a2ui/${one.name}`, one.version]),
@@ -316,7 +360,7 @@ describe('packed candidates', () => {
         checkInstalledCombination(modules(consumer), expectation(a)).map(
           (finding) => finding.package,
         ),
-      ).toEqual(['components', 'react']);
+      ).toEqual(['components', 'react', 'lit-mcp-stack', 'react-mcp-stack']);
     });
 
     it('reports a modules location that does not exist or holds no SDK package, with where to install', () => {
@@ -360,8 +404,10 @@ describe('packed candidates', () => {
       expect(half.map((finding) => finding.package).sort()).toEqual([
         'components',
         'core',
+        'lit-mcp-stack',
         'mcp',
         'react',
+        'react-mcp-stack',
       ]);
       for (const finding of half)
         expect(finding.guidance).toContain(
@@ -656,6 +702,63 @@ describe('packed candidates', () => {
       );
       expect(finding?.guidance).toMatch(/restart the server/);
     });
+  });
+});
+
+describe('the provenance a candidate states', () => {
+  // `candidate.json` serializes the provenance fields and `CANDIDATE.md` prints the same text, so
+  // both are read here from one record. The summary needs only the fields it prints.
+  const record = {
+    ...candidateProvenance(),
+    version: VERSION_A,
+    source: { commit: COMMIT_A, dirty: false },
+    packages: [],
+    combinations: [],
+    exclusions: [],
+    recipe: {
+      node: { testedHere: 'v22', minimum: '22', ciPinned: '22' },
+      npm: '11',
+      platform: 'linux-x64',
+      consumerInstall: { ok: true, treeValid: true },
+      consumerOverrides: {},
+    },
+    versionMismatch: { installProbe: { refused: true } },
+    carriedEvidence: { localResult: null },
+  };
+  const statements = (): string[] => [
+    JSON.stringify(record),
+    candidateSummary(record),
+  ];
+
+  it('does not claim a first candidate or that nothing was ever published', () => {
+    for (const text of statements()) {
+      expect(text).not.toMatch(/first candidate/i);
+      expect(text).not.toMatch(/ever been published/i);
+      expect(text).not.toMatch(/no earlier release/i);
+      expect(text).not.toMatch(/nothing is published/i);
+      expect(text).not.toMatch(/no SAGA package/i);
+    }
+    expect(record.predecessor).not.toHaveProperty('published', null);
+  });
+
+  it('acknowledges the public registry history without inventorying it', () => {
+    for (const text of statements()) {
+      expect(text).toMatch(/public npm releases/i);
+      expect(text).toContain('0.1.0-rc.1');
+      expect(text).toMatch(/does not (list|inventory)/i);
+    }
+  });
+
+  it('limits what was rehearsed to candidate builds, with no registry upgrade', () => {
+    expect(record.predecessor.registryUpgradeExercised).toBe(false);
+    for (const text of statements()) {
+      expect(text).toMatch(/candidate builds only/i);
+      expect(text).toMatch(/no upgrade from a registry release/i);
+      expect(text).toMatch(/local source rehearsal/i);
+      expect(text).toMatch(/anonymous registry install/i);
+      expect(text).toMatch(/real host/i);
+    }
+    expect(record.status).toBe('unreleased candidate');
   });
 });
 

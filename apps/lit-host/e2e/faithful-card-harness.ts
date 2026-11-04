@@ -78,8 +78,8 @@ export const outlineOf = (view: {
       if (tag === 'ul' || tag === 'ol') return 'list';
       if (tag === 'pre') return 'code-block';
       if (tag === 'hr') return 'rule';
-      if (child.classList.contains('table-scroll')) return 'table';
-      if (child.classList.contains('source-block')) return 'raw-html-block';
+      if (child.classList.contains('saga-card-table-scroll')) return 'table';
+      if (child.classList.contains('saga-card-source')) return 'raw-html-block';
       return 'paragraph';
     }),
   );

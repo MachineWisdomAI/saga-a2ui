@@ -1,0 +1,195 @@
+{
+  "version": "0.7.6",
+  "channel": "stable",
+  "revision": "5995b1f0d2703f69582aa5def3db65cdea0967fc",
+  "packages": {
+    "@saga-a2ui/core": "0.7.6",
+    "@saga-a2ui/components": "0.7.6",
+    "@saga-a2ui/mcp": "0.7.6",
+    "@saga-a2ui/react": "0.7.6",
+    "@saga-a2ui/react-mcp-stack": "0.7.6"
+  },
+  "notice": "The Lit packages (`@saga-a2ui/lit`, `@saga-a2ui/lit-mcp-stack`) were first published to npm at 0.7.7-rc.1. Where this snapshot mentions them, it describes source at the pinned revision, not packages you can install at 0.7.6.",
+  "authored": [
+    { "page": "installation", "group": "React stack" },
+    { "page": "server-entry-points", "group": "React stack" }
+  ],
+  "guides": [
+    {
+      "source": "docs/faithful-card-styling.md",
+      "slug": "faithful-card-styling",
+      "group": "Concepts and reference",
+      "description": "The class names, custom properties and selectors an application may use to style the FaithfulCard in either renderer."
+    },
+    {
+      "source": "docs/2026-10-19_host-compatibility-observations_v1.md",
+      "slug": "host-compatibility-observations",
+      "group": "Concepts and reference",
+      "sidebarTitle": "Host observations",
+      "description": "A dated record of standalone probes in ChatGPT web, Claude web and the Alexa+ simulator, and what they do not establish."
+    }
+  ],
+  "exclusions": [
+    {
+      "source": "docs/react-consumers.md",
+      "reason": "States that the React stack has no registry release and that no 0.7.x package is published. The registry has @saga-a2ui/react-mcp-stack at 0.7.6, so the page would contradict this release. The installation page of this release replaces it."
+    },
+    {
+      "source": "docs/public-install.md",
+      "reason": "Pins the 0.1.0-rc.1 packages and predates the 0.7.6 publication, so it does not describe this release."
+    },
+    {
+      "source": "docs/getting-started.md",
+      "reason": "Builds its starter and demonstration from matched candidate tarballs of the unpublished Lit packages; the guide does not install 0.7.6 from the registry."
+    },
+    {
+      "source": "docs/actions.md",
+      "reason": "Its runnable tutorial uses the unpublished Lit renderer from a source checkout and candidate tarballs."
+    },
+    {
+      "source": "docs/attach-to-existing-backend.md",
+      "reason": "Its Lit-based snippets need the unpublished Lit package and a local candidate."
+    },
+    {
+      "source": "docs/authorized-playback.md",
+      "reason": "Describes the Lit reference application, which is not a published package at this release."
+    },
+    {
+      "source": "docs/2026-10-21_react_play_acceptance_v1.md",
+      "reason": "Acceptance record for one reference application's protected player, not documentation of the published packages."
+    },
+    {
+      "source": "docs/development-reference.md",
+      "reason": "Contributor reference for the repository's slices and tests."
+    },
+    {
+      "source": "docs/release-packages.md",
+      "reason": "Maintainer procedure for preparing and publishing a release."
+    },
+    {
+      "source": "docs/candidate-update-and-rollback.md",
+      "reason": "Maintainer procedure for private candidate builds."
+    },
+    {
+      "source": "docs/change-hygiene.md",
+      "reason": "Contributor rules for pull requests and retained artifacts."
+    },
+    {
+      "source": "docs/version-policy.md",
+      "reason": "Contributor rules for versioning this repository."
+    }
+  ],
+  "components": [
+    {
+      "id": "faithful-card",
+      "name": "FaithfulCard",
+      "summary": "A card that shows Markdown from an untrusted result under a content policy, with link and image consent, for answers that need their sources and limits kept visible.",
+      "entries": [
+        {
+          "package": "@saga-a2ui/components",
+          "subpath": "./faithful-card",
+          "role": "Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent"
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "subpath": "./faithful-card",
+          "stylesheet": "./faithful-card.css",
+          "role": "React rendering, catalog entry and trusted settings provider"
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "subpath": "./faithful-card",
+          "role": "Lit rendering, catalog entry and content view"
+        },
+        {
+          "package": "@saga-a2ui/react-mcp-stack",
+          "subpath": "./faithful-card",
+          "stylesheet": "./faithful-card.css",
+          "role": "Starts a FaithfulCard application in React over MCP Apps"
+        },
+        {
+          "package": "@saga-a2ui/lit-mcp-stack",
+          "subpath": "./faithful-card",
+          "role": "Starts a FaithfulCard application in Lit over MCP Apps"
+        }
+      ],
+      "preview": {
+        "caption": "A FaithfulCard declared in an A2UI layout and bound to the body of a note.",
+        "source": "examples/pack1-consumer/src/main-card.ts",
+        "from": "const body = {",
+        "to": "} as const;",
+        "language": "ts"
+      },
+      "usage": [
+        {
+          "label": "Style the FaithfulCard",
+          "guide": "faithful-card-styling"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host.",
+          "guide": "faithful-card-styling",
+          "anchor": "qualification",
+          "label": "Styling qualification"
+        },
+        {
+          "statement": "The dated host observations used standalone probes that did not use SAGA's React adapter or MCP adapter, so they do not qualify this component in a host.",
+          "guide": "host-compatibility-observations",
+          "label": "Host observations"
+        }
+      ]
+    },
+    {
+      "id": "action-button",
+      "name": "ActionButton",
+      "summary": "A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.",
+      "entries": [
+        {
+          "package": "@saga-a2ui/core",
+          "subpath": "./actions/action-button-schema",
+          "role": "Renderer-neutral contract of the control: a strict schema with no action property"
+        },
+        {
+          "package": "@saga-a2ui/react",
+          "subpath": "./actions",
+          "role": "React control and action setup"
+        },
+        {
+          "package": "@saga-a2ui/lit",
+          "subpath": "./actions",
+          "role": "Lit control and action setup"
+        }
+      ],
+      "preview": {
+        "caption": "Two ActionButton instances in a row of the notes application's layout. Neither names an action.",
+        "source": "examples/pack1-consumer/src/notes-surface.ts",
+        "from": "id: 'note-actions',",
+        "to": "text: 'Archive',",
+        "before": 1,
+        "after": 1,
+        "language": "ts"
+      },
+      "usage": [],
+      "qualification": [
+        {
+          "statement": "No guide of this release records a renderer or host qualification for this control."
+        }
+      ]
+    }
+  ],
+  "componentExclusions": [
+    {
+      "name": "SagaAttribution",
+      "reason": "`@saga-a2ui/react/attribution` is not an export of the packages at this revision. The credit component first appears in a later release."
+    },
+    {
+      "name": "Typed surfaces",
+      "reason": "`Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout."
+    },
+    {
+      "name": "Layout and basic components",
+      "reason": "Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward. The SDK does not document them as its own."
+    }
+  ]
+}

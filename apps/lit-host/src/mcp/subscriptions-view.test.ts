@@ -945,13 +945,12 @@ describe('host teardown of the subscriptions view', () => {
     expect(r.states.length).toBe(shown);
   });
 
-  it('closes the connection once, when dispose runs after teardown, however often it is called', async () => {
+  it('closes the connection once after answering the host, however often dispose is called', async () => {
     const r = await withReadInFlight();
     await r.bridge.teardownResource({});
-    expect(r.closes()).toBe(0);
 
-    r.view.dispose();
-    r.view.dispose();
+    await r.view.dispose();
+    await r.view.dispose();
 
     expect(r.closes()).toBe(1);
   });

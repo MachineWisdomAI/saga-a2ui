@@ -1,93 +1,90 @@
 # Installing saga a2ui
 
-Four packages are available from public npm at **`0.1.0-rc.1`**:
+The public release set contains seven packages:
 
 | Package | Use |
 | --- | --- |
 | `@saga-a2ui/core` | Application actions and A2UI protocol processing. |
 | `@saga-a2ui/mcp` | MCP server operations, view connections and request lifetimes. |
-| `@saga-a2ui/react` | React A2UI integration, action controls and optional FaithfulCard rendering. |
 | `@saga-a2ui/components` | Optional FaithfulCard content, link and image policies. |
+| `@saga-a2ui/lit` | Lit renderer integration and optional FaithfulCard rendering. |
+| `@saga-a2ui/react` | React A2UI integration, action controls and optional FaithfulCard rendering. |
+| `@saga-a2ui/lit-mcp-stack` | Lit rendering joined to MCP Apps delivery. |
+| `@saga-a2ui/react-mcp-stack` | React rendering joined to MCP Apps delivery. |
 
-Use Node **22.12.0 or newer** and a TypeScript-aware bundler. These packages export
-TypeScript source. Install the parts your application uses, keeping saga package
-versions matched. The React and FaithfulCard recipe below installs all four.
+Use Node **22.12.0 or newer** and a TypeScript-aware bundler. The packages export TypeScript source. An application normally installs one stack and its framework peers, and imports from that stack only.
 
-## Install the React and MCP packages
+## Choose an exact published version
 
-Before installing, add the required override to your application's root
-`package.json`, preserving any existing overrides:
+Check the registry before selecting a version:
+
+```sh
+npm view @saga-a2ui/lit-mcp-stack dist-tags --json
+npm view @saga-a2ui/react-mcp-stack dist-tags --json
+```
+
+The current RC is `0.11.0-rc.1` for all seven packages, published on 30 October 2026 and verified against the registry the same day. The recipes below pin those versions. `next` selects these versions; `latest` was not changed by this release.
+
+The registry's own record of each version is the receipt. Open `https://registry.npmjs.org/@saga-a2ui/<package>/0.11.0-rc.1` (or the package's page on npmjs.com) to see its `dist.integrity`; the values should equal these:
+
+| Package | `dist.integrity` of `0.11.0-rc.1` |
+| --- | --- |
+| `@saga-a2ui/core` | `sha512-Uq3UjKlvU1TZAFfM+e/fIEP9BtaoQpjYEXrqOdVzKkUIrHiQ0YbioUIdaGXvpFSRS0Z4t3ENRex5kpcXptivBQ==` |
+| `@saga-a2ui/components` | `sha512-2rseheJBxV9g9AA9jXOS7rQrhZtNFM/0q4kuH+ml8J7VAUUt9YNQ/broVf0c5reixP+PT+happXme1ihLH4J8w==` |
+| `@saga-a2ui/mcp` | `sha512-JYZS4LoDX65mk/8Ym5MEOAuhvbYRMSIFOeAH4O/41QC1OqYdeRupHHYRY9SIUbrrovpG8RrsecCrNbq0Pizj+g==` |
+| `@saga-a2ui/lit` | `sha512-qM2H+NT9VLsi86epaHvwQdNh/VeyKUrzVn2E3lkOF4u/B+Km/ySJf4/JPz+4EKv2nilbv0ZnH22JqgufHz/Ntw==` |
+| `@saga-a2ui/react` | `sha512-cOrMbqRNdcxiBu71rkQYYS2QMQewqFWCOqzll+TM9ZO/VXHHwPsGfwYK8ADXwApEa692dL2epaKf1E+lazQK6g==` |
+| `@saga-a2ui/lit-mcp-stack` | `sha512-KE6J1YRuh+AA2Wip2Wlu3/XIrEeAdvzrWxJQkjv3YJbDTW0P3rJM1r7L1yE9wDm7lm66tzm8ekerXx6PTNOCSg==` |
+| `@saga-a2ui/react-mcp-stack` | `sha512-abrfDAynzpTCXqm+HcMiIEF69eFnnzFUgnrzIkw9Rad45MYPv86T6YRZQXX6dxzAW09hyYzz7dqm/sfmHK3t1Q==` |
+
+Both recipes below were run from empty directories with `npm` 10 and installed these exact versions from the registry, with every package in the resulting lockfile resolved from `registry.npmjs.org`.
+
+A stack pins its SDK siblings, so its patch version can differ from theirs. For another release, confirm the stack version and its framework peers in npm before replacing the pins. Source manifests and candidate builds can be ahead of the registry.
+
+## Install one stack plus framework peers
+
+At your application's root, preserve existing overrides and add the following. If the application already directly declares any of these three packages, use the same exact specifier in its dependency field too; npm rejects a direct dependency and override with different specifiers (EOVERRIDE).
 
 ```json
 {
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"
   }
 }
 ```
 
-Then install the published versions and the supported React peers:
+The DOMPurify and Hono overrides replace vulnerable transitive versions pinned or permitted by upstream dependencies. npm applies overrides only from the application root; the SDK cannot impose them through its own manifest. Regenerate the application's lockfile after changing them.
+
+A2UI still requires Zod 3, which is covered by [the Zod resource-consumption advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The available upstream fix is in Zod 4; forcing it into the A2UI v3 context breaks schema compatibility. These overrides do not resolve that advisory. Bound untrusted request sizes at the application's ingress while that dependency remains in use.
+
+For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps \
-  @saga-a2ui/core@0.1.0-rc.1 \
-  @saga-a2ui/components@0.1.0-rc.1 \
-  @saga-a2ui/mcp@0.1.0-rc.1 \
-  @saga-a2ui/react@0.1.0-rc.1 \
-  react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.11.0-rc.1 lit@3.3.3
 ```
 
-Commit the resulting application lockfile. The [React integration guide](react-consumers.md)
-explains the public imports, the pnpm workspace-root override, and why A2UI's
-Zod 3 and MCP's Zod 4 dependencies must remain distinct. Applications using the
-MCP APIs directly should declare the dependencies they import; the qualified
-combination uses MCP Apps `2.0.3`, MCP server `2.3.1`, MCP Node `2.1.1` and Zod
-`4.6.7`.
+For React:
 
-Use `@saga-a2ui/react/a2ui` for A2UI surfaces and catalogs. Do not add direct
-`@a2ui/react` or `@a2ui/web_core` dependencies for this integration. The required
-Markdown override keeps A2UI `0.13.0` on its compatible dependency combination.
+```sh
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.11.0-rc.1 react@19.3.1 react-dom@19.3.1
+```
 
-Public-registry installation, strict typechecking, application builds and a
-standalone container have been verified for this four-package recipe. Host
-behavior has its own [compatibility observations](2026-10-19_host-compatibility-observations_v1.md).
+Commit the application lockfile. Each stack declares its SAGA siblings as regular dependencies with exact pins, so the application does not declare those packages separately. Use the stack root for an application-owned catalog and `/faithful-card` for a card application; `/server` is composed separately and stays out of browser bundles. A stack's server entry requires the full application's framework peers.
 
-## Run a demo or use a Lit starter
+For pnpm, put the equivalent Markdown override in the consumer workspace root. See [React consumer dependencies](react-consumers.md) for the separate A2UI Zod 3 and MCP Zod 4 contexts. Do not add direct upstream A2UI packages to a stack application.
 
-Follow [Getting started](getting-started.md) to run the synthetic podcast demo,
-create a Lit starter, or attach saga to an existing backend. Those paths build
-matched candidate tarballs from a source checkout, including `@saga-a2ui/lit`,
-which is **not published on npm**. The CLI is also source tooling, not an npm
-package.
+## Lower-level integrations
 
-Candidate versions such as `0.0.0-candidate.g<12 hex>` are distinct from the
-published `0.1.0-rc.1` release. See [candidate installation, updates and rollback](candidate-update-and-rollback.md).
-Source package versions may advance ahead of npm; use the published versions
-above for a registry installation.
+Applications that intentionally compose lower-level SDK APIs may install the packages they import, using the versions recorded in the release receipt. The original four-package `0.1.0-rc.1` release remains historical; it predates the stacks. See [package layout](../packages/README.md) for ownership and entry points.
 
-The [development reference](development-reference.md) covers local builds,
-packed-consumer checks and the synthetic examples. The workspace root and
-example applications are private npm workspaces; that setting does not control
-GitHub source visibility.
+## Run a demo or use a starter
+
+[Getting started](getting-started.md) creates a Lit starter or the React starter on Hono, or attaches SAGA to an existing backend, and its two tracks build an application ([React](build-tic-tac-toe-with-react.md), [Lit](build-notes-with-lit.md), which also runs the synthetic demo). The React tutorial installs published npm packages in the reader’s own app directory. The source CLI and contributor workflows build matched candidate tarballs from a checkout to test unpublished changes. Candidates have versions such as `0.0.0-candidate.g<12 hex>` and are distinct from public npm releases; see [candidate installation, updates and rollback](candidate-update-and-rollback.md). The source CLI, root workspace and example applications are not npm packages.
+
+Continue with [the Lit track](build-notes-with-lit.md#compose-a-view-with-a-stack) or the [React track](build-tic-tac-toe-with-react.md) to connect a view, then the [action guide](actions.md) to trace a complete interaction. [Host compatibility](host-compatibility.md) records the flows observed in ChatGPT, Claude and Alexa+. Installing a package does not deploy an application or establish acceptance in an assistant host.
 
 ## Maintainer publication
 
-The [release-packages guide](release-packages.md) describes building and
-qualifying exact tarballs for a subsequent release. Source version changes and
-passing CI do not publish them. Verify package contents, licenses, integrity,
-scope ownership and the approved versions and tag before publishing with public
-npm access. Verify the resulting exact versions through an anonymous clean
-installation.
+[Release preparation](release-packages.md) describes the seven-package set, exact tarball qualification and publication verification. Source metadata and passing CI prepare a release; successful publication followed by an anonymous exact-version install establishes registry availability. Keep current release receipts here instead of copying mutable registry status into agent instructions and development guides.
 
-For repeat releases, configure npm trusted publishing for each package and its
-GitHub Actions workflow. The publishing job needs an npm-supported Node/npm
-combination, `id-token: write`, and a package repository URL matching this
-repository. Keep that permission confined to the release job; the existing
-source-validation workflow does not publish packages. See npm's
-[public scoped package instructions](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/)
-and [trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
-
-Installing libraries does not deploy an application or submit it to a host
-directory. The repository's [publication tooling](../scripts/publish/README.md)
-prepares application artifacts and records manual handoff; deployment and
-submission remain the application owner's work.
+For repeat releases, npm [trusted publishing](https://docs.npmjs.com/trusted-publishers/) needs a matching package repository URL, a supported Node/npm combination and `id-token: write` confined to its publishing job. The existing validation workflow does not publish. Verify scope ownership and approved versions and tags before publishing with [public npm access](https://docs.npmjs.com/creating-and-publishing-an-organization-scoped-package/).

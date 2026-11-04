@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  contentPolicyFromEmbedded,
   createContentPolicy,
   type ContentPolicy,
 } from '@saga-a2ui/components/faithful-card';
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
-import { policyFromEmbedded } from '../content/embedded-policy.js';
 import { contentResource } from './content-resource.js';
 
 // The resource a host receives is built from the policy and nothing else: its identity, its
@@ -71,7 +71,7 @@ describe('the content-policy resource', () => {
 
   it('embeds the configuration so the view rebuilds the same policy', () => {
     const policy = policyWith(['images.example.com', 'cdn.example.org']);
-    const rebuilt = policyFromEmbedded(
+    const rebuilt = contentPolicyFromEmbedded(
       embeddedJson(contentResource(VIEW, policy).html),
     );
     expect(rebuilt.ok && rebuilt.policy.resource).toEqual(policy.resource);
@@ -140,35 +140,12 @@ describe('the resource of a Strict policy', () => {
       imageHosts: HOSTS,
       blockedPresentation: 'inert-text',
     });
-    const rebuilt = policyFromEmbedded(
+    const rebuilt = contentPolicyFromEmbedded(
       embeddedJson(contentResource(VIEW, policy).html),
     );
     expect(rebuilt.ok && rebuilt.policy.configuration).toEqual(
       policy.configuration,
     );
-  });
-});
-
-describe('reading an embedded configuration', () => {
-  it('falls back to the default Standard policy only when nothing is embedded', () => {
-    const rebuilt = policyFromEmbedded(null);
-    expect(rebuilt.ok && rebuilt.policy.imageHosts).toEqual([]);
-  });
-
-  it.each([
-    ['text that is not JSON', 'not json'],
-    ['a wildcard host', '{"level":"standard","imageHosts":["*.example.com"]}'],
-    ['an unknown level', '{"level":"permissive","imageHosts":[]}'],
-    [
-      'a presentation on Standard',
-      '{"level":"standard","imageHosts":[],"blockedPresentation":"placeholder"}',
-    ],
-    [
-      'an unknown presentation',
-      '{"level":"strict","imageHosts":[],"blockedPresentation":"collapsed"}',
-    ],
-  ])('fails explicitly for %s instead of guessing a policy', (_name, text) => {
-    expect(policyFromEmbedded(text).ok).toBe(false);
   });
 });
 
@@ -240,7 +217,7 @@ describe('the resource of a policy with trusted font origins', () => {
         imageHosts: ['images.example.com'],
         fontOrigins: FONTS,
       });
-      const rebuilt = policyFromEmbedded(
+      const rebuilt = contentPolicyFromEmbedded(
         embeddedJson(contentResource(VIEW, policy).html),
       );
       expect(rebuilt.ok && rebuilt.policy.configuration).toEqual(
@@ -251,30 +228,6 @@ describe('the resource of a policy with trusted font origins', () => {
       );
     }
   });
-
-  it.each([
-    [
-      'a wildcard origin',
-      '{"level":"standard","imageHosts":[],"fontOrigins":["https://*.example.com"]}',
-    ],
-    [
-      'a plain HTTP origin',
-      '{"level":"standard","imageHosts":[],"fontOrigins":["http://fonts.example.com"]}',
-    ],
-    [
-      'an origin with a path',
-      '{"level":"strict","imageHosts":[],"fontOrigins":["https://fonts.example.com/css"]}',
-    ],
-    [
-      'an origin that would start a new directive',
-      '{"level":"standard","fontOrigins":["https://fonts.example.com;script-src"]}',
-    ],
-  ])(
-    'fails explicitly for an embedded configuration with %s',
-    (_name, text) => {
-      expect(policyFromEmbedded(text).ok).toBe(false);
-    },
-  );
 });
 
 // The identity of the resource is the identity of the exact document it serves. The tests read the
