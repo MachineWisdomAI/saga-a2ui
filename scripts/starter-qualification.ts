@@ -674,10 +674,53 @@ export function qualifyStarter(
       expect(calls.verifier).toBeGreaterThan(0);
       expect(signals.every((signal) => signal?.aborted === true)).toBe(true); // each abandoned call was told to stop
 
+      // The calls that ignore their signal are still running, so their slots are still taken: a later
+      // wave is refused without reaching the verifier, and the number of running calls does not grow.
+      const reached = calls.verifier;
+      const later = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+        ),
+      );
+      expect(later.every((response) => response.status === 503)).toBe(true);
+      expect(calls.verifier).toBe(reached);
+
       const result = await (
         await connect(listener.statusUrl)
       ).callTool({ name: 'get_status', arguments: {} });
       expect(result.structuredContent).toEqual({ status: 'running' }); // the public endpoint is unaffected
+    });
+
+    it('keeps serving credentials while a verifier that honors its signal is abandoned again and again', async () => {
+      let running = 0;
+      const { listener, calls } = await start({
+        budgets: { operationMs: 50, requestMs: 1_000 },
+        verifier: (counted) => ({
+          // Stops when told to: the slot of each abandoned call comes back.
+          verifyAccessToken: (_token, signal?: AbortSignal) => {
+            counted.verifier += 1;
+            running += 1;
+            return new Promise<AuthInfo>((_resolve, reject) => {
+              signal?.addEventListener('abort', () => {
+                running -= 1;
+                reject(new Error('stopped'));
+              });
+            });
+          },
+        }),
+      });
+      for (let wave = 0; wave < 3; wave += 1) {
+        const responses = await Promise.all(
+          Array.from({ length: 80 }, () =>
+            rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+          ),
+        );
+        expect(responses.every((response) => response.status === 503)).toBe(
+          true,
+        ); // each wave waited, was cut off and answered 503, never 401
+      }
+      expect(running).toBe(0); // every abandoned call actually stopped
+      expect(calls.verifier).toBeGreaterThan(64); // so later waves still reached the verifier
     });
 
     it('refuses an invalid budget before it opens a port', async () => {

@@ -94,6 +94,7 @@ describe('package subpath exports', () => {
       'OperationConfigurationError',
       'RequestLifetimeAttachmentError',
       'StageFailure',
+      'VerifierAbandonedError',
       'VerifierSaturatedError',
       'assertBudgetSettings',
       'attachRequestLifetime',

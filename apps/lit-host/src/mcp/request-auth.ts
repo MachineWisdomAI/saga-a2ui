@@ -136,8 +136,9 @@ function reject(
  *
  * The caller bounds the wait and passes `gate`, which aborts when that wait is over. The verifier is
  * handed `gate` as its cancellation signal and runs under `boundVerifier`'s concurrency cap and hard
- * limit, so work a request abandoned cannot pile up; a full cap is a verifier failure (500), never a
- * rejected credential. A verifier that answers after `gate` aborted is dropped before its result is
+ * limit; a call keeps its slot until the verifier settles, so abandoned work cannot pile up past the
+ * cap (a verifier that ignores the signal and never settles keeps its slot). A full cap or an
+ * abandoned call is a verifier failure (500), never a rejected credential. A verifier that answers after `gate` aborted is dropped before its result is
  * examined or an authorization snapshot is made.
  */
 export async function authenticate(

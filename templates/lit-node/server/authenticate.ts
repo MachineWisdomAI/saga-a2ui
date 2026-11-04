@@ -69,9 +69,9 @@ const refuse = (
  * issued for `resource`, carrying `ACCOUNT_SCOPE` and naming an account. Anything else is refused before any protected
  * work. The verifier runs as the request's `authentication` stage, so a verifier that never
  * answers cannot hold the request past its budget. `boundVerifier` also caps how many calls may be
- * running at once (a full cap is a 503, never a queue), aborts the `signal` it passes to the verifier
- * when the stage ends, and frees a call's slot after a hard limit, so work the request abandoned
- * cannot pile up.
+ * running at once (a full cap is a 503, never a queue) and aborts the `signal` it passes to the
+ * verifier when the stage ends. A call's slot is freed only when the verifier settles, so abandoned
+ * work cannot pile up past the cap; a verifier that ignores the signal and never settles keeps its slot.
  */
 export async function authenticate(
   request: Pick<IncomingMessage, 'headers'>,

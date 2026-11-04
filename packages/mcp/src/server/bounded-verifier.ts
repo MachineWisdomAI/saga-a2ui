@@ -7,10 +7,16 @@ import { BudgetConfigurationError } from './lifetime.js';
 // provider (or a credential that makes the verifier slow) lets callers pile up abandoned work without
 // bound. This module is the verifier's own bound, independent of the request that started the call:
 //
-//   - a concurrency cap on calls still running, refused at once when it is full (never queued);
+//   - a concurrency cap on calls that have not SETTLED, refused at once when it is full (never queued);
 //   - an `AbortSignal` handed to the verifier, aborted when the stage ends or the call is abandoned,
-//     so a verifier that honors it stops and frees its slot early;
-//   - an abandonment deadline, so a call that never settles cannot hold its slot forever.
+//     so a verifier that honors it stops and frees its slot;
+//   - an abandonment deadline after which the CALLER stops waiting: the signal aborts and the wait
+//     rejects, but the slot stays taken until the verifier actually settles.
+//
+// A slot counts running work, not waiting callers. JavaScript cannot stop a function that ignores its
+// signal, so a call that never settles keeps its slot for the life of the wrapper; freeing the slot at
+// the deadline would let repeated windows start unlimited work behind the cap. The cap is therefore the
+// bound on actual verifier calls, and a verifier that ignores cancellation can use it up.
 //
 // Portable like the lifetime: timers and abort signals only.
 
@@ -30,11 +36,15 @@ export interface BoundedVerifier<T> extends CancellableVerifier<T> {
 
 /** Limits on one verifier's outstanding work. Every supplied value is validated. */
 export interface VerifierLimits {
-  /** The most calls that may be running at once. Defaults to `DEFAULT_MAX_CONCURRENT_VERIFICATIONS`. */
+  /**
+   * The most calls that may be unsettled at once. A call holds its slot until the verifier settles it,
+   * even after the caller stopped waiting. Defaults to `DEFAULT_MAX_CONCURRENT_VERIFICATIONS`.
+   */
   readonly maxConcurrent?: number;
   /**
-   * How long one call may run before it is abandoned: its signal aborts and its slot is freed whether
-   * or not it ever settles. Defaults to `DEFAULT_VERIFIER_ABANDON_MS`.
+   * How long a caller waits for one call before it is abandoned: the call's signal aborts and the wait
+   * rejects with `VerifierAbandonedError`. The slot is NOT freed until the verifier settles, so a call
+   * that ignores its signal and never settles keeps its slot. Defaults to `DEFAULT_VERIFIER_ABANDON_MS`.
    */
   readonly abandonMs?: number;
 }
@@ -55,7 +65,17 @@ export class VerifierSaturatedError extends Error {
   }
 }
 
-const ABANDONED = 'The verifier did not settle within its abandonment limit.';
+/**
+ * The rejection a caller gets when a call has not settled within its abandonment limit. The verifier
+ * was told to stop through its signal; whether it did is not known, and its slot stays taken until it
+ * settles. Like `VerifierSaturatedError` it is a verifier failure, not a rejected credential.
+ */
+export class VerifierAbandonedError extends Error {
+  constructor() {
+    super('The verifier did not settle within its abandonment limit.');
+    this.name = 'VerifierAbandonedError';
+  }
+}
 
 function resolveLimits(limits: VerifierLimits | undefined): {
   maxConcurrent: number;
@@ -99,8 +119,11 @@ const bounded = new WeakMap<object, BoundedVerifier<unknown>>();
  * Wrapping the same verifier object again with default limits returns the wrapper it already made, so a
  * caller that cannot tell whether it was given a bounded verifier still shares one cap.
  *
- * A rejection, including a synchronous throw, passes through unchanged. A late result from an abandoned
- * call is ignored by this wrapper; the caller's own deadline decides whether it was still wanted.
+ * A rejection, including a synchronous throw, passes through unchanged. Each call holds one slot from
+ * the moment it starts until the verifier settles it, whoever is still waiting. At the abandonment
+ * deadline the signal aborts and the wait rejects with `VerifierAbandonedError`, so a caller is never
+ * held past the limit; the slot is not recycled, so the cap bounds the verifier's real work. A late
+ * outcome of an abandoned call is observed and ignored: it frees the slot and nothing else.
  */
 export function boundVerifier<T>(
   verifier: CancellableVerifier<T>,
@@ -120,33 +143,49 @@ export function boundVerifier<T>(
       running += 1;
 
       const own = new AbortController();
-      let freed = false;
-      let cancelTimer: (() => void) | undefined;
       const forward = () => own.abort(signal?.reason);
-      const free = () => {
-        if (freed) return;
-        freed = true;
-        running -= 1;
-        cancelTimer?.();
+      const stopForwarding = () =>
         signal?.removeEventListener('abort', forward);
-      };
 
-      if (signal?.aborted) forward();
-      else signal?.addEventListener('abort', forward, { once: true });
-      cancelTimer = startBoundedTimer(abandonMs, () => {
-        own.abort(new Error(ABANDONED));
-        free();
+      const wait = new Promise<T>((resolve, reject) => {
+        // The slot belongs to the verifier's work, not to whoever is waiting for it: it is freed only
+        // when that work settles, however late.
+        const cancelTimer = startBoundedTimer(abandonMs, () => {
+          const error = new VerifierAbandonedError();
+          own.abort(error);
+          stopForwarding();
+          reject(error);
+        });
+        const settled = () => {
+          running -= 1;
+          cancelTimer();
+          stopForwarding();
+        };
+
+        if (signal?.aborted) forward();
+        else signal?.addEventListener('abort', forward, { once: true });
+
+        let work: Promise<T>;
+        try {
+          work = Promise.resolve(verifier.verifyAccessToken(token, own.signal));
+        } catch (error) {
+          work = Promise.reject(error);
+        }
+        // Both handlers are always supplied, so a late rejection of an abandoned call is observed.
+        work.then(
+          (value) => {
+            settled();
+            resolve(value);
+          },
+          (error: unknown) => {
+            settled();
+            reject(error);
+          },
+        );
       });
-
-      let work: Promise<T>;
-      try {
-        work = Promise.resolve(verifier.verifyAccessToken(token, own.signal));
-      } catch (error) {
-        work = Promise.reject(error);
-      }
-      // The slot belongs to the call, not to whoever is waiting for it: it is freed when the call ends.
-      work.then(free, free);
-      return work;
+      // An abandoned wait may reject after its caller stopped listening; that is not an unhandled error.
+      wait.then(undefined, () => undefined);
+      return wait;
     },
   };
   if (limits === undefined) bounded.set(verifier, result);
