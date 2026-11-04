@@ -71,7 +71,12 @@ export interface PackedPackage {
   readonly bytes: number;
   readonly files: readonly { readonly path: string; readonly bytes: number }[];
   readonly manifest: PackedManifest;
-  /** SHA-256 over the Git-tracked package files (path and content) the tarball was built from. */
+  /**
+   * SHA-256 over everything staged into the tarball: the Git-tracked package files (path and
+   * content) and the auxiliary tracked repository files shipped at the package root (the
+   * root `LICENSE`, and `THIRD_PARTY_NOTICES.md` for the packages that ship it), each bound by its
+   * path and content.
+   */
   readonly sourceSha256: string;
   /** Files below the package directory that Git does not track (untracked and ignored alike) and that were left out of the tarball. */
   readonly excludedUntracked: readonly string[];
