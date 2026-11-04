@@ -687,6 +687,7 @@ From `templates/react-hono/server/listener.ts`:
 const decision = await authenticate(
   c.req.header('authorization'),
   options.verifier,
+  options.resource,
   lifetime,
 );
 if (!decision.ok)
