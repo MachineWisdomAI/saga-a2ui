@@ -612,3 +612,434 @@ describe('Fetch MCP hosting diagnostics', () => {
     expect(await response.text()).not.toContain('not json');
   });
 });
+
+// The request budget starts when the app admits a request, so a body that is declared too large,
+// grows too large, or arrives too slowly is bounded by it before any server exists.
+describe('Fetch MCP hosting request lifetime', () => {
+  const encoder = new TextEncoder();
+  const LIST = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+
+  interface BodyProbe {
+    readonly request: Request;
+    readonly cancelled: () => boolean;
+  }
+
+  /** A POST whose body is the given chunks, each arriving after its delay; `hold` keeps the stream open afterwards. */
+  function slowPost(
+    chunks: readonly { readonly text: string; readonly afterMs: number }[],
+    options: { readonly hold?: boolean; readonly headers?: HeadersInit } = {},
+  ): BodyProbe {
+    let cancelled = false;
+    let index = 0;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const next = chunks[index++];
+        if (next === undefined) {
+          if (options.hold === true) return new Promise<void>(() => undefined);
+          controller.close();
+          return undefined;
+        }
+        await new Promise((resolve) => setTimeout(resolve, next.afterMs));
+        controller.enqueue(encoder.encode(next.text));
+        return undefined;
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request(URL_OF('/mcp'), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        host: HOST,
+        ...(options.headers as Record<string, string> | undefined),
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+    return { request, cancelled: () => cancelled };
+  }
+
+  /** Resolves with the response, or `undefined` when none arrived in time (a hang is a failed assertion, not a timeout). */
+  async function answeredWithin(
+    app: McpFetchApp,
+    request: Request,
+    ms: number,
+  ): Promise<Response | undefined> {
+    return Promise.race([
+      app.fetch(request),
+      new Promise<undefined>((resolve) => setTimeout(resolve, ms)),
+    ]);
+  }
+
+  it('answers 408 and builds nothing when the body stalls past the request budget', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 250 } });
+    const probe = slowPost([{ text: LIST.slice(0, 10), afterMs: 0 }], {
+      hold: true,
+    });
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(408);
+    expect(await response?.json()).toEqual({ error: 'request_timeout' });
+    expect(lifetimes).toHaveLength(0);
+    // The connection is not kept for a body that is still owed.
+    expect(response?.headers.get('connection')).toBe('close');
+  });
+
+  it('counts the time a legitimate body takes against the request budget', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 1_000 } });
+    const probe = slowPost([
+      { text: LIST.slice(0, 20), afterMs: 150 },
+      { text: LIST.slice(20), afterMs: 150 },
+    ]);
+    const response = await app.fetch(probe.request);
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    // About 300 ms of the 1,000 ms budget was spent before the server was built.
+    expect(lifetimes[0]?.remainingMs()).toBeLessThan(800);
+  });
+
+  it('refuses a declared oversize body without reading it', async () => {
+    const { app, lifetimes } = harness({ maxRequestBodySize: 64 });
+    const probe = slowPost([{ text: 'x', afterMs: 0 }], {
+      hold: true,
+      headers: { 'content-length': '65' },
+    });
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(413);
+    expect(lifetimes).toHaveLength(0);
+  });
+
+  it('refuses a body that grows past the limit and releases the stream', async () => {
+    const { app, lifetimes } = harness({ maxRequestBodySize: 64 });
+    const probe = slowPost(
+      [
+        { text: 'x'.repeat(40), afterMs: 0 },
+        { text: 'x'.repeat(40), afterMs: 0 },
+      ],
+      { hold: true },
+    );
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(413);
+    expect(lifetimes).toHaveLength(0);
+    expect(probe.cancelled()).toBe(true);
+  });
+
+  it('still serves a body exactly at the limit', async () => {
+    const { app } = harness({ maxRequestBodySize: LIST.length });
+    expect((await app.fetch(post('/mcp'))).status).toBe(200);
+  });
+
+  it('answers a request that is not JSON-typed or not parseable without building a server', async () => {
+    const { app, lifetimes } = harness();
+    const wrongType = await app.fetch(
+      new Request(URL_OF('/mcp'), {
+        method: 'POST',
+        headers: { host: HOST, 'content-type': 'text/plain' },
+        body: LIST,
+      }),
+    );
+    expect(wrongType.status).toBe(415);
+    for (const body of ['', 'not json']) {
+      const response = await app.fetch(
+        new Request(URL_OF('/mcp'), {
+          method: 'POST',
+          headers: {
+            host: HOST,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          body,
+        }),
+      );
+      expect(response.status).toBe(400);
+      await response.text();
+    }
+    expect(lifetimes).toHaveLength(0);
+  });
+
+  it('leaves no request timer behind when a request ends before a server is built', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { app } = harness({ maxRequestBodySize: 64 });
+      const wrongType = new Request(URL_OF('/mcp'), {
+        method: 'POST',
+        headers: { host: HOST, 'content-type': 'text/plain' },
+        body: LIST,
+      });
+      expect((await app.fetch(wrongType)).status).toBe(415);
+      const oversize = post('/mcp', {}, { pad: 'x'.repeat(100) });
+      expect((await app.fetch(oversize)).status).toBe(413);
+      expect(
+        (
+          await app.fetch(
+            new Request(URL_OF('/mcp'), {
+              method: 'POST',
+              headers: {
+                host: HOST,
+                'content-type': 'application/json',
+                accept: 'application/json, text/event-stream',
+              },
+              body: 'not json',
+            }),
+          )
+        ).status,
+      ).toBe(400);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('serves a body-less request under the same lifetime', async () => {
+    const { app, lifetimes, finishes } = harness({
+      budgets: { requestMs: 5_000 },
+    });
+    const response = await app.fetch(
+      new Request(URL_OF('/mcp'), {
+        method: 'DELETE',
+        headers: { host: HOST },
+      }),
+    );
+    await response.text();
+    await app.close();
+    expect(response.status).toBeLessThan(500);
+    expect(finishes()).toEqual(lifetimes.map(() => 1));
+  });
+
+  /** A body that counts how often it is pulled and cancelled, and can be fed after the fact. */
+  function countedBody(options: { readonly stuckCancel?: boolean } = {}): {
+    readonly request: Request;
+    readonly stream: ReadableStream<Uint8Array>;
+    readonly counts: () => { pulls: number; cancels: number };
+    readonly feed: (text: string) => void;
+  } {
+    let pulls = 0;
+    let cancels = 0;
+    let feeder: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        feeder = controller;
+      },
+      pull() {
+        pulls += 1;
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {
+        cancels += 1;
+        // A supported source may never settle its own cancellation.
+        return options.stuckCancel === true
+          ? new Promise<void>(() => undefined)
+          : undefined;
+      },
+    });
+    const request = new Request(URL_OF('/mcp'), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        host: HOST,
+      },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit);
+    return {
+      request,
+      stream,
+      counts: () => ({ pulls, cancels }),
+      feed: (text) => {
+        try {
+          feeder?.enqueue(encoder.encode(text));
+        } catch {
+          // A cancelled stream refuses further chunks, which is the point of the assertion.
+        }
+      },
+    };
+  }
+
+  it('cancels and unlocks the body when its stage expires, and reads no more of it', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 60 } });
+    const probe = countedBody();
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(408);
+    expect(lifetimes).toHaveLength(0);
+    const settled = probe.counts();
+    expect(settled.cancels).toBe(1);
+    expect(probe.stream.locked).toBe(false);
+    // Bytes that arrive after the answer are not pulled, and closing the app changes nothing.
+    probe.feed(LIST);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await app.close();
+    expect(probe.counts()).toEqual(settled);
+    expect(probe.stream.locked).toBe(false);
+  });
+
+  it('unlocks the body when the stream source never settles its cancellation', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 25 } });
+    const probe = countedBody({ stuckCancel: true });
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(408);
+    expect(lifetimes).toHaveLength(0);
+    const settled = probe.counts();
+    expect(settled.cancels).toBe(1);
+    // The lock does not wait for the source's cancellation, which here never settles.
+    expect(probe.stream.locked).toBe(false);
+    probe.feed(LIST);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await app.close();
+    expect(probe.counts()).toEqual(settled);
+    expect(probe.stream.locked).toBe(false);
+  });
+
+  it('keeps JSON parsing inside the request budget and builds no server for an expired one', async () => {
+    const realParse = JSON.parse.bind(JSON);
+    const slow = vi.spyOn(JSON, 'parse').mockImplementation((text, reviver) => {
+      // A parse that takes longer than the whole request budget, whatever the machine's speed.
+      const until = performance.now() + 120;
+      while (performance.now() < until) {
+        // Spin: the work is synchronous, so no timer can interrupt it.
+      }
+      return realParse(text, reviver) as unknown;
+    });
+    try {
+      const { app, lifetimes } = harness({ budgets: { requestMs: 40 } });
+      const response = await app.fetch(post('/mcp'));
+      expect(response.status).toBe(408);
+      expect(response.headers.get('connection')).toBe('close');
+      expect(lifetimes).toHaveLength(0);
+    } finally {
+      slow.mockRestore();
+    }
+  });
+
+  /**
+   * One request in which the official handler's own work, after the body stage and before the
+   * server factory, takes 120 ms of synchronous time, whatever the machine's speed.
+   */
+  async function serveWithSlowHandler(requestMs: number): Promise<{
+    readonly response: Response;
+    readonly lifetimes: RequestLifetime[];
+    readonly failures: McpFetchFailureKind[];
+    readonly spent: boolean;
+  }> {
+    const realParse = JSON.parse.bind(JSON);
+    const realGet = Headers.prototype.get;
+    let parsed = false;
+    let spent = false;
+    const parse = vi
+      .spyOn(JSON, 'parse')
+      .mockImplementation((text, reviver) => {
+        parsed = true;
+        return realParse(text, reviver) as unknown;
+      });
+    // The first header the official handler reads after the body stage stands in for its own work
+    // (classifying and validating a large parsed request) running past the whole request budget.
+    const read = vi
+      .spyOn(Headers.prototype, 'get')
+      .mockImplementation(function (this: Headers, name: string) {
+        if (parsed && !spent) {
+          spent = true;
+          const until = performance.now() + 120;
+          while (performance.now() < until) {
+            // Spin: the work is synchronous, so no timer can interrupt it.
+          }
+        }
+        return realGet.call(this, name);
+      });
+    try {
+      const { app, lifetimes, failures } = harness({
+        budgets: { requestMs },
+      });
+      const response = await app.fetch(post('/mcp'));
+      return { response, lifetimes, failures, spent };
+    } finally {
+      read.mockRestore();
+      parse.mockRestore();
+    }
+  }
+
+  it('refuses a lifetime the official handler spent before the server factory, and builds no server', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowHandler(60);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(408);
+    expect(response.headers.get('connection')).toBe('close');
+    expect(lifetimes).toHaveLength(0);
+    // A refusal is not a factory failure, and it is not reported as one.
+    expect(failures).toEqual([]);
+  });
+
+  it('serves the identical request when the budget outlasts the handler', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowHandler(5_000);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(lifetimes[0]?.remainingMs()).toBeGreaterThan(0);
+    expect(failures).toEqual([]);
+  });
+
+  /**
+   * One request in which setting up the server-building stage (its scope, listeners and timer)
+   * takes 120 ms of synchronous time, whatever the machine's speed. The stage's timer is armed
+   * inside `construct`, after the last check outside the stage and before the application callback.
+   */
+  async function serveWithSlowStageSetup(requestMs: number): Promise<{
+    readonly response: Response;
+    readonly lifetimes: RequestLifetime[];
+    readonly failures: McpFetchFailureKind[];
+    readonly spent: boolean;
+  }> {
+    const realSetTimeout = globalThis.setTimeout;
+    let spent = false;
+    const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      ...args: Parameters<typeof setTimeout>
+    ) => {
+      if (!spent && new Error().stack?.includes('construct')) {
+        spent = true;
+        const until = performance.now() + 120;
+        while (performance.now() < until) {
+          // Spin: the work is synchronous, so no timer can interrupt it.
+        }
+      }
+      return realSetTimeout(...args);
+    }) as typeof setTimeout);
+    try {
+      const { app, lifetimes, failures } = harness({
+        budgets: { requestMs },
+      });
+      const response = await app.fetch(post('/mcp'));
+      return { response, lifetimes, failures, spent };
+    } finally {
+      timer.mockRestore();
+    }
+  }
+
+  it('refuses a stage that expired while it was set up, before the application factory starts', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowStageSetup(60);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(408);
+    expect(response.headers.get('connection')).toBe('close');
+    // The factory never started, so it neither built a server nor failed.
+    expect(lifetimes).toHaveLength(0);
+    expect(failures).toEqual([]);
+  });
+
+  it('serves the identical request when the budget outlasts the stage setup', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowStageSetup(5_000);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(failures).toEqual([]);
+  });
+
+  it('serves the same small body when the budget is not exhausted', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 5_000 } });
+    const response = await app.fetch(post('/mcp'));
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(lifetimes[0]?.remainingMs()).toBeGreaterThan(0);
+  });
+});
