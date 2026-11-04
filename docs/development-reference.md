@@ -264,6 +264,16 @@ Guide or notice changes remain on the fast path and must pass the focused
 document checks; a broken generated recipe or source quote cannot pass merely
 because no application build ran.
 
+Every `uses:` reference in `.github/workflows` and `.github/actions` is pinned to
+a full 40-character commit SHA (or, for a Docker image, a `@sha256` digest); a
+trailing comment names the release it came from. Tag and branch references,
+including major tags such as `@v4`, can move after review. The always-on CI job
+runs `python3 scripts/check-action-pins.py` to reject them, and
+`python3 scripts/test-action-pins.py` covers the rules and this repository.
+To update an action, resolve the reviewed release tag to its commit
+(`gh api repos/OWNER/REPO/commits/TAG --jq .sha`), change the SHA and comment
+together, and run both commands.
+
 The full check retains the entire existing route: packed React pnpm consumer,
 `npm run verify`, `candidate:pack`, `candidate:rehearse`, and the SHA-named
 candidate artifact retained for 14 days. Named steps identify each operation.
