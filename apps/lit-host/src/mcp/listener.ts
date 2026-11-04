@@ -40,8 +40,8 @@ import {
 import { createAnswerServer, type AnswerBackend } from './answer-server.js';
 import {
   authenticate,
-  PLAYBACK_REQUIREMENT,
-  SUBSCRIPTIONS_REQUIREMENT,
+  playbackRequirement,
+  subscriptionsRequirement,
   type AuthRequirement,
 } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
@@ -59,6 +59,7 @@ import {
 } from './protected-request.js';
 import {
   bindResponseToLifetime,
+  ListenerConfigurationError,
   mayAnswer,
   resolveStreamingPolicy,
   type StreamingPolicy,
@@ -82,6 +83,12 @@ export interface SubscriptionsEndpointOptions {
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
   /**
+   * This endpoint's canonical URL as clients and the identity provider know it (RFC 8707). A
+   * credential the verifier accepts is refused unless it names exactly this resource. There is no
+   * default: a listener that guessed it from its own address would be wrong behind any ingress.
+   */
+  readonly resource: URL;
+  /**
    * This browse read's own limit: the per-operation override of the operation limit. Omitted, the
    * route's or listener's operation limit applies. It never extends the request. A later
    * resolution is not returned.
@@ -99,6 +106,12 @@ export interface PlaybackEndpointOptions {
   readonly mediaStore: MediaStore;
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * This endpoint's canonical URL as clients and the identity provider know it (RFC 8707). A
+   * credential the verifier accepts is refused unless it names exactly this resource. There is no
+   * default: a listener that guessed it from its own address would be wrong behind any ingress.
+   */
+  readonly resource: URL;
   /** Lifetime of an issued media capability. Defaults to the service's short default. */
   readonly capabilityTtlSeconds?: number;
   /** Test seam for the media service's clock. */
@@ -220,6 +233,15 @@ interface ProtectedEndpoint {
 /** The stages this listener owns around the tool handler, each with its own safe expiry answer. */
 type OwnedStage = 'authentication' | 'body' | 'acquisition';
 
+/** Throws before the listener opens when a stated protected resource is not an absolute URL. */
+function assertResource(where: string, resource: unknown): void {
+  if (resource === undefined) return;
+  if (!(resource instanceof URL) || !/^https?:$/.test(resource.protocol))
+    throw new ListenerConfigurationError(
+      `${where} must be an absolute http(s) URL`,
+    );
+}
+
 /** Throws before the listener opens when an operation limit stated by an application is unusable. */
 function assertOperationLimit(
   where: string,
@@ -258,6 +280,8 @@ export async function startEpisodeListener(
     options.subscriptions?.readBoundMs,
   );
   assertOperationLimit('Answer answerBoundMs', options.answer?.answerBoundMs);
+  assertResource('Subscriptions resource', options.subscriptions?.resource);
+  assertResource('Playback resource', options.playback?.resource);
   const answerStreaming =
     options.answer?.responseMode === 'event-stream'
       ? resolveStreamingPolicy(options.answer.streaming)
@@ -626,7 +650,7 @@ export async function startEpisodeListener(
       const endpoint = options.subscriptions;
       return {
         policy: SUBSCRIPTIONS_POLICY,
-        requirement: SUBSCRIPTIONS_REQUIREMENT,
+        requirement: subscriptionsRequirement(endpoint.resource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createSubscriptionsServer({
@@ -644,7 +668,7 @@ export async function startEpisodeListener(
       const endpoint = options.playback;
       return {
         policy: PLAYBACK_POLICY,
-        requirement: PLAYBACK_REQUIREMENT,
+        requirement: playbackRequirement(endpoint.resource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createPlaybackServer({

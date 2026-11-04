@@ -27,7 +27,19 @@ export const DEV_TOKENS = {
 
 const HOUR_SECONDS = 3600;
 
-export function createDevelopmentVerifier(): OAuthTokenVerifier {
+/**
+ * The protected resource the development credentials name unless a caller states another. Tests use
+ * it as the endpoints' configured resource; `serve.ts` states each endpoint's real URL instead.
+ */
+export const DEV_RESOURCE = new URL('https://dev-resource.invalid/mcp');
+
+/**
+ * `resource` is the one protected resource every credential this verifier accepts is issued for,
+ * as a real identity provider's audience would be; the listener refuses a credential naming any other.
+ */
+export function createDevelopmentVerifier(
+  resource: URL = DEV_RESOURCE,
+): OAuthTokenVerifier {
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
       'The development-only token verifier cannot be used in a production environment.',
@@ -43,6 +55,7 @@ export function createDevelopmentVerifier(): OAuthTokenVerifier {
     clientId: 'development-client',
     scopes: [SUBSCRIPTIONS_SCOPE, PLAYBACK_SCOPE],
     expiresAt,
+    resource,
     extra: { accountId, signInId },
   });
 
@@ -77,6 +90,7 @@ export function createDevelopmentVerifier(): OAuthTokenVerifier {
             clientId: 'development-service',
             scopes: ['service'],
             expiresAt: now + HOUR_SECONDS,
+            resource,
           };
         default:
           throw new OAuthError(

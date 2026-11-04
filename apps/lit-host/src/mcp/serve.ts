@@ -115,14 +115,21 @@ const subscriptionsViewHtml = await readView(
 );
 const playbackViewHtml = await readView('playback-view/playback.html');
 const answerViewHtml = await readView('answer-view/answer.html');
+const port = Number(process.env.PORT ?? 3001);
+// Each protected endpoint accepts only credentials issued for its own URL.
+const subscriptionsResource = new URL(
+  `http://127.0.0.1:${port}/subscriptions/mcp`,
+);
+const playbackResource = new URL(`http://127.0.0.1:${port}/playback/mcp`);
 const listener = await startEpisodeListener({
   viewHtml,
   catalog,
-  port: Number(process.env.PORT ?? 3001),
+  port,
   subscriptions: {
     viewHtml: subscriptionsViewHtml,
     backend: { listSubscriptions: async (accountId) => accounts[accountId] },
-    verifier: createDevelopmentVerifier(),
+    verifier: createDevelopmentVerifier(subscriptionsResource),
+    resource: subscriptionsResource,
   },
   // Public: no verifier, because the operation reads no credential and has no identity.
   answer: {
@@ -134,7 +141,8 @@ const listener = await startEpisodeListener({
     viewHtml: playbackViewHtml,
     backend: playbackBackend,
     mediaStore,
-    verifier: createDevelopmentVerifier(),
+    verifier: createDevelopmentVerifier(playbackResource),
+    resource: playbackResource,
   },
 });
 console.log(`MCP server listening at ${listener.url}`);

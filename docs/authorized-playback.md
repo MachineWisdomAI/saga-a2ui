@@ -85,7 +85,7 @@ handle(request)
 ├── /subscriptions/mcp    → serveProtected(subscriptions endpoint)
 └── /playback/mcp         → serveProtected(playback endpoint)
       1. declared Content-Length within policy.limits.maxRequestBytes
-      2. authenticate(verifier, requirement): bearer token, realm, scope
+      2. authenticate(verifier, requirement): bearer token, realm, resource, scope
       3. Content-Type and Accept headers
       4. read the body, up to policy.limits.maxRequestBytes (a bounded stage)
       5. classifyProtectedBody(body, policy): JSON-RPC shape, allowed tools, argument bounds

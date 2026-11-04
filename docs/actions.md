@@ -252,6 +252,7 @@ The notes application answers a missing credential at the tool level, with a sen
 | --- | --- | --- |
 | No `Authorization` header | `401`, `WWW-Authenticate: Bearer realm="saga-starter"` | The verifier is not even asked. |
 | A header that is not `Bearer …`, an unknown credential, an expired credential | `401`, `error="invalid_token"` | |
+| A valid credential issued for another protected resource, or naming none (RFC 8707 `resource`) | `401`, `error="invalid_token"` | Compared with the `resource` URL the listener was started with, before scope or account is read. |
 | A credential without the `account:read` scope | `403`, `error="insufficient_scope", scope="account:read"` | |
 | A valid credential that names no account (a service credential) | `403`, `insufficient_scope` | The operation fails closed without running. |
 | A verifier that fails or never answers | `503`, no challenge | Not the caller's fault; cut off by the request's clock. |

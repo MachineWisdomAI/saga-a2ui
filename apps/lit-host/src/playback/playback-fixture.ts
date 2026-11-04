@@ -8,7 +8,7 @@ import {
 import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
-import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
+import { createDevelopmentVerifier, DEV_RESOURCE } from '../mcp/dev-auth.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { BudgetSettings } from '@saga-a2ui/mcp/server';
 import {
@@ -230,6 +230,7 @@ export async function startPlaybackHarness(
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: options.verifier ?? createDevelopmentVerifier(),
+      resource: DEV_RESOURCE,
       ...(options.playbackBudgets === undefined
         ? {}
         : { budgets: options.playbackBudgets }),

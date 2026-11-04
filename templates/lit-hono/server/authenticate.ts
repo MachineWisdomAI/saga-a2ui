@@ -16,6 +16,30 @@ import { identityOf } from './identity.js';
 export const ACCOUNT_SCOPE = 'account:read';
 const REALM = 'saga-starter';
 
+/**
+ * Whether a verified credential was issued for this protected resource (RFC 8707). A credential that
+ * names no resource, or another one, is refused: a token minted for a different service the same
+ * identity provider also serves must never become authority here. A fragment is not part of a
+ * resource identifier, so it is ignored on both sides.
+ */
+function isIssuedFor(resource: unknown, expected: URL): boolean {
+  if (!(resource instanceof URL)) return false;
+  const bare = (value: URL): string => {
+    const copy = new URL(value);
+    copy.hash = '';
+    return copy.href;
+  };
+  return bare(resource) === bare(expected);
+}
+
+/** Throws before the listener opens when the protected resource is not an absolute http(s) URL. */
+export function assertResource(resource: unknown): asserts resource is URL {
+  if (!(resource instanceof URL) || !/^https?:$/.test(resource.protocol))
+    throw new Error(
+      'The listener is not configured: resource must be the absolute http(s) URL of the protected endpoint.',
+    );
+}
+
 export type AuthDecision =
   | { readonly ok: true; readonly authInfo: AuthInfo }
   | {
@@ -36,13 +60,14 @@ const refuse = (
 
 /**
  * Checks the value of the `Authorization` header: a bearer credential the verifier accepts, not expired,
- * carrying `ACCOUNT_SCOPE` and naming an account. Anything else is refused before any protected
+ * issued for `resource`, carrying `ACCOUNT_SCOPE` and naming an account. Anything else is refused before any protected
  * work. The verifier runs as the request's `authentication` stage, so a verifier that never
  * answers cannot hold the request past its budget.
  */
 export async function authenticate(
   header: string | undefined,
   verifier: OAuthTokenVerifier,
+  resource: URL,
   lifetime: RequestLifetime,
 ): Promise<AuthDecision> {
   if (header === undefined)
@@ -68,6 +93,8 @@ export async function authenticate(
     typeof authInfo.expiresAt !== 'number' ||
     authInfo.expiresAt <= Date.now() / 1000
   )
+    return refuse(401, 'invalid_token');
+  if (!isIssuedFor(authInfo.resource, resource))
     return refuse(401, 'invalid_token');
   if (!authInfo.scopes.includes(ACCOUNT_SCOPE))
     return refuse(403, 'insufficient_scope', ACCOUNT_SCOPE);

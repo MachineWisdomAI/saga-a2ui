@@ -15,7 +15,11 @@ import {
   startEpisodeListener,
   type EpisodeListener,
 } from '../../../apps/lit-host/src/mcp/listener.js';
-import { SIGN_INS, createDemoVerifier } from '../fixtures/sign-ins.js';
+import {
+  DEMO_RESOURCE,
+  SIGN_INS,
+  createDemoVerifier,
+} from '../fixtures/sign-ins.js';
 import {
   CONTROL_NAMES,
   EPISODE_IDS,
@@ -162,12 +166,14 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       viewHtml: views.subscriptions,
       backend: world.subscriptions,
       verifier,
+      resource: DEMO_RESOURCE,
     },
     playback: {
       viewHtml: views.playback,
       backend: world.playback,
       mediaStore: world.media,
       verifier,
+      resource: DEMO_RESOURCE,
       ...(options.capabilityTtlSeconds === undefined
         ? {}
         : { capabilityTtlSeconds: options.capabilityTtlSeconds }),
@@ -296,7 +302,13 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
     if (pathname === NOTES_PATH)
       return settle(
         serveNotes(
-          { html: views.notes, backend: world.notes, verifier, allowedHosts },
+          {
+            html: views.notes,
+            backend: world.notes,
+            verifier,
+            resource: DEMO_RESOURCE,
+            allowedHosts,
+          },
           req,
           res,
           budgets.startRequest(),

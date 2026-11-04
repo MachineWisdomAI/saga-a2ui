@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import {
   createDevelopmentVerifier,
+  DEV_RESOURCE,
   DEV_ACCOUNTS,
   DEV_TOKENS,
 } from './dev-auth.js';
@@ -102,6 +103,7 @@ async function harness(
     catalog: { find: () => undefined },
     port: 0,
     subscriptions: {
+      resource: DEV_RESOURCE,
       viewHtml: VIEW_HTML,
       backend,
       verifier: createDevelopmentVerifier(),
@@ -256,6 +258,7 @@ describe('identity is immutable per request', () => {
       clientId: 'shared-client',
       scopes: [SUBSCRIPTIONS_SCOPE],
       expiresAt: Date.now() / 1000 + 3600,
+      resource: DEV_RESOURCE,
       extra: { accountId: DEV_ACCOUNTS.alice, signInId: 'sign-in-alice' },
     };
     const lookups: string[] = [];
@@ -264,6 +267,7 @@ describe('identity is immutable per request', () => {
       catalog: { find: () => undefined },
       port: 0,
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: {
           async listSubscriptions(accountId) {
@@ -402,6 +406,53 @@ describe('protected endpoint credentials', () => {
       expect(h.lookups).toEqual([]);
     },
   );
+
+  it('rejects a valid account credential issued for another resource with 401 before any backend work', async () => {
+    const lookups: string[] = [];
+    cleanup.listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+      subscriptions: {
+        // The verifier accepts the token and names the development resource; this endpoint is another.
+        resource: new URL('https://other-service.invalid/subscriptions/mcp'),
+        viewHtml: VIEW_HTML,
+        backend: {
+          async listSubscriptions(accountId) {
+            lookups.push(accountId);
+            return accounts[accountId];
+          },
+        },
+        verifier: createDevelopmentVerifier(),
+      },
+    });
+    const response = await post(
+      cleanup.listener.subscriptionsUrl ?? '',
+      `Bearer ${DEV_TOKENS.alice}`,
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toMatch(
+      /error="invalid_token"/,
+    );
+    expect(await response.text()).not.toContain('Creator');
+    expect(lookups).toEqual([]);
+  });
+
+  it('refuses to open with a protected resource that is not an absolute http(s) URL', async () => {
+    await expect(
+      startEpisodeListener({
+        viewHtml: VIEW_HTML,
+        catalog: { find: () => undefined },
+        port: 0,
+        subscriptions: {
+          resource: 'https://saga.example/subscriptions/mcp' as never,
+          viewHtml: VIEW_HTML,
+          backend: { listSubscriptions: async () => undefined },
+          verifier: createDevelopmentVerifier(),
+        },
+      }),
+    ).rejects.toThrow(/Subscriptions resource/);
+  });
 
   it('rejects a service-only credential with 403 insufficient_scope before any backend work', async () => {
     const h = await harness();
@@ -658,6 +709,7 @@ describe('subscription request failures', () => {
       catalog: { find: () => undefined },
       port: 0,
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         verifier: createDevelopmentVerifier(),
         backend: {
@@ -878,6 +930,7 @@ describe('subscription request failures', () => {
       catalog: { find: () => undefined },
       port: 0,
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         verifier: createDevelopmentVerifier(),
         readBoundMs: 40,
@@ -940,6 +993,7 @@ describe('subscription request failures', () => {
       catalog: { find: () => undefined },
       port: 0,
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         verifier: createDevelopmentVerifier(),
         readBoundMs: 40,

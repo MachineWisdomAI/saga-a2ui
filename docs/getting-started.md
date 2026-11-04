@@ -93,7 +93,7 @@ npm run build
 npm start
 ```
 
-`npm run typecheck` checks the view and the server. `npm start` prints two endpoint addresses: `/status/mcp` is public and reads no credential; `/account/mcp` is protected. **The protected endpoint refuses every credential until you replace `server/verifier.ts`.** The starter ships no identity provider and no account, sample data or test verifier. The [template README](../templates/lit-hono/README.md) lists the files that are yours.
+`npm run typecheck` checks the view and the server. `npm start` prints two endpoint addresses: `/status/mcp` is public and reads no credential; `/account/mcp` is protected. **The protected endpoint refuses every credential until you replace `server/verifier.ts`.** The credential your verifier returns must also name the endpoint it was issued for (`resource`, RFC 8707), and `server/main.ts` states that endpoint's URL (set `ACCOUNT_RESOURCE_URL` to the public URL behind an ingress); a token issued for another service is refused. The starter ships no identity provider and no account, sample data or test verifier. The [template README](../templates/lit-hono/README.md) lists the files that are yours.
 
 ### HTTP defaults
 

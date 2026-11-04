@@ -1,7 +1,7 @@
 import Hapi from '@hapi/hapi';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { BudgetSettings } from '@saga-a2ui/mcp/server';
-import { authenticate } from './authenticate.js';
+import { assertResource, authenticate } from './authenticate.js';
 import { mcpPlugin, mcpRequestLifetime } from './bridge.js';
 import {
   createAccountServer,
@@ -25,6 +25,12 @@ export interface ListenerOptions {
   readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * The protected endpoint's canonical URL as clients and your identity provider know it (RFC 8707).
+   * A credential the verifier accepts is refused unless it names exactly this resource. Behind an
+   * ingress this is the public URL, not the loopback address the listener binds.
+   */
+  readonly resource: URL;
   /** Decides what a verified account may see. */
   readonly authorize: AccountServerOptions['authorize'];
   /** Use 0 for an ephemeral port. */
@@ -47,6 +53,7 @@ export interface Listener {
 export async function startListener(
   options: ListenerOptions,
 ): Promise<Listener> {
+  assertResource(options.resource);
   // #region saga-snippet:prepare-view
   // Both endpoint registrations below keep one persistent handler and reuse this immutable view.
   const view = prepareStarterView(options.html, options.filename);
@@ -60,6 +67,7 @@ export async function startListener(
       const decision = await authenticate(
         typeof header === 'string' ? header : undefined,
         options.verifier,
+        options.resource,
         mcpRequestLifetime(request),
       );
       if (decision.ok)

@@ -12,11 +12,18 @@ const html = await readFile(
   path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.html'),
   'utf8',
 );
+const port = Number(process.env.PORT ?? 3000);
+// The protected endpoint's canonical URL, which your identity provider names as the resource its
+// access tokens are issued for. Behind an ingress, set ACCOUNT_RESOURCE_URL to the public URL.
+const resource = new URL(
+  process.env.ACCOUNT_RESOURCE_URL ?? `http://127.0.0.1:${port}/account/mcp`,
+);
 const listener = await startListener({
   html,
   verifier,
+  resource,
   authorize: mayViewAccount,
-  port: Number(process.env.PORT ?? 3000),
+  port,
 });
 
 console.log(`Public status endpoint: ${listener.statusUrl}`);

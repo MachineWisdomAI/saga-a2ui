@@ -10,7 +10,10 @@ import {
 } from '@saga-a2ui/mcp/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { serveNotes } from '../demo/lit-node/server/notes-endpoint.js';
-import { createDemoVerifier } from '../demo/lit-node/fixtures/sign-ins.js';
+import {
+  createDemoVerifier,
+  DEMO_RESOURCE,
+} from '../demo/lit-node/fixtures/sign-ins.js';
 import { createFixtureBackend } from '../examples/pack1-consumer/server/index.js';
 import { DEV_TOKENS } from '../apps/lit-host/src/mcp/dev-auth.js';
 import {
@@ -600,6 +603,7 @@ describe('the notes endpoint shares one request deadline across authentication, 
             html: '<p data-testid="view-status"></p><notes-app></notes-app>',
             backend,
             verifier,
+            resource: DEMO_RESOURCE,
             allowedHosts,
           },
           req,

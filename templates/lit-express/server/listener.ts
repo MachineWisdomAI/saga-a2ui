@@ -23,7 +23,7 @@ import express, {
   type Response,
 } from 'express';
 import { createEndpoint, type Endpoint } from './endpoint.js';
-import { authenticate } from './authenticate.js';
+import { assertResource, authenticate } from './authenticate.js';
 import {
   createAccountServer,
   createStatusServer,
@@ -60,6 +60,12 @@ export interface ListenerOptions {
   readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * The protected endpoint's canonical URL as clients and your identity provider know it (RFC 8707).
+   * A credential the verifier accepts is refused unless it names exactly this resource. Behind an
+   * ingress this is the public URL, not the loopback address the listener binds.
+   */
+  readonly resource: URL;
   /** Decides what a verified account may see. */
   readonly authorize: AccountServerOptions['authorize'];
   /** Use 0 for an ephemeral port. */
@@ -269,6 +275,7 @@ export async function startListener(
 ): Promise<Listener> {
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
+  assertResource(options.resource);
   const budgets = createServerBudgets(options.budgets);
   // #region saga-snippet:prepare-view
   const view = prepareStarterView(options.html, options.filename);
@@ -311,7 +318,12 @@ export async function startListener(
   // Who is asking is decided before any server is built. The verified context travels to the tool
   // only as the transport's per-request auth (`req.auth`); no tool argument can name an account.
   const identify: RequestHandler = async (req, res, next) => {
-    const decision = await authenticate(req, options.verifier, lifetimeOf(res));
+    const decision = await authenticate(
+      req,
+      options.verifier,
+      options.resource,
+      lifetimeOf(res),
+    );
     if (!decision.ok) {
       res
         .writeHead(
