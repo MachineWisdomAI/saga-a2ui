@@ -6,6 +6,7 @@ import {
   copyFixture,
   editInput,
   editing,
+  fixtureCallsFile,
   recordOf,
   saga,
   wire,
@@ -46,6 +47,7 @@ const prepare = (
   target: 'chatgpt' | 'claude',
   out: string,
   options?: Options,
+  extra: readonly string[] = [],
 ): Promise<Run> =>
   saga(
     [
@@ -57,6 +59,7 @@ const prepare = (
       release(app),
       '--out',
       out,
+      ...extra,
     ],
     options,
   );
@@ -492,6 +495,142 @@ describe('beginning a handoff', () => {
     expect(ok.assessed).toContain('tools/list');
     expect(ok.assessed).not.toContain('tools/call');
     expect(ok.network).toEqual([]);
+  });
+
+  describe('when the preparation opted in to a fixture invocation', () => {
+    const beginArgs = (out: string, ...extra: string[]): string[] => [
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+      ...extra,
+    ];
+
+    /** A release prepared with a fixture call that succeeded, in a workspace of its own. */
+    async function preparedWithFixture(): Promise<{
+      readonly app: string;
+      readonly cwd: string;
+      readonly out: string;
+      readonly calls: string;
+    }> {
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile();
+      const run = await prepare(app, 'chatgpt', 'publication', { cwd }, [
+        '--invoke-fixture',
+        calls,
+      ]);
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(recordOf(path.join(cwd, 'publication')).fixture.invoked).toBe(
+        true,
+      );
+      return { app, cwd, out: 'publication', calls };
+    }
+
+    /** Replaces the result of every `tools/call` the endpoint answers, as an endpoint whose answer changed would. */
+    const answering =
+      (text: string) =>
+      async (method: string, response: Response): Promise<Response> => {
+        if (method !== 'tools/call') return response;
+        const body = (await response.json()) as Record<string, any>;
+        body.result = { content: [{ type: 'text', text }] };
+        return new Response(JSON.stringify(body), {
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+
+    it('assesses with the same fixture and pins the invocation it saw', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      const methods: string[] = [];
+      const seen = wire();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls), {
+        wire: seen,
+      });
+      methods.push(...seen.methods);
+
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(methods.filter((method) => method === 'tools/call')).toHaveLength(
+        1,
+      );
+      const pinned = events(cwd)[0]!.release;
+      expect(pinned.fixture).toEqual(recordOf(path.join(cwd, out)).fixture);
+      expect(pinned.fixture.invoked).toBe(true);
+      expect(pinned.fixture.invocations).toEqual([
+        {
+          tool: 'get_status',
+          outcome: 'ok',
+          resultSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+      ]);
+    });
+
+    it('does not begin without the fixture the preparation was made with, and calls no tool', async () => {
+      const { app, cwd, out } = await preparedWithFixture();
+      const seen = wire();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out), { wire: seen });
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(seen.methods).not.toContain('tools/call');
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the fixture now returns another result', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls), {
+        wire: wire(answering('another answer')),
+      });
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the fixture now fails', async () => {
+      const { app, cwd, out } = await preparedWithFixture();
+      const refused = await fixtureCallsFile({
+        calls: [{ tool: 'delete_everything', arguments: {} }],
+      });
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', refused));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/not ready/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin with a fixture over a preparation made without one', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      const calls = await fixtureCallsFile();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('still begins without a fixture over a preparation made without one, and pins that no fixture ran', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out));
+
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(s.assessed).not.toContain('tools/call');
+      expect(events(cwd)[0]!.release.fixture).toEqual({
+        declared: 0,
+        invoked: false,
+        invocations: [],
+      });
+    });
   });
 
   it('keeps the assessment options to begin', async () => {

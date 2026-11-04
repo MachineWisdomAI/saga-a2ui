@@ -11,7 +11,7 @@ date_added: 2026-10-16
 ## Status
 
 - Design: approved on 2026-10-16 at [`19fb26c84116b15a56fec31bfa358898fe96d791`](https://github.com/MachineWisdomAI/saga-a2ui/blob/19fb26c84116b15a56fec31bfa358898fe96d791/blueprints/features/host_publication.blueprint.md).
-- Implementation: ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified. The resumable submission handoff (CLI5, [#68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68)) is implemented as `saga publish handoff` and independently verified through fixtures, as recorded below.
+- Implementation: ChatGPT preparation (CLI3) and Claude connector materials (CLI4) are implemented and independently verified. The resumable submission handoff (CLI5, [#68](https://github.com/MachineWisdomAI/saga-a2ui/issues/68)) is implemented as `saga publish handoff` and independently verified through fixtures, as recorded below. A later repair makes `begin` assess the release again instead of trusting the prepared record; it is a candidate (PR [#384](https://github.com/MachineWisdomAI/saga-a2ui/pull/384)) until it lands, as recorded [below](#handoff-begin-assesses-the-release-again).
 - Acceptance: application-owner agreement, authorized submissions and each host’s directory approval remain separate; design approval authorizes none of those actions. [The exact implementation and review records](#implementation-and-acceptance-records) preserve CLI3–CLI5's source and fixture evidence.
 
 ## Problem and current behavior
@@ -50,7 +50,7 @@ npx tsx scripts/saga.ts publish prepare --target chatgpt --release ./saga-public
 
 Discovery initializes the endpoint and reads tools and resources; it makes no application tool call by default. A ready preparation contains `chatgpt-plugin.zip` and `findings.json`, tied to the built and served resource bytes. A failure leaves findings without an apparently complete package. An unknown result, such as an unavailable validator or missing deployment identity, makes the preparation incomplete.
 
-The maintainer can then begin a handoff from that ready output and record an attempt before submitting through the host's portal. If the browser closes before the outcome is known, the next attempt is refused until the maintainer inspects the existing portal record and confirms the submission or records that none occurred. Approval and an observed live listing are later, separate events. The tool records those observations; it does not perform or independently verify the portal actions. [The command reference](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5) provides the full sequence.
+The maintainer can then begin a handoff from that ready output and record an attempt before submitting through the host's portal. `begin` does not take the prepared files as proof of readiness, because a findings record and the package it names are plain files that agree with each other whoever wrote them. It runs the `check` assessment again against the release input, the build and the endpoint as they are now, with the same fixture file when the preparation used one, and records a handoff only when that fresh assessment is `ready` and the prepared output matches it. What the handoff pins is the fresh assessment. If the browser closes before the outcome is known, the next attempt is refused until the maintainer inspects the existing portal record and confirms the submission or records that none occurred. Approval and an observed live listing are later, separate events. The tool records those observations; it does not perform or independently verify the portal actions. [The command reference](../../scripts/publish/README.md#resuming-a-handoff-saga-publish-handoff-cli5) provides the full sequence.
 
 ## Responsibilities and interfaces
 
@@ -80,6 +80,7 @@ The implementation is qualified against the following outcomes; actual web insta
 - Default discovery causes zero application tool calls or domain effects. Opted-in fixture tests remain separately identified from real-host observations.
 - A missing asset, invalid manifest, secret in output or changed resource prevents a ready claim and identifies the repair.
 - Interruption and retry retain the existing submission identity and never duplicate an upload or silently publish.
+- Beginning a handoff assesses the release again. An edited record that says `ready` with a package written to match it, a swapped package, a changed release input and a release that is no longer ready are each refused with nothing written. A preparation made with a fixture is begun only with the same fixture and the same result digests; omitting the fixture, changing a result or adding a fixture the preparation lacked is refused, while a preparation made without a fixture still begins without one and pins that none ran.
 - Actual ChatGPT web and Claude web runs establish installation, card rendering and supported interactions using the recorded release. Local validators, protocol tests and directory approval do not replace these observations.
 
 ## Implementation sequence
@@ -90,7 +91,7 @@ Publication tooling is optional. An owner can prepare a listing through the plat
 
 ## Open decisions
 
-The release format, record format and pinned validator recipes are implemented in [the publication modules](../../scripts/publish/README.md#recorded-decisions). An application still must establish its publisher's authority, deployment identity, review materials and access. The endpoint's self-reported name/version does not prove domain ownership. A supported portal automation path would be separate work; the current handoff command reads and writes local records only.
+The release format, record format and pinned validator recipes are implemented in [the publication modules](../../scripts/publish/README.md#recorded-decisions). An application still must establish its publisher's authority, deployment identity, review materials and access. The endpoint's self-reported name/version does not prove domain ownership. A supported portal automation path would be separate work. The handoff command reads and writes local records only, except that `begin` reads the endpoint as `check` does and calls an application tool only when the maintainer gives it a fixture calls file; no handoff command submits, uploads or deploys anything.
 
 ## References
 
@@ -145,3 +146,15 @@ Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented for the fixture
 Independent verification passed 89 affected handoff/parser checks, then 27 focused checks after the first repairs and 11 focused ownership/cleanup/interruption/race/state checks after the final repair, with TypeScript and current-base version policy passing. The final independent macOS reproduction verified that a directory replaced after staging keeps its foreign file and the command refuses the write. Unchanged cases were reused; the Linux-only `/proc` branch was not newly qualified by that macOS run. Worker-reported broad-suite failures were assessed proportionately: 22 request-consumer/playback-budget checks passed in isolation, while a missing Lynx dependency prevented collection in the reused environment and was not a new CLI5 defect. No broad runtime or host matrix was repeated.
 
 All four scoped SDK68 criteria are supported by this evidence; the issue remains open until this lifecycle record is independently reviewed and merged. No actual upload, submission, installation, deployment or publication was performed. The implementation records observations and readiness boundaries; it cannot grant platform approval or establish a live listing by itself.
+
+## Handoff begin assesses the release again — 4 November 2026
+
+This entry records a conformance repair to the CLI5 handoff. It is not a new design decision, and no human is recorded as having approved new wording. The approved design remains Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791`.
+
+| Item | Record |
+| --- | --- |
+| Approved scope it maps to | CLI5's durable identity, evidence and freshness criterion, and its boundary that a recorded authority reference or a prepared file is not independent evidence. Before the repair, `begin` accepted a prepared findings record that said `ready`, together with an archive matching the digest it named, though a maintainer, a script or a build step can write both. |
+| Repair | `begin` takes `--release` (and `--invoke-fixture` or `--bearer-env` where `prepare` needed them) and runs the `check` assessment itself. It records a handoff only when that assessment is `ready` and the prepared output matches it by the rule `--against` uses. The pinned evidence includes the fixture section (the calls declared, whether they ran and the digest of each result), so an assessment made with a fixture cannot be replaced by one made without it. |
+| Effect on the stated boundary | The handoff commands still read and write local records only, except that `begin` reads the endpoint as `check` does. A tool is called only for a fixture file the maintainer supplies. Nothing is deployed, uploaded, submitted or published. |
+| Left as it was | `status --prepared`, `attempt` and `record-listing` still compare the pinned release with a maintainer-supplied preparation. That comparison notices honest change and is not readiness evidence. If a later step is relied on as readiness evidence, it should assess the release again too. |
+| Status | Candidate: PR [#384](https://github.com/MachineWisdomAI/saga-a2ui/pull/384), on main at `ef6bd3a48b219ec4f66197ce7d45479e96883b37`; the reviewed head is the one its review names. Not yet landed. The landed SHA is pending; `@timeleft--` records it in a status-only follow-up once the pull request merges, as the coordinator of landed-SHA status. Until then this is not recorded as **Blueprint `19fb26c84116b15a56fec31bfa358898fe96d791` implemented at** any landed SHA. |

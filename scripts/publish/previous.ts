@@ -173,6 +173,15 @@ export function staleness(
     changes.push(
       'the validator or the documentation it was checked against changed',
     );
+  // A fixture invocation is evidence only for the release it ran against: the calls declared, whether
+  // they ran, and the digest of each result. An opted-in assessment is not the same assessment as one
+  // made without the fixture, whichever way the difference runs. A handoff begun before the fixture was
+  // pinned holds no such section and has nothing to compare.
+  if (
+    previous.fixture !== undefined &&
+    !same(previous.fixture, current.fixture)
+  )
+    changes.push('the fixture invocation changed');
   if (previous.endpoint.complete !== current.endpoint.complete)
     changes.push('how much of the endpoint could be read changed');
   if (previous.artifact?.sha256 !== current.artifact?.sha256)

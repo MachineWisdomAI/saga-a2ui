@@ -192,15 +192,23 @@ archive with the digest it names prove only that the two agree. `begin` therefor
 against the release input, the build and the endpoint as they are now. It reads the endpoint as `check` does
 and calls no tool unless `--invoke-fixture` is given. It records a handoff only when that fresh assessment is
 `ready` and the prepared output matches it by the rule `--against` uses (the release input, the views, the
-tool definitions, the served resources, the deployment identity, the packages, the validators and the
-package digest). What is pinned is the fresh assessment, not the prepared record. A prepared output that
-was edited, or that the release has moved on from, is refused with what differs.
+tool definitions, the served resources, the deployment identity, the packages, the validators, the
+fixture invocation and the package digest). What is pinned is the fresh assessment, not the prepared
+record. A prepared output that was edited, or that the release has moved on from, is refused with what
+differs.
+
+The fixture invocation is part of that comparison: the calls declared, whether they ran, and the digest
+of each result. A preparation made with `--invoke-fixture` begins only with the same fixture file and
+the same results, so omitting the fixture, a changed result or a failing call is refused, and a fixture
+given over a preparation made without one is refused as well. A preparation made without a fixture still
+begins without one, and the handoff records that no fixture ran. A handoff begun before the fixture was
+pinned holds no fixture section, and `status --prepared` has nothing of it to compare.
 
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
 digest in its record) and whose verdict is `ready`, checks it against that fresh assessment, and pins the assessment: the host (target, directory name,
 guide and portal), the application and its publisher, the exact release evidence (source revision, release
 input and view digests, the tool definitions, served resources and contract digest, the deployment
-identity, the declared and installed `@saga-a2ui` packages, the validators and the package digest) and the
+identity, the declared and installed `@saga-a2ui` packages, the validators, the fixture invocation and the package digest) and the
 references to the intended publisher's authority. Authority references are pointers (an agreement, a
 ticket, an owner's confirmation) that this tool does not verify, and every free-text field is refused when
 it looks like a credential. The handoff identity is derived from the host, the application, the publisher

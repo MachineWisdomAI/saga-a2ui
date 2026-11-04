@@ -247,4 +247,6 @@ export type ReleaseEvidence = Pick<
   | 'validators'
   | 'artifact'
   | 'handoff'
->;
+> &
+  /** Optional only because a handoff begun before the fixture was pinned holds none; every record `prepare` writes has it. */
+  Partial<Pick<PublicationRecord, 'fixture'>>;
