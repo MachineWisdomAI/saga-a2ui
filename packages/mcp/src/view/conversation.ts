@@ -42,7 +42,7 @@ export const CONVERSATION_LIMITS = Object.freeze({
   contextDataBytes: 64 * 1024,
 });
 
-/** The nesting depth that structured context data may reach; it also ends any cycle. */
+/** The levels of arrays and objects that structured context data may nest; it also ends any cycle. */
 const MAX_DATA_DEPTH = 32;
 
 const encoder = new TextEncoder();
@@ -56,46 +56,135 @@ function fitsText(value: unknown, limit: number): boolean {
 }
 
 /**
- * Whether `data` is plain JSON-like data of at most `limit` bytes, counting each string as its
- * UTF-8 bytes plus quotes and each value, key and separator at its JSON width (escapes are not
- * counted). The walk stops as soon as the running size passes the limit, so it visits at most
- * about `limit` values and never builds the encoding of an oversized value. Anything that is not
- * plain data does not fit: a cycle or nesting past `MAX_DATA_DEPTH`, a `Map`, typed array or other
- * non-plain object (whose contents the walk could not bound), or a getter that throws.
+ * The UTF-8 bytes `JSON.stringify` writes for `value`, quotes and escapes included: `"` and `\`
+ * and the short control escapes take two, the other control characters and a lone surrogate take
+ * six, and every other character its UTF-8 width. Stops as soon as the total passes `limit` and
+ * returns `undefined` then, so it reads at most `limit + 1` characters.
  */
-function fitsData(data: unknown, limit: number): boolean {
+function jsonStringBytes(value: string, limit: number): number | undefined {
+  if (value.length + 2 > limit) return undefined;
+  let bytes = 2;
+  for (let i = 0; i < value.length && bytes <= limit; i += 1) {
+    const unit = value.charCodeAt(i);
+    if (unit === 0x22 || unit === 0x5c) bytes += 2;
+    else if (unit < 0x20)
+      bytes +=
+        unit === 8 || unit === 9 || unit === 10 || unit === 12 || unit === 13
+          ? 2
+          : 6;
+    else if (unit < 0x80) bytes += 1;
+    else if (unit < 0x800) bytes += 2;
+    else if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        i += 1;
+      } else bytes += 6;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) bytes += 6;
+    else bytes += 3;
+  }
+  return bytes <= limit ? bytes : undefined;
+}
+
+/**
+ * A copy of `data` made of plain data only, whose JSON encoding is at most `limit` bytes, or
+ * `undefined` when `data` is not that. The budget is measured on the very copy that is returned,
+ * so what is sent is what was measured: reading the original again, as a getter or a changing
+ * object would allow, cannot widen it.
+ *
+ * Size is the exact `JSON.stringify` width: strings and keys with their escapes, the braces and
+ * brackets, the colons and the commas between members. Admitted values are objects with the plain
+ * `Object.prototype` (or none), arrays, strings, finite numbers, booleans and `null`. Everything
+ * else is refused rather than converted: `undefined`, `bigint`, symbols, functions, `NaN` and
+ * infinities, array holes, accessor properties (own properties only; a getter would run on every
+ * read), and any other kind of object (a `Map`, typed array, `Date` or class instance), whose
+ * contents the walk could not bound or that JSON would rewrite. A cycle or nesting past
+ * `MAX_DATA_DEPTH` is refused. The walk stops as soon as the running size passes `limit`, and an
+ * array longer than `limit` is refused without reading an item, so it visits about `limit` values
+ * at most and builds a copy no larger than the budget. Object keys are read one at a time with
+ * `for...in` and stopped at the budget; the engine's own enumeration of an already existing
+ * object is the one cost the walk does not bound.
+ */
+function snapshotData(
+  data: unknown,
+  limit: number,
+): Record<string, unknown> | undefined {
   let size = 0;
   const add = (bytes: number): boolean => {
     size += bytes;
     return size <= limit;
   };
-  const walk = (value: unknown, depth: number): boolean => {
-    if (depth > MAX_DATA_DEPTH) return false;
-    if (typeof value === 'string')
-      return value.length <= limit && add(encoder.encode(value).length + 2);
-    if (typeof value !== 'object' || value === null)
-      return add(String(value).length);
+  // `undefined` is a refusal, which no JSON value is.
+  const walk = (value: unknown, depth: number): unknown => {
+    if (typeof value === 'string') {
+      const bytes = jsonStringBytes(value, limit - size);
+      return bytes !== undefined && add(bytes) ? value : undefined;
+    }
+    if (value === null) return add(4) ? null : undefined;
+    if (typeof value === 'boolean') {
+      return add(value ? 4 : 5) ? value : undefined;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && add(JSON.stringify(value).length)
+        ? value
+        : undefined;
+    }
+    if (typeof value !== 'object' || depth >= MAX_DATA_DEPTH) return undefined;
+    // An own data property's value, or `undefined` for a hole or an accessor.
+    const own = (key: string | number): { value: unknown } | undefined => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined && 'value' in descriptor
+        ? { value: descriptor.value as unknown }
+        : undefined;
+    };
     if (Array.isArray(value)) {
-      if (!add(2)) return false;
-      for (const item of value) {
-        if (!add(1) || !walk(item, depth + 1)) return false;
+      if (Object.getPrototypeOf(value) !== Array.prototype) return undefined;
+      // Every item takes a byte, so a longer array cannot fit and none of it is read.
+      if (value.length > limit || !add(2)) return undefined;
+      const copy: unknown[] = [];
+      for (let i = 0; i < value.length; i += 1) {
+        const item = own(i);
+        if (item === undefined || (i > 0 && !add(1))) return undefined;
+        const admitted = walk(item.value, depth + 1);
+        if (admitted === undefined) return undefined;
+        copy.push(admitted);
       }
-      return true;
+      return copy;
     }
     const prototype: unknown = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return false;
-    if (!add(2)) return false;
-    for (const key of Object.keys(value)) {
-      if (!add(2) || !walk(key, depth + 1)) return false;
-      if (!walk((value as Record<string, unknown>)[key], depth + 1))
-        return false;
+    if (prototype !== Object.prototype && prototype !== null) return undefined;
+    if (!add(2)) return undefined;
+    const copy: Record<string, unknown> = {};
+    let first = true;
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue;
+      const member = own(key);
+      const keyBytes = jsonStringBytes(key, limit - size);
+      if (
+        member === undefined ||
+        keyBytes === undefined ||
+        !add(keyBytes + 1 + (first ? 0 : 1))
+      )
+        return undefined;
+      first = false;
+      const admitted = walk(member.value, depth + 1);
+      if (admitted === undefined) return undefined;
+      // Defined, not assigned: a key called `__proto__` stays an own property.
+      Object.defineProperty(copy, key, {
+        value: admitted,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
-    return true;
+    return copy;
   };
   try {
-    return walk(data, 0);
+    if (typeof data !== 'object' || data === null || Array.isArray(data))
+      return undefined;
+    return walk(data, 0) as Record<string, unknown> | undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -168,23 +257,29 @@ export function conversationFromApp(
       }
       let skipped: RequestOutcome | undefined;
       if (context !== undefined) {
+        // Read once: the checks and the request must see the same values. `data` is replaced by
+        // the copy that was measured, so the host receives exactly what was admitted.
+        const { text: contextText, data, bestEffort } = context;
+        const snapshot =
+          data === undefined
+            ? undefined
+            : snapshotData(data, CONVERSATION_LIMITS.contextDataBytes);
         const admitted =
-          fitsText(context.text, CONVERSATION_LIMITS.contextTextBytes) &&
-          (context.data === undefined ||
-            fitsData(context.data, CONVERSATION_LIMITS.contextDataBytes));
+          fitsText(contextText, CONVERSATION_LIMITS.contextTextBytes) &&
+          (data === undefined || snapshot !== undefined);
         skipped = await attempt(
           'updateModelContext',
           admitted
             ? () =>
                 app.updateModelContext({
-                  content: [{ type: 'text', text: context.text }],
-                  ...(context.data === undefined
+                  content: [{ type: 'text', text: contextText }],
+                  ...(snapshot === undefined
                     ? {}
-                    : { structuredContent: context.data }),
+                    : { structuredContent: snapshot }),
                 })
             : undefined,
         );
-        if (skipped !== undefined && context.bestEffort !== true)
+        if (skipped !== undefined && bestEffort !== true)
           return { outcome: skipped, stage: 'context' };
       }
       // The view can end while the context request is outstanding, even for a best-effort one:

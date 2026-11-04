@@ -4,7 +4,7 @@ import {
   type McpUiHostCapabilities,
 } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { InMemoryTransport } from '@modelcontextprotocol/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CONVERSATION_LIMITS, conversationFromApp } from './conversation.js';
 
 // The conversation, exercised with a real `App` and `AppBridge` joined by an in-memory transport.
@@ -60,6 +60,11 @@ afterEach(async () => {
     await bridge.close().catch(() => undefined);
   }
 });
+
+/** The size of the JSON the budget is measured on: what `JSON.stringify` would encode, in bytes. */
+function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
 
 const BOTH = { message: {}, updateModelContext: {} };
 const CONTEXT = {
@@ -445,8 +450,9 @@ describe('admitting payloads before they reach the host', () => {
     const { app, recorded } = await connected(BOTH);
     const text = 'm'.repeat(LIMITS.messageBytes);
     const contextText = 'c'.repeat(LIMITS.contextTextBytes);
-    // The walk counts the braces, key, quotes and a separator byte as 9 around the string.
-    const data = { k: 'd'.repeat(LIMITS.contextDataBytes - 9) };
+    // `{"k":"…"}` is eight bytes around the string, so this JSON is exactly the budget.
+    const data = { k: 'd'.repeat(LIMITS.contextDataBytes - 8) };
+    expect(jsonBytes(data)).toBe(LIMITS.contextDataBytes);
     await expect(
       conversationFromApp(app).appendMessage(text, {
         context: { text: contextText, data },
@@ -619,3 +625,191 @@ describe('admitting payloads before they reach the host', () => {
     expect(recorded).toEqual([]);
   });
 });
+
+describe('measuring structured context data exactly as it is sent', () => {
+  const LIMIT = CONVERSATION_LIMITS.contextDataBytes;
+  const sentContext = (recorded: Recorded[]) =>
+    (recorded[0]?.params as { structuredContent?: unknown } | undefined)
+      ?.structuredContent;
+
+  /** A value whose JSON is exactly `size` bytes: `filler` pads the string under `key`. */
+  function dataOfSize(key: string, lead: string, size: number) {
+    const bare = {
+      [key]: lead,
+      list: [1, -2.5, true, null, 'x'],
+      deep: { a: {} },
+    };
+    const fill = size - jsonBytes(bare);
+    expect(fill).toBeGreaterThanOrEqual(0);
+    return { ...bare, [key]: lead + 'd'.repeat(fill) };
+  }
+
+  // Every character class whose JSON width differs from its length: quotes, backslashes, control
+  // characters (short and \u00XX escapes), multi-byte characters, and a lone surrogate.
+  const awkward = 'q"\\\n\t\u0001€😀\u2028\ud800';
+
+  it('admits escaped strings and keys, separators and nesting at exactly the budget', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const data = dataOfSize('k"\\\n\u0001', awkward, LIMIT);
+    expect(jsonBytes(data)).toBe(LIMIT);
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'appended' });
+    expect(sentContext(recorded)).toEqual(data);
+  });
+
+  it('refuses the same data one byte over the budget', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const data = dataOfSize('k"\\\n\u0001', awkward, LIMIT + 1);
+    expect(jsonBytes(data)).toBe(LIMIT + 1);
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('counts the escapes: a string that is short but escapes past the budget is refused', async () => {
+    const { app, recorded } = await connected(BOTH);
+    // 65527 control characters are 65527 characters but about six times as many bytes in JSON.
+    const data = { k: '\u0000'.repeat(LIMIT - 9) };
+    expect(jsonBytes(data)).toBeGreaterThan(LIMIT * 5);
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('counts an escaped key as it counts an escaped value', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const data = { ['"'.repeat(LIMIT / 2)]: 1 };
+    expect(jsonBytes(data)).toBeGreaterThan(LIMIT);
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('sends what it measured: a getter that grows after admission cannot widen the payload', async () => {
+    const { app, recorded } = await connected(BOTH);
+    let reads = 0;
+    const data = {
+      get shifty(): string {
+        reads += 1;
+        return reads === 1 ? 'small' : 'x'.repeat(2 * LIMIT);
+      },
+    };
+    const result = await conversationFromApp(app).appendMessage('Your move', {
+      context: { text: 'The board', data, bestEffort: true },
+    });
+    // Whether the accessor is refused or read once, no request carries more than the budget.
+    for (const request of recorded.filter((r) => r.kind === 'context')) {
+      expect(jsonBytes(sentContext([request]))).toBeLessThanOrEqual(LIMIT);
+    }
+    expect(result.outcome).toBe('appended');
+    expect(kindsOf(recorded)).toContain('message');
+  });
+
+  it('refuses accessor properties by default and sends nothing', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const data = {
+      get answer() {
+        return 42;
+      },
+    };
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it.each([
+    ['a bigint', { n: 10n }],
+    ['undefined', { u: undefined }],
+    ['a symbol', { s: Symbol('s') }],
+    ['a function', { f: () => 1 }],
+    ['NaN', { n: Number.NaN }],
+    ['Infinity', { n: Number.POSITIVE_INFINITY }],
+    ['an array hole', { a: [1, , 3] }], // eslint-disable-line no-sparse-arrays
+    ['an undefined array item', { a: [undefined] }],
+    ['a Date', { d: new Date(0) }],
+    ['a class instance', { c: new (class Thing {})() }],
+    ['a boxed primitive', { b: Object(1) }],
+  ])('refuses %s, which is not JSON data', async (_what, data) => {
+    const { app, recorded } = await connected(BOTH);
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('refuses an object with a very large number of keys', async () => {
+    const { app, recorded } = await connected(BOTH);
+    const data: Record<string, number> = {};
+    for (let i = 0; i < 300_000; i += 1) data[`k${i}`] = 0;
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'denied', stage: 'context' });
+    expect(recorded).toEqual([]);
+  });
+
+  it('sends a snapshot, preserving a key called __proto__ and every plain value', async () => {
+    const { app } = await connected(BOTH);
+    // The view's own request, before the bridge parses it for the host.
+    const update = vi.spyOn(app, 'updateModelContext');
+    const data = JSON.parse(
+      '{"__proto__":{"admin":true},"n":[-0.5,1e21,true,null,{"x":"y"}]}',
+    ) as Record<string, unknown>;
+    await expect(
+      conversationFromApp(app).appendMessage('Your move', {
+        context: { text: 'The board', data },
+      }),
+    ).resolves.toEqual({ outcome: 'appended' });
+    const sent = (
+      update.mock.calls[0]?.[0] as {
+        structuredContent: Record<string, unknown>;
+      }
+    ).structuredContent;
+    expect(sent).not.toBe(data);
+    expect(Object.hasOwn(sent, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(sent)).toBe(Object.prototype);
+    expect(JSON.stringify(sent)).toBe(JSON.stringify(data));
+  });
+
+  it('reads the context once: a context text that changes after admission is not sent', async () => {
+    const { app, recorded } = await connected(BOTH);
+    let reads = 0;
+    const context = {
+      get text(): string {
+        reads += 1;
+        return reads === 1
+          ? 'The board'
+          : 'x'.repeat(CONVERSATION_LIMITS.contextTextBytes * 4);
+      },
+    };
+    await conversationFromApp(app).appendMessage('Your move', { context });
+    const params = recorded[0]?.params as {
+      content: [{ text: string }];
+    };
+    expect(params.content[0].text.length).toBeLessThanOrEqual(
+      CONVERSATION_LIMITS.contextTextBytes,
+    );
+  });
+});
+
+function kindsOf(recorded: Recorded[]) {
+  return recorded.map((r) => r.kind);
+}
