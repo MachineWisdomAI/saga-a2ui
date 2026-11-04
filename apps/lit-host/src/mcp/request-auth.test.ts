@@ -140,3 +140,49 @@ describe('protected resource binding', () => {
     expect(asPlayback).toMatchObject({ ok: false, status: 401 });
   });
 });
+
+describe('token expiration', () => {
+  const withExpiry = (expiresAt: unknown): AuthInfo =>
+    ({ ...info(new URL(SUBSCRIPTIONS)), expiresAt }) as AuthInfo;
+
+  it('accepts a credential that expires in the future (control)', async () => {
+    expect((await run(withExpiry(NOW + 1))).ok).toBe(true);
+  });
+
+  it.each([
+    ['now', NOW],
+    ['the past', NOW - 1],
+    ['a missing expiry', undefined],
+    ['a string', String(NOW + 3600)],
+    ['positive infinity', Infinity],
+    ['negative infinity', -Infinity],
+    ['NaN', NaN],
+    ['an unsafe magnitude', Number.MAX_SAFE_INTEGER + 2],
+    ['a beyond-range finite number', 1e300],
+  ])('refuses a credential whose expiry is %s', async (_name, expiresAt) => {
+    const decision = await run(withExpiry(expiresAt));
+    expect(decision).toMatchObject({ ok: false, status: 401 });
+    if (decision.ok) return;
+    expect(decision.challenge).toMatch(/error="invalid_token"/);
+    expect(decision).not.toHaveProperty('authInfo');
+  });
+
+  it.each([
+    ['NaN', NaN],
+    ['positive infinity', Infinity],
+    ['negative infinity', -Infinity],
+  ])(
+    'refuses every credential, as a server fault, when the clock reads %s',
+    async (_name, reading) => {
+      const decision = await authenticate(
+        { headers: { authorization: 'Bearer token' } },
+        verifierOf(withExpiry(Infinity)),
+        subscriptionsRequirement(SUBSCRIPTIONS),
+        gate,
+        () => reading,
+      );
+      expect(decision).toMatchObject({ ok: false, status: 500 });
+      expect(decision).not.toHaveProperty('authInfo');
+    },
+  );
+});

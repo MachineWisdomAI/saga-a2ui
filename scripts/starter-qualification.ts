@@ -94,6 +94,9 @@ export function qualifyStarter(
     service: 'qualification-token-service',
     otherScope: 'qualification-token-other-scope',
     expired: 'qualification-token-expired',
+    infiniteExpiry: 'qualification-token-infinite-expiry',
+    nanExpiry: 'qualification-token-nan-expiry',
+    unsafeExpiry: 'qualification-token-unsafe-expiry',
     noResource: 'qualification-token-no-resource',
     otherResource: 'qualification-token-other-resource',
     fragmentResource: 'qualification-token-fragment-resource',
@@ -173,6 +176,12 @@ export function qualifyStarter(
         return user(ACCOUNT_A, ['something:else']);
       case TOKEN.expired:
         return user(ACCOUNT_A, [scope], nowSeconds() - 60);
+      case TOKEN.infiniteExpiry: // a verifier that reports a credential which never ends
+        return user(ACCOUNT_A, [scope], Infinity);
+      case TOKEN.nanExpiry:
+        return user(ACCOUNT_A, [scope], NaN);
+      case TOKEN.unsafeExpiry:
+        return user(ACCOUNT_A, [scope], 1e300);
       case TOKEN.noResource:
         return user(ACCOUNT_A, [scope], undefined, null); // a valid account credential that names no resource
       case TOKEN.otherResource:
@@ -461,6 +470,17 @@ export function qualifyStarter(
       ['a malformed credential', 'Token abc', 401],
       ['a credential the verifier does not know', 'Bearer nobody', 401],
       ['an expired credential', `Bearer ${TOKEN.expired}`, 401],
+      [
+        'a credential whose expiry is infinite',
+        `Bearer ${TOKEN.infiniteExpiry}`,
+        401,
+      ],
+      ['a credential whose expiry is NaN', `Bearer ${TOKEN.nanExpiry}`, 401],
+      [
+        'a credential whose expiry is beyond the safe range',
+        `Bearer ${TOKEN.unsafeExpiry}`,
+        401,
+      ],
       [
         'a credential without the required scope',
         `Bearer ${TOKEN.otherScope}`,
