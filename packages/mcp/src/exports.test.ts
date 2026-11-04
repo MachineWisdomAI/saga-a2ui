@@ -103,6 +103,8 @@ describe('package subpath exports', () => {
       'viewUriForHtml',
     ]);
     expect(Object.keys(view).sort()).toEqual([
+      'DEFAULT_TOOL_RESULT_LIMITS',
+      'ToolResultRefused',
       'ViewStartFailure',
       'conversationFromApp',
       'deliveredResultFromToolResult',

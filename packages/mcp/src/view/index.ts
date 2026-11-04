@@ -17,3 +17,9 @@ export { hostLinksFromApp } from './host-links.js';
 export { startOwnSizing } from './own-sizing.js';
 export { readingProfile, type ReadingProfile } from './reading-profile.js';
 export { deliveredResultFromToolResult } from './delivered-result.js';
+export {
+  DEFAULT_TOOL_RESULT_LIMITS,
+  ToolResultRefused,
+  type ToolResultExceeded,
+  type ToolResultLimits,
+} from './result-admission.js';
