@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  UnsafePath,
+  listContainedFiles,
+  readContainedFile,
+  sameDirectory,
+} from './owned-filesystem.js';
 import { repoRoot, type SdkPackage } from './packed-consumer.js';
 
 // The maintained starter templates (`templates/<stack>-<server>`), their export, and the snippets
@@ -37,27 +43,46 @@ export class TemplateError extends Error {
 const NOT_EXPORTED = new Set(['template.json']);
 const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist']);
 
+/**
+ * Every read of a template's source goes through here: the file must be a regular file reached
+ * through real directories below the template (a link or special file, or a path that leaves it,
+ * is a `TemplateError`), checked immediately before the read. SECURITY.md invariant 5.
+ */
+function readTemplateFile(template: string, file: string): string {
+  try {
+    return readContainedFile(template, file).toString('utf8');
+  } catch (error) {
+    if (error instanceof UnsafePath)
+      throw new TemplateError(
+        `${file} cannot be read from the template: ${error.message}`,
+      );
+    throw error;
+  }
+}
+
 export function readTemplateMetadata(template: string): TemplateMetadata {
-  const file = path.join(template, 'template.json');
-  if (!fs.existsSync(file))
+  if (!fs.existsSync(path.join(template, 'template.json')))
     throw new TemplateError(
       `${template} is not a template: it has no template.json.`,
     );
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as TemplateMetadata;
+  return JSON.parse(
+    readTemplateFile(template, 'template.json'),
+  ) as TemplateMetadata;
 }
 
-/** The template's exported files, relative and sorted. */
+/** The template's exported files, relative and sorted. A link or special file anywhere in the template is a `TemplateError`: the template is the source of what a developer receives and holds only regular files. */
 export function templateFiles(template: string): string[] {
-  const walk = (directory: string): string[] =>
-    fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-      const full = path.join(directory, entry.name);
-      if (entry.isDirectory())
-        return SKIPPED_DIRECTORIES.has(entry.name) ? [] : walk(full);
-      return [path.relative(template, full).split(path.sep).join('/')];
-    });
-  return walk(template)
-    .filter((file) => !NOT_EXPORTED.has(file))
-    .sort();
+  try {
+    return listContainedFiles(template, SKIPPED_DIRECTORIES).filter(
+      (file) => !NOT_EXPORTED.has(file),
+    );
+  } catch (error) {
+    if (error instanceof UnsafePath)
+      throw new TemplateError(
+        `${template} cannot be exported: ${error.message}`,
+      );
+    throw error;
+  }
 }
 
 const REGION =
@@ -85,9 +110,7 @@ export function extractSnippets(template: string): Snippet[] {
     /\.tsx?$/.test(one),
   )) {
     let open: { readonly name: string; readonly lines: string[] } | undefined;
-    for (const line of fs
-      .readFileSync(path.join(template, file), 'utf8')
-      .split('\n')) {
+    for (const line of readTemplateFile(template, file).split('\n')) {
       const marker = REGION.exec(line);
       if (marker === null) {
         open?.lines.push(line);
@@ -221,8 +244,7 @@ export class ExportInterrupted extends Error {
   }
 }
 
-export const sameDirectory = (a: fs.BigIntStats, b: fs.BigIntStats): boolean =>
-  a.isDirectory() && b.isDirectory() && a.dev === b.dev && a.ino === b.ino;
+export { sameDirectory };
 
 /**
  * Creating a new directory with the given files, as a generator that suspends before each file and
@@ -310,7 +332,7 @@ function* exportSteps(
   const outputs = files.map((file): OutputFile => ({
     path: file,
     content: () => {
-      const source = fs.readFileSync(path.join(template, file), 'utf8');
+      const source = readTemplateFile(template, file);
       return file === 'package.json'
         ? `${JSON.stringify(stampSdkVersion(JSON.parse(source) as Record<string, unknown>, options.sdkVersion), null, 2)}\n`
         : stripMarkers(source);

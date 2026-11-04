@@ -850,3 +850,76 @@ describe.each(releaseVersions(root))(
     );
   },
 );
+
+describe('release specifications name files the generator writes', () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'saga-docs-spec-'));
+  const specFor = (
+    version: string,
+    changes: Record<string, unknown>,
+  ): string => {
+    const directory = path.join(scratch, 'docs/releases', version);
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'release.json'),
+      JSON.stringify({
+        version,
+        revision: REVISION,
+        guides: [{ source: 'docs/a.md', slug: 'getting-started' }],
+        components: [{ id: 'faithful-card' }],
+        ...changes,
+      }),
+    );
+    return scratch;
+  };
+
+  it('accepts the identifiers the committed releases use', () => {
+    expect(readSpec(specFor('1.2.3-rc.1', {}), '1.2.3-rc.1').version).toBe(
+      '1.2.3-rc.1',
+    );
+  });
+
+  it.each([
+    [
+      'a guide slug that climbs out of the release directory',
+      { guides: [{ source: 'docs/a.md', slug: '../../../outside' }] },
+    ],
+    [
+      'a guide slug with a separator',
+      { guides: [{ source: 'docs/a.md', slug: 'nested/page' }] },
+    ],
+    [
+      'an absolute guide slug',
+      { guides: [{ source: 'docs/a.md', slug: '/tmp/x' }] },
+    ],
+    ['a component id that climbs out', { components: [{ id: '..' }] }],
+    ['a component id with a separator', { components: [{ id: 'a/b' }] }],
+    ['an empty component id', { components: [{ id: '' }] }],
+  ])('refuses %s', (_name, changes) => {
+    expect(() => readSpec(specFor('9.9.9', changes), '9.9.9')).toThrow(
+      /single safe path segment/,
+    );
+  });
+
+  it('refuses a version that is not one safe segment', () => {
+    expect(() => readSpec(scratch, '../9.9.9')).toThrow(
+      /single safe path segment/,
+    );
+  });
+
+  it('does not read a release.json that is a link', () => {
+    const outside = path.join(scratch, 'elsewhere.json');
+    fs.writeFileSync(
+      outside,
+      JSON.stringify({
+        version: '8.8.8',
+        revision: REVISION,
+        guides: [],
+        components: [],
+      }),
+    );
+    const directory = path.join(scratch, 'docs/releases/8.8.8');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.symlinkSync(outside, path.join(directory, 'release.json'));
+    expect(() => readSpec(scratch, '8.8.8')).toThrow(/symbolic link/);
+  });
+});

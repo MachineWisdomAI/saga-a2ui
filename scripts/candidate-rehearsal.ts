@@ -6,6 +6,7 @@ import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import type * as Pack1Server from '../examples/pack1-consumer/server/index.js';
 import { startTestHost } from '../packages/mcp/src/server/http-host.test-support.js';
 import { sha256Hex } from './candidate-identity.js';
+import { OwnedDirectory, readContainedFile } from './owned-filesystem.js';
 import {
   PACK1_CONSUMERS,
   buildPack1Consumer,
@@ -480,18 +481,23 @@ export function writeRehearsal(
   candidateFile: string,
   record: RehearsalRecord,
 ): void {
-  const directory = path.dirname(candidateFile);
-  fs.writeFileSync(
-    path.join(directory, 'rehearsal.json'),
-    `${JSON.stringify(record, null, 2)}\n`,
-  );
-  const summaryFile = path.join(directory, 'CANDIDATE.md');
-  if (!fs.existsSync(summaryFile)) return;
-  const summary = fs.readFileSync(summaryFile, 'utf8');
+  // The directory is authenticated (a real directory, never a link), and each record replaces its
+  // leaf instead of being written through whatever is there.
+  const directory = OwnedDirectory.create(path.dirname(candidateFile));
+  directory.writeFile('rehearsal.json', `${JSON.stringify(record, null, 2)}\n`);
+  let summary: string;
+  try {
+    summary = readContainedFile(directory.path, 'CANDIDATE.md').toString(
+      'utf8',
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
   const kept = summary.includes(SECTION)
     ? summary.slice(0, summary.indexOf(SECTION))
     : `${summary}\n`;
-  fs.writeFileSync(summaryFile, `${kept}${rehearsalSummary(record)}`);
+  directory.writeFile('CANDIDATE.md', `${kept}${rehearsalSummary(record)}`);
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -504,7 +510,12 @@ async function main(argv: string[]): Promise<number> {
     return 2;
   }
   const candidateFile = path.resolve(candidateArgument);
-  const recorded = JSON.parse(fs.readFileSync(candidateFile, 'utf8')) as {
+  const recorded = JSON.parse(
+    readContainedFile(
+      path.dirname(candidateFile),
+      path.basename(candidateFile),
+    ).toString('utf8'),
+  ) as {
     version: string;
     packages: { name: string; sha256: string }[];
   };
