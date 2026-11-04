@@ -107,10 +107,11 @@ export function honoAdapterCases({
         const { port } = new URL(listener.statusUrl);
         for (const base of [listener.statusUrl, listener.accountUrl]) {
           const url = `${base}${terminator}`;
-          for (const headers of [
+          const untrusted: Record<string, string>[] = [
             { host: 'rebound.example' },
             { origin: 'https://other-site.example' },
-          ]) {
+          ];
+          for (const headers of untrusted) {
             const refused = await rawRequest(url, {
               ...headers,
               authorization: `Bearer ${allowedToken}`,
