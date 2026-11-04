@@ -1,6 +1,6 @@
 ---
 feature_name: fetch_mcp_hosting
-status: approved
+status: draft
 module_blueprints: []
 dependencies: [reusable_mcp_connector, request_view_lifetimes]
 date_added: 2026-10-30
@@ -12,7 +12,7 @@ date_added: 2026-10-30
 
 - Design: approved by human review on 30 October 2026 at [revision `eb2f0c2cd3cf9216c5b3dbb17d09830283863c05`](https://github.com/MachineWisdomAI/saga-a2ui/blob/eb2f0c2cd3cf9216c5b3dbb17d09830283863c05/blueprints/features/fetch_mcp_hosting.blueprint.md), including its referenced diagrams. This records design approval, not implementation or release acceptance.
 - Implementation: Partial. The shared Fetch entry (`createMcpFetchApp`, [guide](../../docs/fetch-mcp-hosting.md)) landed in [`f1fbac0882302cbf024100b462e08abd06a5bdc1`](https://github.com/MachineWisdomAI/saga-a2ui/commit/f1fbac0882302cbf024100b462e08abd06a5bdc1) and is qualified from source and packed packages in the `workerd` runtime and behind a Node listener. Existing operation registration and request-lifetime attachment remain implemented. The hosted game's consumption is separate scope.
-- Revision pending human approval: this revision starts the request budget at admission and bounds the body inside it (previously the budget began at the server factory and the body was unbounded in time). The approved baseline above is unchanged until a human approves the amended Time paragraph.
+- Revision: draft, awaiting human design approval. This revision changes the approved timing and responsibility contract (the Time paragraph and the platform/listener row): the request budget starts when the Fetch entry admits the request and covers the body read, JSON parsing and the cancellation of a stalled read, where the approved baseline [`eb2f0c2cd3cf9216c5b3dbb17d09830283863c05`](https://github.com/MachineWisdomAI/saga-a2ui/blob/eb2f0c2cd3cf9216c5b3dbb17d09830283863c05/blueprints/features/fetch_mcp_hosting.blueprint.md) began it at the server factory and left a stalled body without an SDK deadline. The front matter is `draft` while this revision is unapproved; the approved baseline is the revision linked above, and every other part of the design is unchanged from it. No human approval of this revision is recorded here. The candidate implementation in the pull request that carries this revision is unaccepted evidence until a human approves the revision. The delivery coordinator (the maintainer who merges that pull request) records the approving decision and the landed code revision in a follow-up status-only commit after the merge.
 - Acceptance: Package publication, a published-registry installation and any deployed endpoint remain open. This design does not establish a deployed endpoint.
 
 ## Problem and current behavior
@@ -38,11 +38,11 @@ The diagram's explicit-public-operation branch is the game path. Fetch hosting c
 | Application | Supplies `createServer(lifetime)`, an exact endpoint path, explicit host/origin allowlists, optional budget settings and JSON or SSE response mode. It owns bindings, identity verification, backend effects, view bytes and storage. |
 | Shared Fetch entry | Returns `fetch(Request)` and asynchronous `close()`. Installs the official validators and delegates the configured route to the official stateless handler. No registry, arbitrary upstream forwarding or process-global current-request state is introduced. |
 | Server factory | Registers operations with the supplied lifetime and returns a fresh server. It does not subclass the server to finish timers. A factory failure finishes the lifetime it received. |
-| Platform/listener | Owns network admission, socket/server timeouts and shutdown. The SDK adds no custom body reader or connection-teardown implementation: it runs the official bounded body reader inside the request budget and asks the listener to close the connection of a refused body. |
+| Platform/listener | Owns network admission, socket/server timeouts and shutdown. The SDK adds no body-reading or connection-teardown implementation of its own: it runs the official bounded body reader, over a relay stream it can cancel, inside the request budget and asks the listener to close the connection of a refused body. |
 
 The path defaults to `/mcp`; the game selects `/tic-tac-toe/mcp`. Validate configuration before handling traffic. Allowlists are explicit arrays: trim and deduplicate entries, preserve an explicitly empty list, and add no implicit localhost entries. Missing host/origin settings are configuration errors. An absent Origin header follows the official middleware's behavior; an Origin-bearing request must pass the configured rule. Environment-to-settings precedence stays in the application.
 
-The request budget begins when the shared Fetch entry admits the request, before the body is read. The declared size, observed size and body time are stages of that one budget, answered with 413 or 408 before any server exists. The platform's network bounds still apply to the socket; the SDK does not replace them with a second transport implementation.
+The request budget begins when the shared Fetch entry admits the request, before the body is read. The declared size, observed size, body time and JSON parsing are stages of that one budget, answered with 413, 408 or 400 before any server exists, and a request whose budget is already spent is refused before the server factory is called. When the budget ends a waiting read, the body is cancelled and unlocked so it is pulled no further. The platform's network bounds still apply to the socket; the SDK does not replace them with a second transport implementation.
 
 ## Failure and recovery
 

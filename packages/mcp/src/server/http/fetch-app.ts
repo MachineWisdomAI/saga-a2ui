@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { createEndpoint } from '../endpoint.js';
 import {
   createServerBudgets,
+  type BoundedScope,
   type BudgetSettings,
   type LifetimeCause,
   type RequestLifetime,
@@ -26,10 +27,11 @@ import { attachRequestLifetime } from '../request-closure.js';
 // upstream and keeps no state between requests.
 //
 // Time: a request's lifetime starts when the route admits it, before the body is read. The size
-// check and the official bounded reader (`readRequestBody`) then run as one `body` stage of that
-// lifetime, so a body that is declared too large, grows too large or arrives too slowly is refused
-// before any server exists. The platform or listener still owns network admission, socket timeouts
-// and shutdown.
+// check, the official bounded reader (`readRequestBody`) and the JSON parse then run as one `body`
+// stage of that lifetime, so a body that is declared too large, grows too large, arrives too slowly
+// or parses too slowly is refused before any server exists, and a lifetime already spent is never
+// handed to the factory. When the stage ends a read that is waiting, the body is cancelled and
+// unlocked. The platform or listener still owns network admission, socket timeouts and shutdown.
 
 const DEFAULT_PATH = '/mcp';
 
@@ -214,34 +216,96 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
     },
   );
 
+  type BodyOutcome =
+    | { readonly kind: 'parsed'; readonly value: unknown }
+    | { readonly kind: 'too-large' }
+    | { readonly kind: 'invalid' };
+
   /**
-   * Reads and parses a POST body as one bounded stage of the request. A `Response` is the answer
-   * for a request that cannot go on; nothing has been built for it.
+   * The same request with a body that this stage can end. The official reader locks whatever body
+   * it is given and offers no way to stop a read that is waiting, so it is given a relay over the
+   * original stream instead: when the stage ends for any reason, the relay's source is cancelled,
+   * which settles the waiting read, stops further pulls and unlocks the original body.
+   */
+  function relayed(request: Request, scope: BoundedScope): Request {
+    const original = request.body;
+    if (original === null) return request;
+    const source = original.getReader();
+    let ended = false;
+    const end = (reason: unknown): Promise<void> => {
+      if (ended) return Promise.resolve();
+      ended = true;
+      return source.cancel(reason).then(
+        () => source.releaseLock(),
+        () => source.releaseLock(),
+      );
+    };
+    scope.signal.addEventListener(
+      'abort',
+      () => void end(scope.signal.reason),
+      {
+        once: true,
+      },
+    );
+    const relay = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          const next = await source.read();
+          if (ended || next.done) controller.close();
+          else controller.enqueue(next.value);
+        },
+        cancel: end,
+      },
+      // The official reader asks for one chunk at a time: nothing is read ahead of it.
+      { highWaterMark: 0 },
+    );
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: relay,
+      duplex: 'half',
+    } as RequestInit);
+  }
+
+  /**
+   * Reads and parses a POST body as one bounded stage of the request, so a stall, an oversize body
+   * and a slow parse all spend the same budget. A `Response` is the answer for a request that
+   * cannot go on; nothing has been built for it.
    */
   async function readJsonBody(
     request: Request,
     lifetime: RequestLifetime,
   ): Promise<{ readonly value: unknown } | Response> {
-    const read = await lifetime.run('body', () =>
-      readRequestBody(request, maxRequestBodySize),
+    const read = await lifetime.run(
+      'body',
+      async (scope): Promise<BodyOutcome> => {
+        const body = await readRequestBody(
+          relayed(request, scope),
+          maxRequestBodySize,
+        );
+        if (body.tooLarge) return { kind: 'too-large' };
+        try {
+          return { kind: 'parsed', value: JSON.parse(body.text) as unknown };
+        } catch {
+          return { kind: 'invalid' };
+        }
+      },
     );
     if (!read.ok) {
       if (read.cause.kind === 'dependency-failure') lifetime.record(read.cause);
       return bodyFailure(read.cause);
     }
-    if (read.value.tooLarge) {
-      // What was not read is not wanted: release the stream rather than leave it half consumed.
-      void request.body?.cancel().catch(() => undefined);
-      return jsonRpcError(
-        413,
-        -32000,
-        `Payload Too Large: Request body must not exceed ${maxRequestBodySize} bytes`,
-      );
-    }
-    try {
-      return { value: JSON.parse(read.value.text) as unknown };
-    } catch {
-      return jsonRpcError(400, -32700, 'Parse error: Invalid JSON');
+    switch (read.value.kind) {
+      case 'too-large':
+        return jsonRpcError(
+          413,
+          -32000,
+          `Payload Too Large: Request body must not exceed ${maxRequestBodySize} bytes`,
+        );
+      case 'invalid':
+        return jsonRpcError(400, -32700, 'Parse error: Invalid JSON');
+      case 'parsed':
+        return { value: read.value.value };
     }
   }
 
@@ -256,6 +320,9 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
           ? await readJsonBody(request, lifetime)
           : undefined;
       if (body instanceof Response) return body;
+      // A budget that ran out while the request was being prepared admits no server.
+      const expired = lifetime.check();
+      if (expired !== undefined) return bodyFailure(expired);
       // A bounded `parsedBody` keeps the official handler from cloning or re-reading the request,
       // which would also discard the object-identity association with this lifetime.
       return await endpoint.fetch(request, lifetime, {

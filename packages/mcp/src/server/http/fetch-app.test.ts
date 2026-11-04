@@ -658,4 +658,96 @@ describe('Fetch MCP hosting request lifetime', () => {
     expect(response.status).toBeLessThan(500);
     expect(finishes()).toEqual(lifetimes.map(() => 1));
   });
+
+  /** A body that counts how often it is pulled and cancelled, and can be fed after the fact. */
+  function countedBody(): {
+    readonly request: Request;
+    readonly stream: ReadableStream<Uint8Array>;
+    readonly counts: () => { pulls: number; cancels: number };
+    readonly feed: (text: string) => void;
+  } {
+    let pulls = 0;
+    let cancels = 0;
+    let feeder: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        feeder = controller;
+      },
+      pull() {
+        pulls += 1;
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {
+        cancels += 1;
+      },
+    });
+    const request = new Request(URL_OF('/mcp'), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        host: HOST,
+      },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit);
+    return {
+      request,
+      stream,
+      counts: () => ({ pulls, cancels }),
+      feed: (text) => {
+        try {
+          feeder?.enqueue(encoder.encode(text));
+        } catch {
+          // A cancelled stream refuses further chunks, which is the point of the assertion.
+        }
+      },
+    };
+  }
+
+  it('cancels and unlocks the body when its stage expires, and reads no more of it', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 60 } });
+    const probe = countedBody();
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(408);
+    expect(lifetimes).toHaveLength(0);
+    const settled = probe.counts();
+    expect(settled.cancels).toBe(1);
+    expect(probe.stream.locked).toBe(false);
+    // Bytes that arrive after the answer are not pulled, and closing the app changes nothing.
+    probe.feed(LIST);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await app.close();
+    expect(probe.counts()).toEqual(settled);
+    expect(probe.stream.locked).toBe(false);
+  });
+
+  it('keeps JSON parsing inside the request budget and builds no server for an expired one', async () => {
+    const realParse = JSON.parse.bind(JSON);
+    const slow = vi.spyOn(JSON, 'parse').mockImplementation((text, reviver) => {
+      // A parse that takes longer than the whole request budget, whatever the machine's speed.
+      const until = performance.now() + 120;
+      while (performance.now() < until) {
+        // Spin: the work is synchronous, so no timer can interrupt it.
+      }
+      return realParse(text, reviver) as unknown;
+    });
+    try {
+      const { app, lifetimes } = harness({ budgets: { requestMs: 40 } });
+      const response = await app.fetch(post('/mcp'));
+      expect(response.status).toBe(408);
+      expect(response.headers.get('connection')).toBe('close');
+      expect(lifetimes).toHaveLength(0);
+    } finally {
+      slow.mockRestore();
+    }
+  });
+
+  it('serves the same small body when the budget is not exhausted', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 5_000 } });
+    const response = await app.fetch(post('/mcp'));
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(lifetimes[0]?.remainingMs()).toBeGreaterThan(0);
+  });
 });
