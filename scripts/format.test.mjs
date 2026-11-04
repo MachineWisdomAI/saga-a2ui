@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cpSync,
+  existsSync,
   lstatSync,
   mkdtempSync,
   mkdirSync,
@@ -97,4 +98,21 @@ test('check mode refuses a link too, and does not read what it points at', (t) =
   assert.equal(result.status, 1);
   assert.match(result.stderr, /linked\.ts: not a regular file/);
   assert.doesNotMatch(result.stderr, /formatting differs/);
+});
+
+test('a path outside the checkout is refused before any Prettier configuration beside it is loaded', (t) => {
+  const { root, outside, run } = fixture(t);
+  const marker = join(outside, 'config-ran');
+  // A configuration file is code: loading one beside a selected path executes it.
+  writeFileSync(
+    join(outside, '.prettierrc.mjs'),
+    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'ran');\nexport default {};\n`,
+  );
+  writeFileSync(join(outside, 'test.ts'), UNFORMATTED);
+  symlinkSync(outside, join(root, 'link'), 'dir');
+  const result = run('--write', 'link/test.ts');
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /link\/test\.ts: outside the checkout/);
+  assert.equal(existsSync(marker), false, 'outside configuration was loaded');
+  assert.equal(readFileSync(join(outside, 'test.ts'), 'utf8'), UNFORMATTED);
 });

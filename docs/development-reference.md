@@ -138,10 +138,10 @@ Repair a defect there, not at a call site.
   safe path segment, fail before anything is written. `build.directory` of a publication release input
   must resolve inside the input's own directory, like every other path in it.
 - **Source identity.** `release:pack` and `candidate:pack` copy only the files Git tracks below each package
-  (plus the repository license and notices) from the working tree, so an untracked or ignored file cannot
+  (plus the repository license and notices, each of which must itself be one regular tracked file) from the working tree, so an untracked or ignored file cannot
   enter a tarball whatever a package's `files` list selects; Git LFS content is the working tree's, as a
   clean checkout smudges it. `release.json` records, per package, `sourceSha256` (the staged tracked
-  content) and `excludedUntracked` (files Git does not track, ignored ones included, left out). The `dirty` flag still means tracked files
+  content, the license and notices included) and `excludedUntracked` (files Git does not track, ignored ones included, left out). The `dirty` flag still means tracked files
   differ from the commit; a dirty build remains preparation only.
 - **Output.** `release:pack`, `candidate:pack`, the `tarballs` command of `scripts/release-candidate.ts` and `candidate:rehearse`
   create their output directory or authenticate it (a real directory, never a link, owned by the running

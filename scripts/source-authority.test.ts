@@ -110,9 +110,68 @@ describe('a release artifact is built from tracked files only', () => {
         mode: 0o755,
       },
     );
+    fs.writeFileSync(path.join(root, 'LICENSE'), 'license text\n');
+    fs.writeFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'), 'notices\n');
     git('add', '.');
     git('commit', '-q', '-m', 'initial');
     return root;
+  }
+
+  const AUXILIARY = ['LICENSE', 'THIRD_PARTY_NOTICES.md'];
+
+  it('stages the tracked license and notices beside the package and binds them into its identity', () => {
+    const root = repository();
+    const destination = fresh();
+    const first = stageTrackedFiles(
+      root,
+      'packages/demo',
+      destination,
+      AUXILIARY,
+    );
+    expect(fs.readFileSync(path.join(destination, 'LICENSE'), 'utf8')).toBe(
+      'license text\n',
+    );
+    expect(
+      fs.readFileSync(path.join(destination, 'THIRD_PARTY_NOTICES.md'), 'utf8'),
+    ).toBe('notices\n');
+    // The auxiliary bytes are part of what the package was built from.
+    expect(first.sourceSha256).not.toBe(
+      stageTrackedFiles(root, 'packages/demo', fresh()).sourceSha256,
+    );
+    for (const file of AUXILIARY) {
+      fs.writeFileSync(path.join(root, file), 'edited\n');
+      expect(
+        stageTrackedFiles(root, 'packages/demo', fresh(), AUXILIARY)
+          .sourceSha256,
+      ).not.toBe(first.sourceSha256);
+      fs.writeFileSync(
+        path.join(root, file),
+        file === 'LICENSE' ? 'license text\n' : 'notices\n',
+      );
+    }
+  });
+
+  for (const file of AUXILIARY) {
+    it(`refuses ${file} when Git no longer tracks it, though the working tree still has it`, () => {
+      const root = repository();
+      execFileSync('git', ['rm', '-q', '--cached', file], { cwd: root });
+      expect(fs.existsSync(path.join(root, file))).toBe(true);
+      const destination = fresh();
+      expect(() =>
+        stageTrackedFiles(root, 'packages/demo', destination, AUXILIARY),
+      ).toThrow(UnsafePath);
+      expect(fs.existsSync(path.join(destination, file))).toBe(false);
+    });
+
+    it(`refuses ${file} when it is a tracked link`, () => {
+      const root = repository();
+      fs.rmSync(path.join(root, file));
+      fs.symlinkSync('packages/demo/package.json', path.join(root, file));
+      execFileSync('git', ['add', file], { cwd: root });
+      expect(() =>
+        stageTrackedFiles(root, 'packages/demo', fresh(), AUXILIARY),
+      ).toThrow(UnsafePath);
+    });
   }
 
   it('stages what Git tracks and names, and leaves out, an untracked file', () => {

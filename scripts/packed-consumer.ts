@@ -302,11 +302,17 @@ function trackedEntries(root: string, pathspec: string): TrackedEntry[] {
  * deleted is what `sourceRevision` reports as dirty. Returns the identity of what was staged and
  * the files below `subdirectory` that Git does not track, ignored ones included, left out. Git LFS content is the working tree's, exactly as a clean checkout
  * of the commit smudges it.
+ *
+ * `auxiliary` names repository files (the license, the notices) staged at the root of
+ * `destination`. Each must be exactly one regular tracked entry at that path (an untracked or
+ * index-deleted file, a link or an unmerged path is refused), and its path and content are bound
+ * into the returned identity, so the identity covers everything the artifact was built from.
  */
 export function stageTrackedFiles(
   root: string,
   subdirectory: string,
   destination: string,
+  auxiliary: readonly string[] = [],
 ): { readonly sourceSha256: string; readonly excludedUntracked: string[] } {
   const entries = trackedEntries(root, subdirectory);
   if (entries.length === 0)
@@ -325,6 +331,19 @@ export function stageTrackedFiles(
       .update(createHash('sha256').update(data).digest())
       .update('\n');
   }
+  for (const file of auxiliary) {
+    const [entry, ...rest] = trackedEntries(root, file);
+    if (entry === undefined || rest.length > 0 || entry.path !== file)
+      throw new UnsafePath(
+        `${file} is not tracked by Git as one regular file; a release artifact ships only tracked auxiliary files.`,
+      );
+    const data = readContainedFile(root, file);
+    fs.writeFileSync(path.join(destination, file), data);
+    identity
+      .update(`auxiliary:${file}\0`)
+      .update(createHash('sha256').update(data).digest())
+      .update('\n');
+  }
   // No `--exclude-standard`: an ignored file is left out of the tarball too, so it is named too.
   const excludedUntracked = gitIn(root, [
     'ls-files',
@@ -338,12 +357,6 @@ export function stageTrackedFiles(
     .map((file) => file.slice(subdirectory.length + 1))
     .sort();
   return { sourceSha256: identity.digest('hex'), excludedUntracked };
-}
-
-/** Copies the tracked repository file `file` (the license, the notices) into `staged`. */
-function stageTrackedFile(file: string, staged: string): void {
-  trackedEntries(repoRoot, file);
-  fs.writeFileSync(path.join(staged, file), readContainedFile(repoRoot, file));
 }
 
 function packPackages(
@@ -365,16 +378,15 @@ function packPackages(
       : OwnedDirectory.create(destination);
   return packages.map((name) => {
     const staged = path.join(work, 'staged', name);
+    const notices = SHIPS_THIRD_PARTY_NOTICES.includes(name)
+      ? ['THIRD_PARTY_NOTICES.md']
+      : [];
     const { sourceSha256, excludedUntracked } = stageTrackedFiles(
       repoRoot,
       `packages/${name}`,
       staged,
+      ['LICENSE', ...notices],
     );
-    stageTrackedFile('LICENSE', staged);
-    const notices = SHIPS_THIRD_PARTY_NOTICES.includes(name)
-      ? ['THIRD_PARTY_NOTICES.md']
-      : [];
-    for (const notice of notices) stageTrackedFile(notice, staged);
     const manifestPath = path.join(staged, 'package.json');
     const manifest = JSON.parse(
       fs.readFileSync(manifestPath, 'utf8'),

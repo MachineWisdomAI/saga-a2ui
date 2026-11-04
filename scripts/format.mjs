@@ -77,8 +77,11 @@ async function formattingFiles(files) {
   const selected = [];
   for (const file of files) {
     if (!/\.(?:[cm]?js|jsx|ts|tsx|json|css|ya?ml)$/.test(file)) continue;
+    // `resolveConfig: false`: this runs before a path is admitted (see `readSelected`), and loading
+    // Prettier configuration executes it, so a path outside the checkout must not reach that.
     const info = await prettier.getFileInfo(file, {
       ignorePath: ['.gitignore', '.prettierignore'],
+      resolveConfig: false,
     });
     if (!info.ignored && info.inferredParser) selected.push(file);
   }
