@@ -174,7 +174,8 @@ describe('decoder', () => {
     [
       'a bigint version',
       { version: 1n, deleteSurface: { surfaceId: 's' } },
-      'unsupported-version',
+      // A bigint is not wire data: admission refuses it before the version is read.
+      'malformed',
     ],
     [
       'a cyclic version',
@@ -183,7 +184,8 @@ describe('decoder', () => {
         v.push(v);
         return { version: v, deleteSurface: { surfaceId: 's' } };
       })(),
-      'unsupported-version',
+      // Admission meets the cycle first and spends its node budget on it.
+      'malformed',
     ],
   ])(
     'returns a typed failure instead of throwing for %s',

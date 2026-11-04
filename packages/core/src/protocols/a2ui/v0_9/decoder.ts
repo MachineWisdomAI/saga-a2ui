@@ -12,6 +12,14 @@ import type {
   UpdateComponentsMessage,
   UpdateDataModelMessage,
 } from '@a2ui/web_core/v0_9';
+import {
+  DEFAULT_INPUT_LIMITS,
+  admit,
+  checkedLimits,
+  describeExceeded,
+  pathWithinDepth,
+  type InputLimits,
+} from './admission.js';
 import { deepFreeze } from './deep-freeze.js';
 import type { ValidatedMessage } from './message.js';
 
@@ -100,7 +108,11 @@ function describeVersion(version: unknown): string {
   }
 }
 
-function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
+/** `raw` is a message from the admitted snapshot, never the caller's own object. */
+function decodeMessage(
+  raw: unknown,
+  limits: InputLimits,
+): ValidatedMessage | DecodeFailure {
   if (!isRecord(raw)) return malformed('Each message must be an object.');
   if (!SUPPORTED_VERSIONS.includes(raw.version)) {
     return {
@@ -127,6 +139,16 @@ function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
     );
   }
   if ('updateDataModel' in raw) {
+    // A data path creates one level of retained state per segment, so it has the depth limit.
+    const update = raw.updateDataModel;
+    if (
+      isRecord(update) &&
+      typeof update.path === 'string' &&
+      !pathWithinDepth(update.path, limits.maxDepth)
+    )
+      return malformed(
+        `A2UI data path has more than ${limits.maxDepth} segments.`,
+      );
     return decodeCase(
       'updateDataModel',
       UpdateDataModelMessageSchema,
@@ -145,10 +167,16 @@ function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
   return malformed('Message has no supported operation.');
 }
 
+/** Whether `record` has a key besides `only`; stops at the first, builds no list of keys. */
+function hasOtherKey(record: Record<string, unknown>, only: string): boolean {
+  for (const key in record) if (key !== only) return true;
+  return false;
+}
+
 function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   if (Array.isArray(input)) return input;
   if (isRecord(input) && 'messages' in input) {
-    if (!Array.isArray(input.messages) || Object.keys(input).length !== 1) {
+    if (!Array.isArray(input.messages) || hasOtherKey(input, 'messages')) {
       return malformed(
         'A message list must be an object with only a "messages" array.',
       );
@@ -158,13 +186,23 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   return [input];
 }
 
-function decodeInput(input: unknown): DecodeResult {
-  const raws = rawMessages(input);
+function decodeInput(unchecked: unknown, limits: InputLimits): DecodeResult {
+  // Admission comes first and covers everything below, the message count included: neither
+  // Zod nor a copy sees input that is over a limit, and the one traversal of the caller's
+  // value also measures the message list, so nothing is read before or beside it.
+  const admitted = admit(unchecked, limits);
+  if (!admitted.ok)
+    return {
+      ok: false,
+      failure: malformed(describeExceeded(admitted.exceeded, limits)),
+    };
+  // From here on only the snapshot is read; the caller's object is not touched again.
+  const raws = rawMessages(admitted.value);
   if (!Array.isArray(raws))
     return { ok: false, failure: raws as DecodeFailure };
   const messages: ValidatedMessage[] = [];
   for (const raw of raws) {
-    const decoded = decodeMessage(raw);
+    const decoded = decodeMessage(raw, limits);
     if ('kind' in decoded) return { ok: false, failure: decoded };
     messages.push(decoded);
   }
@@ -172,19 +210,34 @@ function decodeInput(input: unknown): DecodeResult {
 }
 
 /**
- * Decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
- * The whole operation sits behind one failure boundary: anything that throws while
- * inspecting or parsing caller input (e.g. a throwing getter) becomes a malformed result.
+ * Creates a decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
+ * Input over a limit (see `InputLimits`; `limits` overrides the defaults) is refused before it
+ * reaches the upstream schemas, which are built on Zod 3 and accept arrays and nesting of any
+ * size, and before anything is copied. The input is read once into a snapshot of plain data
+ * (objects, arrays, primitives and binary data; a `Map`, a `Set`, a `Date` or a class instance
+ * is refused), and the snapshot is what is validated and kept, so a getter or a proxy cannot
+ * change the value between measurement and use. The whole operation sits behind one failure
+ * boundary: anything that throws while inspecting or parsing caller input (e.g. a throwing
+ * getter) becomes a malformed result. Throws `RangeError` for a limit that is not a positive
+ * integer.
  */
-export const a2uiV0_9Decoder: MessageDecoder = {
-  decode(input) {
-    try {
-      return decodeInput(input);
-    } catch {
-      return {
-        ok: false,
-        failure: malformed('Input could not be inspected or parsed.'),
-      };
-    }
-  },
-};
+export function createA2uiV0_9Decoder(
+  limits?: Partial<InputLimits>,
+): MessageDecoder {
+  const checked = checkedLimits(DEFAULT_INPUT_LIMITS, limits);
+  return {
+    decode(input) {
+      try {
+        return decodeInput(input, checked);
+      } catch {
+        return {
+          ok: false,
+          failure: malformed('Input could not be inspected or parsed.'),
+        };
+      }
+    },
+  };
+}
+
+/** The decoder with the default input limits. */
+export const a2uiV0_9Decoder: MessageDecoder = createA2uiV0_9Decoder();
