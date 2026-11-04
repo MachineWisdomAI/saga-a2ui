@@ -431,6 +431,154 @@ describe('Fetch MCP hosting lifetime release', () => {
   });
 });
 
+describe('Fetch MCP hosting server construction lifetime', () => {
+  const NEVER = Symbol('still waiting');
+  const budgets = { operationMs: 100, requestMs: 150 };
+
+  /** Settles with the answer, or with `NEVER` when the app has not answered by `ms`. */
+  async function answered(
+    app: McpFetchApp,
+    ms = 2_000,
+  ): Promise<Response | typeof NEVER> {
+    let timer: NodeJS.Timeout | undefined;
+    const waiting = new Promise<typeof NEVER>((resolve) => {
+      timer = setTimeout(() => resolve(NEVER), ms);
+    });
+    try {
+      return await Promise.race([app.fetch(post('/mcp')), waiting]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** A factory the test settles by hand, as a non-cooperative upstream would. */
+  function deferredFactory() {
+    const lifetimes: RequestLifetime[] = [];
+    let settle!: (server: McpServer) => void;
+    let fail!: (error: unknown) => void;
+    const pending = new Promise<McpServer>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    });
+    return {
+      lifetimes,
+      settle,
+      fail,
+      createServer: (lifetime: RequestLifetime) => {
+        lifetimes.push(lifetime);
+        return pending;
+      },
+    };
+  }
+
+  it('answers a factory that never settles once the request budget is spent, and ends its lifetime once', async () => {
+    const factory = deferredFactory();
+    const failures: McpFetchFailureKind[] = [];
+    const app = createMcpFetchApp({
+      allowedHosts: [HOST],
+      allowedOrigins: [HOST],
+      budgets,
+      createServer: factory.createServer,
+      onFailure: (kind) => failures.push(kind),
+    });
+    open.push(app);
+    const response = await answered(app);
+    expect(response).not.toBe(NEVER);
+    if (response === NEVER) return;
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(await response.text()).not.toContain('still waiting');
+    expect(factory.lifetimes).toHaveLength(1);
+    expect(['operation-timeout', 'request-timeout']).toContain(
+      factory.lifetimes[0]?.cause?.kind,
+    );
+    expect(failures).toContain('server-factory');
+  });
+
+  it('closes a server that a late factory result delivers after the request was answered', async () => {
+    const factory = deferredFactory();
+    const app = createMcpFetchApp({
+      allowedHosts: [HOST],
+      allowedOrigins: [HOST],
+      budgets,
+      createServer: factory.createServer,
+    });
+    open.push(app);
+    expect(await answered(app)).not.toBe(NEVER);
+    const late = new McpServer({ name: 'late', version: '0.0.0' });
+    const close = vi.spyOn(late, 'close');
+    factory.settle(late);
+    await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+    const lifetime = factory.lifetimes[0];
+    expect(lifetime?.signal.aborted).toBe(true);
+  });
+
+  it('does not raise a late factory failure as an unhandled rejection', async () => {
+    const factory = deferredFactory();
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      const app = createMcpFetchApp({
+        allowedHosts: [HOST],
+        allowedOrigins: [HOST],
+        budgets,
+        createServer: factory.createServer,
+      });
+      open.push(app);
+      expect(await answered(app)).not.toBe(NEVER);
+      factory.fail(new Error('late-failure-detail'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+  });
+
+  it('still serves a factory that settles inside its budget, and closes nothing early', async () => {
+    const lifetimes: RequestLifetime[] = [];
+    const closes: ReturnType<typeof vi.spyOn>[] = [];
+    const failures: McpFetchFailureKind[] = [];
+    const app = createMcpFetchApp({
+      allowedHosts: [HOST],
+      allowedOrigins: [HOST],
+      budgets,
+      onFailure: (kind) => failures.push(kind),
+      async createServer(lifetime) {
+        lifetimes.push(lifetime);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const server = new McpServer({ name: 'slow', version: '0.0.0' });
+        // The SDK wraps `close` when it attaches the lifetime; this spy sits under that wrapper.
+        closes.push(vi.spyOn(server, 'close'));
+        return server;
+      },
+    });
+    open.push(app);
+    const response = await app.fetch(
+      post('/mcp', {}, { jsonrpc: '2.0', id: 2, method: 'ping' }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('"result"');
+    // The handler closes the server it used; that is the only close, and it ended the lifetime.
+    await vi.waitFor(() =>
+      expect(lifetimes[0]?.cause).toEqual({ kind: 'completed' }),
+    );
+    expect(lifetimes).toHaveLength(1);
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toHaveBeenCalledTimes(1);
+    expect(failures).toEqual([]);
+  });
+
+  it('keeps the factory failure reported unchanged when it fails inside its budget', async () => {
+    const { app, lifetimes, finishes, failures } = harness({ budgets }, true);
+    const response = await app.fetch(post('/mcp'));
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(await response.text()).not.toContain('secret-upstream-detail');
+    expect(lifetimes).toHaveLength(1);
+    expect(finishes()).toEqual([1]);
+    expect(failures).toContain('server-factory');
+  });
+});
+
 describe('Fetch MCP hosting diagnostics', () => {
   it('reports only fixed kinds and survives a failing sink', async () => {
     const reported: unknown[] = [];

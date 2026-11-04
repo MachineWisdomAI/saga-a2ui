@@ -11,6 +11,7 @@ import {
 import { Hono } from 'hono';
 import { createEndpoint } from '../endpoint.js';
 import {
+  StageFailure,
   createServerBudgets,
   type BoundedScope,
   type BudgetSettings,
@@ -53,6 +54,8 @@ export interface McpFetchAppOptions {
    * (`registerPublicOperation` / `registerProtectedOperation`) and keep application state outside
    * this callback. The SDK ends `lifetime` when the returned server closes, with or without a
    * connected transport, and ends it if this callback throws; do not subclass the server to do so.
+   * A returned promise is awaited only within the request budget: if it has not settled by then the
+   * request fails, and a server it delivers afterwards is closed, never used.
    */
   readonly createServer: (
     lifetime: RequestLifetime,
@@ -179,6 +182,15 @@ function bodyFailure(cause: LifetimeCause): Response {
   }
 }
 
+/** Closes a server that will serve no request. Its failure is not the caller's to see. */
+function disposeStale(server: McpServer): void {
+  try {
+    void Promise.resolve(server.close()).catch(() => undefined);
+  } catch {
+    // A server that cannot close has nothing further for the SDK to release.
+  }
+}
+
 /**
  * Hosts one stateless MCP endpoint behind `fetch`. Validates its settings (and budgets) before it
  * handles any traffic. A request that fails the Host or Origin rule, or names another path, runs
@@ -217,12 +229,12 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
       }
       claimed.add(lifetime);
       try {
-        const server = await options.createServer(lifetime);
+        const server = await construct(lifetime);
         attachRequestLifetime(server, lifetime);
         return server;
       } catch (error) {
-        // The factory failed, or its server already carries a different lifetime: nothing will
-        // close a server for this lifetime, so it ends here.
+        // The factory failed or ran out of budget, or its server already carries a different
+        // lifetime: nothing will close a server for this lifetime, so it ends here.
         lifetime.finish();
         report('server-factory');
         throw error;
@@ -237,6 +249,38 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
       maxRequestBodySize,
     },
   );
+
+  /**
+   * Builds the server as one bounded stage of the request. The application's promise is raced
+   * against the request's budget, so a factory that never settles (or ignores its lifetime's
+   * signal) ends this request instead of holding it. A server the factory delivers after the
+   * stage was abandoned is stale: it is closed here and never reaches the handler.
+   */
+  async function construct(lifetime: RequestLifetime): Promise<McpServer> {
+    let delivered: McpServer | undefined;
+    const result = await lifetime.run(
+      'handler',
+      async (scope) => {
+        const server = await options.createServer(lifetime);
+        // The stage already lost its race (or the request ended): nobody is waiting for this server.
+        const stale = scope.check();
+        if (stale !== undefined) {
+          disposeStale(server);
+          throw new StageFailure(stale);
+        }
+        delivered = server;
+        return server;
+      },
+      // Construction may use what the request has left, as it could before it was raced.
+      { limitMs: lifetime.requestMs },
+    );
+    if (result.ok) return result.value;
+    // A server delivered just as the budget ended was dropped by the race: close it too.
+    if (delivered !== undefined) disposeStale(delivered);
+    // The application's own failure keeps propagating as it did; a budget or caller exit is fixed text.
+    if (result.cause.kind === 'dependency-failure') throw result.cause.error;
+    throw new StageFailure(result.cause);
+  }
 
   type BodyOutcome =
     | { readonly kind: 'parsed'; readonly value: unknown }
