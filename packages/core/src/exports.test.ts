@@ -52,6 +52,7 @@ describe('@saga-a2ui/core exports', () => {
   it('expose exactly the supported names for the A2UI v0.9 protocol', () => {
     expect(Object.keys(a2uiV0_9).sort()).toEqual([
       'a2uiV0_9Decoder',
+      'createA2uiV0_9Decoder',
       'createMessageSession',
       'defineSurface',
     ]);

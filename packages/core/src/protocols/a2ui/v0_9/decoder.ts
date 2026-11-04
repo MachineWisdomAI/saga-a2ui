@@ -12,6 +12,14 @@ import type {
   UpdateComponentsMessage,
   UpdateDataModelMessage,
 } from '@a2ui/web_core/v0_9';
+import {
+  DEFAULT_INPUT_LIMITS,
+  admitInput,
+  checkedLimits,
+  pathWithinDepth,
+  type InputLimits,
+  type MessageSize,
+} from './admission.js';
 import { deepFreeze } from './deep-freeze.js';
 import type { ValidatedMessage } from './message.js';
 
@@ -22,7 +30,12 @@ export interface DecodeFailure {
 }
 
 export type DecodeResult =
-  | { readonly ok: true; readonly messages: readonly ValidatedMessage[] }
+  | {
+      readonly ok: true;
+      readonly messages: readonly ValidatedMessage[];
+      /** What the admitted input weighed; a session counts it against its retained budget. */
+      readonly size: MessageSize;
+    }
   | { readonly ok: false; readonly failure: DecodeFailure };
 
 /**
@@ -100,7 +113,10 @@ function describeVersion(version: unknown): string {
   }
 }
 
-function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
+function decodeMessage(
+  raw: unknown,
+  limits: InputLimits,
+): ValidatedMessage | DecodeFailure {
   if (!isRecord(raw)) return malformed('Each message must be an object.');
   if (!SUPPORTED_VERSIONS.includes(raw.version)) {
     return {
@@ -127,6 +143,16 @@ function decodeMessage(raw: unknown): ValidatedMessage | DecodeFailure {
     );
   }
   if ('updateDataModel' in raw) {
+    // A data path creates one level of retained state per segment, so it has the depth limit.
+    const update = raw.updateDataModel;
+    if (
+      isRecord(update) &&
+      typeof update.path === 'string' &&
+      !pathWithinDepth(update.path, limits.maxDepth)
+    )
+      return malformed(
+        `A2UI data path has more than ${limits.maxDepth} segments.`,
+      );
     return decodeCase(
       'updateDataModel',
       UpdateDataModelMessageSchema,
@@ -158,33 +184,55 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   return [input];
 }
 
-function decodeInput(input: unknown): DecodeResult {
+function decodeInput(input: unknown, limits: InputLimits): DecodeResult {
   const raws = rawMessages(input);
   if (!Array.isArray(raws))
     return { ok: false, failure: raws as DecodeFailure };
+  // Admission comes first and covers everything below: neither Zod nor a copy sees input that
+  // is over a limit, and the cheap count check keeps a long list from being walked at all.
+  if (raws.length > limits.maxMessages)
+    return {
+      ok: false,
+      failure: malformed(
+        `A2UI input has more than ${limits.maxMessages} messages.`,
+      ),
+    };
+  const admitted = admitInput(input, limits);
+  if (!admitted.ok) return { ok: false, failure: malformed(admitted.message) };
   const messages: ValidatedMessage[] = [];
   for (const raw of raws) {
-    const decoded = decodeMessage(raw);
+    const decoded = decodeMessage(raw, limits);
     if ('kind' in decoded) return { ok: false, failure: decoded };
     messages.push(decoded);
   }
-  return { ok: true, messages };
+  return { ok: true, messages, size: admitted.size };
 }
 
 /**
- * Decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
- * The whole operation sits behind one failure boundary: anything that throws while
- * inspecting or parsing caller input (e.g. a throwing getter) becomes a malformed result.
+ * Creates a decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
+ * Input over a limit (see `InputLimits`; `limits` overrides the defaults) is refused before it
+ * reaches the upstream schemas, which are built on Zod 3 and accept arrays and nesting of any
+ * size, and before anything is copied. The whole operation sits behind one failure boundary:
+ * anything that throws while inspecting or parsing caller input (e.g. a throwing getter)
+ * becomes a malformed result. Throws `RangeError` for a limit that is not a positive integer.
  */
-export const a2uiV0_9Decoder: MessageDecoder = {
-  decode(input) {
-    try {
-      return decodeInput(input);
-    } catch {
-      return {
-        ok: false,
-        failure: malformed('Input could not be inspected or parsed.'),
-      };
-    }
-  },
-};
+export function createA2uiV0_9Decoder(
+  limits?: Partial<InputLimits>,
+): MessageDecoder {
+  const checked = checkedLimits(DEFAULT_INPUT_LIMITS, limits);
+  return {
+    decode(input) {
+      try {
+        return decodeInput(input, checked);
+      } catch {
+        return {
+          ok: false,
+          failure: malformed('Input could not be inspected or parsed.'),
+        };
+      }
+    },
+  };
+}
+
+/** The decoder with the default input limits. */
+export const a2uiV0_9Decoder: MessageDecoder = createA2uiV0_9Decoder();
