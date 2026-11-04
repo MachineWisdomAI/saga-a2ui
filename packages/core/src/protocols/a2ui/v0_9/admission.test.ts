@@ -828,6 +828,148 @@ describe('retained-state measurement of what a custom decoder supplies', () => {
     expect(session.ingest(null).ok).toBe(false);
     expect(surface()).toBeUndefined();
   });
+
+  // A custom decoder's value is read once into a snapshot; the snapshot is measured, replayed
+  // and applied, so what is kept is what was measured.
+  const sessionWith = (
+    first: Record<string, unknown>,
+    retainedLimits = limits,
+  ) => {
+    const holder = { decoder: decoderOf(create) };
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: { decode: (input) => holder.decoder.decode(input) },
+      retainedLimits,
+    });
+    const surface = surfaceOf(session);
+    expect(session.ingest(null).ok).toBe(true);
+    holder.decoder = decoderOf(first);
+    return { session, surface };
+  };
+
+  it('reads a getter once, so the measured value is the one kept', () => {
+    let reads = 0;
+    const value = {
+      get payload() {
+        reads += 1;
+        return reads === 1 ? 'ok' : 'x'.repeat(10_000);
+      },
+    };
+    const { session, surface } = sessionWith(data(value));
+    expect(session.ingest(null).ok).toBe(true);
+    expect(reads).toBe(1);
+    expect(surface()!.dataModel.get('/')).toEqual({ payload: 'ok' });
+  });
+
+  it('refuses a getter whose single read is over the limit', () => {
+    let reads = 0;
+    const value = {
+      get payload() {
+        reads += 1;
+        return reads === 1 ? 'x'.repeat(10_000) : 'ok';
+      },
+    };
+    const { session, surface } = sessionWith(data(value));
+    const result = session.ingest(null);
+    expect(result.ok).toBe(false);
+    expect(reads).toBe(1);
+    expect(surface()!.dataModel.get('/')).toEqual({});
+  });
+
+  it('refuses a getter that throws', () => {
+    const value = {
+      get payload(): string {
+        throw new Error('boom');
+      },
+    };
+    const { session, surface } = sessionWith(data(value));
+    const result = session.ingest(null);
+    expect(result.ok).toBe(false);
+    expect(result.ok || result.failure.kind).toBe('rejected');
+    expect(surface()!.dataModel.get('/')).toEqual({});
+  });
+
+  it('reads each property of a proxy once and keeps what it showed', () => {
+    const reads = new Map<string | symbol, number>();
+    const target: Record<string, unknown> = { a: 'one', b: 'two' };
+    const value = new Proxy(target, {
+      get(object, key) {
+        const count = (reads.get(key) ?? 0) + 1;
+        reads.set(key, count);
+        return count === 1 ? object[key as string] : 'x'.repeat(10_000);
+      },
+    });
+    const { session, surface } = sessionWith(data(value));
+    expect(session.ingest(null).ok).toBe(true);
+    expect(reads.get('a')).toBe(1);
+    expect(reads.get('b')).toBe(1);
+    expect(surface()!.dataModel.get('/')).toEqual({ a: 'one', b: 'two' });
+  });
+
+  it('does not keep an extra own property of an array, whatever it holds', () => {
+    const items = Object.assign([] as unknown[], { extra: wide() });
+    const { session, surface } = sessionWith(data(items, '/m'));
+    expect(session.ingest(null).ok).toBe(true);
+    const kept = surface()!.dataModel.get('/m') as unknown[];
+    expect(kept).toEqual([]);
+    expect(Object.keys(kept)).toEqual([]);
+    expect(
+      measureRetained(new Map([['s', surface()!]]), limits).nodes,
+    ).toBeLessThanOrEqual(limits.maxNodes);
+  });
+
+  it('uses only the first observation of a message that shows more than one', () => {
+    let calls = 0;
+    const decoder: MessageDecoder = {
+      decode: () => ({
+        ok: true,
+        messages: [
+          {
+            accept: (visitor) => {
+              calls += 1;
+              const v = visitor as unknown as Record<
+                string,
+                (m: unknown) => never
+              >;
+              if (calls > 1) return v.createSurface!(create);
+              return v.createSurface!({
+                ...create,
+                createSurface: {
+                  ...create.createSurface,
+                  get theme() {
+                    return {};
+                  },
+                },
+              });
+            },
+          },
+        ],
+      }),
+    };
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder,
+      retainedLimits: limits,
+    });
+    expect(session.ingest(null).ok).toBe(true);
+    expect(calls).toBe(1);
+  });
+
+  it('refuses a message that never shows the session a case', () => {
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: {
+        decode: () => ({
+          ok: true,
+          messages: [{ accept: () => undefined as never }],
+        }),
+      },
+      retainedLimits: limits,
+    });
+    const result = session.ingest(null);
+    expect(result.ok).toBe(false);
+    expect(result.ok || result.failure.kind).toBe('rejected');
+  });
 });
 
 describe('retained growth is never below what a batch really adds', () => {

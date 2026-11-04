@@ -253,8 +253,8 @@ export function admit(
  * counted as a value because the data model's auto-vivified arrays are measured by length. It
  * stops when a limit is crossed, and also at a value that is not plain data (a `Map`, a `Set`,
  * a class instance): its content is out of reach of a property read, so it cannot be charged
- * and is never retained. A custom `MessageDecoder` can supply such a value; `admit` refuses it
- * on the default decoder's path.
+ * and is never retained. The session reads every message, from the default decoder or a
+ * custom one, through `admit` first, which refuses such a value, so this is the second line.
  */
 export function measure(
   roots: readonly unknown[],
