@@ -89,12 +89,17 @@ describe('package subpath exports', () => {
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
+      'DEFAULT_MAX_CONCURRENT_VERIFICATIONS',
       'DEFAULT_MAX_TOOL_INPUT_ELEMENTS',
+      'DEFAULT_VERIFIER_ABANDON_MS',
       'OperationConfigurationError',
       'RequestLifetimeAttachmentError',
       'StageFailure',
+      'VerifierAbandonedError',
+      'VerifierSaturatedError',
       'assertBudgetSettings',
       'attachRequestLifetime',
+      'boundVerifier',
       'createServerBudgets',
       'operationViewFromHtml',
       'registerProtectedOperation',
