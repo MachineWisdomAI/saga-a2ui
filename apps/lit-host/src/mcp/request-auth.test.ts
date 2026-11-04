@@ -2,7 +2,7 @@ import type {
   AuthInfo,
   OAuthTokenVerifier,
 } from '@modelcontextprotocol/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   authenticate,
   playbackRequirement,
@@ -138,5 +138,155 @@ describe('protected resource binding', () => {
       () => NOW,
     );
     expect(asPlayback).toMatchObject({ ok: false, status: 401 });
+  });
+});
+
+describe('verifier work is bounded independently of the request', () => {
+  const request = { headers: { authorization: 'Bearer token' } };
+
+  it('gives the verifier the gate as its cancellation signal', () => {
+    let received: AbortSignal | undefined;
+    const controller = new AbortController();
+    const verifier = {
+      verifyAccessToken: (_token: string, signal?: AbortSignal) => {
+        received = signal;
+        return new Promise<AuthInfo>(() => undefined);
+      },
+    } as OAuthTokenVerifier;
+    void authenticate(
+      request,
+      verifier,
+      subscriptionsRequirement(SUBSCRIPTIONS),
+      controller.signal,
+      () => NOW,
+    );
+    expect(received?.aborted).toBe(false);
+    controller.abort();
+    expect(received?.aborted).toBe(true);
+  });
+
+  it('stops calling a verifier that ignores its signal once too many abandoned calls are running, and answers 500, not 401', async () => {
+    let calls = 0;
+    const verifier: OAuthTokenVerifier = {
+      verifyAccessToken: () => {
+        calls += 1;
+        return new Promise<AuthInfo>(() => undefined);
+      },
+    };
+    const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+    for (let n = 0; n < 64; n += 1)
+      void authenticate(request, verifier, requirement, gate, () => NOW);
+    expect(calls).toBe(64);
+
+    const refused = await authenticate(
+      request,
+      verifier,
+      requirement,
+      gate,
+      () => NOW,
+    );
+    expect(refused).toMatchObject({ ok: false, status: 500 });
+    expect(calls).toBe(64); // the 65th credential never reached the application
+  });
+
+  it('keeps serving a verifier that honors its signal after many abandoned requests, because each stopped call frees its slot', async () => {
+    let running = 0;
+    const verifier = {
+      verifyAccessToken: (_token: string, signal?: AbortSignal) => {
+        running += 1;
+        return new Promise<AuthInfo>((_resolve, rejectCall) => {
+          signal?.addEventListener('abort', () => {
+            running -= 1;
+            rejectCall(new Error('stopped'));
+          });
+        });
+      },
+    } as OAuthTokenVerifier;
+    const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+    for (let n = 0; n < 200; n += 1) {
+      const stage = new AbortController();
+      const pending = authenticate(
+        request,
+        verifier,
+        requirement,
+        stage.signal,
+        () => NOW,
+      );
+      stage.abort(); // the request's stage ended
+      expect(await pending).toMatchObject({ ok: false, status: 500 }); // not 401: the wait merely ended
+    }
+    expect(running).toBe(0); // no abandoned call is still running
+  });
+
+  it('answers 500, never 401, when a call is abandoned at its limit, and the abandoned call keeps its slot', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const verifier: OAuthTokenVerifier = {
+        verifyAccessToken: () => {
+          calls += 1;
+          return new Promise<AuthInfo>(() => undefined); // ignores its signal, never answers
+        },
+      };
+      const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+      const answers = Array.from({ length: 64 }, () =>
+        authenticate(request, verifier, requirement, gate, () => NOW),
+      );
+      await vi.advanceTimersByTimeAsync(31_000); // past the default abandonment limit
+      for (const answer of await Promise.all(answers))
+        expect(answer).toMatchObject({ ok: false, status: 500 });
+
+      const after = await authenticate(
+        request,
+        verifier,
+        requirement,
+        gate,
+        () => NOW,
+      );
+      expect(after).toMatchObject({ ok: false, status: 500 });
+      expect(calls).toBe(64); // the stuck calls still run, so the slots were not recycled
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never starts verifier work for a request whose gate has already aborted, and leaves the whole cap to live requests', async () => {
+    const tokens: string[] = [];
+    const verifier: OAuthTokenVerifier = {
+      verifyAccessToken: (token: string) => {
+        tokens.push(token);
+        return new Promise<AuthInfo>(() => undefined); // ignores its signal, never answers
+      },
+    };
+    const requirement = subscriptionsRequirement(SUBSCRIPTIONS);
+    for (let n = 0; n < 100; n += 1)
+      expect(
+        await authenticate(
+          request,
+          verifier,
+          requirement,
+          AbortSignal.abort(),
+          () => NOW,
+        ),
+      ).toMatchObject({ ok: false, status: 500 });
+    expect(tokens).toEqual([]); // the application verifier was never called
+
+    for (let n = 0; n < 64; n += 1)
+      void authenticate(request, verifier, requirement, gate, () => NOW);
+    expect(tokens).toHaveLength(64); // all 64 slots were still free
+  });
+
+  it('keeps accepting credentials from a verifier that answers, however many requests came before', async () => {
+    const verifier = verifierOf(info(new URL(SUBSCRIPTIONS)));
+    for (let n = 0; n < 200; n += 1) {
+      const decision = await authenticate(
+        request,
+        verifier,
+        subscriptionsRequirement(SUBSCRIPTIONS),
+        gate,
+        () => NOW,
+      );
+      expect(decision.ok).toBe(true);
+    }
   });
 });
