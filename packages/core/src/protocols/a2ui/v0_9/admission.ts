@@ -116,7 +116,7 @@ export const hasOwn = (value: object, key: string): boolean =>
  * `Set`, a `Date` or a class instance keeps its content where no property read can measure it,
  * so it is refused rather than charged as a single value and copied later.
  */
-function isPlainObject(value: object): boolean {
+export function isPlainObject(value: object): boolean {
   const prototype = Object.getPrototypeOf(value) as object | null;
   return prototype === null || Object.getPrototypeOf(prototype) === null;
 }
@@ -125,8 +125,11 @@ function isPlainObject(value: object): boolean {
  * Reads `root` once, with an explicit stack, into a snapshot of plain arrays and objects, and
  * stops at the first limit crossed. The work and the snapshot are bounded by the limits, never
  * by the input: a value is charged before it is stored, an array's length is checked before
- * its items are read, and an object's keys are read one at a time (`for...in`), so no list of
- * them is built here and a key past the budget is never reached. A cycle revisits values until
+ * its items are read, and an object's keys are read one at a time (`for...in`), so this code
+ * builds no list of them and a key past the budget is never reached. Residual risk: the engine
+ * may still allocate enumeration metadata for an already-materialized wide object before the
+ * first iteration, and JavaScript has no bounded one-key enumeration of own keys at this
+ * boundary, so that is accepted as such, not removed. A cycle revisits values until
  * the node budget ends the walk. Every property, item and length is read exactly once, so a
  * getter or a proxy cannot show the walk one value and the caller another.
  */
@@ -244,10 +247,14 @@ export function admit(
 }
 
 /**
- * What state a session already holds, for the retained budget. Unlike `admit` it reads
- * session-owned state (data the session admitted and the upstream processor stored), not caller
- * input, so it only counts: every value, with a hole in an array counted as a value because
- * the data model's auto-vivified arrays are measured by length. It stops when a limit is crossed.
+ * What state a session already holds, or is about to keep, for the retained budget. It reads
+ * session-owned state and validated messages (data the session admitted and the upstream
+ * processor stored), not caller input, so it only counts: every value, with a hole in an array
+ * counted as a value because the data model's auto-vivified arrays are measured by length. It
+ * stops when a limit is crossed, and also at a value that is not plain data (a `Map`, a `Set`,
+ * a class instance): its content is out of reach of a property read, so it cannot be charged
+ * and is never retained. A custom `MessageDecoder` can supply such a value; `admit` refuses it
+ * on the default decoder's path.
  */
 export function measure(
   roots: readonly unknown[],
@@ -275,6 +282,7 @@ export function measure(
         for (let index = 0; index < value.length; index += 1)
           stack.push(value[index]);
       } else {
+        if (!isPlainObject(value)) return undefined;
         for (const key in value) {
           if (!hasOwn(value, key)) continue;
           if (key.length > limits.maxBytes - bytes) return undefined;

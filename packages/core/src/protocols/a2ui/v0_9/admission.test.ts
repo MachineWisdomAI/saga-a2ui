@@ -5,7 +5,11 @@ import {
 } from '@a2ui/web_core/v0_9';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from '../zod3.js';
-import { a2uiV0_9Decoder, createA2uiV0_9Decoder } from './decoder.js';
+import {
+  a2uiV0_9Decoder,
+  createA2uiV0_9Decoder,
+  type MessageDecoder,
+} from './decoder.js';
 import { measureRetained, retainedGrowth } from './retained-state.js';
 import { createMessageSession } from './session.js';
 
@@ -587,13 +591,99 @@ describe('session retained-state admission of data paths', () => {
     expect(session.ingest(setData(keys(5), '/slot')).ok).toBe(true);
   });
 
-  it('never under-counts a batch that writes the same new path twice', () => {
-    const { session, held } = newSession(60);
+  it('treats a batch that writes the same new path twice as the same two writes sent apart', () => {
     const path = `/a${'/a'.repeat(30)}`;
-    const result = session.ingest([setData('one', path), setData('two', path)]);
+    // Sent apart, both fit (4 values for the surface and 32 for the path, of 60).
+    const apart = newSession(60);
+    expect(apart.session.ingest(setData('one', path)).ok).toBe(true);
+    expect(apart.session.ingest(setData('two', path)).ok).toBe(true);
+    // Sent together, the second write replaces the first, so both fit as well.
+    const together = newSession(60);
+    expect(
+      together.session.ingest([setData('one', path), setData('two', path)]).ok,
+    ).toBe(true);
+    expect(together.held()).toBe(apart.held());
+    expect(together.held()).toBe(32);
+    // And so do many, with a deletion between.
+    const many = newSession(60);
+    const remove = {
+      version: 'v0.9',
+      updateDataModel: { surfaceId: 's', path },
+    };
+    const batch = Array.from({ length: 40 }, (_, index) =>
+      index % 3 === 2 ? remove : setData(`v${index}`, path),
+    );
+    expect(many.session.ingest(batch).ok).toBe(true);
+    expect(many.held()).toBeLessThanOrEqual(60);
+  });
+
+  it('still refuses a batch whose writes do not fit together, and keeps none of it', () => {
+    const { session, held } = newSession(60);
+    const first = `/a${'/a'.repeat(30)}`;
+    const second = `/b${'/b'.repeat(30)}`;
+    const result = session.ingest([
+      setData('one', first),
+      setData('two', second),
+    ]);
     expect(result.ok).toBe(false);
-    expect(held()).toBeLessThanOrEqual(60);
+    expect(result.ok || result.failure.kind).toBe('rejected');
     expect(held()).toBe(1);
+    // Each fits alone; it is the pair that does not.
+    expect(session.ingest(setData('one', first)).ok).toBe(true);
+    expect(held()).toBe(32);
+  });
+
+  it('credits a value an earlier message of the batch wrote, once', () => {
+    // 4 values for the surface, 1 for the key and 40 for the object.
+    const { session, held } = newSession(46);
+    const keys = (count: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`k${index}`, index]),
+      );
+    expect(
+      session.ingest([
+        setData(keys(40), '/slot'),
+        setData(keys(41), '/slot'),
+        setData(keys(5), '/slot'),
+        setData(keys(41), '/slot'),
+      ]).ok,
+    ).toBe(true);
+    expect(held()).toBe(43);
+    // Growing twice past the budget in one batch is refused as a whole.
+    expect(
+      session.ingest([setData(keys(41), '/slot'), setData(keys(43), '/slot')])
+        .ok,
+    ).toBe(false);
+    expect(held()).toBe(43);
+  });
+
+  it('does not credit a deletion of something that is not there', () => {
+    const { session, held } = newSession(36);
+    const path = `/a${'/a'.repeat(28)}`;
+    const remove = (at: string) => ({
+      version: 'v0.9',
+      updateDataModel: { surfaceId: 's', path: at },
+    });
+    // Deleting a path that was never written frees nothing for the write after it.
+    const result = session.ingest([
+      remove(`/z${'/z'.repeat(28)}`),
+      setData('one', path),
+      setData('two', `/b${'/b'.repeat(28)}`),
+    ]);
+    expect(result.ok).toBe(false);
+    expect(held()).toBe(1);
+  });
+
+  it('charges a surface a batch creates exactly as it would be charged apart', () => {
+    const batched = createMessageSession({
+      catalogs: [catalog],
+      decoder: a2uiV0_9Decoder,
+      retainedLimits: { maxNodes: 60, maxBytes: 1_000_000 },
+    });
+    const path = `/a${'/a'.repeat(30)}`;
+    expect(
+      batched.ingest([create, setData('one', path), setData('two', path)]).ok,
+    ).toBe(true);
   });
 
   it('keeps accepting a component that is replaced, without a deletion between', () => {
@@ -616,6 +706,127 @@ describe('session retained-state admission of data paths', () => {
       if (!result.ok)
         throw new Error(`update ${index}: ${result.failure.message}`);
     }
+  });
+});
+
+describe('retained-state measurement of what a custom decoder supplies', () => {
+  // A custom decoder may hand the session any value; its content must be charged or refused.
+  const decoderOf = (
+    ...messages: Record<string, unknown>[]
+  ): MessageDecoder => ({
+    decode: () => ({
+      ok: true,
+      messages: messages.map((message) => ({
+        accept: (visitor) => {
+          const tag = Object.keys(message).find((key) => key !== 'version');
+          return (visitor as unknown as Record<string, (m: unknown) => never>)[
+            tag!
+          ]!({ version: 'v0.9', ...message });
+        },
+      })),
+    }),
+  });
+  const wide = () =>
+    new Map(Array.from({ length: 250_000 }, (_, index) => [index, index]));
+  const limits = { maxNodes: 10, maxBytes: 100 };
+  const surfaceOf = (session: ReturnType<typeof createMessageSession>) => {
+    let surface: SurfaceModel<ComponentApi> | undefined;
+    session.onSurfaceCreated((created) => (surface = created));
+    return () => surface;
+  };
+  const data = (value: unknown, path?: string) => ({
+    updateDataModel: {
+      surfaceId: 's',
+      ...(path === undefined ? {} : { path }),
+      value,
+    },
+  });
+  const components = (entries: unknown[]) => ({
+    updateComponents: { surfaceId: 's', components: entries },
+  });
+
+  class Held {
+    readonly items = [1];
+  }
+  // What the session is given, as `updateDataModel`, `updateComponents` or `createSurface`.
+  const cases: [string, Record<string, unknown>][] = [
+    ['a Map as a data value', data(wide())],
+    ['a Map at a data path', data(wide(), '/a/b')],
+    ['a Map nested in a data value', data({ a: [{ b: wide() }] })],
+    ['a Map at a shallow data path', data(wide(), '/m')],
+    ['a Set', data(new Set([1, 2, 3]))],
+    ['a Date', data(new Date())],
+    ['a class instance', data(new Held())],
+    [
+      'a Map as a property',
+      components([{ id: 'root', component: 'Panel', title: wide() }]),
+    ],
+    [
+      'a Map as component metadata',
+      components([{ id: 'root', component: 'Panel', metadata: wide() }]),
+    ],
+    ['a Map as a component entry', components([wide()])],
+    [
+      'a Map as a theme',
+      {
+        createSurface: {
+          surfaceId: 't',
+          catalogId: CATALOG_ID,
+          theme: wide(),
+        },
+      },
+    ],
+  ];
+
+  it.each(cases)('refuses %s, and keeps nothing of it', (_, bad) => {
+    const holder = { decoder: decoderOf(create) };
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: { decode: (input) => holder.decoder.decode(input) },
+      retainedLimits: limits,
+    });
+    const surface = surfaceOf(session);
+    expect(session.ingest(null).ok).toBe(true);
+    const before = measureRetained(new Map([['s', surface()!]]), limits);
+
+    holder.decoder = decoderOf(bad);
+    const result = session.ingest(null);
+    expect(result.ok).toBe(false);
+    expect(result.ok || result.failure.kind).toBe('rejected');
+    expect(measureRetained(new Map([['s', surface()!]]), limits)).toEqual(
+      before,
+    );
+    expect(surface()!.dataModel.get('/')).toEqual({});
+    expect(surface()!.componentsModel.get('root')).toBeUndefined();
+  });
+
+  it('still accepts the same shapes as plain data', () => {
+    const holder = { decoder: decoderOf(create) };
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: { decode: (input) => holder.decoder.decode(input) },
+      retainedLimits: limits,
+    });
+    expect(session.ingest(null).ok).toBe(true);
+    holder.decoder = decoderOf(data({ a: [{ b: 1 }] }, '/m'));
+    expect(session.ingest(null).ok).toBe(true);
+  });
+
+  it('refuses a Map as the first thing a session is given, too', () => {
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: decoderOf({
+        createSurface: {
+          surfaceId: 's',
+          catalogId: CATALOG_ID,
+          theme: wide(),
+        },
+      }),
+      retainedLimits: limits,
+    });
+    const surface = surfaceOf(session);
+    expect(session.ingest(null).ok).toBe(false);
+    expect(surface()).toBeUndefined();
   });
 });
 
@@ -654,14 +865,20 @@ describe('retained growth is never below what a batch really adds', () => {
     }
   }
 
-  function randomMessage(next: (below: number) => number) {
+  function randomMessage(next: (below: number) => number): unknown {
+    // The surface is deleted and made again, which the rest of the batch finds empty.
+    if (next(15) === 0) return [remove, create];
     if (next(6) === 0)
       return {
         version: 'v0.9',
         updateComponents: {
           surfaceId: 's',
           components: [
-            { id: 'root', component: 'Panel', title: 'x'.repeat(next(20)) },
+            {
+              id: next(2) === 0 ? 'root' : 'a',
+              component: 'Panel',
+              title: 'x'.repeat(next(20)),
+            },
           ],
         },
       };
@@ -694,12 +911,13 @@ describe('retained growth is never below what a batch really adds', () => {
       });
       const surfaces = new Map<string, SurfaceModel<ComponentApi>>();
       session.onSurfaceCreated((surface) => surfaces.set(surface.id, surface));
+      session.onSurfaceDeleted((id) => surfaces.delete(id));
       session.ingest(create);
       let applied = 0;
       for (let step = 0; step < 400; step += 1) {
-        const batch = Array.from({ length: 1 + next(3) }, () =>
+        const batch = Array.from({ length: 1 + next(5) }, () =>
           randomMessage(next),
-        );
+        ).flat();
         const decoded = a2uiV0_9Decoder.decode(batch);
         if (!decoded.ok) throw new Error(decoded.failure.message);
         const growth = retainedGrowth(decoded.messages, limits, surfaces);
@@ -709,6 +927,10 @@ describe('retained growth is never below what a batch really adds', () => {
         if (result.ok) applied += 1;
         // Messages applied before a refusal stay applied, so this holds for every batch.
         expect(growth).toBeDefined();
+        // What the state really is can never make a batch cost more than the bound that reads none.
+        const bound = retainedGrowth(decoded.messages, limits);
+        expect(growth!.nodes).toBeLessThanOrEqual(bound!.nodes);
+        expect(growth!.bytes).toBeLessThanOrEqual(bound!.bytes);
         expect(after.nodes - before.nodes).toBeLessThanOrEqual(growth!.nodes);
         expect(after.bytes - before.bytes).toBeLessThanOrEqual(growth!.bytes);
       }

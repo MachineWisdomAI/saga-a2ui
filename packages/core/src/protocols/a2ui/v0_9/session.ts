@@ -111,9 +111,12 @@ export function createMessageSession<T extends ComponentApi>(
   // upper bound of every admitted batch and never subtracts, so a replaced value or a deleted
   // surface is counted until the bound is next checked against the state itself. Only a batch
   // that would cross the limit pays for that: the real state is measured and the batch is
-  // charged what it would really add to it (a value written over an existing one, or a path
-  // through containers that exist, adds little or nothing), and it is refused only when that
-  // leaves no room. The decision is made on the validated messages, before any is applied.
+  // charged what it would really add to it, message by message against the state the earlier
+  // ones leave (a value written over an existing one, or a path through containers that
+  // exist, adds little or nothing, and the same path twice costs what it costs once), and it
+  // is refused only when that leaves no room. A message that holds a value that is not plain
+  // data cannot be measured and is refused. The decision is made on the validated messages,
+  // before any is applied.
   const limits = checkedLimits(DEFAULT_RETAINED_LIMITS, options.retainedLimits);
   let tally: MessageSize = { nodes: 0, bytes: 0 };
   const fits = (used: MessageSize, extra: MessageSize): boolean =>
