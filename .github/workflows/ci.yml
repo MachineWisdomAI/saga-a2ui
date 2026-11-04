@@ -31,10 +31,6 @@ jobs:
         run: python3 scripts/check-version-enrollment.py
       - name: Test version-policy integration
         run: python3 scripts/test-version-enrollment.py
-      - name: Require immutable workflow action references
-        run: |
-          python3 scripts/check-action-pins.py
-          python3 scripts/test-action-pins.py
       - name: Select qualification from changed paths
         id: scope
         env:
@@ -49,6 +45,10 @@ jobs:
           cache: npm
       - name: Install root documentation tools without SDK workspaces or lifecycle scripts
         run: npm ci --workspaces=false --ignore-scripts
+      - name: Require immutable workflow action references
+        run: |
+          npm run check:action-pins
+          npm run test:action-pins
       - name: Verify isolated staged-formatting and hook behavior
         run: npm run test:tooling
       - name: Check formatting of changed source and configuration

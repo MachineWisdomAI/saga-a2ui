@@ -269,20 +269,27 @@ a full 40-character commit SHA (or, for a Docker image, a `@sha256` digest); a
 trailing comment names the release it came from. The only exemption is a
 repository-owned local path that starts with `./` and has no `..` segment. Tag
 and branch references, including major tags such as `@v4`, can move after
-review. The always-on CI job runs `python3 scripts/check-action-pins.py` to
-reject them, and `python3 scripts/test-action-pins.py` covers the rules and
-this repository. The checker parses the YAML itself, so it finds `uses` in
-block, flow (`{ uses: ... }`), JSON, explicit-key (`? uses`, including a
-block-scalar key) and quoted forms, in every document and duplicate key of a
-file, and it ignores comments and `run: |` text. It enforces `uses` only where
-it executes: a direct child of a step, of a job (a reusable workflow) or of a
-composite action's `runs`. A key named `uses` anywhere else, such as a `with:`
-input or an `env:` variable, is data and is never reported, so it needs no
-quoting or renaming. It fails closed where the executable structure cannot be
-read statically: a `uses` value that is an alias, block scalar, collection or
-empty, an alias or a YAML merge key (`<<`) in place of a step, job, `steps`,
-`jobs` or `runs` node or key, and text it cannot parse are reported rather than
-passed.
+review. The always-on CI job runs `npm run check:action-pins`
+(`scripts/check-action-pins.mjs`) to reject them, and
+`npm run test:action-pins` covers the rules and this repository. The checker
+does not read YAML itself: the maintained `yaml` package (YAML 1.2, a pinned
+root dev dependency) parses each tracked file, and the checker walks the node
+tree, so scalar styles, flow and JSON collections, explicit and block-scalar
+keys, anchors, tags, comments, `run: |` text, multiple documents and duplicate
+keys are the parser's concern. It enforces `uses` only where it executes: a
+direct child of a step, of a job under `jobs` (a reusable workflow) or of a
+composite action's `runs`, or of a document's root mapping. A key named `uses`
+anywhere else, such as a `with:` input or an `env:` variable, is data and is
+never reported, so it needs no quoting or renaming. It fails closed where it
+cannot see the executable structure: a `uses` value that is an alias, block
+scalar, collection, non-string or empty; an alias or a YAML merge key (`<<`) in
+place of a step, job, `steps`, `jobs` or `runs` node or key; and any text the
+parser reports as an error or a warning.
+
+The scope is a YAML 1.2 reading of the files. It is not shown to match the
+reader GitHub Actions runs, so the check rejects unusual constructs rather than
+claiming every executable form is understood.
+
 To update an action, resolve the reviewed release tag to its commit
 (`gh api repos/OWNER/REPO/commits/TAG --jq .sha`), change the SHA and comment
 together, and run both commands.
