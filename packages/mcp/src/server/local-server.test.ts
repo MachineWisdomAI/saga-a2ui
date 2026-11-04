@@ -5,6 +5,7 @@ import {
 import { McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { RawHttpConnection } from '../../../../scripts/raw-http-connection.js';
 import { registerPublicOperation } from './operation.js';
 import { startLocalMcpServer } from '@saga-a2ui/mcp/server/node';
 
@@ -414,6 +415,41 @@ describe('local MCP request admission', () => {
       expect(second.body).not.toBe('');
     } finally {
       agent.destroy();
+      await listener.close();
+    }
+  });
+
+  // Requests queued in one write behind a refused one's remainder, read off a raw connection so the
+  // framing and the pipelining are the test's own: a small remainder keeps the connection and each
+  // queued request is answered whole. This listener is hosted by the pinned `@hono/node-server` adapter,
+  // whose own drain is bounded at 500 ms and 64 MiB, so the SDK's 1 MiB cap does not apply to it.
+  it('answers both requests queued behind a small refused-body remainder in the same write, each whole and with nothing stray', async () => {
+    const listener = await startLocalMcpServer({
+      port: 0,
+      createServer() {
+        return new McpServer({ name: 'refusal-control', version: '1.0.0' });
+      },
+    });
+    const connection = await RawHttpConnection.open(listener.url);
+    try {
+      const url = new URL(listener.url);
+      connection.request('POST', new URL('/other', listener.url).href, {
+        declaredLength: 3,
+        body: '{',
+      });
+      expect((await connection.readResponse(3_000)).status).toBe(404);
+      connection.write(
+        `  POST /other HTTP/1.1\r\nHost: ${url.host}\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{` +
+          `POST /mcp HTTP/1.1\r\nHost: untrusted.example\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{`,
+      );
+      const second = await connection.readResponse(3_000);
+      expect(second.status).toBe(404);
+      const third = await connection.readResponse(3_000);
+      expect(third.status).toBe(403);
+      expect(await connection.waitForClose(800)).toBe(false);
+      expect(connection.pending).toBe('');
+    } finally {
+      connection.destroy();
       await listener.close();
     }
   });

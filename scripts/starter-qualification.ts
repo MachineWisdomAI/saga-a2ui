@@ -1063,6 +1063,79 @@ export function qualifyStarter(
       },
     );
 
+    // The drain is bounded by bytes as well as by time. A remainder far over the cap that arrives at
+    // once completes its body at once, and the request queued behind it is already in the same write:
+    // the connection is still dropped at the cap and the queued request is never served. The SDK's own
+    // listeners hold the 1 MiB cap. The Hono starters use the pinned `@hono/node-server` adapter, whose
+    // own drain is bounded at 500 ms and 64 MiB, and hapi closes by itself, so neither keeps that cap.
+    it.skipIf(
+      template === 'lit-hapi' ||
+        template === 'lit-hono' ||
+        template === 'react-hono',
+    )(
+      'drops the connection at the byte cap when an oversized remainder arrives at once with the next request queued behind it',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const declared = 2 * 1024 * 1024 + 2;
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, {
+            declaredLength: declared,
+            body: '{',
+          });
+          expect((await connection.readResponse(3_000)).status).toBe(404);
+
+          const next = new URL(listener.statusUrl);
+          connection.write(
+            `${'x'.repeat(declared - 1)}POST ${next.pathname} HTTP/1.1\r\nHost: untrusted.example\r\nContent-Length: 0\r\n\r\n`,
+          );
+          expect(await connection.waitForClose(3_000)).toBe(true);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    it.skipIf(template === 'lit-hapi')(
+      'answers both requests queued behind a small remainder in the same write, each whole and with nothing stray',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const expectedHost = await wholeAnswer(
+          listener.statusUrl,
+          'untrusted.example',
+        );
+        const expectedCredential = await wholeAnswer(
+          listener.accountUrl,
+          undefined,
+        );
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, { declaredLength: 3, body: '{' });
+          expect((await connection.readResponse(3_000)).status).toBe(404);
+
+          const status = new URL(listener.statusUrl);
+          const account = new URL(listener.accountUrl);
+          connection.write(
+            `  POST ${status.pathname} HTTP/1.1\r\nHost: untrusted.example\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{` +
+              `POST ${account.pathname} HTTP/1.1\r\nHost: ${account.host}\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{`,
+          );
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedHost),
+          );
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedCredential),
+          );
+          expect(await connection.waitForClose(800)).toBe(false);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
     it('keeps serving other callers after refusing a request whose body never finished', async () => {
       const { listener } = await start();
       const stalled = await RawHttpConnection.open(listener.statusUrl);

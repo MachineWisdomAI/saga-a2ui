@@ -219,12 +219,17 @@ async function readJsonBody(
  * and up to a byte cap; a body still unfinished then is dropped together with its connection. A body
  * that does finish in time keeps the connection usable. Call it first for every request, before
  * anything can answer.
+ *
+ * The listener goes ahead of Node's own `finish` handling on purpose: that handling dumps a request
+ * nobody is reading, and a dumped body is discarded by the parser without ever reaching a `data`
+ * listener, so the byte cap could not see it and a body that completed at once would end the drain
+ * unchecked. Reading from here keeps the remainder countable.
  */
 function closeUnfinishedBodyAfterAnswer(
   req: IncomingMessage,
   res: ServerResponse,
 ): void {
-  res.once('finish', () => {
+  res.prependOnceListener('finish', () => {
     if (req.complete || req.destroyed || res.destroyed) return;
     let discarded = 0;
     const settle = () => {

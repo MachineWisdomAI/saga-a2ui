@@ -142,6 +142,50 @@ describe('an early answer while the request body is incomplete', () => {
     expect(connection.pending).toBe('');
   });
 
+  it('drops the connection at the byte cap when an oversized remainder arrives at once with the next request queued behind it', async () => {
+    const listener = await start();
+    const connection = await connect(listener.url);
+    const declared = 2 * 1024 * 1024 + 2;
+    connection.request('POST', `${listener.url}/nowhere`, {
+      declaredLength: declared,
+      body: '{',
+    });
+    expect((await connection.readResponse(2_500)).status).toBe(404);
+
+    // The whole remainder, then a complete next request, in one write: the body completes promptly, but
+    // it is far over the cap, so the connection is dropped and the queued request is never served.
+    const remainder = 'x'.repeat(declared - 1);
+    connection.write(
+      `${remainder}PUT ${new URL(listener.url).pathname} HTTP/1.1\r\nHost: ${new URL(listener.url).host}\r\nContent-Length: 0\r\n\r\n`,
+    );
+    expect(await connection.waitForClose(2_500)).toBe(true);
+    expect(connection.pending).toBe('');
+  });
+
+  it('serves the next request queued behind a small remainder in the same write, each answer whole and nothing stray', async () => {
+    const listener = await start();
+    const connection = await connect(listener.url);
+    connection.request('POST', `${listener.url}/nowhere`, {
+      declaredLength: 3,
+      body: '{',
+    });
+    expect((await connection.readResponse(2_500)).status).toBe(404);
+
+    const url = new URL(listener.url);
+    connection.write(
+      `  PUT ${url.pathname} HTTP/1.1\r\nHost: ${url.host}\r\nContent-Length: 0\r\n\r\n` +
+        `PUT ${url.pathname} HTTP/1.1\r\nHost: ${url.host}\r\nContent-Length: 0\r\n\r\n`,
+    );
+    for (let answered = 0; answered < 2; answered += 1) {
+      const next = await connection.readResponse(2_500);
+      expect(next.status).toBe(405);
+      expect(next.body).toBe('');
+      expect(next.headers).toMatchObject({ allow: 'POST' });
+    }
+    expect(await connection.waitForClose(800)).toBe(false);
+    expect(connection.pending).toBe('');
+  });
+
   it('serves a complete request on a new connection after refusing a stalled one', async () => {
     const listener = await start();
     const stalled = await connect(listener.url);
