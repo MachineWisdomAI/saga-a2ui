@@ -5,6 +5,7 @@ import {
   type AuthInfo,
   type OAuthTokenVerifier,
 } from '@modelcontextprotocol/server';
+import { boundVerifier } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 
 // Application-owned request authentication for protected MCP endpoints. A pluggable
@@ -145,9 +146,12 @@ function reject(
  * naming an account. Anything else is refused with
  * the HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
  *
- * The verifier takes only the token, so it cannot be asked to stop: the caller bounds the wait and
- * passes `gate`, which aborts when that wait is over. A verifier that answers after `gate` aborted is
- * dropped before its result is examined or an authorization snapshot is made.
+ * The caller bounds the wait and passes `gate`, which aborts when that wait is over. The verifier is
+ * handed `gate` as its cancellation signal and runs under `boundVerifier`'s concurrency cap and hard
+ * limit; a call keeps its slot until the verifier settles, so abandoned work cannot pile up past the
+ * cap (a verifier that ignores the signal and never settles keeps its slot). A full cap or an
+ * abandoned call is a verifier failure (500), never a rejected credential. A verifier that answers after `gate` aborted is dropped before its result is
+ * examined or an authorization snapshot is made.
  */
 export async function authenticate(
   request: Pick<IncomingMessage, 'headers'>,
@@ -171,7 +175,7 @@ export async function authenticate(
 
   let authInfo: AuthInfo;
   try {
-    authInfo = await verifier.verifyAccessToken(match[1]);
+    authInfo = await boundVerifier(verifier).verifyAccessToken(match[1], gate);
   } catch (error) {
     if (
       OAuthError.isInstance(error) &&
