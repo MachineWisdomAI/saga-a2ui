@@ -66,6 +66,15 @@ const payload = (elements: number) => ({
   padding: new Array<number>(elements).fill(0),
 });
 
+// The server counts every array element and object member: the two members of the payload
+// object (`word` and `padding`) plus the padding array's elements.
+const PAYLOAD_MEMBERS = 2;
+/** The largest padding that still fits the limit: exactly the limit's count. */
+const LARGEST_FITTING_PADDING =
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS - PAYLOAD_MEMBERS;
+/** One element over the limit: the same payload shape with one more padding element. */
+const ONE_OVER_PADDING = LARGEST_FITTING_PADDING + 1;
+
 let host: TestHost | undefined;
 afterEach(async () => {
   await host?.close();
@@ -99,17 +108,17 @@ describe('the default tool input element limit', () => {
     expect(legitimate.isError).not.toBe(true);
     expect(legitimate.structuredContent).toEqual({ word: 'hello' });
 
-    // The largest payload that still fits: the declared member plus the padding array's elements
-    // and the padding member itself.
+    // The largest payload that still fits: its two members plus the padding array's elements
+    // total exactly the limit.
     const fits = await client.callTool({
       name: 'echo',
-      arguments: payload(DEFAULT_MAX_TOOL_INPUT_ELEMENTS - 2),
+      arguments: payload(LARGEST_FITTING_PADDING),
     });
     expect(fits.isError).not.toBe(true);
 
     const refused = await client.callTool({
       name: 'echo',
-      arguments: payload(DEFAULT_MAX_TOOL_INPUT_ELEMENTS),
+      arguments: payload(ONE_OVER_PADDING),
     });
     expect(refused.isError).toBe(true);
     expect(JSON.stringify(refused.content)).toMatch(
@@ -125,9 +134,10 @@ describe('the default tool input element limit', () => {
     const client = await host.connect();
     const result = await client.callTool({
       name: 'echo',
-      arguments: payload(DEFAULT_MAX_TOOL_INPUT_ELEMENTS * 10),
+      // The very payload the limited server refuses above, one element over the limit.
+      arguments: payload(ONE_OVER_PADDING),
     });
-    // The official server's own default: no limit, so the oversized payload is accepted.
+    // The official server's own default: no limit, so that payload is accepted.
     expect(result.isError).not.toBe(true);
   });
 });
