@@ -129,24 +129,42 @@ interface BuiltView {
   readonly data: Buffer | null;
 }
 
+class BuildRootOutside extends Error {}
+
+/**
+ * The canonical build directory, bound to the admitted application root before any view is
+ * checked: the directory of the release input. `build.directory` is text from that file, so a
+ * path, a `..` or a link that leads elsewhere must not become the root the views are measured
+ * against (SECURITY.md invariants 5 and 9).
+ */
+function buildRoot(loaded: LoadedReleaseInput): string {
+  const application = fs.realpathSync(loaded.directory);
+  const real = fs.realpathSync(
+    path.resolve(loaded.directory, loaded.input.build.directory),
+  );
+  if (real !== application && !real.startsWith(`${application}${path.sep}`))
+    throw new BuildRootOutside();
+  if (!fs.statSync(real).isDirectory()) throw new Error('not a directory');
+  return real;
+}
+
 /** Reads the built views named by the release input. A view that is missing, a link or outside the build directory is a finding. */
 function readBuild(loaded: LoadedReleaseInput): {
   readonly views: BuiltView[];
   readonly findings: Finding[];
 } {
   const { build } = loaded.input;
-  const buildDirectory = path.resolve(loaded.directory, build.directory);
   const findings: Finding[] = [];
   let realBuild: string;
   try {
-    realBuild = fs.realpathSync(buildDirectory);
-    if (!fs.statSync(realBuild).isDirectory())
-      throw new Error('not a directory');
-  } catch {
+    realBuild = buildRoot(loaded);
+  } catch (error) {
     findings.push(
       fail(
         'build.directory',
-        `The build directory ${build.directory} does not exist.`,
+        error instanceof BuildRootOutside
+          ? `The build directory ${build.directory} is outside the directory of the release input.`
+          : `The build directory ${build.directory} does not exist.`,
         'Build the application, or correct build.directory in the release input.',
       ),
     );
@@ -225,10 +243,15 @@ function readBuild(loaded: LoadedReleaseInput): {
 function sagaPackages(
   loaded: LoadedReleaseInput,
 ): PublicationRecord['application']['sagaPackages'] {
-  for (const directory of [
-    path.resolve(loaded.directory, loaded.input.build.directory),
-    loaded.directory,
-  ]) {
+  let build: string | null = null;
+  try {
+    buildRoot(loaded);
+    build = path.resolve(loaded.directory, loaded.input.build.directory);
+  } catch {
+    // an outside or missing build directory is a finding of its own; its package.json is not read
+  }
+  for (const directory of [build, loaded.directory]) {
+    if (directory === null) continue;
     try {
       const manifest = JSON.parse(
         fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),

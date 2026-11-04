@@ -41,7 +41,12 @@ npm run release:pack -- release-out
 `release-out/release.json` identifies the source revision, dirty state, exact
 package manifests, file inventories, SHA-256 digests and npm SHA-512 integrity.
 The seven tarballs are in `release-out/packages`. A dirty build is preparation
-only: rebuild after committing and reviewing the final source. This command
+only: rebuild after committing and reviewing the final source. Tarballs are
+built from the files Git tracks, so an untracked file cannot enter one;
+`release.json` names those left out (`excludedUntracked`) and a digest of the
+staged tracked content (`sourceSha256`) for each package. The output directory
+must be new or a real directory you own, never a link ([source and output
+authority](development-reference.md#source-and-output-authority)). This command
 does not publish, tag, deploy or change repository visibility.
 
 Release packing retains the enrolled versions and exact sibling dependencies,

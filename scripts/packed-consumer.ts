@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type InlineConfig, type PluginOption } from 'vite';
+import { UnsafePath, readContainedFile } from './owned-filesystem.js';
 
 // Installs the SDK packages the way an application receives them, without a registry: each package
 // is packed with `npm pack`, the tarball is unpacked into the node_modules of a clean directory
@@ -66,6 +67,10 @@ export interface PackedPackage {
   readonly bytes: number;
   readonly files: readonly { readonly path: string; readonly bytes: number }[];
   readonly manifest: PackedManifest;
+  /** SHA-256 over the Git-tracked package files (path and content) the tarball was built from. */
+  readonly sourceSha256: string;
+  /** Untracked files below the package directory that were left out of the tarball. */
+  readonly excludedUntracked: readonly string[];
 }
 
 /** A fresh scratch directory outside the repository. Remove it with `fs.rmSync(dir, { recursive: true, force: true })`. */
@@ -94,7 +99,7 @@ export function candidateVersion(commit: string, dirty: boolean): string {
   return `0.0.0-candidate.g${commit.slice(0, 12)}${dirty ? '.dirty' : ''}`;
 }
 
-/** The commit and tracked-file state of the repository this script runs from. */
+/** The commit and tracked-file state of the repository this script runs from. Untracked files never enter an artifact (see `stageTrackedFiles`), so they do not make a build dirty; the packages that left some out say so. */
 export function sourceRevision(): {
   readonly commit: string;
   readonly dirty: boolean;
@@ -257,6 +262,86 @@ export function packReleasePackages(
   });
 }
 
+interface TrackedEntry {
+  readonly mode: string;
+  readonly path: string;
+}
+
+const gitIn = (root: string, args: string[]): string =>
+  execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+  });
+
+/** What Git tracks at `pathspec`: regular files only. A link, a submodule or an unmerged path is refused. */
+function trackedEntries(root: string, pathspec: string): TrackedEntry[] {
+  return gitIn(root, ['ls-files', '-s', '-z', '--', pathspec])
+    .split('\0')
+    .filter(Boolean)
+    .map((line) => {
+      const [meta = '', file = ''] = line.split('\t');
+      const [mode = '', , stage = ''] = meta.split(' ');
+      if (stage !== '0' || (mode !== '100644' && mode !== '100755'))
+        throw new UnsafePath(
+          `${file} is not a plain tracked file (mode ${mode}, stage ${stage}); a release artifact is built from regular tracked files only.`,
+        );
+      return { mode, path: file };
+    });
+}
+
+/**
+ * Copies the files Git tracks below `subdirectory` of `root` into `destination`, and nothing else:
+ * an untracked file, an ignored one or a stray build output cannot reach the artifact, whatever the
+ * package's `files` list selects. Each file is read from the working tree through the contained
+ * reader (so a file replaced by a link is refused); a tracked file the working tree has changed or
+ * deleted is what `sourceRevision` reports as dirty. Returns the identity of what was staged and
+ * the untracked files left out. Git LFS content is the working tree's, exactly as a clean checkout
+ * of the commit smudges it.
+ */
+export function stageTrackedFiles(
+  root: string,
+  subdirectory: string,
+  destination: string,
+): { readonly sourceSha256: string; readonly excludedUntracked: string[] } {
+  const entries = trackedEntries(root, subdirectory);
+  if (entries.length === 0)
+    throw new UnsafePath(`Git tracks no files below ${subdirectory}.`);
+  const identity = createHash('sha256');
+  for (const entry of entries) {
+    const relative = entry.path.slice(subdirectory.length + 1);
+    const data = readContainedFile(root, entry.path);
+    const out = path.join(destination, relative);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, data, {
+      mode: entry.mode === '100755' ? 0o755 : 0o644,
+    });
+    identity
+      .update(`${relative}\0`)
+      .update(createHash('sha256').update(data).digest())
+      .update('\n');
+  }
+  const excludedUntracked = gitIn(root, [
+    'ls-files',
+    '-z',
+    '--others',
+    '--exclude-standard',
+    '--',
+    subdirectory,
+  ])
+    .split('\0')
+    .filter(Boolean)
+    .map((file) => file.slice(subdirectory.length + 1))
+    .sort();
+  return { sourceSha256: identity.digest('hex'), excludedUntracked };
+}
+
+/** Copies the tracked repository file `file` (the license, the notices) into `staged`. */
+function stageTrackedFile(file: string, staged: string): void {
+  trackedEntries(repoRoot, file);
+  fs.writeFileSync(path.join(staged, file), readContainedFile(repoRoot, file));
+}
+
 function packPackages(
   work: string,
   packages: readonly SdkPackage[],
@@ -269,19 +354,16 @@ function packPackages(
   fs.mkdirSync(destination, { recursive: true });
   return packages.map((name) => {
     const staged = path.join(work, 'staged', name);
-    fs.cpSync(path.join(repoRoot, 'packages', name), staged, {
-      recursive: true,
-      filter: (from) => !from.includes('node_modules'),
-    });
-    fs.copyFileSync(
-      path.join(repoRoot, 'LICENSE'),
-      path.join(staged, 'LICENSE'),
+    const { sourceSha256, excludedUntracked } = stageTrackedFiles(
+      repoRoot,
+      `packages/${name}`,
+      staged,
     );
+    stageTrackedFile('LICENSE', staged);
     const notices = SHIPS_THIRD_PARTY_NOTICES.includes(name)
       ? ['THIRD_PARTY_NOTICES.md']
       : [];
-    for (const notice of notices)
-      fs.copyFileSync(path.join(repoRoot, notice), path.join(staged, notice));
+    for (const notice of notices) stageTrackedFile(notice, staged);
     const manifestPath = path.join(staged, 'package.json');
     const manifest = JSON.parse(
       fs.readFileSync(manifestPath, 'utf8'),
@@ -312,6 +394,8 @@ function packPackages(
       manifest: JSON.parse(
         fs.readFileSync(manifestPath, 'utf8'),
       ) as PackedManifest,
+      sourceSha256,
+      excludedUntracked,
     };
   });
 }

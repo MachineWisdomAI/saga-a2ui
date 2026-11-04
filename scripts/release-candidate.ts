@@ -6,6 +6,7 @@ import { FAITHFUL_CARD_CONTRACT_VERSION } from '@saga-a2ui/components/faithful-c
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { CATALOG_ID } from '../examples/pack1-consumer/src/notes-surface.js';
 import { sha256Hex, summarizeReceipt } from './candidate-identity.js';
+import { OwnedDirectory, UnsafePath } from './owned-filesystem.js';
 import {
   candidateVersion,
   createWorkDirectory,
@@ -934,13 +935,19 @@ const dist = (...parts: string[]): string =>
   path.join(repoRoot, 'apps', 'lit-host', ...parts);
 
 /** Packs the candidate into `outDirectory`, runs the install checks and writes the record and summary. */
-export function writeCandidate(outDirectory: string): Record<string, unknown> {
+export function writeCandidate(requested: string): Record<string, unknown> {
+  // The output directory is created by this run or authenticated (a real directory the user owns,
+  // never a link) before anything below it is removed or written (SECURITY.md invariant 5).
+  const out = OwnedDirectory.create(requested);
+  if (fs.realpathSync(out.path) === fs.realpathSync(repoRoot))
+    throw new UnsafePath(
+      'The candidate output cannot be the repository root: its packages directory is source.',
+    );
   const revision = sourceRevision();
   const version = candidateVersion(revision.commit, revision.dirty);
   const work = createWorkDirectory('saga-candidate-');
   try {
-    const packages = path.join(outDirectory, 'packages');
-    fs.rmSync(packages, { recursive: true, force: true });
+    const packages = out.resetChild('packages').path;
     const packed = packSdkPackages(work, SDK_PACKAGES, packages, version);
 
     const clean = path.join(work, 'consumer');
@@ -962,10 +969,7 @@ export function writeCandidate(outDirectory: string): Record<string, unknown> {
         })
       : [];
     if (installed.ok)
-      fs.copyFileSync(
-        lockfile,
-        path.join(outDirectory, 'consumer-package-lock.json'),
-      );
+      out.writeFile('consumer-package-lock.json', fs.readFileSync(lockfile));
     const resolved = installed.ok
       ? Object.fromEntries(
           Object.entries(
@@ -1047,15 +1051,8 @@ export function writeCandidate(outDirectory: string): Record<string, unknown> {
         : null,
       generatedAt: new Date().toISOString(),
     });
-    fs.mkdirSync(outDirectory, { recursive: true });
-    fs.writeFileSync(
-      path.join(outDirectory, 'candidate.json'),
-      `${JSON.stringify(record, null, 2)}\n`,
-    );
-    fs.writeFileSync(
-      path.join(outDirectory, 'CANDIDATE.md'),
-      candidateSummary(record),
-    );
+    out.writeFile('candidate.json', `${JSON.stringify(record, null, 2)}\n`);
+    out.writeFile('CANDIDATE.md', candidateSummary(record));
     return record;
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -1168,9 +1165,11 @@ export function verifyCommand(argv: readonly string[]): VerifyOutcome {
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
   if (command === 'tarballs') {
-    const output = path.resolve(required(rest, '--out'));
     // A fresh directory keeps the previous install's artifacts available for rollback.
-    fs.mkdirSync(output);
+    const owned = OwnedDirectory.create(path.resolve(required(rest, '--out')), {
+      fresh: true,
+    });
+    const output = owned.path;
     const work = createWorkDirectory('saga-local-tarballs-');
     try {
       const source = sourceRevision();
@@ -1192,8 +1191,8 @@ function main(argv: string[]): number {
           ]),
         ),
       };
-      fs.writeFileSync(
-        path.join(output, 'npm-overrides.json'),
+      owned.writeFile(
+        'npm-overrides.json',
         `${JSON.stringify({ source, overrides }, null, 2)}\n`,
       );
       console.log(
