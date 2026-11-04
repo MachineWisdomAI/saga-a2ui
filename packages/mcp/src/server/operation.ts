@@ -13,6 +13,12 @@ import type {
 import type { z } from 'zod';
 import type { ViewCsp } from '../policy/index.js';
 import {
+  admitOutput,
+  outputLimitProblems,
+  resolveOutputLimits,
+  type OutputLimits,
+} from './output-budget.js';
+import {
   createServerBudgets,
   throwIfEnded,
   valueOrThrow,
@@ -139,6 +145,13 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
    * never extend the request.
    */
   readonly boundMs?: number;
+  /**
+   * Optional. The most this operation may return: combined text and structured size in bytes,
+   * nesting depth and value count. Omitted fields keep the SDK defaults (1 MiB, 32 levels, 100,000
+   * values). A result over any limit is answered with the declared `invalidOutput` text and
+   * nothing is serialized. Raise a limit only for an operation whose legitimate results need it.
+   */
+  readonly outputLimits?: OutputLimits;
 }
 
 /** Where an operation finds the request it serves. Absent, it runs under the SDK defaults. */
@@ -222,6 +235,7 @@ interface UncheckedDeclaration {
     readonly signInRequired?: unknown;
   };
   readonly boundMs?: number;
+  readonly outputLimits?: unknown;
   readonly handle?: unknown;
   readonly project?: unknown;
   readonly identity?: unknown;
@@ -273,6 +287,7 @@ function assertConfigured(
     !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)
   )
     problems.push('boundMs must be a finite positive number');
+  problems.push(...outputLimitProblems(declaration.outputLimits));
   if (problems.length > 0)
     throw new OperationConfigurationError(
       isText(declaration.name) ? String(declaration.name) : '(unnamed)',
@@ -334,7 +349,7 @@ function requestFor(
 async function execute<Found>(
   declaration: Pick<
     Declaration<z.ZodObject, z.ZodObject>,
-    'output' | 'boundMs'
+    'output' | 'boundMs' | 'outputLimits'
   > & { readonly failures: OperationFailures },
   ctx: ServerContext,
   lifetime: RequestLifetime,
@@ -384,8 +399,21 @@ async function execute<Found>(
         // break like invalid data, not a thrown fault and never something the SDK serializes.
         if (!isProjection(projection))
           return failure(declaration.failures.invalidOutput);
+        // The result is bounded before the contract parses it, so an oversized value is not copied
+        // by validation, and again after, because a contract may transform what it accepts. The
+        // check reads the value and never serializes it.
+        const admission = admitOutput(
+          resolveOutputLimits(declaration.outputLimits),
+        );
+        if (
+          !admission.text(projection.text) ||
+          !admission.data(projection.data)
+        )
+          return failure(declaration.failures.invalidOutput);
         const parsed = declaration.output.safeParse(projection.data);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
+        if (!admission.data(parsed.data))
+          return failure(declaration.failures.invalidOutput);
         return {
           content: [{ type: 'text' as const, text: projection.text }],
           structuredContent: parsed.data,
