@@ -128,6 +128,96 @@ qualifyStarter(STARTER, ({ built, start, allowedToken }) => {
       expect(manifest.engines.node).toBe('>=22.12.0');
     });
 
+    // @hapi/content before 6.0.3 parsed multipart headers in quadratic time. Hapi reaches it through
+    // @hapi/subtext and @hapi/pez, so the version Hapi resolves is what counts, in the lock and as installed.
+    const MINIMUM_CONTENT = [6, 0, 3] as const;
+    const atLeast = (version: string, minimum: readonly number[]): boolean => {
+      const parts = version.split('.').map((part) => Number.parseInt(part, 10));
+      for (const [index, floor] of minimum.entries()) {
+        const part = parts[index] ?? 0;
+        if (part !== floor) return part > floor;
+      }
+      return true;
+    };
+
+    it('resolves the repaired multipart header parser, in the lock and as installed', () => {
+      const lock = read(path.join(repoRoot, 'package-lock.json')) as {
+        packages: Record<string, { version?: string }>;
+      };
+      const copies = Object.entries(lock.packages).filter(
+        ([location]) =>
+          location === 'node_modules/@hapi/content' ||
+          location.endsWith('/node_modules/@hapi/content'),
+      );
+      expect(copies.length).toBeGreaterThan(0);
+      for (const [location, entry] of copies) {
+        expect(
+          atLeast(entry.version ?? '0', MINIMUM_CONTENT),
+          `${location} ${entry.version}`,
+        ).toBe(true);
+      }
+      expect(
+        atLeast(installed('@hapi/content').version ?? '0', MINIMUM_CONTENT),
+      ).toBe(true);
+    });
+
+    it('still refuses a multipart body on the MCP route before any parser runs, and still answers JSON', async () => {
+      const { listener } = await start();
+      const send = (
+        contentType: string,
+        body: string,
+      ): Promise<{ status: number | undefined; text: string }> =>
+        new Promise((resolve, reject) => {
+          const request = http.request(listener.statusUrl, {
+            method: 'POST',
+            headers: {
+              'content-type': contentType,
+              accept: 'application/json, text/event-stream',
+              'content-length': String(Buffer.byteLength(body)),
+              authorization: `Bearer ${allowedToken}`,
+            },
+          });
+          request.on('response', (response) => {
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => chunks.push(chunk));
+            response.on('end', () =>
+              resolve({
+                status: response.statusCode,
+                text: Buffer.concat(chunks).toString('utf8'),
+              }),
+            );
+          });
+          request.on('error', reject);
+          request.end(body);
+        });
+
+      const boundary = 'saga-boundary';
+      const multipart = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="field"',
+        '',
+        'value',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n');
+      const refused = await send(
+        `multipart/form-data; boundary=${boundary}`,
+        multipart,
+      );
+      expect(refused.status).toBe(415);
+
+      const accepted = await send(
+        'application/json',
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'get_status', arguments: {} },
+        }),
+      );
+      expect(accepted.status).toBe(200);
+    });
+
     it('reuses the Node view, operations and policy source apart from formatting', async () => {
       const node = templateDirectory('lit-node');
       const hapi = templateDirectory(STARTER);
