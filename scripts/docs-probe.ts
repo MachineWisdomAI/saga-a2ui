@@ -2,12 +2,15 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  Client,
-  StreamableHTTPClientTransport,
-  type FetchLike,
-} from '@modelcontextprotocol/client';
+import type { FetchLike } from '@modelcontextprotocol/client';
 import { fencedBlocks } from './docs-release/convert.js';
+import {
+  ByteBudget,
+  createAdmittedFetch,
+  openAdmittedMcp,
+  refusalOf,
+  type ToolAuthority,
+} from './maintainer-network.js';
 
 // A reproducible probe of the hosted versioned documentation (see docs/mintlify.md).
 //
@@ -27,12 +30,41 @@ import { fencedBlocks } from './docs-release/convert.js';
 //     `robots.txt`, sitemap), expected `indexable` for production and `withheld` for a preview.
 // Nothing here writes to the site. The only network traffic is MCP initialize, tools/list and
 // search calls and page GETs.
+//
+// All of it goes through the admitted network session (maintainer-network.ts): the site must be a
+// public HTTPS host, redirects are re-admitted, responses are size-limited, and the probe can call
+// only the two tools it names below, whatever the endpoint lists or says about them.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const RELEASE_PAGE =
   /docs\/releases\/([^/\s)"'<>?#\\]+)\/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)/g;
 const DEFAULT_TIMEOUT_MS = 20_000;
+/** The most one hosted page, robots file or sitemap may be, and everything one command reads. */
+const MAX_PAGE_BYTES = 4 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+/** The local profile of the two tools the probe calls: the endpoint's search and its read-only filesystem. */
+export const SEARCH_TOOL: ToolAuthority = /^search(?:_[a-z0-9_]+)?$/;
+export const READ_TOOL: ToolAuthority =
+  /^query_docs_filesystem(?:_[a-z0-9_]+)?$/;
+/** A page path the probe is willing to put in a `cat` command. */
+const SAFE_PAGE = /^[A-Za-z0-9_-][A-Za-z0-9._/-]*$/;
+
+const hostedFetch = (connector: FetchLike | undefined): FetchLike =>
+  createAdmittedFetch({
+    connector,
+    maxResponseBytes: MAX_PAGE_BYTES,
+    budget: new ByteBudget(MAX_TOTAL_BYTES),
+  });
+
+/** The text of a served page, or the empty string for a failed response, releasing its connection either way. */
+async function bodyText(response: Response): Promise<string> {
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return '';
+  }
+  return response.text();
+}
 
 export interface ReleasePage {
   readonly version: string;
@@ -204,8 +236,16 @@ export interface McpProbeReport {
 }
 
 export interface McpProbeOptions {
+  /** The connector seam for tests; the command line uses the pinned HTTPS connector. */
   readonly fetch?: FetchLike | undefined;
   readonly timeoutMs?: number | undefined;
+  /** Exact tool names, when the site's are known. Otherwise {@link SEARCH_TOOL} and {@link READ_TOOL} select them, and more than one match selects none. */
+  readonly tools?:
+    | {
+        readonly search?: string | undefined;
+        readonly read?: string | undefined;
+      }
+    | undefined;
 }
 
 function textOf(result: {
@@ -338,24 +378,36 @@ export async function probeMcp(
   cases: readonly SearchCase[],
   options: McpProbeOptions = {},
 ): Promise<McpProbeReport> {
-  const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const signal = (): AbortSignal => AbortSignal.timeout(timeout);
-  const client = new Client({ name: 'saga-docs-probe', version: '0.0.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+  const searchAuthority = options.tools?.search ?? SEARCH_TOOL;
+  const readAuthority = options.tools?.read ?? READ_TOOL;
+  const session = await openAdmittedMcp(endpoint, {
+    clientName: 'saga-docs-probe',
+    authorizedTools: [searchAuthority, readAuthority],
+    connector: options.fetch,
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    budget: new ByteBudget(MAX_TOTAL_BYTES),
+    maxResponseBytes: MAX_PAGE_BYTES,
   });
   try {
-    await client.connect(transport, { signal: signal() });
-    const info = client.getServerVersion();
-    const listed = await client.listTools(undefined, { signal: signal() });
-    const tools = listed.tools.map((tool) => tool.name);
-    const searchTool = tools.find((name) => /search/i.test(name)) ?? null;
-    const readTool = tools.find((name) => /filesystem/i.test(name)) ?? null;
-    const filterable = listed.tools.some(
+    const info = session.server;
+    const listed = await session.listTools();
+    const tools = listed.items.map((tool) => String(tool.name));
+    const select = (authority: ToolAuthority): string | null => {
+      const matches = tools.filter((name) =>
+        typeof authority === 'string'
+          ? name === authority
+          : authority.test(name),
+      );
+      return matches.length === 1 ? (matches[0] ?? null) : null;
+    };
+    const searchTool = select(searchAuthority);
+    const readTool = select(readAuthority);
+    const filterable = listed.items.some(
       (tool) =>
         tool.name === searchTool &&
         'version' in
-          ((tool.inputSchema as { properties?: object }).properties ?? {}),
+          ((tool.inputSchema as { properties?: object } | undefined)
+            ?.properties ?? {}),
     );
     const results: CaseResult[] = [];
     for (const searchCase of cases) {
@@ -366,10 +418,9 @@ export async function probeMcp(
         });
         continue;
       }
-      const response = await client.callTool(
-        { name: searchTool, arguments: { query: searchCase.query } },
-        { signal: signal() },
-      );
+      const response = await session.callTool(searchTool, {
+        query: searchCase.query,
+      });
       if (response.isError === true) {
         results.push({
           ...judge(searchCase, []),
@@ -380,14 +431,14 @@ export async function probeMcp(
       const returned = releasePagesIn(textOf(response));
       const ranked = returned[0]?.page === searchCase.expectedPage;
       let content: string | undefined;
-      if (ranked && readTool !== null) {
-        const read = await client.callTool(
-          {
-            name: readTool,
-            arguments: { command: `cat /${searchCase.expectedPage}.mdx` },
-          },
-          { signal: signal() },
-        );
+      if (
+        ranked &&
+        readTool !== null &&
+        SAFE_PAGE.test(searchCase.expectedPage)
+      ) {
+        const read = await session.callTool(readTool, {
+          command: `cat /${searchCase.expectedPage}.mdx`,
+        });
         if (read.isError !== true) content = textOf(read);
       }
       const verdict = judge(searchCase, returned, content);
@@ -399,16 +450,10 @@ export async function probeMcp(
         reason: 'The search tool has no version argument.',
       };
       if (filterable) {
-        const filtered = await client.callTool(
-          {
-            name: searchTool,
-            arguments: {
-              query: searchCase.query,
-              version: searchCase.version,
-            },
-          },
-          { signal: signal() },
-        );
+        const filtered = await session.callTool(searchTool, {
+          query: searchCase.query,
+          version: searchCase.version,
+        });
         versionFilter = judgeFilter(
           searchCase.version,
           filtered.isError === true ? [] : releasePagesIn(textOf(filtered)),
@@ -434,8 +479,7 @@ export async function probeMcp(
     }
     return {
       endpoint,
-      server:
-        info === undefined ? null : { name: info.name, version: info.version },
+      server: info === null ? null : { name: info.name, version: info.version },
       tools,
       searchTool,
       readTool,
@@ -443,7 +487,7 @@ export async function probeMcp(
       passed: results.length > 0 && results.every((result) => result.passed),
     };
   } finally {
-    await client.close().catch(() => undefined);
+    await session.close();
   }
 }
 
@@ -466,31 +510,65 @@ export function normalizeHosts(markdown: string): string {
   );
 }
 
+/** How many pages are requested at once. The byte budget bounds content; this bounds open requests and response objects. */
+export const PAGE_CONCURRENCY = 4;
+
+/**
+ * Applies `work` to each item with at most `limit` running at a time. Results keep the order of
+ * `items`. The first failure is thrown once the calls already started have settled, and no later
+ * item is started.
+ */
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failure: { readonly error: unknown } | undefined;
+  const worker = async (): Promise<void> => {
+    while (failure === undefined && next < items.length) {
+      const index = next;
+      next += 1;
+      try {
+        results[index] = await work(items[index] as T, index);
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker),
+  );
+  if (failure !== undefined) throw failure.error;
+  return results;
+}
+
 /** Hashes the hosted Markdown of each listed page. Mintlify serves any page's source at `<url>.md`. */
 export async function snapshotPages(
   site: string,
   pages: readonly string[],
-  fetchPage: FetchLike = fetch,
+  connector?: FetchLike,
 ): Promise<PageSnapshot> {
+  const fetchPage = hostedFetch(connector);
   const base = site.replace(/\/+$/, '');
-  const entries = await Promise.all(
-    pages.map(async (page) => {
-      const response = await fetchPage(`${base}/${page}.md`, {
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-      });
-      const body = response.ok ? normalizeHosts(await response.text()) : null;
-      return [
-        page,
-        {
-          status: response.status,
-          sha256:
-            body === null
-              ? null
-              : createHash('sha256').update(body).digest('hex'),
-        },
-      ] as const;
-    }),
-  );
+  const entries = await mapBounded(pages, PAGE_CONCURRENCY, async (page) => {
+    const response = await fetchPage(`${base}/${page}.md`, {
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+    const text = await bodyText(response);
+    const body = response.ok ? normalizeHosts(text) : null;
+    return [
+      page,
+      {
+        status: response.status,
+        sha256:
+          body === null
+            ? null
+            : createHash('sha256').update(body).digest('hex'),
+      },
+    ] as const;
+  });
   return { site: base, pages: Object.fromEntries(entries) };
 }
 
@@ -540,22 +618,23 @@ export async function checkPages(
   site: string,
   pages: readonly string[],
   readCommitted: (page: string) => string,
-  fetchPage: FetchLike = fetch,
+  connector?: FetchLike,
 ): Promise<PageCheck[]> {
+  const fetchPage = hostedFetch(connector);
   const base = site.replace(/\/+$/, '');
-  return Promise.all(
-    pages.map(async (page): Promise<PageCheck> => {
+  return mapBounded(
+    pages,
+    PAGE_CONCURRENCY,
+    async (page): Promise<PageCheck> => {
       const expected = fencedBlocks(readCommitted(page));
       const response = await fetchPage(`${base}/${page}.md`, {
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
       });
       let actual: string[] = [];
-      if (response.ok) {
-        try {
-          actual = fencedBlocks(await response.text()).map(withoutTheme);
-        } catch {
-          actual = [];
-        }
+      try {
+        actual = fencedBlocks(await bodyText(response)).map(withoutTheme);
+      } catch {
+        actual = [];
       }
       const index = expected.findIndex((block, i) => actual[i] !== block);
       const firstDifference =
@@ -571,7 +650,7 @@ export async function checkPages(
         firstDifference,
         passed: response.ok && firstDifference === null,
       };
-    }),
+    },
   );
 }
 
@@ -627,8 +706,9 @@ export async function probeIndexing(
   site: string,
   page: string,
   expectation: IndexingExpectation,
-  fetchPage: FetchLike = fetch,
+  connector?: FetchLike,
 ): Promise<IndexingReport> {
+  const fetchPage = hostedFetch(connector);
   const base = site.replace(/\/+$/, '');
   const get = (suffix: string) =>
     fetchPage(`${base}${suffix}`, {
@@ -639,11 +719,11 @@ export async function probeIndexing(
     get('/robots.txt'),
     get('/sitemap.xml'),
   ]);
-  const html = pageResponse.ok ? await pageResponse.text() : '';
+  const html = await bodyText(pageResponse);
   const robotsMeta = headTag(html, 'meta', 'name', 'robots', 'content');
   const canonical = headTag(html, 'link', 'rel', 'canonical', 'href');
   const robotsHeader = pageResponse.headers.get('x-robots-tag');
-  const robotsTxt = robotsResponse.ok ? await robotsResponse.text() : '';
+  const robotsTxt = await bodyText(robotsResponse);
   // Group the file by `User-agent` blocks and look for `Disallow: /` under `*`.
   let universal = false;
   let robotsTxtDisallowsAll = false;
@@ -655,9 +735,8 @@ export async function probeIndexing(
     else if (universal && /^disallow$/i.test(field ?? '') && value === '/')
       robotsTxtDisallowsAll = true;
   }
-  const sitemapUrls = sitemapResponse.ok
-    ? ((await sitemapResponse.text()).match(/<loc>/g) ?? []).length
-    : 0;
+  const sitemapUrls = ((await bodyText(sitemapResponse)).match(/<loc>/g) ?? [])
+    .length;
   const blocks = [
     ...(robotsMeta !== null && BLOCKING_DIRECTIVE.test(robotsMeta)
       ? [`robots meta "${robotsMeta}"`]
@@ -686,16 +765,39 @@ export async function probeIndexing(
 }
 
 const USAGE = `Usage:
-  tsx scripts/docs-probe.ts mcp <https://site/mcp>
+  tsx scripts/docs-probe.ts mcp <https://site/mcp> [--search-tool NAME] [--read-tool NAME]
   tsx scripts/docs-probe.ts pages <https://site>
   tsx scripts/docs-probe.ts indexing <https://site> [indexable|withheld]
   tsx scripts/docs-probe.ts snapshot <https://site> > before.json
   tsx scripts/docs-probe.ts compare before.json after.json`;
 
+/** The value after `--name`, or `undefined`. */
+function flag(argv: readonly string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+  return index < 0 ? undefined : argv[index + 1];
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
+  try {
+    return await run(argv);
+  } catch (error) {
+    // A request the admitted session refused is reported by its fixed kind and nothing the site wrote.
+    const refused = refusalOf(error);
+    if (refused === undefined) throw error;
+    console.error(`Refused: ${refused.message}`);
+    return 2;
+  }
+}
+
+async function run(argv: readonly string[]): Promise<number> {
   const [command, first, second] = argv;
   if (command === 'mcp' && first !== undefined) {
-    const report = await probeMcp(first, releaseCases(readSite()));
+    const report = await probeMcp(first, releaseCases(readSite()), {
+      tools: {
+        search: flag(argv, '--search-tool'),
+        read: flag(argv, '--read-tool'),
+      },
+    });
     console.log(JSON.stringify(report, null, 2));
     return report.passed ? 0 : 1;
   }

@@ -14,6 +14,8 @@ import {
   probeMcp,
   readSite,
   judgeFilter,
+  mapBounded,
+  PAGE_CONCURRENCY,
   releaseCases,
   releasePagesIn,
   snapshotPages,
@@ -607,5 +609,63 @@ describe('the indexing check', () => {
       host({ head: canonical }),
     );
     expect(open.passed).toBe(false);
+  });
+});
+
+describe('the page fan-out bound', () => {
+  const many = Array.from(
+    { length: PAGE_CONCURRENCY * 4 + 3 },
+    (_, i) => `p${i}`,
+  );
+  /** A host that records how many requests are open at once and answers in reverse order of arrival. */
+  const counting = () => {
+    const state = { open: 0, peak: 0, served: [] as string[] };
+    const connector = (async (url: string | URL) => {
+      state.open += 1;
+      state.peak = Math.max(state.peak, state.open);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      state.open -= 1;
+      state.served.push(String(url));
+      return new Response(`body of ${String(url)}`, { status: 200 });
+    }) as (url: string | URL, init?: RequestInit) => Promise<Response>;
+    return { state, connector };
+  };
+
+  it('requests no more pages at once than the pool, and keeps the order of the list', async () => {
+    const { state, connector } = counting();
+    const snapshot = await snapshotPages(
+      'https://docs.example.test',
+      many,
+      connector,
+    );
+    expect(state.served).toHaveLength(many.length);
+    expect(state.peak).toBeGreaterThan(1);
+    expect(state.peak).toBeLessThanOrEqual(PAGE_CONCURRENCY);
+    expect(Object.keys(snapshot.pages)).toEqual(many);
+  });
+
+  it('bounds the page check the same way and returns its results in list order', async () => {
+    const { state, connector } = counting();
+    const checks = await checkPages(
+      'https://docs.example.test',
+      many,
+      () => 'No code here.',
+      connector,
+    );
+    expect(state.peak).toBeLessThanOrEqual(PAGE_CONCURRENCY);
+    expect(checks.map((check) => check.page)).toEqual(many);
+  });
+
+  it('starts no further item after a failure and reports the first one', async () => {
+    let started = 0;
+    await expect(
+      mapBounded(many, 2, async (item) => {
+        started += 1;
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        if (item === 'p1') throw new Error('stop');
+        return item;
+      }),
+    ).rejects.toThrow('stop');
+    expect(started).toBeLessThan(many.length);
   });
 });

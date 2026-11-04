@@ -4,7 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { candidateVersion, sourceRevision } from './packed-consumer.js';
 import type { StagedDemo } from './build-demo.js';
+import type { ByteBudget } from './maintainer-network.js';
 import type { FetchLike } from '@modelcontextprotocol/client';
+import type { FileBudget } from './publish/bounded-read.js';
 import type { ValidatorLoad } from './publish/chatgpt.js';
 import type { PluginValidator } from './publish/claude-plugin.js';
 import type { HandoffAction, HandoffRequest } from './publish/handoff.js';
@@ -77,6 +79,10 @@ export interface PublicationSupport {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for endpoint discovery; the platform's `fetch` when absent. */
   readonly fetch?: FetchLike | undefined;
+  /** What all responses of one assessment may add up to; a test supplies a smaller one. */
+  readonly networkBudget?: ByteBudget | undefined;
+  /** What all local files of one command may add up to; a test supplies a smaller one. */
+  readonly localBudget?: FileBudget | undefined;
   /** The ChatGPT manifest validators; the pinned official schemas when absent. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle; Claude Code's `claude plugin validate` when absent. */
@@ -114,8 +120,8 @@ const pairLines = (pairs: readonly QualifiedPair[]): string =>
 
 const USAGE = `Usage: saga init --a2ui-stack <renderer>-mcp --server <target> <directory>
        saga demo --a2ui-stack <renderer>-mcp --server <target> <directory>
-       saga publish check --target <chatgpt|claude> --release <saga-publication.json> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
-       saga publish prepare --target <chatgpt|claude> --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture] [--bearer-env <name>]
+       saga publish check --target <chatgpt|claude> --release <saga-publication.json> [--against <directory>] [--invoke-fixture <calls.json>] [--bearer-env <name>]
+       saga publish prepare --target <chatgpt|claude> --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture <calls.json>] [--bearer-env <name>]
        saga publish handoff <begin|status|attempt|confirm-submission|void-attempt|record-review|record-listing> --handoff <directory> [options]
 
 init creates <directory>, which must not exist yet, from the maintained starter for the pair.
@@ -199,7 +205,7 @@ function parseCommandLine(argv: readonly string[]): Command {
         release: { type: 'string' },
         out: { type: 'string' },
         against: { type: 'string' },
-        'invoke-fixture': { type: 'boolean' },
+        'invoke-fixture': { type: 'string' },
         'bearer-env': { type: 'string' },
         handoff: { type: 'string' },
         prepared: { type: 'string' },
@@ -258,7 +264,7 @@ interface ParsedValues {
   readonly release?: string | undefined;
   readonly out?: string | undefined;
   readonly against?: string | undefined;
-  readonly 'invoke-fixture'?: boolean | undefined;
+  readonly 'invoke-fixture'?: string | undefined;
   readonly 'bearer-env'?: string | undefined;
   readonly handoff?: string | undefined;
   readonly prepared?: string | undefined;
@@ -328,7 +334,7 @@ function parsePublish(values: ParsedValues, rest: readonly string[]): Command {
       release: values.release,
       out: values.out,
       against: values.against,
-      invokeFixture: values['invoke-fixture'] === true,
+      invokeFixture: values['invoke-fixture'],
       bearerEnv: values['bearer-env'],
     },
   };
@@ -368,7 +374,8 @@ function parseHandoff(values: ParsedValues, rest: readonly string[]): Command {
   const prepareOnly =
     (['target', 'release', 'out', 'against', 'bearer-env'] as const).find(
       (name) => values[name] !== undefined,
-    ) ?? (values['invoke-fixture'] === true ? 'invoke-fixture' : undefined);
+    ) ??
+    (values['invoke-fixture'] !== undefined ? 'invoke-fixture' : undefined);
   if (prepareOnly !== undefined)
     return {
       kind: 'usage',
@@ -580,6 +587,8 @@ const publishIo = (support: PublicationSupport, environment: Environment) => ({
   signal: environment.signal,
   environment: support.environment,
   fetch: support.fetch,
+  networkBudget: support.networkBudget,
+  localBudget: support.localBudget,
   validators: support.validators,
   pluginValidator: support.pluginValidator,
   now: support.now,

@@ -11,6 +11,7 @@ import {
   editInput,
   editing,
   listing,
+  fixtureCallsFile,
   png,
   recordOf,
   saga,
@@ -717,8 +718,12 @@ describe('what cannot be concluded is never a pass', () => {
     expect((await check(app, { wire: seen })).code).toBe(0);
     expect(seen.methods).not.toContain('tools/call');
 
+    const calls = await fixtureCallsFile();
     const invoked = wire();
-    const run = await check(app, { wire: invoked }, ['--invoke-fixture']);
+    const run = await check(app, { wire: invoked }, [
+      '--invoke-fixture',
+      calls,
+    ]);
     expect(run.code, run.out).toBe(0);
     expect(
       invoked.methods.filter((method) => method === 'tools/call'),
