@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -800,6 +801,93 @@ export function qualifyStarter(
         jsonrpc: '2.0',
         error: { code: -32700 },
       });
+    });
+
+    /**
+     * POSTs `sent` of a body declared as 1000 bytes on a raw socket and reports whether the listener
+     * answered, and whether it closed the socket within `windowMs`, without the body ever finishing.
+     */
+    function unfinishedBody(
+      target: string,
+      host: string | undefined,
+      extraHeaders: readonly string[],
+      windowMs: number,
+    ): Promise<{ status: number | undefined; closed: boolean }> {
+      const url = new URL(target);
+      return new Promise((resolve) => {
+        const socket = net.connect(Number(url.port), url.hostname);
+        const outcome: { status: number | undefined; closed: boolean } = {
+          status: undefined,
+          closed: false,
+        };
+        let head = '';
+        const timer = setTimeout(() => {
+          socket.destroy();
+          resolve(outcome);
+        }, windowMs);
+        socket.on('data', (chunk) => {
+          head += chunk.toString('latin1');
+          const match = /^HTTP\/1\.1 (\d{3})/.exec(head);
+          if (match) outcome.status = Number(match[1]);
+        });
+        socket.on('error', () => undefined);
+        socket.once('close', () => {
+          outcome.closed = true;
+          clearTimeout(timer);
+          resolve(outcome);
+        });
+        socket.write(
+          [
+            `POST ${url.pathname} HTTP/1.1`,
+            `Host: ${host ?? url.host}`,
+            'Content-Type: application/json',
+            'Content-Length: 1000',
+            ...extraHeaders,
+            '',
+            '{',
+          ].join('\r\n'),
+        );
+      });
+    }
+
+    // An answer given before the body has arrived (a refusal, a missing route, a missing credential)
+    // must not leave the connection waiting for the rest of a body that never comes.
+    // Hapi's own router answers an unknown path, and only after it has read the payload under its own
+    // bounded payload timeout; the plugin owns the routes it registers, not that fallback.
+    it.each(
+      (
+        [
+          ['an untrusted Host', 'status', 'untrusted.example', 403],
+          ['an unknown path', 'elsewhere', undefined, 404],
+          ['a missing credential', 'account', undefined, 401],
+        ] as const
+      ).filter(
+        ([, where]) => !(template === 'lit-hapi' && where === 'elsewhere'),
+      ),
+    )(
+      'closes the connection after refusing %s while the request body is incomplete',
+      async (_label, where, host, expected) => {
+        const { listener, calls } = await start();
+        const target =
+          where === 'status'
+            ? listener.statusUrl
+            : where === 'account'
+              ? listener.accountUrl
+              : new URL('/elsewhere', listener.statusUrl).href;
+        const outcome = await unfinishedBody(target, host, [], 3_000);
+        expect(outcome.status).toBe(expected);
+        expect(outcome.closed).toBe(true);
+        expect(calls.authorize).toBe(0);
+      },
+    );
+
+    it('keeps serving other callers after refusing a request whose body never finished', async () => {
+      const { listener } = await start();
+      await unfinishedBody(listener.statusUrl, 'untrusted.example', [], 800);
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
+      expect(result.structuredContent).toEqual({ status: 'running' });
     });
 
     it('a finite response that cannot be delivered in time is destroyed, not left holding the connection', async () => {

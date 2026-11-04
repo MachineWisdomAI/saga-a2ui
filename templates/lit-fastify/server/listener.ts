@@ -213,6 +213,44 @@ async function readJsonBody(
 }
 
 /**
+ * Whatever answers a request before its body has fully arrived (a refusal, a missing route, an
+ * authentication failure) leaves a remainder nobody wants, and a sender that stalls must not hold
+ * the connection for it. After the answer is sent, the rest is read and discarded for a short window
+ * and up to a byte cap; a body still unfinished then is dropped together with its connection. A body
+ * that does finish in time keeps the connection usable. Call it first for every request, before
+ * anything can answer.
+ */
+function closeUnfinishedBodyAfterAnswer(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  res.once('finish', () => {
+    if (req.complete || req.destroyed || res.destroyed) return;
+    let discarded = 0;
+    const settle = () => {
+      clearTimeout(timer);
+      req.off('data', onData);
+      req.off('end', settle);
+      req.off('close', settle);
+    };
+    const drop = () => {
+      settle();
+      req.socket.destroySoon();
+    };
+    const onData = (chunk: Buffer | string) => {
+      discarded += chunk.length;
+      if (discarded > 1024 * 1024) drop();
+    };
+    const timer = setTimeout(drop, 500);
+    timer.unref();
+    req.on('data', onData);
+    req.on('end', settle);
+    req.on('close', settle);
+    req.resume();
+  });
+}
+
+/**
  * Connects one request's lifetime to its response when the request is admitted. The transport
  * finishing the response ends the lifetime; the caller going away does too. In the other direction,
  * a request deadline that passes before the response is delivered destroys the response, which
@@ -285,6 +323,9 @@ export async function startListener(
   }
 
   const app = createMcpFastifyApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
+  // Fastify runs the adapter's Host and Origin validation before any hook of ours, so this is
+  // installed on the server itself: it sees every request, whoever refuses it.
+  app.server.on('request', closeUnfinishedBodyAfterAnswer);
 
   // The request's clock starts at admission, before any credential or body wait. Fastify runs the
   // adapter's Host and Origin validation first, so a request it refuses never reaches a lifetime.

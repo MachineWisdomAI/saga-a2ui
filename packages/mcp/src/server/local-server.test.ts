@@ -221,6 +221,109 @@ describe('local MCP request admission', () => {
       await listener.close();
     }
   });
+
+  // An early refusal answers before the body has arrived. The unread remainder must not keep the
+  // connection open until Node's own (much longer) request timeout.
+  it.each([
+    ['an untrusted Host', '/mcp', { Host: 'untrusted.example' }, 403],
+    [
+      'an untrusted Origin',
+      '/mcp',
+      { Origin: 'https://untrusted.example' },
+      403,
+    ],
+    ['an unknown path', '/other', {}, 404],
+  ] as const)(
+    'closes the connection after refusing %s while the body is incomplete',
+    async (_label, path, headers, expected) => {
+      const { request } = await import('node:http');
+      let builds = 0;
+      const listener = await startLocalMcpServer({
+        port: 0,
+        // Long enough that only the refusal path can end the connection inside the window.
+        budgets: { requestMs: 30_000, operationMs: 3_000 },
+        createServer() {
+          builds++;
+          return new McpServer({ name: 'refusal-test', version: '1.0.0' });
+        },
+      });
+      try {
+        const seen = await new Promise<{ status?: number; closed: boolean }>(
+          (resolve) => {
+            const outcome: { status?: number; closed: boolean } = {
+              closed: false,
+            };
+            const req = request(new URL(path, listener.url), {
+              method: 'POST',
+              agent: false,
+              headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': '1000',
+              },
+            });
+            for (const [name, value] of Object.entries(headers))
+              req.setHeader(name, value);
+            const finish = () => {
+              clearTimeout(timer);
+              req.destroy();
+              resolve(outcome);
+            };
+            const timer = setTimeout(finish, 1_500);
+            // The socket's own close, not the response's: the response also closes when it ends.
+            req.on('socket', (socket) =>
+              socket.once('close', () => {
+                outcome.closed = true;
+                finish();
+              }),
+            );
+            req.on('response', (res) => {
+              outcome.status = res.statusCode;
+              res.resume();
+            });
+            req.on('error', () => undefined);
+            req.write('{');
+          },
+        );
+        expect(seen.status).toBe(expected);
+        expect(seen.closed).toBe(true);
+        expect(builds).toBe(0);
+      } finally {
+        await listener.close();
+      }
+    },
+  );
+
+  it('keeps serving a well-formed request after refusing one with an incomplete body', async () => {
+    const { request } = await import('node:http');
+    const listener = await startLocalMcpServer({
+      port: 0,
+      createServer() {
+        return new McpServer({ name: 'refusal-control', version: '1.0.0' });
+      },
+    });
+    try {
+      const stalled = request(listener.url, {
+        method: 'POST',
+        agent: false,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '1000',
+          Host: 'untrusted.example',
+        },
+      });
+      stalled.on('error', () => undefined);
+      stalled.on('response', (res) => res.resume());
+      stalled.write('{');
+      const client = new Client({ name: 'test', version: '1.0.0' });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(listener.url)),
+      );
+      await client.close();
+      stalled.destroy();
+    } finally {
+      await listener.close();
+    }
+  });
 });
 
 describe('local MCP shutdown', () => {
