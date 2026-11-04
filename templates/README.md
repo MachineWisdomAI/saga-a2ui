@@ -61,6 +61,8 @@ npx tsx scripts/starter-snippets.ts --template lit-hono   # choose another templ
 are the functions the CLI and guides call. Export writes only into a directory that does not exist,
 installs nothing and runs nothing. It removes only the directory it created, which it recognizes by the
 directory's identity and not by its path, and leaves a path that was replaced meanwhile as it found it.
+A template holds regular files only: a symbolic link or special file anywhere in it fails the export
+before anything is written, and every source read is checked to stay inside the template.
 `exportTemplateInterruptibly` is the same export for a caller that must react to SIGINT or SIGTERM: it
 yields to the event loop between files, which a synchronous copy cannot do.
 

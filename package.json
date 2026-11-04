@@ -33,7 +33,7 @@
     "hooks:check": "node scripts/git-hooks.mjs --check",
     "format": "node scripts/format.mjs --write",
     "format:check": "node scripts/format.mjs --check",
-    "test:tooling": "node --test scripts/git-hooks.test.mjs",
+    "test:tooling": "node --test scripts/git-hooks.test.mjs scripts/format.test.mjs",
     "lint": "node scripts/lint.mjs",
     "lint:workflows": "node scripts/lint.mjs --workflows",
     "test:lint": "node --test scripts/lint.test.mjs",

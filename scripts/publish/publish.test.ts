@@ -719,6 +719,37 @@ describe('inputs that must prevent a ready claim', () => {
     ).toMatch(/outside the directory of the release input/);
   });
 
+  it('a build directory the release input points outside the application', async () => {
+    const outside = path.join(root, 'outside-build');
+    const { record } = await blocked((app) => {
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'view.html'), '<html></html>');
+      editInput(
+        app,
+        (input) => (input.build.directory = path.relative(app, outside)),
+      );
+    }, 'build.directory');
+    expect(
+      record.findings.find((finding) => finding.id === 'build.directory')
+        ?.summary,
+    ).toMatch(/outside the directory of the release input/);
+    // The view is not read from there either, so the record names no digest of it.
+    expect(
+      status(record, 'build.views') === 'pass',
+      'a view outside the application was accepted',
+    ).toBe(false);
+  });
+
+  it('a build directory that is a link to somewhere else', async () => {
+    const outside = path.join(root, 'outside-link-build');
+    await blocked((app) => {
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'view.html'), '<html></html>');
+      fs.rmSync(path.join(app, 'build'), { recursive: true });
+      fs.symlinkSync(outside, path.join(app, 'build'), 'dir');
+    }, 'build.directory');
+  });
+
   describe('an icon that is not a complete, valid image', () => {
     const withLogo =
       (name: string, data: Buffer | string) =>

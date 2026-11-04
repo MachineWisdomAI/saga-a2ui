@@ -4,6 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as prettier from 'prettier';
 import {
+  assertSafeSegment,
+  readContainedFile,
+  writeContainedFile,
+} from './owned-filesystem.js';
+import {
   deriveComponent,
   type CatalogComponent,
   type ComponentSpec,
@@ -382,13 +387,27 @@ export function gitTree(root: string, revision: string): SourceTree {
   };
 }
 
+/**
+ * The release specification of `version`. Its text names the files the generator writes below the
+ * release directory, so the version, every guide slug and every component id must each be one safe
+ * path segment before anything is built from them (SECURITY.md invariant 5).
+ */
 export function readSpec(root: string, version: string): ReleaseSpec {
+  assertSafeSegment(version, 'The release version');
   const file = path.join(root, 'docs/releases', version, 'release.json');
-  const spec = JSON.parse(fs.readFileSync(file, 'utf8')) as ReleaseSpec;
+  const spec = JSON.parse(
+    readContainedFile(root, `docs/releases/${version}/release.json`).toString(
+      'utf8',
+    ),
+  ) as ReleaseSpec;
   if (spec.version !== version)
     throw new Error(`${file} describes ${spec.version}, not ${version}.`);
   if (!/^[0-9a-f]{40}$/.test(spec.revision))
     throw new Error(`${file} must pin a full 40-character revision.`);
+  for (const guide of spec.guides)
+    assertSafeSegment(guide.slug, `${file}: a guide slug`);
+  for (const component of spec.components)
+    assertSafeSegment(component.id, `${file}: a component id`);
   return spec;
 }
 
@@ -493,10 +512,10 @@ async function generate(root: string, version: string): Promise<void> {
     );
   const built = buildRelease(spec, gitTree(root, spec.revision));
   for (const [relative, content] of built.files) {
-    const target = path.join(directory, relative);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(
-      target,
+    // Written below the release directory only, through real directories, at the moment of writing.
+    writeContainedFile(
+      directory,
+      relative,
       relative === 'components/catalog.json'
         ? await formatJson(
             root,

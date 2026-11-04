@@ -125,6 +125,39 @@ local formatter and retry the commit; inspect the index and worktree after any
 lint-staged restoration conflict. There is no automatic network download in the
 hook.
 
+### Source and output authority
+
+[`scripts/owned-filesystem.ts`](../scripts/owned-filesystem.ts) is the one owner of which files maintained
+tooling reads as source and which directories it empties or writes as output (SECURITY.md invariant 5).
+Repair a defect there, not at a call site.
+
+- **Reads.** Template export, snippet extraction and the generated release documentation read a file only
+  through `readContainedFile`: every step below the root is a real directory and the leaf a regular
+  file, a link or special file is refused, and the file is opened without following a link. A template
+  that holds a link, and a release specification whose version, guide slug or component id is not one
+  safe path segment, fail before anything is written. `build.directory` of a publication release input
+  must resolve inside the input's own directory, like every other path in it.
+- **Source identity.** `release:pack` and `candidate:pack` copy only the files Git tracks below each package
+  (plus the repository license and notices, each of which must itself be one regular tracked file) from the working tree, so an untracked or ignored file cannot
+  enter a tarball whatever a package's `files` list selects; Git LFS content is the working tree's, as a
+  clean checkout smudges it. `release.json` records, per package, `sourceSha256` (the staged tracked
+  content, the license and notices included) and `excludedUntracked` (files Git does not track, ignored ones included, left out). The `dirty` flag still means tracked files
+  differ from the commit; a dirty build remains preparation only.
+- **Output.** `release:pack`, `candidate:pack`, the `tarballs` command of `scripts/release-candidate.ts` and `candidate:rehearse`
+  create their output directory or authenticate it (a real directory, never a link, owned by the running
+  user), keep its identity, and check it before every removal or write. `packages` below it must be a real
+  directory; `candidate:pack` empties it and refuses the repository root as the output. Fixed files such
+  as `candidate.json` and every packed tarball replace their leaf through a temporary file and are never written
+  through a link: `npm pack` writes into a private scratch directory, never into the output.
+- **Formatter.** `npm run format` and the pre-commit hook refuse a selected path that is a link, a special
+  file or outside the checkout, and replace a file through a temporary file after checking that it is the
+  file that was read.
+- **Limit.** Node has no directory-relative file calls, so each check narrows the window to two adjacent
+  calls and does not close it. Ancestors of a path the operator named are the operator's own. An attacker
+  who can already rewrite the checkout's tracked files or run code as the same user is out of scope.
+
+If a command reports a link at an output path, remove or move that link; the tool will not follow it.
+
 ### Advisory correctness lint
 
 `npm run lint` checks tracked JS/TS and workflow files. Pass explicit paths to
