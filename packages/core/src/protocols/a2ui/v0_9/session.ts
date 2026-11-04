@@ -9,7 +9,7 @@ import {
 import {
   DEFAULT_RETAINED_LIMITS,
   checkedLimits,
-  scan,
+  measure,
   type MessageSize,
   type RetainedLimits,
 } from './admission.js';
@@ -108,7 +108,8 @@ export function createMessageSession<T extends ComponentApi>(
   };
 
   // Retained-state admission. `tally` is an upper bound of what the session keeps: it adds the
-  // size of every admitted batch and never subtracts, so a replaced value or a deleted surface
+  // size of every admitted batch (which includes the containers a data path may create) and
+  // never subtracts, so a replaced value or a deleted surface
   // is counted until the bound is next checked against the state itself. Only a batch that
   // would cross the limit pays for that measurement, and then it is refused only when the
   // measured state really leaves no room.
@@ -135,15 +136,13 @@ export function createMessageSession<T extends ComponentApi>(
           component.metadata,
         );
     }
-    const measured = scan(roots, {
-      ...limits,
-      maxDepth: Number.POSITIVE_INFINITY,
-      maxArrayItems: Number.POSITIVE_INFINITY,
-    });
     // State past the limits cannot have been admitted; treat it as full.
-    return measured.ok
-      ? measured.size
-      : { nodes: limits.maxNodes, bytes: limits.maxBytes };
+    return (
+      measure(roots, limits) ?? {
+        nodes: limits.maxNodes,
+        bytes: limits.maxBytes,
+      }
+    );
   };
 
   const admitRetained = (

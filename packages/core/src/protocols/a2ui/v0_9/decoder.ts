@@ -14,8 +14,10 @@ import type {
 } from '@a2ui/web_core/v0_9';
 import {
   DEFAULT_INPUT_LIMITS,
-  admitInput,
+  admit,
   checkedLimits,
+  describeExceeded,
+  pathRetainedWeight,
   pathWithinDepth,
   type InputLimits,
   type MessageSize,
@@ -33,7 +35,10 @@ export type DecodeResult =
   | {
       readonly ok: true;
       readonly messages: readonly ValidatedMessage[];
-      /** What the admitted input weighed; a session counts it against its retained budget. */
+      /**
+       * What the accepted input can leave in a session: its admitted size, plus the containers
+       * a data path may create. A session counts it against its retained budget.
+       */
       readonly size: MessageSize;
     }
   | { readonly ok: false; readonly failure: DecodeFailure };
@@ -113,6 +118,7 @@ function describeVersion(version: unknown): string {
   }
 }
 
+/** `raw` is a message from the admitted snapshot, never the caller's own object. */
 function decodeMessage(
   raw: unknown,
   limits: InputLimits,
@@ -171,10 +177,23 @@ function decodeMessage(
   return malformed('Message has no supported operation.');
 }
 
+/** The data path of a message that has one, from the admitted snapshot. */
+function dataPathOf(raw: unknown): string | undefined {
+  if (!isRecord(raw) || !isRecord(raw.updateDataModel)) return undefined;
+  const { path } = raw.updateDataModel;
+  return typeof path === 'string' ? path : undefined;
+}
+
+/** Whether `record` has a key besides `only`; stops at the first, builds no list of keys. */
+function hasOtherKey(record: Record<string, unknown>, only: string): boolean {
+  for (const key in record) if (key !== only) return true;
+  return false;
+}
+
 function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   if (Array.isArray(input)) return input;
   if (isRecord(input) && 'messages' in input) {
-    if (!Array.isArray(input.messages) || Object.keys(input).length !== 1) {
+    if (!Array.isArray(input.messages) || hasOtherKey(input, 'messages')) {
       return malformed(
         'A message list must be an object with only a "messages" array.',
       );
@@ -184,37 +203,71 @@ function rawMessages(input: unknown): readonly unknown[] | DecodeFailure {
   return [input];
 }
 
-function decodeInput(input: unknown, limits: InputLimits): DecodeResult {
+/**
+ * The length of the message list the caller claims, read only to refuse an over-long list
+ * before any of it is walked. A claim is never relied on: the admitted snapshot is counted again.
+ */
+function claimedMessageCount(input: unknown): number {
+  if (Array.isArray(input)) return input.length;
+  if (isRecord(input) && Array.isArray(input.messages))
+    return input.messages.length;
+  return 0;
+}
+
+function tooManyMessages(limits: InputLimits): DecodeResult {
+  return {
+    ok: false,
+    failure: malformed(
+      `A2UI input has more than ${limits.maxMessages} messages.`,
+    ),
+  };
+}
+
+function decodeInput(unchecked: unknown, limits: InputLimits): DecodeResult {
+  // Admission comes first and covers everything below: neither Zod nor a copy sees input that
+  // is over a limit, and the cheap count check keeps a long list from being walked at all.
+  if (claimedMessageCount(unchecked) > limits.maxMessages)
+    return tooManyMessages(limits);
+  const admitted = admit(unchecked, limits);
+  if (!admitted.ok)
+    return {
+      ok: false,
+      failure: malformed(describeExceeded(admitted.exceeded, limits)),
+    };
+  // From here on only the snapshot is read; the caller's object is not touched again.
+  const input = admitted.value;
   const raws = rawMessages(input);
   if (!Array.isArray(raws))
     return { ok: false, failure: raws as DecodeFailure };
-  // Admission comes first and covers everything below: neither Zod nor a copy sees input that
-  // is over a limit, and the cheap count check keeps a long list from being walked at all.
-  if (raws.length > limits.maxMessages)
-    return {
-      ok: false,
-      failure: malformed(
-        `A2UI input has more than ${limits.maxMessages} messages.`,
-      ),
-    };
-  const admitted = admitInput(input, limits);
-  if (!admitted.ok) return { ok: false, failure: malformed(admitted.message) };
+  if (raws.length > limits.maxMessages) return tooManyMessages(limits);
   const messages: ValidatedMessage[] = [];
+  let nodes = admitted.size.nodes;
+  let bytes = admitted.size.bytes;
   for (const raw of raws) {
     const decoded = decodeMessage(raw, limits);
     if ('kind' in decoded) return { ok: false, failure: decoded };
     messages.push(decoded);
+    const path = dataPathOf(raw);
+    if (path !== undefined) {
+      const created = pathRetainedWeight(path);
+      nodes += created.nodes;
+      bytes += created.bytes;
+    }
   }
-  return { ok: true, messages, size: admitted.size };
+  return { ok: true, messages, size: { nodes, bytes } };
 }
 
 /**
  * Creates a decoder for A2UI v0.9: one message, an array of messages, or `{ messages: [...] }`.
  * Input over a limit (see `InputLimits`; `limits` overrides the defaults) is refused before it
  * reaches the upstream schemas, which are built on Zod 3 and accept arrays and nesting of any
- * size, and before anything is copied. The whole operation sits behind one failure boundary:
- * anything that throws while inspecting or parsing caller input (e.g. a throwing getter)
- * becomes a malformed result. Throws `RangeError` for a limit that is not a positive integer.
+ * size, and before anything is copied. The input is read once into a snapshot of plain data
+ * (objects, arrays, primitives and binary data; a `Map`, a `Set`, a `Date` or a class instance
+ * is refused), and the snapshot is what is validated and kept, so a getter or a proxy cannot
+ * change the value between measurement and use. The whole operation sits behind one failure
+ * boundary: anything that throws while inspecting or parsing caller input (e.g. a throwing
+ * getter) becomes a malformed result. Throws `RangeError` for a limit that is not a positive
+ * integer.
  */
 export function createA2uiV0_9Decoder(
   limits?: Partial<InputLimits>,

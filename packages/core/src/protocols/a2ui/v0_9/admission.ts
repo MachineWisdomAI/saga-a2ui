@@ -1,8 +1,13 @@
 /**
  * Admission of untrusted A2UI input: finite structural, byte, item and retained-state limits
- * that are checked before Zod parses the input, before anything is copied and before a session
- * keeps it. The upstream schemas are built on Zod 3, which accepts arrays and nesting of any
- * size, so the bound has to be ours. Every walk here is iterative: depth never costs stack.
+ * that are checked before Zod parses the input, before anything else copies it and before a
+ * session keeps it. The upstream schemas are built on Zod 3, which accepts arrays and nesting of
+ * any size, so the bound has to be ours. Every walk here is iterative: depth never costs stack.
+ *
+ * Admission is also the one read of caller input. It returns a snapshot of plain data that it
+ * built while charging the limits, and everything after it (schema validation, copying, the
+ * session) works on that snapshot. A getter or a proxy is therefore read once, and the value
+ * that was measured is the value that is used.
  */
 
 /** Limits on one `decode` call. Each is a positive integer. */
@@ -46,10 +51,7 @@ export interface MessageSize {
   readonly bytes: number;
 }
 
-type Exceeded = 'bytes' | 'nodes' | 'depth' | 'array-items';
-type Scan =
-  | { readonly ok: true; readonly size: MessageSize }
-  | { readonly ok: false; readonly exceeded: Exceeded };
+type Exceeded = 'bytes' | 'nodes' | 'depth' | 'array-items' | 'unsupported';
 
 /** Throws, naming the limit, unless every supplied limit is a positive safe integer. */
 export function checkedLimits<Limits extends InputLimits | RetainedLimits>(
@@ -83,67 +85,200 @@ function utf8Length(text: string): number {
   return bytes;
 }
 
-interface ScanLimits {
+interface AdmitLimits {
   readonly maxBytes: number;
   readonly maxNodes: number;
   readonly maxDepth: number;
   readonly maxArrayItems: number;
 }
 
+/** A container whose items are still to be read from `source` into `target`. */
+type Frame =
+  | {
+      readonly source: unknown[];
+      readonly target: unknown[];
+      readonly depth: number;
+      readonly length: number;
+    }
+  | {
+      readonly source: object;
+      readonly target: Record<string, unknown>;
+      readonly depth: number;
+    };
+
+const hasOwn = (value: object, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
 /**
- * Walks `roots` with an explicit stack and stops at the first limit crossed. Nothing is
- * allocated or copied in proportion to the input: a value is counted when it is pushed, so the
- * stack never outgrows `maxNodes`, and an array's length is checked before its items are read.
- * A cycle revisits values until the node budget ends the walk.
+ * Plain data only: an object whose prototype is `null` or an object prototype. A `Map`, a
+ * `Set`, a `Date` or a class instance keeps its content where no property read can measure it,
+ * so it is refused rather than charged as a single value and copied later.
  */
-export function scan(roots: readonly unknown[], limits: ScanLimits): Scan {
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  return prototype === null || Object.getPrototypeOf(prototype) === null;
+}
+
+/**
+ * Reads `root` once, with an explicit stack, into a snapshot of plain arrays and objects, and
+ * stops at the first limit crossed. The work and the snapshot are bounded by the limits, never
+ * by the input: a value is charged before it is stored, an array's length is checked before
+ * its items are read, and an object's keys are read one at a time (`for...in`), so no list of
+ * them is built here and a key past the budget is never reached. A cycle revisits values until
+ * the node budget ends the walk. Every property, item and length is read exactly once, so a
+ * getter or a proxy cannot show the walk one value and the caller another.
+ */
+export function admit(
+  root: unknown,
+  limits: AdmitLimits,
+):
+  | { readonly ok: true; readonly value: unknown; readonly size: MessageSize }
+  | { readonly ok: false; readonly exceeded: Exceeded } {
   let nodes = 0;
   let bytes = 0;
-  const stack: { value: unknown; depth: number }[] = [];
-  const push = (value: unknown, depth: number): Exceeded | undefined => {
-    if (depth > limits.maxDepth) return 'depth';
-    nodes += 1;
-    if (nodes > limits.maxNodes) return 'nodes';
-    stack.push({ value, depth });
-    return undefined;
+  let exceeded: Exceeded | undefined;
+  const frames: Frame[] = [];
+
+  /** Charges `text` as bytes; false when that crosses the limit. */
+  const chargeText = (text: string): boolean => {
+    // A string takes at least one byte per UTF-16 unit, so a long one is refused unmeasured.
+    if (text.length > limits.maxBytes - bytes) return false;
+    bytes += utf8Length(text);
+    return bytes <= limits.maxBytes;
   };
+
+  /** The snapshot of `raw`; sets `exceeded` instead when `raw` cannot be admitted. */
+  const visit = (raw: unknown, depth: number): unknown => {
+    if (depth > limits.maxDepth) {
+      exceeded = 'depth';
+      return undefined;
+    }
+    nodes += 1;
+    if (nodes > limits.maxNodes) {
+      exceeded = 'nodes';
+      return undefined;
+    }
+    if (typeof raw === 'string') {
+      if (!chargeText(raw)) exceeded = 'bytes';
+      return raw;
+    }
+    if (typeof raw !== 'object' || raw === null) return raw;
+    if (ArrayBuffer.isView(raw) || raw instanceof ArrayBuffer) {
+      if (raw.byteLength > limits.maxBytes - bytes) {
+        exceeded = 'bytes';
+        return undefined;
+      }
+      // The copy is what is kept, so its length is what is charged.
+      const copy = structuredClone(raw);
+      bytes += copy.byteLength;
+      if (bytes > limits.maxBytes) exceeded = 'bytes';
+      return copy;
+    }
+    if (Array.isArray(raw)) {
+      const length = raw.length;
+      if (length > limits.maxArrayItems) {
+        exceeded = 'array-items';
+        return undefined;
+      }
+      const target: unknown[] = [];
+      frames.push({
+        source: raw as unknown[],
+        target,
+        depth,
+        length,
+      });
+      return target;
+    }
+    if (!isPlainObject(raw)) {
+      exceeded = 'unsupported';
+      return undefined;
+    }
+    const target: Record<string, unknown> = {};
+    frames.push({ source: raw, target, depth });
+    return target;
+  };
+
+  const value = visit(root, 0);
+  while (frames.length > 0 && exceeded === undefined) {
+    const frame = frames.pop()!;
+    if ('length' in frame) {
+      for (let index = 0; index < frame.length; index += 1) {
+        const item = visit(frame.source[index], frame.depth + 1);
+        if (exceeded !== undefined) break;
+        frame.target.push(item);
+      }
+      continue;
+    }
+    for (const key in frame.source) {
+      if (!chargeText(key)) {
+        exceeded = 'bytes';
+        break;
+      }
+      if (!hasOwn(frame.source, key)) continue;
+      const item = visit(
+        (frame.source as Record<string, unknown>)[key],
+        frame.depth + 1,
+      );
+      if (exceeded !== undefined) break;
+      // Defined, not assigned: a key named `__proto__` is data here, never a prototype.
+      Object.defineProperty(frame.target, key, {
+        value: item,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+  }
+  return exceeded === undefined
+    ? { ok: true, value, size: { nodes, bytes } }
+    : { ok: false, exceeded };
+}
+
+/**
+ * What state a session already holds, for the retained budget. Unlike `admit` it reads
+ * session-owned state (data the session admitted and the upstream processor stored), not caller
+ * input, so it only counts: every value, with a hole in an array counted as a value because
+ * the data model's auto-vivified arrays are measured by length. It stops when a limit is crossed.
+ */
+export function measure(
+  roots: readonly unknown[],
+  limits: { readonly maxNodes: number; readonly maxBytes: number },
+): MessageSize | undefined {
+  let nodes = 0;
+  let bytes = 0;
+  const stack: unknown[] = [];
   for (const root of roots) {
-    const exceeded = push(root, 0);
-    if (exceeded) return { ok: false, exceeded };
+    nodes += 1;
+    if (nodes > limits.maxNodes) return undefined;
+    stack.push(root);
   }
   while (stack.length > 0) {
-    const { value, depth } = stack.pop()!;
+    const value = stack.pop();
     if (typeof value === 'string') {
-      // A string takes at least one byte per UTF-16 unit, so a long one is refused unmeasured.
-      if (value.length > limits.maxBytes - bytes)
-        return { ok: false, exceeded: 'bytes' };
+      if (value.length > limits.maxBytes - bytes) return undefined;
       bytes += utf8Length(value);
     } else if (typeof value === 'object' && value !== null) {
       if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
         bytes += value.byteLength;
       } else if (Array.isArray(value)) {
-        if (value.length > limits.maxArrayItems)
-          return { ok: false, exceeded: 'array-items' };
-        for (let index = 0; index < value.length; index += 1) {
-          const exceeded = push(value[index], depth + 1);
-          if (exceeded) return { ok: false, exceeded };
-        }
+        nodes += value.length;
+        if (nodes > limits.maxNodes) return undefined;
+        for (let index = 0; index < value.length; index += 1)
+          stack.push(value[index]);
       } else {
-        for (const key of Object.keys(value)) {
-          if (key.length > limits.maxBytes - bytes)
-            return { ok: false, exceeded: 'bytes' };
+        for (const key in value) {
+          if (!hasOwn(value, key)) continue;
+          if (key.length > limits.maxBytes - bytes) return undefined;
           bytes += utf8Length(key);
-          const exceeded = push(
-            (value as Record<string, unknown>)[key],
-            depth + 1,
-          );
-          if (exceeded) return { ok: false, exceeded };
+          nodes += 1;
+          if (nodes > limits.maxNodes) return undefined;
+          stack.push((value as Record<string, unknown>)[key]);
         }
       }
     }
-    if (bytes > limits.maxBytes) return { ok: false, exceeded: 'bytes' };
+    if (bytes > limits.maxBytes) return undefined;
   }
-  return { ok: true, size: { nodes, bytes } };
+  return { nodes, bytes };
 }
 
 /** Why `decode` refused input over a limit. Plain text, safe to display. */
@@ -160,20 +295,9 @@ export function describeExceeded(
       return `A2UI input is nested deeper than ${limits.maxDepth} levels.`;
     case 'array-items':
       return `A2UI input has an array with more than ${limits.maxArrayItems} items.`;
+    case 'unsupported':
+      return 'A2UI input has a value that is not plain data (only objects, arrays, strings, numbers, booleans, null and binary data are accepted).';
   }
-}
-
-/** Admits one `decode` input as a whole, or says which limit it crossed. */
-export function admitInput(
-  input: unknown,
-  limits: InputLimits,
-):
-  | { readonly ok: true; readonly size: MessageSize }
-  | { readonly ok: false; readonly message: string } {
-  const scanned = scan([input], limits);
-  return scanned.ok
-    ? scanned
-    : { ok: false, message: describeExceeded(scanned.exceeded, limits) };
 }
 
 /** Whether a data path stays within the depth limit (each `/` starts a segment). */
@@ -188,4 +312,27 @@ export function pathWithinDepth(path: string, maxDepth: number): boolean {
     if (segments > maxDepth) return false;
   }
   return true;
+}
+
+/** The upstream data model's own ceiling on an array index (`MAX_ARRAY_INDEX`). */
+const MAX_ARRAY_INDEX = 10_000;
+
+/**
+ * What writing at `path` can leave behind beyond the value written. The upstream data model
+ * creates every missing container along a path, and a numeric segment may create an array that
+ * is then extended to that index, which the retained measure counts item by item. So each
+ * segment is charged as one container, or as `index + 1` items for a numeric segment (the
+ * index is capped where upstream refuses it); and the path's own bytes stand for the property
+ * names it creates. An upper bound: a segment that finds its container already there is still
+ * charged. Callers have already bounded the path's segments (`pathWithinDepth`).
+ */
+export function pathRetainedWeight(path: string): MessageSize {
+  let nodes = 0;
+  for (const segment of path.split('/')) {
+    if (segment.length === 0) continue;
+    nodes += /^(0|[1-9]\d*)$/.test(segment)
+      ? Math.min(Number(segment), MAX_ARRAY_INDEX + 1) + 1
+      : 1;
+  }
+  return { nodes, bytes: utf8Length(path) };
 }
