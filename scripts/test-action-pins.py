@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 
 CHECKER = Path(__file__).with_name("check-action-pins.py")
@@ -17,6 +18,21 @@ spec.loader.exec_module(pins)
 
 def findings(text):
     return list(pins.scan("workflow.yml", text))
+
+
+def steps(items):
+    """Return a workflow whose single job runs the step YAML in `items`."""
+    return "jobs:\n  build:\n    steps:\n" + textwrap.indent(items, "      ")
+
+
+def job(body):
+    """Return a workflow whose single job has the YAML mapping text in `body`."""
+    return "jobs:\n  build:\n" + textwrap.indent(body, "    ")
+
+
+def action(items):
+    """Return a composite action that runs the step YAML in `items`."""
+    return "runs:\n  using: composite\n  steps:\n" + textwrap.indent(items, "    ")
 
 
 class ActionPinTests(unittest.TestCase):
@@ -35,7 +51,8 @@ class ActionPinTests(unittest.TestCase):
             "docker://alpine@sha256:abc",
         ]:
             with self.subTest(ref=ref):
-                self.assertEqual(len(findings(f"      - uses: {ref}\n")), 1)
+                self.assertEqual(len(findings(steps(f"- uses: {ref}\n"))), 1)
+                self.assertEqual(len(findings(job(f"uses: {ref}\n"))), 1)
 
     def test_accepts_immutable_and_local_references(self):
         for ref in [
@@ -47,7 +64,8 @@ class ActionPinTests(unittest.TestCase):
             "./.github/workflows/reusable.yml",
         ]:
             with self.subTest(ref=ref):
-                self.assertEqual(findings(f"      - uses: {ref}\n"), [])
+                self.assertEqual(findings(steps(f"- uses: {ref}\n")), [])
+                self.assertEqual(findings(job(f"uses: {ref}\n")), [])
 
     def test_only_the_repository_owned_dot_slash_form_is_local(self):
         for ref in [
@@ -60,109 +78,219 @@ class ActionPinTests(unittest.TestCase):
             ".github/actions/local",
         ]:
             with self.subTest(ref=ref):
-                self.assertEqual(len(findings(f"      - uses: {ref}\n")), 1)
+                self.assertEqual(len(findings(steps(f"- uses: {ref}\n"))), 1)
 
     def test_recognizes_every_yaml_shape_of_a_uses_key(self):
-        for line in [
-            "      - uses: actions/checkout@v4",
-            "        uses: actions/checkout@v4",
-            "    uses: owner/repo/.github/workflows/a.yml@v1",
-            "      - uses: 'actions/checkout@v4'",
-            '      - uses: "actions/checkout@v4"',
-            "      - uses: actions/checkout@v4 # pinned elsewhere",
-            "      - 'uses': actions/checkout@v4",
+        for item in [
             "- uses: actions/checkout@v4",
+            "- name: x\n  uses: actions/checkout@v4",
+            "- uses: 'actions/checkout@v4'",
+            '- uses: "actions/checkout@v4"',
+            "- uses: actions/checkout@v4 # pinned elsewhere",
+            "- 'uses': actions/checkout@v4",
+            "- uses:\n    actions/checkout@v4",
+            "- uses:\n\n    # note\n    'actions/checkout@v4'",
+            "- uses: !!str actions/checkout@v4",
+            "- &pin uses: actions/checkout@v4",
+            "- uses: &ref actions/checkout@v4",
+            "- !!str uses: actions/checkout@v4",
+            '- "uses": "actions/checkout@v4"',
+            '- "u\\x73es": "actions/checkout@v4"',
+            '- "us\\u0065s": "actions/checkout@v4"',
+            '- "us\\\n   es": "actions/checkout@v4"',
+            '- uses: "actions/checkout@v\\x34"',
         ]:
-            with self.subTest(line=line):
-                self.assertEqual(len(findings(line + "\n")), 1)
+            with self.subTest(item=item):
+                self.assertEqual(len(findings(steps(item + "\n"))), 1)
 
     def test_rejects_flow_mapping_and_json_shapes(self):
         for text in [
-            "steps:\n  - { uses: actions/checkout@v4 }\n",
-            "steps: [{ uses: actions/checkout@v4 }]\n",
-            "steps: [{uses: actions/checkout@v4, name: x}]\n",
+            "jobs:\n  a:\n    steps:\n      - { uses: actions/checkout@v4 }\n",
+            "jobs:\n  a:\n    steps: [{ uses: actions/checkout@v4 }]\n",
+            "jobs:\n  a:\n    steps: [{uses: actions/checkout@v4, name: x}]\n",
             "jobs: { build: { uses: owner/repo/.github/workflows/build.yml@v2 } }\n",
             "jobs: { build: { 'uses': 'owner/repo/.github/workflows/build.yml@v2' } }\n",
             '{"jobs": {"build": {"steps": [{"uses": "actions/checkout@v4"}]}}}\n',
             '{"jobs":{"b":{"steps":[{"uses":"actions/checkout@v4"}]}}}\n',
-            "steps:\n  - {\n      name: x,\n      uses: actions/checkout@v4,\n    }\n",
-            "steps: [ uses: actions/checkout@v4 ]\n",
+            "jobs:\n  a:\n    steps:\n      - {\n          name: x,\n          uses: actions/checkout@v4,\n        }\n",
+            "jobs:\n  a:\n    steps: [ uses: actions/checkout@v4 ]\n",
+            "jobs: { a: { steps: [ { ? uses : actions/checkout@v4 } ] } }\n",
+            # Root-level fragments, as a checker caller may pass them.
+            "steps:\n  - { uses: actions/checkout@v4 }\n",
+            "steps: [{ uses: actions/checkout@v4 }]\n",
+            "- { uses: actions/checkout@v4 }\n",
+            "- uses: actions/checkout@v4\n",
         ]:
             with self.subTest(text=text):
                 self.assertEqual(len(findings(text)), 1)
 
-    def test_rejects_explicit_key_and_split_shapes(self):
-        for text in [
-            "steps:\n  - ? uses\n    : actions/checkout@v4\n",
-            "steps:\n  - ? 'uses'\n    : actions/checkout@v4\n",
-            "steps:\n  - uses:\n      actions/checkout@v4\n",
-            "steps:\n  - uses:\n\n      # note\n      'actions/checkout@v4'\n",
-            "steps:\n  - uses: !!str actions/checkout@v4\n",
-            "steps:\n  - &pin uses: actions/checkout@v4\n",
-            "steps:\n  - uses: &ref actions/checkout@v4\n",
-            "steps:\n  - !!str uses: actions/checkout@v4\n",
-            '- "uses": "actions/checkout@v4"\n',
-            '- "u\\x73es": "actions/checkout@v4"\n',
-            '- "us\\u0065s": "actions/checkout@v4"\n',
-            '- "us\\\n   es": "actions/checkout@v4"\n',
-            '- uses: "actions/checkout@v\\x34"\n',
-            "- uses: 'actions/checkout@v4'\n",
+    def test_rejects_explicit_key_shapes_including_block_scalar_keys(self):
+        for item in [
+            "- ? uses\n  : actions/checkout@v4",
+            "- ? 'uses'\n  : actions/checkout@v4",
+            '- ? "uses"\n  : actions/checkout@v4',
+            "- ? |-\n    uses\n  : actions/checkout@v4",
+            "- ? |\n    uses\n  : actions/checkout@v4",
+            "- ? |+\n    uses\n\n  : actions/checkout@v4",
+            "- ? >-\n    uses\n  : actions/checkout@v4",
+            "- ? >\n    uses\n  : actions/checkout@v4",
+            "- ? |2\n     uses\n  : actions/checkout@v4",
+            "- ? !!str |-\n    uses\n  : actions/checkout@v4",
+            "- ? &k |-\n    uses\n  : actions/checkout@v4",
+            "- name: x\n  ? |-\n    uses\n  : actions/checkout@v4",
+            "- ? |-\n    uses\n  : actions/checkout@v4\n  name: x",
         ]:
-            with self.subTest(text=text):
-                self.assertEqual(len(findings(text)), 1)
-
-    def test_rejects_references_it_cannot_resolve_statically(self):
-        for text in [
-            "- uses: *pin\n",
-            "- uses:\n",
-            "- uses: |\n    actions/checkout@v4\n",
-            "- uses: >-\n    actions/checkout@v4\n",
-            "- uses: [actions/checkout@v4]\n",
-            "- uses: { a: b }\n",
-            "- uses:\n    name: actions/checkout@v4\n",
-            "- uses:\n  - actions/checkout@v4\n",
-            "- uses: ''\n",
-            "- *key : actions/checkout@v4\n",
-            '- uses: "unterminated\n',
-            "- uses: \"bad \\q escape\"\n",
-            "{ uses: [\n",
-        ]:
-            with self.subTest(text=text):
-                self.assertGreaterEqual(len(findings(text)), 1)
+            with self.subTest(item=item):
+                self.assertEqual(len(findings(steps(item + "\n"))), 1)
+        # The reviewed reproduction, verbatim, as a fragment and in a workflow.
+        repro = "steps:\n  - ? |-\n      uses\n    : actions/checkout@v4\n"
+        self.assertEqual(len(findings(repro)), 1)
+        self.assertEqual(len(findings("jobs:\n  b:\n" + textwrap.indent(repro, "    "))), 1)
+        reusable = job("? |-\n  uses\n: owner/repo/.github/workflows/a.yml@v1\n")
+        self.assertEqual(len(findings(reusable)), 1)
+        self.assertEqual(len(list(pins.scan("action.yml", action(
+            "- ? |-\n    uses\n  : actions/checkout@v4\n")))), 1)
 
     def test_accepts_every_shape_of_an_immutable_reference(self):
         for text in [
-            f"steps:\n  - {{ uses: actions/checkout@{SHA} }}\n",
-            f"steps: [{{uses: 'actions/checkout@{SHA}'}}]\n",
-            f'{{"steps": [{{"uses": "actions/checkout@{SHA}"}}]}}\n',
-            f"steps:\n  - ? uses\n    : actions/checkout@{SHA}\n",
-            f"steps:\n  - uses:\n      actions/checkout@{SHA}\n",
-            f"jobs: {{ b: {{ uses: ./.github/workflows/x.yml }} }}\n",
-            f"- uses: !!str actions/checkout@{SHA} # v4\n",
+            steps(f"- {{ uses: actions/checkout@{SHA} }}\n"),
+            steps(f"- ? |-\n    uses\n  : actions/checkout@{SHA}\n"),
+            steps(f"- ? uses\n  : actions/checkout@{SHA}\n"),
+            steps(f"- uses:\n    actions/checkout@{SHA}\n"),
+            steps(f"- uses: !!str actions/checkout@{SHA} # v4\n"),
+            f"jobs:\n  a:\n    steps: [{{uses: 'actions/checkout@{SHA}'}}]\n",
+            f'{{"jobs": {{"a": {{"steps": [{{"uses": "actions/checkout@{SHA}"}}]}}}}}}\n',
+            "jobs: { b: { uses: ./.github/workflows/x.yml } }\n",
         ]:
             with self.subTest(text=text):
                 self.assertEqual(findings(text), [])
 
+    def test_a_uses_key_outside_an_executable_location_is_not_an_action(self):
+        # An input or environment variable may be named `uses`; quoting or
+        # renaming it must never be needed.
+        for text in [
+            "with: { uses: harmless }\n",
+            "env: { uses: harmless }\n",
+            "env:\n  uses: harmless\n",
+            "env:\n  'uses': harmless\n",
+            "with:\n  ? |-\n    uses\n  : harmless\n",
+            steps("- uses: actions/checkout@{0}\n  with: {{ uses: harmless }}\n".format(SHA)),
+            steps("- uses: actions/checkout@{0}\n  with:\n    uses: harmless\n".format(SHA)),
+            steps("- uses: actions/checkout@{0}\n  with:\n    'uses': v4\n    \"uses\": v4\n".format(SHA)),
+            steps("- run: echo\n  env:\n    uses: harmless\n"),
+            steps("- run: echo\n  env:\n    ? |-\n      uses\n    : actions/checkout@v4\n"),
+            steps("- name: x\n  with:\n    steps:\n      - uses: actions/checkout@v4\n"),
+            job("env: { uses: harmless }\nsteps:\n  - run: echo\n"),
+            job("with: { uses: actions/checkout@v4 }\nsteps:\n  - run: echo\n"),
+            job("strategy:\n  matrix:\n    include:\n      - uses: v4\n    uses: [a, b]\nsteps:\n  - run: echo\n"),
+            job("outputs:\n  uses: ${{ steps.x.outputs.uses }}\nsteps:\n  - run: echo\n"),
+            "inputs:\n  uses:\n    description: an input named uses\n    default: v4\n",
+            "defaults: { run: { uses: x } }\n",
+            "name: uses\non: push\n",
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(findings(text), [])
+        self.assertEqual(list(pins.scan("action.yml", (
+            "inputs:\n  uses:\n    description: x\n"
+            "runs:\n  using: composite\n  steps:\n    - run: echo\n      env:\n        uses: harmless\n"))), [])
+
+    def test_composite_actions_are_checked_where_their_steps_are(self):
+        self.assertEqual(len(list(pins.scan("action.yml", action("- uses: actions/cache@v4\n")))), 1)
+        self.assertEqual(len(list(pins.scan("action.yml", action("- { uses: actions/cache@v4 }\n")))), 1)
+        self.assertEqual(len(list(pins.scan("action.yml", "runs: { steps: [{ uses: ../shared/action }] }\n"))), 1)
+        self.assertEqual(list(pins.scan("action.yml", action(f"- uses: actions/cache@{SHA}\n"))), [])
+
+    def test_rejects_references_it_cannot_resolve_statically(self):
+        for item in [
+            "- uses: *pin",
+            "- uses:",
+            "- uses: |\n    actions/checkout@v4",
+            "- uses: >-\n    actions/checkout@v4",
+            "- uses: [actions/checkout@v4]",
+            "- uses: { a: b }",
+            "- uses:\n    name: actions/checkout@v4",
+            "- uses:\n  - actions/checkout@v4",
+            "- uses: ''",
+            "- *key : actions/checkout@v4",
+            '- uses: "unterminated',
+            "- uses: \"bad \\q escape\"",
+        ]:
+            with self.subTest(item=item):
+                self.assertGreaterEqual(len(findings(steps(item + "\n"))), 1)
+        for text in ["{ uses: [\n", "jobs: { a: { uses: [ }\n"]:
+            with self.subTest(text=text):
+                self.assertGreaterEqual(len(findings(text)), 1)
+
+    def test_rejects_ambiguous_executable_structure(self):
+        # Merge keys, aliases and anchors can build an executable mapping from
+        # text defined elsewhere, so the checker cannot see the result.
+        for text in [
+            steps("- <<: *base\n  name: x\n"),
+            steps("- <<: { uses: actions/checkout@v4 }\n"),
+            steps("- <<: [*a, *b]\n"),
+            steps("- '<<': *base\n"),
+            steps("- *step\n"),
+            job("<<: *common\nsteps:\n  - run: echo\n"),
+            job("steps: *shared\n"),
+            job("steps:\n  - run: echo\n  - *tail\n"),
+            "jobs:\n  build: *job\n",
+            "jobs: *all\n",
+            "jobs:\n  <<: *jobs\n",
+            "<<: *workflow\n",
+            "*jobs-key : {}\n",
+            "steps: *shared\n",
+            "runs: *runs\n",
+            "- *step\n",
+            action("- *step\n"),
+        ]:
+            with self.subTest(text=text):
+                self.assertGreaterEqual(len(findings(text)), 1)
+
+    def test_enforcement_does_not_depend_on_key_case(self):
+        for text in [
+            steps("- Uses: actions/checkout@v4\n"),
+            steps("- USES: actions/checkout@v4\n"),
+            "Jobs:\n  a:\n    Steps:\n      - uses: actions/checkout@v4\n",
+            "JOBS:\n  a:\n    STEPS:\n      - uses: actions/checkout@v4\n",
+            "Runs:\n  Steps:\n    - uses: actions/checkout@v4\n",
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(len(findings(text)), 1)
+
+    def test_checks_every_document_and_every_duplicate_key(self):
+        self.assertEqual(len(findings(
+            f"jobs: {{ a: {{ steps: [{{ uses: actions/checkout@{SHA} }}] }} }}\n"
+            "---\n"
+            "jobs: { b: { steps: [{ uses: actions/checkout@v4 }] } }\n")), 1)
+        self.assertEqual(len(findings(
+            "jobs:\n  a:\n    steps: []\n    steps:\n      - uses: actions/checkout@v4\n")), 1)
+        self.assertEqual(len(findings(
+            "jobs:\n  a:\n    uses: ./.github/workflows/x.yml\n    uses: owner/repo/a.yml@v1\n")), 1)
+        self.assertEqual(len(findings(
+            "--- !!map\njobs: { a: { steps: [{ uses: actions/checkout@v4 }] } }\n...\n")), 1)
+
     def test_block_scalar_text_is_not_scanned_but_following_keys_are(self):
         text = (
-            "steps:\n"
-            "  - run: |\n"
-            "      echo\n"
-            "      uses: actions/checkout@v4\n"
+            "jobs:\n"
+            "  a:\n"
+            "    steps:\n"
+            "      - run: |\n"                              # 4
+            "          echo\n"
+            "          uses: actions/checkout@v4\n"
             "\n"
-            "      - uses: actions/checkout@v4\n"
-            "    name: after\n"
-            "  - run: >-\n"
-            "      uses: actions/checkout@v4\n"
-            "    uses: actions/setup-node@v4\n"
-            "  - uses: actions/cache@v4\n"
+            "          - uses: actions/checkout@v4\n"
+            "        name: after\n"
+            "      - run: >-\n"                              # 10
+            "          uses: actions/checkout@v4\n"
+            "        uses: actions/setup-node@v4\n"          # 12
+            "      - uses: actions/cache@v4\n"               # 13
         )
         self.assertEqual([(number, ref) for number, ref, _ in findings(text)],
-                         [(10, "actions/setup-node@v4"), (11, "actions/cache@v4")])
-        top = "run: |\n  uses: actions/checkout@v4\nuses: actions/setup-node@v4\n"
-        self.assertEqual([number for number, _, _ in findings(top)], [3])
+                         [(12, "actions/setup-node@v4"), (13, "actions/cache@v4")])
         dash = "- |\n  uses: actions/checkout@v4\n- uses: actions/setup-node@v4\n"
         self.assertEqual([number for number, _, _ in findings(dash)], [3])
+        trailing = steps("- run: |\n    echo\n\n\n- uses: actions/setup-node@v4\n")
+        self.assertEqual([ref for _, ref, _ in findings(trailing)], ["actions/setup-node@v4"])
 
     def test_plain_text_that_mentions_uses_is_not_a_key(self):
         text = (
@@ -172,21 +300,27 @@ class ActionPinTests(unittest.TestCase):
             'env: { NOTE: "uses: actions/checkout@v4" }\n'
         )
         self.assertEqual(findings(text), [])
+        self.assertEqual(findings(steps("- name: Explain uses: actions/checkout@v4\n  run: echo uses\n")), [])
 
     def test_comments_and_unrelated_text_are_not_references(self):
-        text = (
+        text = steps(
             "# uses: actions/checkout@v4\n"
-            "      # - uses: actions/checkout@v4\n"
-            "      - name: Explain uses: actions/checkout@v4\n"
-            "        run: echo 'uses: actions/checkout@v4'\n"
-            f"      - uses: actions/checkout@{SHA} # v4, not @v4\n"
+            "# - uses: actions/checkout@v4\n"
+            "- name: Explain uses: actions/checkout@v4\n"
+            "  run: echo 'uses: actions/checkout@v4'\n"
+            f"- uses: actions/checkout@{SHA} # v4, not @v4\n"
         )
         self.assertEqual(findings(text), [])
 
+    def test_multi_line_plain_and_quoted_values_are_read_whole(self):
+        self.assertEqual(len(findings(steps("- uses: actions/checkout@v4\n    continued\n"))), 1)
+        self.assertEqual(findings(steps(f"- name: a\n    b\n  uses: actions/checkout@{SHA}\n")), [])
+        self.assertEqual(len(findings(steps(f'- uses: "actions/checkout@{SHA}\n    more"\n'))), 1)
+
     def test_reports_each_violation_with_its_line(self):
-        text = f"steps:\n  - uses: actions/checkout@{SHA}\n  - uses: actions/setup-node@v4\n"
+        text = steps(f"- uses: actions/checkout@{SHA}\n- uses: actions/setup-node@v4\n")
         self.assertEqual(findings(text), [
-            (3, "actions/setup-node@v4",
+            (5, "actions/setup-node@v4",
              "uses mutable revision 'v4' instead of a full 40-character commit SHA"),
         ])
 
@@ -195,7 +329,7 @@ class ActionPinTests(unittest.TestCase):
             root = Path(directory)
             subprocess.check_call(["git", "init", "-q"], cwd=root)
             files = {
-                ".github/workflows/good.yml": f"steps:\n  - uses: actions/checkout@{SHA}\n",
+                ".github/workflows/good.yml": steps(f"- uses: actions/checkout@{SHA}\n"),
                 ".github/actions/local/action.yaml": "runs:\n  steps:\n    - uses: actions/cache@v4\n",
                 ".github/README.md": "uses: actions/checkout@v4\n",
                 "docs/example.yml": "uses: actions/checkout@v4\n",
@@ -218,6 +352,8 @@ class ActionPinTests(unittest.TestCase):
                 ".github/workflows/flow.yml": "jobs:\n  a:\n    steps: [{ uses: actions/checkout@v4 }]\n",
                 ".github/workflows/reusable.yaml": "jobs: { b: { uses: owner/repo/.github/workflows/b.yml@v2 } }\n",
                 ".github/workflows/explicit.yml": "jobs:\n  c:\n    steps:\n      - ? uses\n        : actions/setup-node@v4\n",
+                ".github/workflows/block-key.yml": "jobs:\n  d:\n    steps:\n      - ? |-\n          uses\n        : actions/checkout@v4\n",
+                ".github/workflows/with-input.yml": f"jobs:\n  e:\n    steps:\n      - uses: actions/cache@{SHA}\n        with: {{ uses: harmless }}\n",
                 ".github/actions/shared/action.yml": "runs:\n  using: composite\n  steps:\n    - { uses: ../shared/action }\n",
                 ".github/actions/pinned/action.yml": f"runs:\n  steps:\n    - {{ uses: actions/cache@{SHA} }}\n",
             }
@@ -227,10 +363,11 @@ class ActionPinTests(unittest.TestCase):
                 target.write_text(content)
             subprocess.check_call(["git", "add", "--", *files], cwd=root)
             names, problems = pins.check(root)
-            self.assertEqual(len(names), 5)
+            self.assertEqual(len(names), 7)
             flagged = sorted(problem.split(":", 1)[0] for problem in problems)
             self.assertEqual(flagged, [
                 ".github/actions/shared/action.yml",
+                ".github/workflows/block-key.yml",
                 ".github/workflows/explicit.yml",
                 ".github/workflows/flow.yml",
                 ".github/workflows/reusable.yaml",

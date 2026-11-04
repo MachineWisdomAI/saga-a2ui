@@ -271,13 +271,18 @@ repository-owned local path that starts with `./` and has no `..` segment. Tag
 and branch references, including major tags such as `@v4`, can move after
 review. The always-on CI job runs `python3 scripts/check-action-pins.py` to
 reject them, and `python3 scripts/test-action-pins.py` covers the rules and
-this repository. The checker tokenizes the YAML itself, so it finds `uses` in
-block, flow (`{ uses: ... }`), JSON, explicit-key (`? uses`) and quoted forms,
-in workflows, reusable-workflow jobs and composite actions, and it ignores
-`run: |` text. It fails closed: a `uses` value that is an alias, block scalar,
-collection or empty, an alias used as a key, and text it cannot tokenize are
-reported rather than passed. Quote or rename any non-action key named `uses`
-(for example a `with:` input) that it reports.
+this repository. The checker parses the YAML itself, so it finds `uses` in
+block, flow (`{ uses: ... }`), JSON, explicit-key (`? uses`, including a
+block-scalar key) and quoted forms, in every document and duplicate key of a
+file, and it ignores comments and `run: |` text. It enforces `uses` only where
+it executes: a direct child of a step, of a job (a reusable workflow) or of a
+composite action's `runs`. A key named `uses` anywhere else, such as a `with:`
+input or an `env:` variable, is data and is never reported, so it needs no
+quoting or renaming. It fails closed where the executable structure cannot be
+read statically: a `uses` value that is an alias, block scalar, collection or
+empty, an alias or a YAML merge key (`<<`) in place of a step, job, `steps`,
+`jobs` or `runs` node or key, and text it cannot parse are reported rather than
+passed.
 To update an action, resolve the reviewed release tag to its commit
 (`gh api repos/OWNER/REPO/commits/TAG --jq .sha`), change the SHA and comment
 together, and run both commands.
