@@ -28,18 +28,96 @@ describe('admitToolResult', () => {
     ).toBeUndefined();
   });
 
-  it('counts UTF-8 bytes of strings and of property names', () => {
-    expect(exceeded('€€€', { maxBytes: 9 })).toBeUndefined();
-    expect(exceeded('€€€', { maxBytes: 8 })).toBe('bytes');
-    expect(exceeded({ ['k'.repeat(10)]: 1 }, { maxBytes: 9 })).toBe('bytes');
-    // A string far past the budget is refused without being measured.
-    expect(exceeded('x'.repeat(10_000), { maxBytes: 100 })).toBe('bytes');
-  });
+  describe('maxBytes is a bound on the serialized JSON size', () => {
+    const jsonBytes = (value: unknown): number =>
+      Buffer.byteLength(JSON.stringify(value), 'utf8');
+    /** The smallest `maxBytes` that admits `value`. */
+    const smallestBudget = (value: unknown): number => {
+      let low = 1;
+      let high = 2 ** 30;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (exceeded(value, { maxBytes: middle }) === undefined) high = middle;
+        else low = middle + 1;
+      }
+      return low;
+    };
 
-  it('counts the length of binary values as bytes', () => {
-    expect(exceeded(new Uint8Array(10), { maxBytes: 10 })).toBeUndefined();
-    expect(exceeded(new Uint8Array(11), { maxBytes: 10 })).toBe('bytes');
-    expect(exceeded(new ArrayBuffer(11), { maxBytes: 10 })).toBe('bytes');
+    it('is exact for strings, property names and structure: admitted at the JSON size, refused one byte below', () => {
+      for (const value of [
+        '',
+        'plain',
+        '€€€',
+        '😀',
+        'a"b\\c',
+        '\u0000'.repeat(5),
+        '\n\t\b\f\r',
+        '\u001f\u007f',
+        '\ud800',
+        '\udc00x',
+        '\u2028\u2029',
+        {},
+        [],
+        { k: 'v' },
+        { 'a"b': 'c\nd' },
+        { a: ['x', 'y', { b: 'z' }], c: {} },
+        [[], [[]], {}],
+        JSON.parse('{"__proto__":"x"}'),
+        { content: [{ type: 'text', text: 'hello\u0000' }] },
+      ]) {
+        const size = jsonBytes(value);
+        expect(smallestBudget(value)).toBe(size);
+        expect(exceeded(value, { maxBytes: size })).toBeUndefined();
+        expect(exceeded(value, { maxBytes: size - 1 })).toBe('bytes');
+      }
+    });
+
+    it('refuses the NUL-text result whose raw bytes fit but whose JSON is six times larger', () => {
+      const MiB4 = 4 * 1024 * 1024;
+      const result = {
+        content: [{ type: 'text', text: '\u0000'.repeat(MiB4 - 19) }],
+      };
+      expect(exceeded(result)).toBe('bytes');
+      // The same size in ordinary characters is the legitimate case and is admitted.
+      expect(
+        exceeded({ content: [{ type: 'text', text: 'a'.repeat(MiB4 - 64) }] }),
+      ).toBeUndefined();
+    });
+
+    it('never underestimates a number, boolean, null or absent value', () => {
+      for (const value of [
+        0,
+        -1,
+        0.1 + 0.2,
+        5e-324,
+        -1.7976931348623157e308,
+        1e21,
+        Number.MAX_SAFE_INTEGER,
+        true,
+        false,
+        null,
+        [undefined, undefined],
+        [0.1 + 0.2, -1.7976931348623157e308, false, null],
+        { a: 1e21, b: false, c: null, d: [-5e-324] },
+      ])
+        expect(smallestBudget(value)).toBeGreaterThanOrEqual(jsonBytes(value));
+    });
+
+    it('never underestimates binary values and charges at least their retained length', () => {
+      for (const length of [1, 10, 11, 1000, 100_000])
+        expect(smallestBudget(new Uint8Array(length))).toBeGreaterThanOrEqual(
+          jsonBytes(new Uint8Array(length)),
+        );
+      expect(smallestBudget(new Float64Array(5))).toBeGreaterThanOrEqual(
+        jsonBytes(new Float64Array(5)),
+      );
+      expect(smallestBudget(new ArrayBuffer(11))).toBeGreaterThanOrEqual(11);
+      expect(exceeded(new Uint8Array(1000), { maxBytes: 100 })).toBe('bytes');
+    });
+
+    it('refuses a string far past the budget without measuring it', () => {
+      expect(exceeded('x'.repeat(10_000), { maxBytes: 100 })).toBe('bytes');
+    });
   });
 
   it('counts values and refuses past the node budget', () => {
@@ -121,6 +199,18 @@ describe('toolResultLimits', () => {
     for (const bad of [0, -1, 1.5, Number.NaN, Infinity])
       expect(() => toolResultLimits({ maxNodes: bad })).toThrow(RangeError);
   });
+
+  it('resolves custom limits to a frozen object that cannot be raised afterwards', () => {
+    const supplied = { maxBytes: 10 };
+    const resolved = toolResultLimits(supplied);
+    expect(Object.isFrozen(resolved)).toBe(true);
+    expect(() => {
+      (resolved as { maxBytes: number }).maxBytes = 2 ** 30;
+    }).toThrow(TypeError);
+    supplied.maxBytes = 2 ** 30;
+    expect(resolved.maxBytes).toBe(10);
+    expect(Object.isFrozen(DEFAULT_TOOL_RESULT_LIMITS)).toBe(true);
+  });
 });
 
 describe('ToolResultRefused', () => {
@@ -129,5 +219,17 @@ describe('ToolResultRefused', () => {
     expect(refusal).toBeInstanceOf(TypeError);
     expect(refusal.message).toBe('The tool result is larger than 10 bytes.');
     expect(refusal.exceeded).toBe('bytes');
+  });
+
+  it('exposes its own frozen copy of the limits, whatever object it was given', () => {
+    const mutable: ToolResultLimits = { ...DEFAULT_TOOL_RESULT_LIMITS };
+    const refusal = new ToolResultRefused('bytes', mutable);
+    expect(refusal.limits).not.toBe(mutable);
+    expect(Object.isFrozen(refusal.limits)).toBe(true);
+    expect(() => {
+      (refusal.limits as { maxBytes: number }).maxBytes = 2 ** 30;
+    }).toThrow(TypeError);
+    (mutable as { maxBytes: number }).maxBytes = 1;
+    expect(refusal.limits.maxBytes).toBe(DEFAULT_TOOL_RESULT_LIMITS.maxBytes);
   });
 });

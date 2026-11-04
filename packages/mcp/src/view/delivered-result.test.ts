@@ -133,6 +133,15 @@ describe('deliveredResultFromToolResult admission', () => {
     );
   });
 
+  it('counts the serialized size: text whose raw bytes fit but whose JSON escapes do not is refused', () => {
+    const nul = {
+      content: [{ type: 'text', text: '\u0000'.repeat(4 * 1024 * 1024 - 19) }],
+    };
+    expect(() => deliveredResultFromToolResult(malformed(nul))).toThrow(
+      /larger than 4194304 bytes/,
+    );
+  });
+
   it('refuses a result with more content blocks, values, depth or array items than the budget', () => {
     const blocks = Array.from({ length: 1001 }, () => ({ type: 'x' }));
     expect(() =>

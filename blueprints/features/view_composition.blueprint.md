@@ -16,6 +16,10 @@ A notes application should decide which note an Archive button affects without a
 
 All seven packages are published at [`0.7.7-rc.1`](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/v0.7.7-rc.1), available under npm `next` on 27 October 2026. The [installation guide](../../docs/public-install.md) owns the public recipe. The implemented and qualified composition surface above is available in either stack. The [source generator](application_setup.blueprint.md) currently offers Lit templates only; that is a tooling limit, separate from React stack support. Publication does not establish adoption by the motivating application or a new named-host run; those require the exact application and built resource. Qualification covers MCP delivery and the behaviors listed below, not equivalence across every renderer feature or runtime.
 
+**Amendment under review: bounded admission of host results.** This is a candidate amendment to the approved baseline [`7a78e7eae99285174a11c62d43c1f0035658ec96`](https://github.com/MachineWisdomAI/saga-a2ui/blob/7a78e7eae99285174a11c62d43c1f0035658ec96/blueprints/features/view_composition.blueprint.md), which stays the approved design and keeps every other part of its contract unchanged. The amendment is the [Admission of host results](#admission-of-host-results) section: a view counts what a host delivers against one finite budget before it holds, walks, maps or forwards it. Approval mapping, stated as what exists and no more: delivery of a repair for the unbounded retention and mapping of host results is an existing operator-approved delivery scope. No human has yet reviewed or attested this amendment text, and neither the change nor its tests establish approval; the coordinating maintainer (Captain @timeleft--) decides whether that scope covers this exact contract and records the decision here, or approves a new revision. Reviewed candidate: [PR #387](https://github.com/MachineWisdomAI/saga-a2ui/pull/387), whose pull-request review pins the exact reviewed head; a status edit cannot contain the SHA of the commit that carries it. Landed SHA: pending. After the merge, the delivery coordinator, Captain @timeleft--, records **Blueprint `<reviewed revision>` implemented at `MachineWisdomAI/saga-a2ui@<landed SHA>`** in a status-only update, with the exact-head review and verification links. Until then, record neither implementation nor design approval for this amendment.
+
+Residual risk accepted with the amendment, and its trigger: the browser and the MCP Apps bridge have already received and validated a host message when the view's listener runs, so the budget bounds what the SDK keeps, walks, copies and forwards, not what the host sends; the engine may allocate enumeration metadata for an already-materialized, very wide object before the first key is read; and startup still waits for the handshake and `readyWhen` with no deadline, now holding at most one admitted result and one admitted input. Reconsider the limits when the host contract provides an independently enforced smaller limit.
+
 ## Ownership and example
 
 Every versioned package shares one major.minor; patch may vary, and the version check enforces it. The retired integration pin remains historical; ordinary changes follow the [version policy](../../docs/version-policy.md).
@@ -88,6 +92,23 @@ Schema, fallback and wording belong to the application's reader, and the SDK enf
 - Present but malformed structured data, or an empty answer, rejects even beside fallback text.
 
 The stack owns what follows: if the reader rejects or `present` rejects its content, the stack calls `clear()` to remove the stale card, image consent and link state, then shows the rejection text, or `texts.problem` when there is none. A reader that throws is reported with phase `result` and gets the same clearing and `texts.problem`; so does a throwing result map. The next valid result recovers.
+
+## Admission of host results
+
+*Amendment candidate; see [Status](#status) for its approval state.*
+
+Before this amendment, `runToolResultView` held the latest result and input of a starting view with no size check, and `deliveredResultFromToolResult` mapped every block with no quota. Now the view counts each result and input before it is held, walked, copied or forwarded, and a value over the budget is never held or delivered:
+
+```ts
+runToolResultView({app, transport, onToolResult, onToolResultRefused, resultLimits: {maxBytes: 1_000_000}, onTeardown});
+```
+
+- **Budget.** A delivered value is counted by an iterative walk that copies nothing and stops at the first limit crossed. The defaults are 4 MiB, 200000 values, 64 levels of nesting, 10000 items in any array and 1000 content blocks; `resultLimits` chooses other positive whole numbers, and others throw `RangeError` before anything connects. The limits object, including the one a refusal exposes, is frozen, so no callback can raise the budget for later results.
+- **Bytes are serialized size.** `maxBytes` bounds the UTF-8 length of the value's JSON text and never underestimates it. Strings, property names and structure are counted exactly, so text full of characters that JSON escapes costs its escaped length (a NUL costs six bytes, not one). A number, boolean or null is charged the most its text can take, and binary values are charged conservatively. A value that is not plain data (a `bigint`, symbol, function, `Map`, `Set`, `Date` or class instance) is refused as unsupported.
+- **Refusal.** An over-budget result goes to the optional `onToolResultRefused`, or to `onError` with phase `result` when none is set; an over-budget input is reported with phase `input`. The latest result decides while the view starts, so a refusal replaced by a later admitted result is never reported. The refusal names the limit and never repeats any content. `deliveredResultFromToolResult` throws the same `ToolResultRefused`, a `TypeError`.
+- **Stacks.** Both stacks pass `onToolResultRefused`, so a refused result clears the card, image consent and link state, then shows `texts.problem`, and the definition's reader is not called. The next admitted result recovers.
+
+The amendment does not make a host's bytes smaller or cheaper to receive, does not add a startup deadline and does not validate meaning; schema and wording stay with the application's reader.
 
 ## Startup and failure
 

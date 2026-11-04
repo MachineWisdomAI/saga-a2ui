@@ -80,6 +80,8 @@ interface RunOptions {
   readonly resultLimits?: Partial<ToolResultLimits>;
   /** Installs `onToolResultRefused`, which logs `refused:<limit>`. */
   readonly withRefusal?: boolean;
+  /** Installs `onToolResultRefused` with this callback, after logging `refused:<limit>`. */
+  readonly onRefusal?: (refusal: ToolResultRefused) => void;
 }
 
 async function startRun(options: RunOptions = {}): Promise<Run> {
@@ -118,9 +120,13 @@ async function startRun(options: RunOptions = {}): Promise<Run> {
           log.push(`input:${JSON.stringify(input.arguments)}`)
       : undefined,
     resultLimits: options.resultLimits,
-    onToolResultRefused: options.withRefusal
-      ? (refusal) => log.push(`refused:${refusal.exceeded}`)
-      : undefined,
+    onToolResultRefused:
+      options.withRefusal || options.onRefusal
+        ? (refusal) => {
+            log.push(`refused:${refusal.exceeded}`);
+            options.onRefusal?.(refusal);
+          }
+        : undefined,
     onHostContext: (context, hostName) => {
       log.push(`context:${context?.theme ?? '-'}:${hostName ?? '-'}`);
       options.onHostContext?.(context, hostName, log);
@@ -771,6 +777,29 @@ describe('the admission budget for what the host delivers', () => {
       .poll(() => run.log.slice(1).map((line) => line.slice(0, 15)))
       .toEqual(['result:ordinary', `result:${'y'.repeat(8)}`]);
     expect(run.errors).toEqual([]);
+  });
+
+  it('keeps the chosen budget when a refusal callback tries to raise the limits it was handed', async () => {
+    const attempts: string[] = [];
+    const run = await startRun({
+      resultLimits: small,
+      onRefusal: (refusal) => {
+        try {
+          (refusal.limits as { maxBytes: number }).maxBytes = 2 ** 30;
+          attempts.push('raised');
+        } catch {
+          attempts.push('refused');
+        }
+      },
+    });
+    await run.view.ready;
+    await run.bridge.sendToolResult(oversize());
+    await run.bridge.sendToolResult(oversize('z'.repeat(4096)));
+    await run.bridge.sendToolResult(result('fits'));
+    await expect
+      .poll(() => run.log.slice(1))
+      .toEqual(['refused:bytes', 'refused:bytes', 'result:fits']);
+    expect(attempts).toEqual(['refused', 'refused']);
   });
 
   it('refuses limits that are not positive whole numbers before connecting', () => {

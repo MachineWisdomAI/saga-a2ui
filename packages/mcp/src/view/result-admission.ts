@@ -3,10 +3,21 @@
 // this walk has counted them and found them within finite limits. The walk allocates nothing
 // proportional to its input: it is iterative (depth never costs stack), reads each array and
 // object once, and stops at the first limit crossed.
+//
+// The byte limit bounds the SERIALIZED size: the number of UTF-8 bytes of the value's JSON text
+// (`JSON.stringify`), counted as an upper bound that never underestimates it. Strings, property
+// names and the structure around them (braces, brackets, quotes, colons, commas) are counted
+// exactly, so a text full of characters that JSON escapes (a quote, a backslash, a control
+// character) costs what its escaped form costs. A number, boolean or null is charged the most its
+// text can take, which keeps the count cheap and independent of how the engine prints a number.
 
 /** Limits on one delivered result or input. Each is a positive safe integer. */
 export interface ToolResultLimits {
-  /** UTF-8 bytes of every string and property name, plus the length of binary values. */
+  /**
+   * An upper bound on the UTF-8 length of the value's JSON text: exact for strings, property names
+   * and structure, the most a number or literal can take, and a conservative charge for binary
+   * values (see {@link admitToolResult}).
+   */
   readonly maxBytes: number;
   /** Values visited (objects, arrays and primitives), counting a shared value each time. */
   readonly maxNodes: number;
@@ -45,16 +56,25 @@ export type ToolResultAdmission =
  * crossed and never repeats any of the content.
  */
 export class ToolResultRefused extends TypeError {
+  /** The limits that applied: a frozen copy, so a callback holding it cannot change the budget. */
+  readonly limits: ToolResultLimits;
+
   constructor(
     readonly exceeded: ToolResultExceeded,
-    readonly limits: ToolResultLimits,
+    limits: ToolResultLimits,
   ) {
     super(describeExceeded(exceeded, limits));
     this.name = 'ToolResultRefused';
+    this.limits = Object.isFrozen(limits)
+      ? limits
+      : Object.freeze({ ...limits });
   }
 }
 
-/** Throws, naming the limit, unless every supplied limit is a positive safe integer. */
+/**
+ * Throws, naming the limit, unless every supplied limit is a positive safe integer. The result is
+ * frozen, so a holder of it (a refusal handler, for one) cannot raise the budget later.
+ */
 export function toolResultLimits(
   supplied?: Partial<ToolResultLimits>,
 ): ToolResultLimits {
@@ -64,7 +84,7 @@ export function toolResultLimits(
     if (!Number.isSafeInteger(value) || value < 1)
       throw new RangeError(`${name} must be a positive integer.`);
   }
-  return limits;
+  return Object.freeze(limits);
 }
 
 function describeExceeded(
@@ -87,24 +107,52 @@ function describeExceeded(
   }
 }
 
-/** Exact UTF-8 length, without allocating. Callers bound the string's length first. */
-function utf8Length(text: string): number {
-  let bytes = 0;
+/**
+ * Exact UTF-8 length of `text` as a JSON string literal, quotes included, without allocating. It
+ * follows `JSON.stringify`: a quote, a backslash and the controls \b \f \n \r \t take two bytes,
+ * any other control character and any lone surrogate takes six (\uXXXX), and everything else
+ * takes its UTF-8 length. Callers bound the string's length first.
+ */
+function jsonStringBytes(text: string): number {
+  let bytes = 2;
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index);
-    if (unit < 0x80) bytes += 1;
-    else if (unit < 0x800) bytes += 2;
-    else if (
-      unit >= 0xd800 &&
-      unit <= 0xdbff &&
-      (text.charCodeAt(index + 1) & 0xfc00) === 0xdc00
-    ) {
-      bytes += 4;
-      index += 1;
-    } else bytes += 3;
+    if (unit < 0x80) {
+      if (unit === 0x22 || unit === 0x5c) bytes += 2;
+      else if (unit >= 0x20) bytes += 1;
+      else if (
+        unit === 8 ||
+        unit === 9 ||
+        unit === 10 ||
+        unit === 12 ||
+        unit === 13
+      )
+        bytes += 2;
+      else bytes += 6;
+    } else if (unit < 0x800) bytes += 2;
+    else if (unit >= 0xd800 && unit <= 0xdbff) {
+      if ((text.charCodeAt(index + 1) & 0xfc00) === 0xdc00) {
+        bytes += 4;
+        index += 1;
+      } else bytes += 6;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) bytes += 6;
+    else bytes += 3;
   }
   return bytes;
 }
+
+/** The longest text of a finite number (`-1.7976931348623157e+308`). */
+const NUMBER_BYTES = 24;
+/** The longest literal (`false`); `null` and an absent array item take less. */
+const LITERAL_BYTES = 5;
+/**
+ * Charged for each byte of a typed array or `DataView`. `JSON.stringify` writes a typed array as an
+ * object of its elements (`{"0":1,"1":2}`), each at most a quoted index, a colon, a comma and a
+ * number, 38 bytes for an element, so charging this much per byte of storage cannot underestimate
+ * it for any element size. An `ArrayBuffer` is charged its length: its JSON text is `{}`, but the
+ * bytes are retained.
+ */
+const BINARY_VIEW_BYTES_PER_BYTE = 38;
 
 const hasOwn = (value: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -151,12 +199,17 @@ export function admitToolResult(
     ok: false,
     exceeded,
   });
-  /** Charges `text` as bytes; false when that crosses the limit. */
-  const chargeText = (text: string): boolean => {
-    // A string takes at least one byte per UTF-16 unit, so a long one is refused unmeasured.
-    if (text.length > limits.maxBytes - bytes) return false;
-    bytes += utf8Length(text);
+  /** Charges `count` serialized bytes; false when that crosses the limit. */
+  const charge = (count: number): boolean => {
+    bytes += count;
     return bytes <= limits.maxBytes;
+  };
+  /** Charges `text` as a JSON string; false when that crosses the limit. */
+  const chargeText = (text: string): boolean => {
+    // A string literal takes at least one byte per UTF-16 unit and its quotes, so a long one is
+    // refused unmeasured.
+    if (text.length + 2 > limits.maxBytes - bytes) return false;
+    return charge(jsonStringBytes(text));
   };
   /** Counts and queues a child value; the limit it crossed, if any. */
   const queue = (
@@ -177,17 +230,22 @@ export function admitToolResult(
       if (!chargeText(value)) return refuse('bytes');
       continue;
     }
-    if (
-      typeof value === 'number' ||
-      typeof value === 'boolean' ||
-      value === null ||
-      value === undefined
-    )
+    if (typeof value === 'number') {
+      if (!charge(NUMBER_BYTES)) return refuse('bytes');
       continue;
+    }
+    if (typeof value === 'boolean' || value === null || value === undefined) {
+      if (!charge(LITERAL_BYTES)) return refuse('bytes');
+      continue;
+    }
     if (typeof value !== 'object') return refuse('unsupported');
-    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-      bytes += value.byteLength;
-      if (bytes > limits.maxBytes) return refuse('bytes');
+    if (ArrayBuffer.isView(value)) {
+      if (!charge(value.byteLength * BINARY_VIEW_BYTES_PER_BYTE))
+        return refuse('bytes');
+      continue;
+    }
+    if (value instanceof ArrayBuffer) {
+      if (!charge(value.byteLength)) return refuse('bytes');
       continue;
     }
     if (Array.isArray(value)) {
@@ -195,6 +253,8 @@ export function admitToolResult(
       if (contentList && length > limits.maxContentBlocks)
         return refuse('content-blocks');
       if (length > limits.maxArrayItems) return refuse('array-items');
+      // Brackets, and a comma between neighbours.
+      if (!charge(2 + Math.max(length - 1, 0))) return refuse('bytes');
       for (let index = 0; index < length; index += 1) {
         const exceeded = queue(value[index], depth + 1);
         if (exceeded !== undefined) return refuse(exceeded);
@@ -202,9 +262,14 @@ export function admitToolResult(
       continue;
     }
     if (!isPlainObject(value)) return refuse('unsupported');
+    // Braces; then for each member its key, a colon and, between neighbours, a comma.
+    if (!charge(2)) return refuse('bytes');
+    let first = true;
     for (const key in value) {
       if (!chargeText(key)) return refuse('bytes');
       if (!hasOwn(value, key)) continue;
+      if (!charge(first ? 1 : 2)) return refuse('bytes');
+      first = false;
       const exceeded = queue(
         (value as Record<string, unknown>)[key],
         depth + 1,
