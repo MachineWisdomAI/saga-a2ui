@@ -115,6 +115,41 @@ describe('admitToolResult', () => {
       expect(exceeded(new Uint8Array(1000), { maxBytes: 100 })).toBe('bytes');
     });
 
+    it('charges an empty or one-byte binary value at least the two bytes of its JSON text', () => {
+      const small: [string, unknown][] = [
+        ['empty Uint8Array', new Uint8Array(0)],
+        ['empty Float64Array', new Float64Array(0)],
+        ['empty DataView', new DataView(new ArrayBuffer(0))],
+        ['empty ArrayBuffer', new ArrayBuffer(0)],
+        ['one-byte Uint8Array', new Uint8Array(1)],
+        ['one-byte DataView', new DataView(new ArrayBuffer(1))],
+        ['one-byte ArrayBuffer', new ArrayBuffer(1)],
+      ];
+      for (const [name, value] of small) {
+        // JSON.stringify writes each of them as at least `{}`.
+        expect(jsonBytes(value), name).toBeGreaterThanOrEqual(2);
+        expect(smallestBudget(value), name).toBeGreaterThanOrEqual(
+          jsonBytes(value),
+        );
+        // A budget of one byte admits none of them.
+        expect(exceeded(value, { maxBytes: 1 }), name).toBe('bytes');
+      }
+    });
+
+    it('is exact at the boundary for an empty binary value and still admits a legitimate one', () => {
+      expect(exceeded(new Uint8Array(0), { maxBytes: 2 })).toBeUndefined();
+      expect(exceeded(new Uint8Array(0), { maxBytes: 1 })).toBe('bytes');
+      expect(exceeded(new ArrayBuffer(0), { maxBytes: 2 })).toBeUndefined();
+      expect(exceeded(new ArrayBuffer(1), { maxBytes: 1 })).toBe('bytes');
+      expect(
+        exceeded({ data: new Uint8Array(0) }, { maxBytes: 11 }),
+      ).toBeUndefined();
+      expect(exceeded({ data: new Uint8Array(0) }, { maxBytes: 10 })).toBe(
+        'bytes',
+      );
+      expect(exceeded(new Uint8Array(8), { maxBytes: 4096 })).toBeUndefined();
+    });
+
     it('refuses a string far past the budget without measuring it', () => {
       expect(exceeded('x'.repeat(10_000), { maxBytes: 100 })).toBe('bytes');
     });

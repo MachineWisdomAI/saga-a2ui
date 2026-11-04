@@ -150,9 +150,12 @@ const LITERAL_BYTES = 5;
  * object of its elements (`{"0":1,"1":2}`), each at most a quoted index, a colon, a comma and a
  * number, 38 bytes for an element, so charging this much per byte of storage cannot underestimate
  * it for any element size. An `ArrayBuffer` is charged its length: its JSON text is `{}`, but the
- * bytes are retained.
+ * bytes are retained. Neither is charged less than `EMPTY_OBJECT_BYTES`, the `{}` that an empty or
+ * one-byte value still serializes to.
  */
 const BINARY_VIEW_BYTES_PER_BYTE = 38;
+/** The braces of `{}`, the least that a binary value's JSON text takes. */
+const EMPTY_OBJECT_BYTES = 2;
 
 const hasOwn = (value: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -240,12 +243,20 @@ export function admitToolResult(
     }
     if (typeof value !== 'object') return refuse('unsupported');
     if (ArrayBuffer.isView(value)) {
-      if (!charge(value.byteLength * BINARY_VIEW_BYTES_PER_BYTE))
+      if (
+        !charge(
+          Math.max(
+            value.byteLength * BINARY_VIEW_BYTES_PER_BYTE,
+            EMPTY_OBJECT_BYTES,
+          ),
+        )
+      )
         return refuse('bytes');
       continue;
     }
     if (value instanceof ArrayBuffer) {
-      if (!charge(value.byteLength)) return refuse('bytes');
+      if (!charge(Math.max(value.byteLength, EMPTY_OBJECT_BYTES)))
+        return refuse('bytes');
       continue;
     }
     if (Array.isArray(value)) {
