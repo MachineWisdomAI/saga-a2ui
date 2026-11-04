@@ -282,9 +282,11 @@ composite action's `runs`, or of a document's root mapping. A key named `uses`
 anywhere else, such as a `with:` input or an `env:` variable, is data and is
 never reported, so it needs no quoting or renaming. It fails closed where it
 cannot see the executable structure: a `uses` value that is an alias, block
-scalar, collection, non-string or empty; an alias or a YAML merge key (`<<`) in
-place of a step, job, `steps`, `jobs` or `runs` node or key; and any text the
-parser reports as an error or a warning.
+scalar, collection, non-string or empty; an alias or a YAML merge key (`<<`,
+including the explicitly tagged `!!merge <<` forms) in place of a step, job,
+`steps`, `jobs` or `runs` node or key; any other mapping key of those nodes that
+is not a string scalar; and any text the parser reports as an error or a
+warning.
 
 The scope is a YAML 1.2 reading of the files. It is not shown to match the
 reader GitHub Actions runs, so the check rejects unusual constructs rather than

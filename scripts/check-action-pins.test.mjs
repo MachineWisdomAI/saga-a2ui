@@ -306,6 +306,67 @@ test('rejects ambiguous executable structure', () => {
     assert.ok(count(text) >= 1, text);
 });
 
+test('rejects an explicitly tagged merge key in every spelling', () => {
+  // The parser reads `!!merge <<` as a symbol-valued key, not the string
+  // `<<`; the execution-compatible reading still inherits the anchored step.
+  const anchor = 'shared: &step\n  uses: actions/checkout@v4\n';
+  const spellings = [
+    "!!merge '<<'",
+    '!!merge <<',
+    "!<tag:yaml.org,2002:merge> '<<'",
+    '!<tag:yaml.org,2002:merge> <<',
+    '!!merge "<<"',
+  ];
+  for (const key of spellings) {
+    for (const text of [
+      `${anchor}${steps(`- ${key}: *step\n`)}`,
+      `${anchor}${steps(`- ${key}: [*step]\n`)}`,
+      `${anchor}${steps(`- { ${key}: *step }\n`)}`,
+      `${anchor}${steps(`- ? ${key}\n  : *step\n`)}`,
+      `${anchor}${job(`${key}: *step\n`)}`,
+      `${anchor}jobs:\n  ${key}: *step\n`,
+      `${anchor}${key}: *step\n`,
+      `${anchor}${action(`- ${key}: *step\n`)}`,
+    ]) {
+      const [finding] = findings(text);
+      assert.ok(finding, text);
+      assert.match(finding.reason, /merge key/, text);
+    }
+  }
+});
+
+test('rejects a mapping key that is not a string in executable nodes', () => {
+  for (const text of [
+    steps('- 1: x\n  uses: actions/checkout@v4\n'),
+    steps('- null: x\n'),
+    steps('- ? [uses]\n  : actions/checkout@v4\n'),
+    steps('- ? { a: b }\n  : x\n'),
+    steps('- !!int 5: x\n'),
+    steps('- true: x\n'),
+    job('1.5: x\nsteps: []\n'),
+    'jobs:\n  1: {}\n',
+    '2: x\n',
+  ])
+    assert.ok(
+      findings(text).some((finding) => /not a string/.test(finding.reason)),
+      text,
+    );
+});
+
+test('keeps string keys and tagged string keys readable', () => {
+  // Ordinary, quoted and string-tagged `uses` keys stay accepted, as do
+  // non-string keys outside executable nodes (a `with:` mapping). A
+  // string-tagged `<<` is still refused as a merge-shaped key.
+  const pin = 'actions/checkout@' + '0'.repeat(40);
+  for (const text of [
+    steps(`- 'uses': ${pin}\n`),
+    steps(`- !!str uses: ${pin}\n`),
+    steps(`- name: x\n  with: { 1: a, null: b }\n  uses: ${pin}\n`),
+  ])
+    assert.equal(count(text), 0, text);
+  assert.ok(count(steps('- !!str <<: *step\n')) >= 1);
+});
+
 test('enforcement does not depend on key case', () => {
   for (const text of [
     steps('- Uses: actions/checkout@v4\n'),

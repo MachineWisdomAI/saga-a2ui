@@ -35,7 +35,10 @@ import {
 // statically: a `uses` value that is not one literal string (an alias, a block
 // scalar, a collection, a number, or nothing); an alias or a merge key (`<<`)
 // where a step, job, `steps`, `jobs` or `runs` node or key is expected; and
-// any text the parser reports as an error or a warning.
+// any text the parser reports as an error or a warning. A merge key is refused
+// in every spelling (`<<`, `'<<'`, and the explicitly tagged `!!merge <<` and
+// `!<tag:yaml.org,2002:merge> <<`), and so is any other mapping key of an
+// executable node that is not a string scalar (a number, null, a collection).
 //
 // Scope: this proves the policy against a YAML 1.2 reading of the files. It
 // does not claim identical behavior to the YAML reader GitHub Actions runs; a
@@ -69,6 +72,10 @@ export function violation(ref) {
     : `uses mutable revision '${revision}' instead of a full 40-character commit SHA`;
 }
 
+// A key explicitly tagged `!!merge` (any spelling of the tag) is read by the
+// parser as a symbol, not the string `<<`, so a string comparison misses it.
+const isMergeSymbol = (key) => isScalar(key) && typeof key.value === 'symbol';
+
 /** Return a mapping key's comparable name, or null when it is not a string scalar. */
 function keyName(key) {
   return isScalar(key) && typeof key.value === 'string'
@@ -101,24 +108,43 @@ export function scan(name, text) {
     if (reason) report(line, value.value, reason);
   }
 
+  // Return the comparable name of an executable mapping's key, or null after
+  // reporting a key the checker cannot read: an alias, a merge key in any
+  // spelling (plain, quoted or explicitly tagged) or any other key that is not
+  // a string scalar.
+  function readKey(pair, node) {
+    const line = lineOf(pair.key, lineOf(node));
+    if (isAlias(pair.key)) {
+      report(
+        line,
+        '',
+        'uses an alias as a mapping key, which cannot be checked',
+      );
+      return null;
+    }
+    const key = keyName(pair.key);
+    if (key === '<<' || isMergeSymbol(pair.key)) {
+      report(line, '', 'uses a YAML merge key, which cannot be checked');
+      return null;
+    }
+    if (key === null) {
+      report(
+        line,
+        '',
+        'uses a mapping key that is not a string, which cannot be checked',
+      );
+      return null;
+    }
+    return key;
+  }
+
   // Walk the pairs of an executable mapping. `handlers` maps a lowercase key
   // to what to do with its value; `uses` always checks the reference.
   function walkMapping(node, handlers) {
     for (const pair of node.items) {
-      const line = lineOf(pair.key, lineOf(node));
-      if (isAlias(pair.key)) {
-        report(
-          line,
-          '',
-          'uses an alias as a mapping key, which cannot be checked',
-        );
-        continue;
-      }
-      const key = keyName(pair.key);
-      if (key === '<<') {
-        report(line, '', 'uses a YAML merge key, which cannot be checked');
-      } else if (key === 'uses') {
-        checkReference(pair.value, line);
+      const key = readKey(pair, node);
+      if (key === 'uses') {
+        checkReference(pair.value, lineOf(pair.key, lineOf(node)));
       } else if (key && handlers[key]) {
         handlers[key](pair.value);
       }
@@ -148,15 +174,7 @@ export function scan(name, text) {
     if (isAlias(node)) return unreadable(node, 'jobs');
     if (!isMap(node)) return;
     for (const pair of node.items) {
-      const line = lineOf(pair.key, lineOf(node));
-      if (isAlias(pair.key))
-        report(
-          line,
-          '',
-          'uses an alias as a mapping key, which cannot be checked',
-        );
-      else if (keyName(pair.key) === '<<')
-        report(line, '', 'uses a YAML merge key, which cannot be checked');
+      readKey(pair, node);
       job(pair.value);
     }
   }
