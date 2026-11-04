@@ -660,7 +660,7 @@ describe('Fetch MCP hosting request lifetime', () => {
   });
 
   /** A body that counts how often it is pulled and cancelled, and can be fed after the fact. */
-  function countedBody(): {
+  function countedBody(options: { readonly stuckCancel?: boolean } = {}): {
     readonly request: Request;
     readonly stream: ReadableStream<Uint8Array>;
     readonly counts: () => { pulls: number; cancels: number };
@@ -679,6 +679,10 @@ describe('Fetch MCP hosting request lifetime', () => {
       },
       cancel() {
         cancels += 1;
+        // A supported source may never settle its own cancellation.
+        return options.stuckCancel === true
+          ? new Promise<void>(() => undefined)
+          : undefined;
       },
     });
     const request = new Request(URL_OF('/mcp'), {
@@ -715,6 +719,23 @@ describe('Fetch MCP hosting request lifetime', () => {
     expect(settled.cancels).toBe(1);
     expect(probe.stream.locked).toBe(false);
     // Bytes that arrive after the answer are not pulled, and closing the app changes nothing.
+    probe.feed(LIST);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await app.close();
+    expect(probe.counts()).toEqual(settled);
+    expect(probe.stream.locked).toBe(false);
+  });
+
+  it('unlocks the body when the stream source never settles its cancellation', async () => {
+    const { app, lifetimes } = harness({ budgets: { requestMs: 25 } });
+    const probe = countedBody({ stuckCancel: true });
+    const response = await answeredWithin(app, probe.request, 2_000);
+    expect(response?.status).toBe(408);
+    expect(lifetimes).toHaveLength(0);
+    const settled = probe.counts();
+    expect(settled.cancels).toBe(1);
+    // The lock does not wait for the source's cancellation, which here never settles.
+    expect(probe.stream.locked).toBe(false);
     probe.feed(LIST);
     await new Promise((resolve) => setTimeout(resolve, 50));
     await app.close();

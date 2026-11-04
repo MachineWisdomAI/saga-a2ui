@@ -257,10 +257,12 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
     const end = (reason: unknown): Promise<void> => {
       if (ended) return Promise.resolve();
       ended = true;
-      return source.cancel(reason).then(
-        () => source.releaseLock(),
-        () => source.releaseLock(),
-      );
+      // Cancelling closes the stream at once, which settles a waiting read; the underlying
+      // source's own cancellation may take arbitrarily long or never settle. The lock is released
+      // here, independently of that, and a rejection is observed so it is never unhandled.
+      const cancelled = source.cancel(reason).catch(() => undefined);
+      source.releaseLock();
+      return cancelled;
     };
     scope.signal.addEventListener(
       'abort',
