@@ -110,12 +110,23 @@ export function writeZip(entries: readonly ZipEntry[]): Buffer {
   return Buffer.concat([...locals, directory, end]);
 }
 
+/** Optional bounds for reading an archive that is not trusted to be small. */
+export interface ZipReadLimits {
+  /** The most entries the archive may declare. */
+  readonly maxEntries?: number;
+  /** The most uncompressed bytes the archive may declare in total. */
+  readonly maxBytes?: number;
+}
+
 /**
  * Reads every entry of a ZIP, refusing what an extractor must not follow: a path outside the root,
  * a repeated path, a directory entry, a link, an encrypted or unsupported entry, or data that does
  * not match its recorded checksum and size.
  */
-export function readZip(bytes: Uint8Array): ZipEntry[] {
+export function readZip(
+  bytes: Uint8Array,
+  limits: ZipReadLimits = {},
+): ZipEntry[] {
   const archive = Buffer.from(bytes);
   const endAt = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   if (endAt < 0 || archive.length - endAt < 22)
@@ -123,6 +134,11 @@ export function readZip(bytes: Uint8Array): ZipEntry[] {
       'The file is not a ZIP archive: its end record is missing.',
     );
   const count = archive.readUInt16LE(endAt + 10);
+  if (limits.maxEntries !== undefined && count > limits.maxEntries)
+    throw new ZipError(
+      `The archive holds more than ${limits.maxEntries} files.`,
+    );
+  let remaining = limits.maxBytes ?? Number.POSITIVE_INFINITY;
   let cursor = archive.readUInt32LE(endAt + 16);
   const entries: ZipEntry[] = [];
   const seen = new Set<string>();
@@ -173,10 +189,24 @@ export function readZip(bytes: Uint8Array): ZipEntry[] {
     const raw = archive.subarray(dataAt, dataAt + compressed);
     if (raw.length !== compressed)
       throw new ZipError(`The data of ${entryPath} is truncated.`);
+    // The recorded size is checked against the budget before anything is inflated, and inflation
+    // is stopped at that size, so a small archive cannot expand into memory.
+    if (size > remaining)
+      throw new ZipError(
+        `The archive expands to more than ${limits.maxBytes} bytes.`,
+      );
+    remaining -= size;
     let data: Buffer;
     if (method === 0) data = raw;
-    else if (method === 8) data = inflateRawSync(raw);
-    else
+    else if (method === 8) {
+      try {
+        data = inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) });
+      } catch {
+        throw new ZipError(
+          `${entryPath} does not inflate to its recorded size.`,
+        );
+      }
+    } else
       throw new ZipError(
         `${entryPath} uses compression method ${method}, which is not supported.`,
       );
