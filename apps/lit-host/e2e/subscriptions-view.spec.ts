@@ -6,6 +6,7 @@ import {
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import {
   createDevelopmentVerifier,
+  DEV_RESOURCE,
   DEV_ACCOUNTS,
   DEV_TOKENS,
 } from '../src/mcp/dev-auth.js';
@@ -40,6 +41,7 @@ test.beforeAll(async () => {
     catalog: { find: () => undefined },
     port: 0,
     subscriptions: {
+      resource: DEV_RESOURCE,
       viewHtml,
       verifier: createDevelopmentVerifier(),
       backend: {
@@ -348,6 +350,7 @@ test('a subscriber recovers from empty, failed and cleared wire results', async 
     catalog: { find: () => undefined },
     port: 0,
     subscriptions: {
+      resource: DEV_RESOURCE,
       viewHtml: await readFile(
         builtUrl('subscriptions-view/subscriptions.html'),
         'utf8',

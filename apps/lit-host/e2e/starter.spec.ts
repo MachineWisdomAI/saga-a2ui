@@ -22,6 +22,8 @@ import type { HostedResource } from './host-fixture/host.js';
 // over the fixture's real AppBridge. The local host fixture is not evidence of any actual
 // assistant host. The identities below belong to this specification; the starter has none.
 
+const RESOURCE = new URL('https://starter.example/account/mcp');
+
 interface Entry {
   startListener(options: ListenerOptions): Promise<Listener>;
   readonly ACCOUNT_SCOPE: string;
@@ -62,11 +64,13 @@ for (const template of QUALIFIED_STARTERS) {
         clientId: 'browser-spec',
         scopes: [entry.ACCOUNT_SCOPE],
         expiresAt: 9_999_999_999,
+        resource: RESOURCE,
         extra: { accountId: ACCOUNT },
       };
       listener = await entry.startListener({
         html: bytes.toString('utf8'),
         verifier: { verifyAccessToken: async () => credential },
+        resource: RESOURCE,
         authorize: async () => true,
         port: 0,
       });
@@ -199,9 +203,11 @@ for (const template of QUALIFIED_STARTERS) {
             clientId: 'browser-spec',
             scopes: [entry.ACCOUNT_SCOPE],
             expiresAt: 9_999_999_999,
+            resource: RESOURCE,
             extra: { accountId: accounts[token] ?? '' },
           }),
         },
+        resource: RESOURCE,
         // Neither request is answered until both handlers are inside the application's policy at once.
         authorize: async (identity) => {
           arrived.push(identity.accountId);

@@ -15,20 +15,39 @@ import { z } from 'zod';
 export const SUBSCRIPTIONS_SCOPE = 'subscriptions:read';
 export const PLAYBACK_SCOPE = 'playback:play';
 
-/** What one protected endpoint requires of a credential: the challenge realm and the scope. */
+/**
+ * What one protected endpoint requires of a credential: the challenge realm, the scope and the
+ * protected resource the credential must have been issued for (RFC 8707). The resource is the
+ * endpoint's canonical URL as clients and the identity provider know it.
+ */
 export interface AuthRequirement {
   readonly realm: string;
   readonly scope: string;
+  readonly resource: URL;
 }
 
-export const SUBSCRIPTIONS_REQUIREMENT: AuthRequirement = {
+export const subscriptionsRequirement = (resource: URL): AuthRequirement => ({
   realm: 'saga-a2ui-subscriptions',
   scope: SUBSCRIPTIONS_SCOPE,
-};
-export const PLAYBACK_REQUIREMENT: AuthRequirement = {
+  resource,
+});
+export const playbackRequirement = (resource: URL): AuthRequirement => ({
   realm: 'saga-a2ui-playback',
   scope: PLAYBACK_SCOPE,
-};
+  resource,
+});
+
+/**
+ * Whether a verified credential was issued for this endpoint. A credential that names no resource,
+ * or another one, is refused: a token minted for a different service the same verifier also
+ * serves must never become authority here. A resource identifier has no fragment (RFC 8707), so a
+ * credential that names one is invalid and refused, never normalized into a match.
+ */
+function isIssuedFor(resource: unknown, expected: URL): boolean {
+  if (!(resource instanceof URL)) return false;
+  const named = resource.href;
+  return !named.includes('#') && named === expected.href;
+}
 
 /** Who is calling, as established by the verifier for exactly one request. */
 export interface VerifiedIdentity {
@@ -110,7 +129,8 @@ function reject(
 
 /**
  * Checks the `Authorization` header: a bearer credential the verifier accepts, not expired,
- * carrying the endpoint's required scope, and naming an account. Anything else is refused with
+ * issued for this endpoint's protected resource, carrying the endpoint's required scope, and
+ * naming an account. Anything else is refused with
  * the HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
  *
  * The verifier takes only the token, so it cannot be asked to stop: the caller bounds the wait and
@@ -154,6 +174,14 @@ export async function authenticate(
     authInfo.expiresAt <= nowSeconds()
   ) {
     return reject(requirement, 401, 'invalid_token', 'Token has expired');
+  }
+  if (!isIssuedFor(authInfo.resource, requirement.resource)) {
+    return reject(
+      requirement,
+      401,
+      'invalid_token',
+      'Credential was not issued for this resource',
+    );
   }
   if (!authInfo.scopes.includes(requirement.scope)) {
     return reject(

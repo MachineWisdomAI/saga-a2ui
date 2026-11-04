@@ -28,6 +28,8 @@ export interface NotesEndpointOptions {
   readonly html: string;
   readonly backend: NotesBackend;
   readonly verifier: OAuthTokenVerifier;
+  /** The protected resource a credential must have been issued for. */
+  readonly resource: URL;
   /** Host header values this endpoint answers to (DNS-rebinding protection). */
   readonly allowedHosts: readonly string[];
 }
@@ -209,7 +211,12 @@ export async function serveNotes(
   bindToLifetime(req, res, lifetime);
   if (req.method !== 'POST')
     return void res.writeHead(405, { allow: 'POST' }).end();
-  const decision = await authenticate(req, options.verifier, lifetime);
+  const decision = await authenticate(
+    req,
+    options.verifier,
+    options.resource,
+    lifetime,
+  );
   if (!decision.ok) {
     if (mayAnswer(lifetime, res))
       res

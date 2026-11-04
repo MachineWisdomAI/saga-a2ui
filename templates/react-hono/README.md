@@ -18,7 +18,7 @@ npm start          # prints the two endpoint URLs; PORT=0 picks a free port
 - `…/account/mcp` is protected: `get_account` runs only for a request whose bearer credential your
   verifier accepted, and shows that request's own account.
 
-The protected endpoint refuses every credential until you replace `server/verifier.ts`. That is
+The protected endpoint refuses every credential until you replace `server/verifier.ts`. Your verifier must also return the `resource` the credential was issued for (RFC 8707); `server/main.ts` states this endpoint's URL, and a credential issued for any other resource is refused. That is
 deliberate: the starter ships no identity provider.
 
 ## The tested recipe

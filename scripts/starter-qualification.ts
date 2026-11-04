@@ -94,7 +94,13 @@ export function qualifyStarter(
     service: 'qualification-token-service',
     otherScope: 'qualification-token-other-scope',
     expired: 'qualification-token-expired',
+    noResource: 'qualification-token-no-resource',
+    otherResource: 'qualification-token-other-resource',
+    fragmentResource: 'qualification-token-fragment-resource',
   } as const;
+  // The protected endpoint's canonical URL, and a different service the same identity provider serves.
+  const RESOURCE = new URL('https://starter.example/account/mcp');
+  const OTHER_RESOURCE = new URL('https://other-service.example/account/mcp');
 
   const work = createWorkDirectory('saga-starter-test-');
   let built: BuiltStarter;
@@ -145,11 +151,13 @@ export function qualifyStarter(
       accountId: string | undefined,
       scopes: string[],
       expiresAt = nowSeconds() + 3600,
+      resource: URL | null = RESOURCE,
     ): AuthInfo => ({
       token,
       clientId: 'qualification-client',
       scopes,
       expiresAt,
+      ...(resource === null ? {} : { resource }),
       ...(accountId === undefined ? {} : { extra: { accountId } }),
     });
     switch (token) {
@@ -165,6 +173,17 @@ export function qualifyStarter(
         return user(ACCOUNT_A, ['something:else']);
       case TOKEN.expired:
         return user(ACCOUNT_A, [scope], nowSeconds() - 60);
+      case TOKEN.noResource:
+        return user(ACCOUNT_A, [scope], undefined, null); // a valid account credential that names no resource
+      case TOKEN.otherResource:
+        return user(ACCOUNT_A, [scope], undefined, OTHER_RESOURCE); // a valid account credential issued for another service
+      case TOKEN.fragmentResource:
+        return user(
+          ACCOUNT_A,
+          [scope],
+          undefined,
+          new URL(`${RESOURCE.href}#section`),
+        ); // names this endpoint, with a fragment no resource identifier has
       default:
         return undefined;
     }
@@ -176,6 +195,7 @@ export function qualifyStarter(
       verifier?: (calls: Running['calls'], hooks: Hooks) => OAuthTokenVerifier;
       budgets?: ListenerOptions['budgets'];
       html?: string;
+      resource?: URL;
     } = {},
   ): Promise<Running> {
     const calls = { verifier: 0, authorize: 0 };
@@ -198,6 +218,7 @@ export function qualifyStarter(
         return options.html ?? html;
       },
       verifier,
+      resource: options.resource ?? RESOURCE,
       authorize: async (identity, signal) => {
         calls.authorize += 1;
         await hooks.beforeAuthorize?.(identity.accountId, signal);
@@ -450,6 +471,21 @@ export function qualifyStarter(
         `Bearer ${TOKEN.service}`,
         403,
       ],
+      [
+        'an account credential that names no protected resource',
+        `Bearer ${TOKEN.noResource}`,
+        401,
+      ],
+      [
+        'an account credential issued for another protected resource',
+        `Bearer ${TOKEN.otherResource}`,
+        401,
+      ],
+      [
+        'an account credential whose resource carries a fragment',
+        `Bearer ${TOKEN.fragmentResource}`,
+        401,
+      ],
     ] as const)(
       'fails closed for %s: it is refused at HTTP with a challenge and no protected work starts',
       async (_label, authorization, status) => {
@@ -463,6 +499,42 @@ export function qualifyStarter(
         expect(calls.authorize).toBe(0);
       },
     );
+
+    it('refuses to open with a protected resource that is not an absolute http(s) URL', async () => {
+      for (const resource of [
+        undefined,
+        'https://starter.example/mcp',
+        new URL('file:///account/mcp'),
+        new URL('https://starter.example/account/mcp#section'),
+        new URL('https://starter.example/account/mcp#'),
+      ])
+        await expect(
+          entry.startListener({
+            html,
+            verifier: {
+              verifyAccessToken: () => Promise.reject(new Error('unused')),
+            },
+            resource: resource as never,
+            authorize: async () => true,
+            port: 0,
+          }),
+        ).rejects.toThrow(/resource/);
+    });
+
+    it('keeps the accepted resource fixed after startup: changing the caller-owned URL moves nothing', async () => {
+      const stated = new URL(RESOURCE);
+      const { listener, calls } = await start({ resource: stated });
+      // The application changes its own object after startup; the listener must not follow it.
+      stated.href = OTHER_RESOURCE.href;
+      const moved = await rawCall(
+        listener.accountUrl,
+        `Bearer ${TOKEN.otherResource}`,
+      );
+      expect(moved.status).toBe(401);
+      expect(calls.authorize).toBe(0);
+      const kept = await rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`);
+      expect(kept.status).not.toBe(401);
+    });
 
     it('does not so much as ask the verifier when there is no credential', async () => {
       const { listener, calls } = await start();
@@ -506,6 +578,7 @@ export function qualifyStarter(
         clientId: 'qualification-client',
         scopes: [],
         expiresAt: nowSeconds() + 3600,
+        resource: RESOURCE,
         extra: {},
       };
       const { listener } = await start({
@@ -585,6 +658,7 @@ export function qualifyStarter(
           verifier: {
             verifyAccessToken: () => Promise.reject(new Error('unused')),
           },
+          resource: RESOURCE,
           authorize: async () => true,
           port: 0,
           budgets: { operationMs: 0 },

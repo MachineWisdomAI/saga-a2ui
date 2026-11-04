@@ -47,6 +47,7 @@ beforeAll(async () => {
       verifyAccessToken: () =>
         Promise.reject(new Error('this fixture is public')),
     },
+    resource: new URL('https://fixture.invalid/account/mcp'),
     authorize: async () => true,
     port: 0,
   });

@@ -1,6 +1,7 @@
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import {
   createDevelopmentVerifier,
+  DEV_RESOURCE,
   DEV_TOKENS,
 } from '../../../apps/lit-host/src/mcp/dev-auth.js';
 import { ACCOUNT_SCOPE } from '../../../templates/lit-node/server/authenticate.js';
@@ -10,6 +11,14 @@ import { ACCOUNT_SCOPE } from '../../../templates/lit-node/server/authenticate.j
 // registration behind them. A real deployment supplies its own `OAuthTokenVerifier` for its
 // identity provider; nothing in the SDK or in the clean starter depends on this file. The host page
 // shows these choices under a banner that says so, and `NODE_ENV=production` refuses to start.
+
+/**
+ * The one protected resource every demonstration credential names, and so the `resource` each of
+ * the demonstration's protected endpoints is configured with. Fixed, public, local-only credentials
+ * stand in for an identity provider here, so they are not issued per endpoint; a real deployment
+ * has its identity provider issue a credential for each protected resource.
+ */
+export const DEMO_RESOURCE = DEV_RESOURCE;
 
 export interface SignIn {
   readonly id:

@@ -341,6 +341,7 @@ describe('a ready application', () => {
           throw new Error('public fixture');
         },
       },
+      resource: new URL('https://fixture.invalid/account/mcp'),
       authorize: async () => true,
       port: 0,
     });
@@ -1743,6 +1744,7 @@ describe('a complete built application (the qualified lit-node starter)', () => 
             new Error('this application is read without an account'),
           ),
       },
+      resource: new URL('https://fixture.invalid/account/mcp'),
       authorize: async () => true,
       port: 0,
     });

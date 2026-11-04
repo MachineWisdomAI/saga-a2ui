@@ -42,6 +42,7 @@ it('keeps application body refusals inspectable by Hapi host response listeners'
           throw new Error('unused');
         },
       },
+      resource: new URL('https://fixture.invalid/account/mcp'),
       authorize: async () => true,
     });
   } finally {

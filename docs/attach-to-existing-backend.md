@@ -69,7 +69,12 @@ From `templates/lit-node/server/listener.ts`:
 ```ts
 // Who is asking is decided before any server is built. The verified context travels to the tool
 // only as the transport's per-request auth; no tool argument can name an account.
-const decision = await authenticate(req, options.verifier, lifetime);
+const decision = await authenticate(
+  req,
+  options.verifier,
+  resource,
+  lifetime,
+);
 if (!decision.ok) {
   res
     .writeHead(
@@ -191,7 +196,12 @@ From `templates/lit-express/server/listener.ts`:
 // Who is asking is decided before any server is built. The verified context travels to the tool
 // only as the transport's per-request auth (`req.auth`); no tool argument can name an account.
 const identify: RequestHandler = async (req, res, next) => {
-  const decision = await authenticate(req, options.verifier, lifetimeOf(res));
+  const decision = await authenticate(
+    req,
+    options.verifier,
+    resource,
+    lifetimeOf(res),
+  );
   if (!decision.ok) {
     res
       .writeHead(
@@ -321,6 +331,7 @@ const identityHandoff = async (
   const decision = await authenticate(
     request.raw,
     options.verifier,
+    resource,
     lifetimeOf(request),
   );
   if (!decision.ok) {
@@ -441,6 +452,7 @@ From `templates/lit-hono/server/listener.ts`:
 const decision = await authenticate(
   c.req.header('authorization'),
   options.verifier,
+  resource,
   lifetime,
 );
 if (!decision.ok)
@@ -675,6 +687,7 @@ From `templates/react-hono/server/listener.ts`:
 const decision = await authenticate(
   c.req.header('authorization'),
   options.verifier,
+  resource,
   lifetime,
 );
 if (!decision.ok)
