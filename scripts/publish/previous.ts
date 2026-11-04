@@ -110,10 +110,15 @@ export function readPreviousOutput(
 const same = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** What differs between an earlier record and the one just computed, in words. Empty when nothing the evidence depends on changed. */
+/**
+ * What differs between an earlier record and the one just computed, in words. Empty when nothing the
+ * evidence depends on changed. `historicalPin` is true only when `previous` was read back from an
+ * already-begun handoff, which may hold no fixture section; a prepared record is never exempt.
+ */
 export function staleness(
   previous: ReleaseEvidence,
   current: ReleaseEvidence,
+  options: { readonly historicalPin?: boolean } = {},
 ): string[] {
   const changes: string[] = [];
   if (previous.target !== current.target)
@@ -173,6 +178,17 @@ export function staleness(
     changes.push(
       'the validator or the documentation it was checked against changed',
     );
+  // A fixture invocation is evidence only for the release it ran against: the calls declared (by the
+  // digest of the tool, definition and arguments), whether they ran, and the digest of each result.
+  // An opted-in assessment is not the same assessment as one made without the fixture, whichever way
+  // the difference runs. Every record `prepare` writes holds the section, so a record without it is
+  // not what `prepare` wrote and is stale; only a pinned release of a handoff begun before the section
+  // was pinned may lack it, and it has nothing to compare (`options.historicalPin`).
+  if (previous.fixture === undefined) {
+    if (!options.historicalPin)
+      changes.push('the fixture evidence is missing from the earlier record');
+  } else if (!same(previous.fixture, current.fixture))
+    changes.push('the fixture invocation changed');
   if (previous.endpoint.complete !== current.endpoint.complete)
     changes.push('how much of the endpoint could be read changed');
   if (previous.artifact?.sha256 !== current.artifact?.sha256)
