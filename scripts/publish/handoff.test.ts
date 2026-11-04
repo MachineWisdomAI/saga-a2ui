@@ -6,13 +6,14 @@ import {
   copyFixture,
   editInput,
   editing,
+  recordOf,
   saga,
   wire,
   workspace,
   type Options,
   type Run,
 } from './harness.js';
-import { ARCHIVE_FILES, RECORD_FILE } from './record.js';
+import { ARCHIVE_FILES, RECORD_FILE, sha256 } from './record.js';
 
 // `saga publish handoff` as a maintainer runs it (CLI5 #68), on the fixture application of harness.ts:
 // prepare a release, begin a handoff for it, record the manual submission, the host's review and the
@@ -79,26 +80,42 @@ async function prepared(
 interface Session {
   readonly cwd: string;
   readonly time: ReturnType<typeof clock>;
-  /** Every JSON-RPC method any handoff command sent anywhere. Always empty. */
+  /** Every JSON-RPC method any handoff command other than `begin` sent anywhere. Always empty. */
   readonly network: string[];
+  /** Every JSON-RPC method `begin` sent: it assesses the release again, as `check` does, and calls no tool. */
+  readonly assessed: string[];
   readonly run: (args: readonly string[], options?: Options) => Promise<Run>;
 }
 
-/** Runs handoff commands in `cwd` with one clock and one recording network seam. */
-function session(cwd: string): Session {
+/**
+ * Runs handoff commands in `cwd` with one clock and one recording network seam. `begin` assesses
+ * the release again, so when the application is given it is passed as `--release` unless the case
+ * gives its own.
+ */
+function session(cwd: string, app?: string): Session {
   const time = clock();
   const seen = wire();
+  const assessed: string[] = [];
   return {
     cwd,
     time,
     network: seen.methods,
-    run: (args, options = {}) =>
-      saga(['publish', 'handoff', ...args], {
+    assessed,
+    run: async (args, options = {}) => {
+      const begins = args[0] === 'begin';
+      const given =
+        begins && app !== undefined && !args.includes('--release')
+          ? [...args, '--release', release(app)]
+          : args;
+      const run = await saga(['publish', 'handoff', ...given], {
         cwd,
         wire: seen,
         now: time.now,
         ...options,
-      }),
+      });
+      if (begins) assessed.push(...seen.methods.splice(0));
+      return run;
+    },
   };
 }
 
@@ -127,7 +144,7 @@ async function begun(target: 'chatgpt' | 'claude' = 'claude'): Promise<{
   readonly out: string;
 }> {
   const { app, cwd, out } = await prepared(target);
-  const s = session(cwd);
+  const s = session(cwd, app);
   const run = await s.run([
     'begin',
     '--handoff',
@@ -249,7 +266,7 @@ describe('beginning a handoff', () => {
 
   it('refuses a release that is not ready, an altered package and a missing or secret-bearing authority reference, and writes nothing', async () => {
     const { app, cwd } = await prepared();
-    const s = session(cwd);
+    const s = session(cwd, app);
 
     editInput(
       app,
@@ -311,6 +328,189 @@ describe('beginning a handoff', () => {
     expect(s.network).toEqual([]);
   });
 
+  /** Rewrites a prepared output's record and package by hand, the two files a self-authored "ready" has to agree in. */
+  function forge(
+    cwd: string,
+    directory: string,
+    change: (record: Record<string, any>) => Buffer,
+  ): void {
+    const file = path.join(cwd, directory, RECORD_FILE);
+    const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+      string,
+      any
+    >;
+    const bytes = change(record);
+    fs.writeFileSync(path.join(cwd, directory, ARCHIVE_FILES.claude), bytes);
+    record.artifact = {
+      file: ARCHIVE_FILES.claude,
+      sha256: sha256(bytes),
+      bytes: bytes.length,
+      files: [],
+    };
+    fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+  }
+
+  it('does not take a self-authored ready record and its matching package as evidence of readiness', async () => {
+    const { app, cwd } = await prepared();
+    // The release is blocked: the deployment reports a version the release input does not expect.
+    editInput(
+      app,
+      (input) => (input.endpoint.expectedServer.version = '9.9.9'),
+    );
+    expect((await prepare(app, 'claude', 'forged', { cwd })).code).toBe(1);
+    expect(fs.existsSync(path.join(cwd, 'forged', ARCHIVE_FILES.claude))).toBe(
+      false,
+    );
+    // Then the record is edited to say ready, with a package it names by digest. The two files agree
+    // with each other, which is all the earlier `begin` asked of them.
+    forge(cwd, 'forged', (record) => {
+      record.verdict = 'ready';
+      record.findings = record.findings.map((finding: any) => ({
+        id: finding.id,
+        status: 'pass',
+        summary: finding.summary,
+      }));
+      return Buffer.from('not a connector dossier');
+    });
+    const sound = recordOf(path.join(cwd, 'forged'));
+    expect(sound.verdict).toBe('ready');
+
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      'forged',
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/assessed again now, the release is blocked/);
+    expect(run.err).toMatch(/not evidence of readiness/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    expect(s.network).toEqual([]);
+  });
+
+  it('does not take a package swapped together with its record for the one the release produces', async () => {
+    const { app, cwd, out } = await prepared();
+    // The release is ready, but the package that would be submitted is not what it produces.
+    forge(cwd, out, () => Buffer.from('another package, with its own digest'));
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(
+      /does not match the release as assessed now: the package content changed/,
+    );
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('does not begin for a release that changed after it was prepared, and names what changed', async () => {
+    const { app, cwd, out } = await prepared();
+    editInput(
+      app,
+      (input) => (input.endpoint.expectedServer.version = '9.9.9'),
+    );
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/assessed again now, the release is blocked/);
+    expect(run.err).toMatch(/Deployment identity: mismatch/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('names what changed when the release is still ready but is no longer the one that was prepared', async () => {
+    const { app, cwd, out } = await prepared();
+    editInput(app, (input) => {
+      input.claude.connector.oneLiner = 'Shows whether the service is up.';
+    });
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/does not match the release as assessed now/);
+    expect(run.err).toMatch(/the release input changed/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('assesses the release again, without calling a tool, and needs the release input to do so', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd);
+    const missing = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toMatch(/--release is required/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+
+    const ok = session(cwd, app);
+    expect(ok.network).toEqual([]);
+    const run = await ok.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(run.code, run.err).toBe(0);
+    expect(ok.assessed).toContain('initialize');
+    expect(ok.assessed).toContain('tools/list');
+    expect(ok.assessed).not.toContain('tools/call');
+    expect(ok.network).toEqual([]);
+  });
+
+  it('keeps the assessment options to begin', async () => {
+    const { app, cwd } = await begun().then((one) => ({
+      ...one,
+      cwd: one.s.cwd,
+    }));
+    const s = session(cwd);
+    const run = await s.run([
+      'status',
+      '--handoff',
+      HANDOFF,
+      '--release',
+      release(app),
+    ]);
+    expect(run.code).toBe(2);
+    expect(run.err).toMatch(/--release belongs to saga publish handoff begin/);
+  });
+
   it('does not begin over a record that exists', async () => {
     const { s, out } = await begun();
     const again = await s.run([
@@ -329,10 +529,10 @@ describe('beginning a handoff', () => {
   });
 
   it('leaves no new directory when interrupted before the record exists', async () => {
-    const { cwd, out } = await prepared();
+    const { app, cwd, out } = await prepared();
     const controller = new AbortController();
     controller.abort();
-    const run = await session(cwd).run(
+    const run = await session(cwd, app).run(
       [
         'begin',
         '--handoff',
@@ -614,8 +814,8 @@ describe('an uncertain submission', () => {
   });
 
   it('writes the first event only into the directory it made: a path replaced meanwhile is refused and left alone', async () => {
-    const { cwd, out } = await prepared();
-    const s = session(cwd);
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
     const run = await s.run(
       [
         'begin',

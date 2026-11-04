@@ -11,6 +11,7 @@ import {
   TARGET_NAMES,
   canonicalDigest,
   sha256,
+  type PublicationRecord,
   type ReleaseEvidence,
   type TargetName,
 } from './record.js';
@@ -79,7 +80,26 @@ export interface HandoffRequest {
   readonly host: string | undefined;
   /** The reference to that observation. */
   readonly evidence: string | undefined;
+  /** `begin` only: the release input the prepared output came from, which `begin` assesses again itself. */
+  readonly release?: string | undefined;
+  /** `begin` only: the environment variable holding a bearer credential for the read-only look at a protected endpoint. */
+  readonly bearerEnv?: string | undefined;
+  /** `begin` only: the maintainer's own `saga-fixture-calls/1` file, as for `prepare`. */
+  readonly invokeFixture?: string | undefined;
 }
+
+/**
+ * A fresh assessment of the release, made by this run and not read from a file: the same checks
+ * `prepare` runs, against the release input, the build and the endpoint as they are now.
+ */
+export type Reassessment =
+  | {
+      readonly ok: true;
+      readonly record: PublicationRecord;
+      /** The findings as `check` prints them, shown when the fresh assessment is not ready. */
+      readonly report: string;
+    }
+  | { readonly ok: false; readonly problem: string };
 
 export interface HandoffIo {
   readonly cwd: string;
@@ -87,6 +107,13 @@ export interface HandoffIo {
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
   readonly now: () => Date;
+  /**
+   * Assesses the release again for `begin` (the target is the prepared record's). Readiness is
+   * pinned only from this result: a findings record and its archive are files a maintainer, a
+   * script or a build step can write, so on their own they are not evidence of readiness.
+   */
+  readonly reassess?:
+    ((target: TargetName) => Promise<Reassessment>) | undefined;
 }
 
 const EXIT_REFUSED = 1;
@@ -1008,12 +1035,19 @@ const statDirectory = (directory: string): fs.BigIntStats | undefined => {
   }
 };
 
-/** `begin`: pins one prepared, ready release to the host it was prepared for and to the authority references of its intended publisher. */
-function begin(request: HandoffRequest, io: HandoffIo): number {
+/**
+ * `begin`: pins one ready release to the host it was prepared for and to the authority references of
+ * its intended publisher. The prepared output is only what is being handed off: its record and
+ * archive are plain files, so whoever can write one can write the other to match. Readiness is
+ * therefore decided by assessing the release again here, and the prepared output must agree with
+ * that assessment byte for byte in the package and in every piece of evidence a later comparison uses.
+ */
+async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   if (
     !requireOption(io, 'begin', {
       handoff: request.handoff,
       prepared: request.prepared,
+      release: request.release,
     })
   )
     return EXIT_USAGE;
@@ -1080,6 +1114,42 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
     );
     return EXIT_REFUSED;
   }
+  // The assessment is this run's own: nothing of it is read from the prepared output.
+  if (io.reassess === undefined) {
+    io.stderr(
+      'saga publish handoff begin: this installation cannot assess the release again, so it will not take the prepared record as evidence of readiness. Nothing was recorded.\n',
+    );
+    return EXIT_REFUSED;
+  }
+  const fresh = await io.reassess(record.target);
+  if (io.signal?.aborted) {
+    io.stderr(
+      'saga publish handoff begin: interrupted; nothing was recorded.\n',
+    );
+    return EXIT_INTERRUPTED;
+  }
+  if (!fresh.ok) {
+    io.stderr(
+      `saga publish handoff begin: the release could not be assessed again: ${fresh.problem}\nNothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+  const assessed = fresh.record;
+  if (assessed.verdict !== 'ready' || assessed.artifact === null) {
+    io.stderr(
+      `saga publish handoff begin: assessed again now, the release is ${assessed.verdict}, not ready, so there is nothing to hand off. The prepared record is not evidence of readiness.\n${fresh.report}Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+  // The prepared output is the release only when it holds what the fresh assessment produced.
+  const changes = staleness(record, assessed);
+  if (changes.length > 0) {
+    io.stderr(
+      `saga publish handoff begin: the prepared output does not match the release as assessed now: ${changes.join('; ')}. Run prepare again and pass that directory. Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+
   const created = existing === undefined;
   if (created) fs.mkdirSync(directory);
   const ours = statDirectory(directory);
@@ -1101,23 +1171,24 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
       fs.rmdirSync(directory);
   };
 
-  const host = HOST_DIRECTORIES[record.target];
+  const host = HOST_DIRECTORIES[assessed.target];
   const body: EventBody = {
     type: 'begin',
     handoffId: canonicalDigest({
-      target: record.target,
-      application: record.application.name,
-      publisher: record.application.publisher.name,
-      package: record.artifact.sha256,
+      target: assessed.target,
+      application: assessed.application.name,
+      publisher: assessed.application.publisher.name,
+      package: assessed.artifact.sha256,
     }).slice(0, 16),
     host: {
-      target: record.target,
+      target: assessed.target,
       name: host.name,
       guide: host.guide,
       portal: host.portal,
     },
-    preparedRecordSha256: prepared.recordSha256,
-    release: pinned(record),
+    // The digest of the record `prepare` writes for this assessment: what this handoff is bound to.
+    preparedRecordSha256: sha256(`${JSON.stringify(assessed, null, 2)}\n`),
+    release: pinned(assessed),
     authority,
   };
   try {
@@ -1136,8 +1207,8 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
   io.stdout(
     [
       `Began a ${host.name} handoff ${(body as EventOf<'begin'>).handoffId} in ${request.handoff}.`,
-      `Pinned release: ${record.artifact.file} sha256 ${record.artifact.sha256}; contract ${record.endpoint.contractSha256 ?? 'not read'}; deployment identity ${record.endpoint.deploymentIdentity.status}.`,
-      `Publisher: ${record.application.publisher.name}; authority references recorded, not verified: ${authority.join('; ')}.`,
+      `Pinned release: ${assessed.artifact.file} sha256 ${assessed.artifact.sha256}; contract ${assessed.endpoint.contractSha256 ?? 'not read'}; deployment identity ${assessed.endpoint.deploymentIdentity.status}.`,
+      `Publisher: ${assessed.application.publisher.name}; authority references recorded, not verified: ${authority.join('; ')}.`,
       'Preparation is recorded as ready. Nothing is submitted, in review or live.',
       "Next: `saga publish handoff attempt`, then submit by hand in the host's own flow.",
       'Nothing was deployed, uploaded, submitted or published.',

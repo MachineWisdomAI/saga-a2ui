@@ -166,8 +166,8 @@ pending handoff.
 and, much later, a listing someone can install. `handoff` is the record of that work, kept in a directory
 of your choosing, so it can stop at any point (a closed browser, a colleague taking over, a timeout whose
 outcome nobody saw) and resume without a second upload and without a prepared package, a submission or an
-approval being mistaken for a live listing. It reads and writes local files only. It calls no host and
-no network, has no submission interface, hosting or credential of its own, and submits nothing: the
+approval being mistaken for a live listing. Apart from `begin`, which assesses the release again
+(below), it reads and writes local files only. It calls no host, has no submission interface, hosting or credential of its own, and submits nothing: the
 publisher submits by hand in the host's documented flow
 ([ChatGPT](https://developers.openai.com/plugins/deploy/submission),
 [Claude](https://claude.com/docs/connectors/building/submission), portal
@@ -176,7 +176,7 @@ publisher submits by hand in the host's documented flow
 From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
 
 ```text
-npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --release path/to/saga-publication.json --authority-ref "owner agreement, ticket 12" [--invoke-fixture FILE] [--bearer-env NAME]
 npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
 npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
 npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
@@ -185,8 +185,19 @@ npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --stat
 npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
+**Readiness is assessed again, never read from a file.** `findings.json` and the archive beside it are
+plain files: whoever can write one can write the other to match, so a record that says `ready` and an
+archive with the digest it names prove only that the two agree. `begin` therefore runs the checks of
+`check` itself, with `--release` (and `--bearer-env` or `--invoke-fixture` where `prepare` needed them),
+against the release input, the build and the endpoint as they are now. It reads the endpoint as `check` does
+and calls no tool unless `--invoke-fixture` is given. It records a handoff only when that fresh assessment is
+`ready` and the prepared output matches it by the rule `--against` uses (the release input, the views, the
+tool definitions, the served resources, the deployment identity, the packages, the validators and the
+package digest). What is pinned is the fresh assessment, not the prepared record. A prepared output that
+was edited, or that the release has moved on from, is refused with what differs.
+
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
-digest in its record) and whose verdict is `ready`, and pins it: the host (target, directory name,
+digest in its record) and whose verdict is `ready`, checks it against that fresh assessment, and pins the assessment: the host (target, directory name,
 guide and portal), the application and its publisher, the exact release evidence (source revision, release
 input and view digests, the tool definitions, served resources and contract digest, the deployment
 identity, the declared and installed `@saga-a2ui` packages, the validators and the package digest) and the
@@ -235,7 +246,8 @@ never repaired.
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,
 a built view, a tool definition, a served resource and its metadata, the server instructions, the
 deployment identity, the packages, the validators, how much of the endpoint was read and the package
-content. A preparation that is not `ready` is never current. When stale, `status` lists what changed and
+content. A preparation that is not `ready` is never current. This comparison reads the `--prepared` record, a file the maintainer controls: it notices honest change and is not
+readiness evidence (`begin` assesses the release again for that). When stale, `status` lists what changed and
 exits 1, and `attempt` and `record-listing` are refused for the old release; begin a new handoff for the new
 one. What the host already holds for the old release stays as recorded, and a verified listing is reported
 as observed for the earlier release. `attempt` and `record-listing` require `--prepared`, so readiness is
