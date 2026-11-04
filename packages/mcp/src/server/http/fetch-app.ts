@@ -13,6 +13,7 @@ import { createEndpoint } from '../endpoint.js';
 import {
   StageFailure,
   createServerBudgets,
+  throwIfEnded,
   type BoundedScope,
   type BudgetSettings,
   type LifetimeCause,
@@ -155,7 +156,7 @@ function jsonRpcError(
 
 /** Thrown inside the server callback to stop the official handler before any application code runs. */
 class SpentLifetime extends Error {
-  constructor() {
+  constructor(readonly cause: LifetimeCause) {
     super('The request lifetime was spent before the server was built.');
     this.name = 'SpentLifetime';
   }
@@ -225,7 +226,7 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
       const expired = lifetime.check();
       if (expired !== undefined) {
         refused.set(lifetime, expired);
-        throw new SpentLifetime();
+        throw new SpentLifetime(expired);
       }
       claimed.add(lifetime);
       try {
@@ -236,7 +237,13 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
         // The factory failed or ran out of budget, or its server already carries a different
         // lifetime: nothing will close a server for this lifetime, so it ends here.
         lifetime.finish();
-        report('server-factory');
+        // A stage that ended before the factory started is a refusal, like the check above: the
+        // route answers it, and neither the factory nor the handler failed.
+        if (error instanceof SpentLifetime) {
+          refused.set(lifetime, error.cause);
+        } else {
+          report('server-factory');
+        }
         throw error;
       }
     },
@@ -258,9 +265,14 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
    */
   async function construct(lifetime: RequestLifetime): Promise<McpServer> {
     let delivered: McpServer | undefined;
+    let started = false;
     const result = await lifetime.run(
       'handler',
       async (scope) => {
+        // Setting the stage up (its scope, listeners and timer) spends the same budget. The last
+        // place to refuse an ended stage is here, immediately before application code starts.
+        throwIfEnded(scope);
+        started = true;
         const server = await options.createServer(lifetime);
         // The stage already lost its race (or the request ended): nobody is waiting for this server.
         const stale = scope.check();
@@ -275,6 +287,8 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
       { limitMs: lifetime.requestMs },
     );
     if (result.ok) return result.value;
+    // The factory never started (the stage was refused or ended during setup): a pre-factory refusal.
+    if (!started) throw new SpentLifetime(result.cause);
     // A server delivered just as the budget ended was dropped by the race: close it too.
     if (delivered !== undefined) disposeStale(delivered);
     // The application's own failure keeps propagating as it did; a budget or caller exit is fixed text.

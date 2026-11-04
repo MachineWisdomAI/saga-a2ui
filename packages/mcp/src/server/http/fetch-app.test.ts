@@ -979,6 +979,62 @@ describe('Fetch MCP hosting request lifetime', () => {
     expect(failures).toEqual([]);
   });
 
+  /**
+   * One request in which setting up the server-building stage (its scope, listeners and timer)
+   * takes 120 ms of synchronous time, whatever the machine's speed. The stage's timer is armed
+   * inside `construct`, after the last check outside the stage and before the application callback.
+   */
+  async function serveWithSlowStageSetup(requestMs: number): Promise<{
+    readonly response: Response;
+    readonly lifetimes: RequestLifetime[];
+    readonly failures: McpFetchFailureKind[];
+    readonly spent: boolean;
+  }> {
+    const realSetTimeout = globalThis.setTimeout;
+    let spent = false;
+    const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      ...args: Parameters<typeof setTimeout>
+    ) => {
+      if (!spent && new Error().stack?.includes('construct')) {
+        spent = true;
+        const until = performance.now() + 120;
+        while (performance.now() < until) {
+          // Spin: the work is synchronous, so no timer can interrupt it.
+        }
+      }
+      return realSetTimeout(...args);
+    }) as typeof setTimeout);
+    try {
+      const { app, lifetimes, failures } = harness({
+        budgets: { requestMs },
+      });
+      const response = await app.fetch(post('/mcp'));
+      return { response, lifetimes, failures, spent };
+    } finally {
+      timer.mockRestore();
+    }
+  }
+
+  it('refuses a stage that expired while it was set up, before the application factory starts', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowStageSetup(60);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(408);
+    expect(response.headers.get('connection')).toBe('close');
+    // The factory never started, so it neither built a server nor failed.
+    expect(lifetimes).toHaveLength(0);
+    expect(failures).toEqual([]);
+  });
+
+  it('serves the identical request when the budget outlasts the stage setup', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowStageSetup(5_000);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(failures).toEqual([]);
+  });
+
   it('serves the same small body when the budget is not exhausted', async () => {
     const { app, lifetimes } = harness({ budgets: { requestMs: 5_000 } });
     const response = await app.fetch(post('/mcp'));
