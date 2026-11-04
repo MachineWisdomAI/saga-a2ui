@@ -528,6 +528,40 @@ describe('archives inside the package', () => {
       );
     });
 
+    it('refuses a local extended header that has no member after it, whatever it carries', () => {
+      const dangling = (header: Buffer) => Buffer.concat([header, TAR_END]);
+      refused(
+        'dangling-mtime.tar',
+        dangling(tarMember('PaxHeader', paxRecord('mtime', '1700000000'), 'x')),
+      );
+      refused(
+        'dangling-comment.tar',
+        dangling(tarMember('PaxHeader', paxRecord('comment', 'note'), 'x')),
+      );
+      refused('dangling-empty.tar', dangling(tarMember('PaxHeader', '', 'x')));
+      refused(
+        'dangling-gnu.tar',
+        dangling(tarMember('LongLink', 'some/long/name\0', 'L')),
+      );
+      refused(
+        'dangling-after-member.tar',
+        Buffer.concat([
+          tarMember('a.txt', 'hello'),
+          tarMember('PaxHeader', paxRecord('mtime', '1700000000'), 'x'),
+          TAR_END,
+        ]),
+      );
+    });
+
+    it('still accepts a metadata-only local extended header that has a member after it', () => {
+      const data = Buffer.concat([
+        tarMember('PaxHeader', paxRecord('mtime', '1700000000'), 'x'),
+        tarMember('a.txt', 'hello'),
+        TAR_END,
+      ]);
+      expect(verdict([entry('meta.tar', data)]).failed).toBe(false);
+    });
+
     it('refuses a member path outside the archive root', () => {
       refused('up.tar', tar('../escape.txt', 'hello'));
       refused('abs.tar', tar('/etc/passwd', 'hello'));

@@ -144,6 +144,9 @@ function readTar(
   let at = 0;
   let total = 0;
   let pendingPath: string | undefined;
+  // A local extended header (PAX `x` or GNU `L`) modifies the member after it, whatever it
+  // carries, so one with no member after it is a malformed archive even when it names no path.
+  let pendingHeader = false;
   for (;;) {
     if (at + BLOCK > data.length)
       throw new Unreadable(
@@ -154,7 +157,7 @@ function readTar(
       const rest = data.subarray(at + BLOCK);
       if (rest.length < BLOCK || !rest.every((byte) => byte === 0))
         throw new Unreadable('a damaged end-of-archive marker');
-      if (pendingPath !== undefined)
+      if (pendingHeader)
         throw new Unreadable('an extended header with no member after it');
       return members;
     }
@@ -176,10 +179,14 @@ function readTar(
       if (type === 'g') {
         if (records.has('path'))
           throw new Unreadable('a global extended header that renames files');
-      } else if (records.has('path')) pendingPath = records.get('path');
+      } else {
+        pendingHeader = true;
+        if (records.has('path')) pendingPath = records.get('path');
+      }
       continue;
     }
     if (type === 'L') {
+      pendingHeader = true;
       pendingPath = cString(body);
       continue;
     }
@@ -192,6 +199,7 @@ function readTar(
     const name = cString(header.subarray(0, 100));
     const named = pendingPath ?? (prefix === '' ? name : `${prefix}/${name}`);
     pendingPath = undefined;
+    pendingHeader = false;
     // A folder: type 5, or the older convention of a trailing slash. It holds no data of its own.
     if (type === '5' || named.endsWith('/')) {
       if (size !== 0) throw new Unreadable('a folder entry with data');
