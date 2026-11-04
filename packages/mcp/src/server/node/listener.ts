@@ -17,7 +17,7 @@ import {
   type RequestLifetime,
 } from '../lifetime.js';
 import { Hono, type Context } from 'hono';
-import { createEndpoint } from './endpoint.js';
+import { createEndpoint } from '../endpoint.js';
 
 // Local Node hosting for a stateless MCP endpoint. The official Hono middleware owns Host
 // and Origin validation. This adapter owns admission, bounded body reading, response completion
