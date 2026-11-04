@@ -89,6 +89,7 @@ describe('package subpath exports', () => {
   it('expose exactly the supported names on each subpath', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
+      'DEFAULT_MAX_TOOL_INPUT_ELEMENTS',
       'OperationConfigurationError',
       'RequestLifetimeAttachmentError',
       'StageFailure',
