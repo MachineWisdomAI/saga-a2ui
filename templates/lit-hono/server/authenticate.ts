@@ -29,6 +29,19 @@ function isIssuedFor(resource: unknown, expected: URL): boolean {
 }
 
 /**
+ * Whether a value is a usable timestamp in seconds: a finite number no larger in magnitude than
+ * the largest integer a double holds exactly. NaN and Infinity would otherwise never compare as
+ * expired, so a verifier that returned one would grant a credential that never ends.
+ */
+function isSafeSeconds(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= Number.MAX_SAFE_INTEGER
+  );
+}
+
+/**
  * Validates the protected resource once, before the listener opens, and returns the listener's own
  * copy. The caller's `URL` is mutable and the listener runs for as long as the process does, so the
  * accepted authority boundary is this private copy, never the object the caller still holds.
@@ -98,7 +111,7 @@ export async function authenticate(
   }
   const authInfo = verified.value;
   if (
-    typeof authInfo.expiresAt !== 'number' ||
+    !isSafeSeconds(authInfo.expiresAt) ||
     authInfo.expiresAt <= Date.now() / 1000
   )
     return refuse(401, 'invalid_token');

@@ -23,7 +23,11 @@ import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
 import { ByteBudget } from '../maintainer-network.js';
 import { loadFixtureCalls, type FixtureCall } from './fixture-calls.js';
-import { runHandoff, type HandoffRequest } from './handoff.js';
+import {
+  runHandoff,
+  type HandoffRequest,
+  type Reassessment,
+} from './handoff.js';
 import {
   discoverEndpoint,
   invokeFixture,
@@ -110,7 +114,7 @@ export interface PublishIo {
 /** What `saga.ts` loads, only when a publication command runs. */
 export interface PublicationTool {
   run(request: PublishRequest, io: PublishIo): Promise<number>;
-  /** `saga publish handoff` (CLI5): the resumable record of a prepared release's manual submission. It reads local files only. */
+  /** `saga publish handoff` (CLI5): the resumable record of a prepared release's manual submission. Only `begin` reads the endpoint (it assesses the release again); the other actions read local files only. */
   handoff(request: HandoffRequest, io: PublishIo): Promise<number>;
 }
 
@@ -768,6 +772,7 @@ async function assess(
       },
       fixture: {
         declared: declared.length,
+        callsSha256: declaredCallsDigest(declared),
         invoked: request.invokeFixture !== undefined && invocations.length > 0,
         invocations,
       },
@@ -1096,7 +1101,7 @@ export const publicationTool: PublicationTool = {
     }
   },
   async handoff(request, unredacted) {
-    const io = withRedactedOutput(unredacted, undefined);
+    const io = withRedactedOutput(unredacted, request.bearerEnv);
     // As for `run`: every failure is reported through the redacted channels and never rethrown.
     try {
       return await runHandoff(request, {
@@ -1105,6 +1110,7 @@ export const publicationTool: PublicationTool = {
         stderr: io.stderr,
         signal: io.signal,
         now: io.now ?? (() => new Date()),
+        reassess: (target) => reassessRelease(request, target, io),
       });
     } catch (error) {
       io.stderr(
@@ -1114,6 +1120,60 @@ export const publicationTool: PublicationTool = {
     }
   },
 };
+
+/**
+ * `handoff begin`: the checks of `check`, run again against the release input, the build and the
+ * endpoint as they are now, with nothing read from an earlier output. Failures come back as
+ * a problem, never as a thrown error that could carry an unredacted message.
+ */
+async function reassessRelease(
+  request: HandoffRequest,
+  targetName: TargetName,
+  io: PublishIo,
+): Promise<Reassessment> {
+  const target = targetFor(targetName, io);
+  if (target === undefined || request.release === undefined)
+    return { ok: false, problem: 'there is no release input to assess.' };
+  try {
+    const loaded = loadReleaseInput(
+      path.resolve(io.cwd, request.release),
+      io.localBudget ?? preparationBudget(),
+    );
+    if (!loaded.ok) return { ok: false, problem: loaded.problem };
+    const unusable = target.inputProblem(loaded.loaded.input);
+    if (unusable !== null) return { ok: false, problem: unusable };
+    const asked: PublishRequest = {
+      command: 'check',
+      target: targetName,
+      release: request.release,
+      invokeFixture: request.invokeFixture,
+      bearerEnv: request.bearerEnv,
+    };
+    const { record } = await assess(asked, target, loaded.loaded, io);
+    return { ok: true, record, report: report(record, asked) };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * The digest that identifies the calls a maintainer declared: tool, reviewed definition digest and
+ * arguments, in the order given. The arguments are digested and never recorded (they may hold domain
+ * data). `null` when no call was declared.
+ */
+function declaredCallsDigest(calls: readonly FixtureCall[]): string | null {
+  if (calls.length === 0) return null;
+  return canonicalDigest(
+    calls.map((call) => ({
+      tool: call.tool,
+      toolSha256: call.toolSha256,
+      arguments: call.arguments ?? {},
+    })),
+  );
+}
 
 /** The target a request names, built with the seams this run was given, or `undefined` when no such target exists. */
 function targetFor(name: string, io: PublishIo): PublicationTarget | undefined {
