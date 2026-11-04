@@ -340,6 +340,52 @@ describe('admission reads caller input once and builds no key lists', () => {
     },
   );
 
+  // Primitives are an allowlist: strings, finite numbers, booleans and null. A bigint is
+  // charged as nothing by the node and byte counts yet can hold millions of bits.
+  const unsupportedPrimitives: [string, () => unknown][] = [
+    ['a bigint', () => 1n << 8_000_000n],
+    ['a small bigint', () => 1n],
+    ['a symbol', () => Symbol('s')],
+    ['a function', () => () => 1],
+    ['undefined', () => undefined],
+    ['NaN', () => Number.NaN],
+    ['Infinity', () => Number.POSITIVE_INFINITY],
+  ];
+
+  it.each(unsupportedPrimitives)(
+    'refuses %s from the default decoder wherever it sits',
+    (_, make) => {
+      const decoder = createA2uiV0_9Decoder({ maxNodes: 1_000 });
+      for (const value of [
+        make(),
+        { a: make() },
+        [make()],
+        { a: [{ b: make() }] },
+      ]) {
+        const failure = failureOf(setData(value), decoder);
+        expect(failure.kind).toBe('malformed');
+        expect(failure.message).toMatch(/not plain data/);
+      }
+    },
+  );
+
+  it('does not let an oversized bigint through the default decoder into a session', () => {
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: a2uiV0_9Decoder,
+      retainedLimits: { maxNodes: 10, maxBytes: 100 },
+    });
+    expect(session.ingest(create).ok).toBe(true);
+    const result = session.ingest(setData(1n << 8_000_000n));
+    expect(result.ok).toBe(false);
+    expect(result.ok || result.failure.kind).toBe('malformed');
+  });
+
+  it('still accepts strings, finite numbers, booleans and null', () => {
+    const value = { s: 'x', n: -1.5, z: 0, t: true, f: false, nil: null };
+    expect(decodedValue(a2uiV0_9Decoder.decode(setData(value)))).toEqual(value);
+  });
+
   it('accepts null-prototype objects and binary data, kept as a copy', () => {
     const bare = Object.assign(Object.create(null) as object, { a: 1 });
     const bytes = new Uint8Array([1, 2, 3]).buffer;
@@ -757,6 +803,15 @@ describe('retained-state measurement of what a custom decoder supplies', () => {
     ['a Set', data(new Set([1, 2, 3]))],
     ['a Date', data(new Date())],
     ['a class instance', data(new Held())],
+    ['an oversized bigint as a data value', data(1n << 8_000_000n)],
+    ['a bigint nested in a data value', data({ a: [1n << 8_000_000n] })],
+    ['a symbol', data({ a: Symbol('s') })],
+    ['a function', data({ a: () => 1 })],
+    ['a non-finite number', data({ a: Number.POSITIVE_INFINITY })],
+    [
+      'a bigint as a property',
+      components([{ id: 'root', component: 'Panel', title: 1n << 8_000_000n }]),
+    ],
     [
       'a Map as a property',
       components([{ id: 'root', component: 'Panel', title: wide() }]),

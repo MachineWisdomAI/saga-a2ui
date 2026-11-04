@@ -167,7 +167,19 @@ export function admit(
       if (!chargeText(raw)) exceeded = 'bytes';
       return raw;
     }
-    if (typeof raw !== 'object' || raw === null) return raw;
+    // An explicit allowlist of primitives, never a pass-through of everything that is not an
+    // object: a `bigint` can hold millions of bits that neither the node nor the byte count
+    // would see, and a symbol, a function or `undefined` is not wire data at all.
+    if (typeof raw === 'boolean' || raw === null) return raw;
+    if (typeof raw === 'number') {
+      if (Number.isFinite(raw)) return raw;
+      exceeded = 'unsupported';
+      return undefined;
+    }
+    if (typeof raw !== 'object') {
+      exceeded = 'unsupported';
+      return undefined;
+    }
     if (ArrayBuffer.isView(raw) || raw instanceof ArrayBuffer) {
       if (raw.byteLength > limits.maxBytes - bytes) {
         exceeded = 'bytes';
@@ -315,7 +327,7 @@ export function describeExceeded(
     case 'array-items':
       return `A2UI input has an array with more than ${limits.maxArrayItems} items.`;
     case 'unsupported':
-      return 'A2UI input has a value that is not plain data (only objects, arrays, strings, numbers, booleans, null and binary data are accepted).';
+      return 'A2UI input has a value that is not plain data (only objects, arrays, strings, finite numbers, booleans, null and binary data are accepted).';
   }
 }
 
