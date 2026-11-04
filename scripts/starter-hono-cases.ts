@@ -20,43 +20,43 @@ export function honoAdapterCases({
   StarterHarness,
   'template' | 'built' | 'start' | 'allowedToken'
 >): void {
-  describe("the official adapter's Host and Origin validation", () => {
-    /** A raw request, so the Host and Origin headers can be chosen; the answer is read as the HTTP answer it is. */
-    function rawRequest(
-      url: string,
-      headers: Record<string, string>,
-    ): Promise<{ status: number | undefined; text: string }> {
-      return new Promise((resolve, reject) => {
-        const body = JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: 'get_status', arguments: {} },
-        });
-        const request = http.request(url, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-            'content-length': String(Buffer.byteLength(body)),
-            ...headers,
-          },
-        });
-        request.on('response', (response) => {
-          const chunks: Buffer[] = [];
-          response.on('data', (chunk: Buffer) => chunks.push(chunk));
-          response.on('end', () =>
-            resolve({
-              status: response.statusCode,
-              text: Buffer.concat(chunks).toString('utf8'),
-            }),
-          );
-        });
-        request.on('error', reject);
-        request.end(body);
+  /** A raw request, so the Host and Origin headers can be chosen; the answer is read as the HTTP answer it is. */
+  function rawRequest(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number | undefined; text: string }> {
+    return new Promise((resolve, reject) => {
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_status', arguments: {} },
       });
-    }
+      const request = http.request(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'content-length': String(Buffer.byteLength(body)),
+          ...headers,
+        },
+      });
+      request.on('response', (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () =>
+          resolve({
+            status: response.statusCode,
+            text: Buffer.concat(chunks).toString('utf8'),
+          }),
+        );
+      });
+      request.on('error', reject);
+      request.end(body);
+    });
+  }
 
+  describe("the official adapter's Host and Origin validation", () => {
     it('answers a request for the local host name the starter lists, with or without a local Origin', async () => {
       const { listener } = await start();
       const { port } = new URL(listener.statusUrl);
@@ -90,6 +90,41 @@ export function honoAdapterCases({
           });
           expect(answered.status, url).toBe(403);
           expect(answered.text, url).toContain('"jsonrpc":"2.0"');
+        }
+        expect(calls).toEqual({ verifier: 0, authorize: 0 });
+      },
+    );
+  });
+
+  describe('the wildcard admission middleware', () => {
+    // Hono's default router once skipped every `*` middleware for a path with an encoded line
+    // terminator. The clock, Host check and Origin check are such middleware, so those paths must
+    // be refused or answered exactly like any other path.
+    it.each(['%0A', '%0D', '%E2%80%A8', '%E2%80%A9'])(
+      'refuses another Host or Origin for a path with the encoded line terminator %s, and answers a trusted caller not-found',
+      async (terminator) => {
+        const { listener, calls } = await start();
+        const { port } = new URL(listener.statusUrl);
+        for (const base of [listener.statusUrl, listener.accountUrl]) {
+          const url = `${base}${terminator}`;
+          const untrusted: Record<string, string>[] = [
+            { host: 'rebound.example' },
+            { origin: 'https://other-site.example' },
+          ];
+          for (const headers of untrusted) {
+            const refused = await rawRequest(url, {
+              ...headers,
+              authorization: `Bearer ${allowedToken}`,
+            });
+            expect(refused.status, `${url} ${JSON.stringify(headers)}`).toBe(
+              403,
+            );
+          }
+          // Control: the same path from a trusted caller is simply not found.
+          expect(
+            (await rawRequest(url, { host: `localhost:${port}` })).status,
+            url,
+          ).toBe(404);
         }
         expect(calls).toEqual({ verifier: 0, authorize: 0 });
       },
