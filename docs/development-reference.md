@@ -264,6 +264,40 @@ Guide or notice changes remain on the fast path and must pass the focused
 document checks; a broken generated recipe or source quote cannot pass merely
 because no application build ran.
 
+Every `uses` reference in `.github/workflows` and `.github/actions` is pinned to
+a full 40-character commit SHA (or, for a Docker image, a `@sha256` digest); a
+trailing comment names the release it came from. The only exemption is a
+repository-owned local path that starts with `./`, uses forward slashes only
+(a backslash is a path separator on Windows runners, so any reference containing
+one is rejected) and has no `..` segment. Tag
+and branch references, including major tags such as `@v4`, can move after
+review. The always-on CI job runs `npm run check:action-pins`
+(`scripts/check-action-pins.mjs`) to reject them, and
+`npm run test:action-pins` covers the rules and this repository. The checker
+does not read YAML itself: the maintained `yaml` package (YAML 1.2, a pinned
+root dev dependency) parses each tracked file, and the checker walks the node
+tree, so scalar styles, flow and JSON collections, explicit and block-scalar
+keys, anchors, tags, comments, `run: |` text, multiple documents and duplicate
+keys are the parser's concern. It enforces `uses` only where it executes: a
+direct child of a step, of a job under `jobs` (a reusable workflow) or of a
+composite action's `runs`, or of a document's root mapping. A key named `uses`
+anywhere else, such as a `with:` input or an `env:` variable, is data and is
+never reported, so it needs no quoting or renaming. It fails closed where it
+cannot see the executable structure: a `uses` value that is an alias, block
+scalar, collection, non-string or empty; an alias or a YAML merge key (`<<`,
+including the explicitly tagged `!!merge <<` forms) in place of a step, job,
+`steps`, `jobs` or `runs` node or key; any other mapping key of those nodes that
+is not a string scalar; and any text the parser reports as an error or a
+warning.
+
+The scope is a YAML 1.2 reading of the files. It is not shown to match the
+reader GitHub Actions runs, so the check rejects unusual constructs rather than
+claiming every executable form is understood.
+
+To update an action, resolve the reviewed release tag to its commit
+(`gh api repos/OWNER/REPO/commits/TAG --jq .sha`), change the SHA and comment
+together, and run both commands.
+
 The full check retains the entire existing route: packed React pnpm consumer,
 `npm run verify`, `candidate:pack`, `candidate:rehearse`, and the SHA-named
 candidate artifact retained for 14 days. Named steps identify each operation.
