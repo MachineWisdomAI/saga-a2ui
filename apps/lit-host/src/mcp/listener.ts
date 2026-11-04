@@ -116,6 +116,8 @@ export interface PlaybackEndpointOptions {
   readonly capabilityTtlSeconds?: number;
   /** Test seam for the media service's clock. */
   readonly nowSeconds?: () => number;
+  /** The most bytes one episode may be. Defaults to the media service's own limit. */
+  readonly mediaMaxBytes?: number;
   /**
    * This route's budgets, over the listener's. They apply to the Play tool and, separately for each
    * request, to every media acquisition: an acquisition starts a new deadline and inherits nothing
@@ -329,6 +331,9 @@ export async function startEpisodeListener(
         ...(playback.nowSeconds === undefined
           ? {}
           : { nowSeconds: playback.nowSeconds }),
+        ...(playback.mediaMaxBytes === undefined
+          ? {}
+          : { maxBytes: playback.mediaMaxBytes }),
       })
     : undefined;
 

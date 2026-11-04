@@ -5,6 +5,11 @@ import {
   valueOrThrow,
   type BoundedScope,
 } from '@saga-a2ui/mcp/server';
+import {
+  assertByteLimit,
+  MAX_MEDIA_BODY_BYTES,
+  MediaTooLargeError,
+} from './media-limits.js';
 import { MEDIA_PROOF_TYP } from './media-proof.js';
 import { resolveRange } from './media-range.js';
 
@@ -23,8 +28,16 @@ export interface MediaStore {
    * `signal` aborts when the acquisition is abandoned (its budget, the request's deadline or the
    * caller). A store that ignores it still cannot hold the request open, but one that honors it
    * stops its own work. Bytes that arrive after the abort are never delivered.
+   *
+   * `limits.maxBytes` is the most the service will deliver. A store that can learn an episode's size
+   * before it loads the episode should refuse a larger one (reject) instead of loading it; the
+   * service refuses any body above the limit whether or not the store honors the hint.
    */
-  read(episodeId: string, signal: AbortSignal): Promise<ProtectedMedia>;
+  read(
+    episodeId: string,
+    signal: AbortSignal,
+    limits: { readonly maxBytes: number },
+  ): Promise<ProtectedMedia>;
 }
 
 /** What a capability is scoped to. The recipient is the view's key, not the person's name. */
@@ -117,6 +130,12 @@ export interface MediaServiceOptions {
   /** Capability lifetime from issue. Expiry is measured on this service's clock, never the client's. */
   readonly ttlSeconds?: number;
   readonly nowSeconds?: () => number;
+  /**
+   * The most bytes one episode may be. A store that returns more makes the acquisition fail as a
+   * storage fault. Defaults to `MAX_MEDIA_BODY_BYTES`, the view's own limit, so the service never
+   * sends a body the view would refuse.
+   */
+  readonly maxBytes?: number;
 }
 
 const DEFAULT_TTL_SECONDS = 60;
@@ -132,6 +151,10 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
   const ttlSeconds = options.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const nowSeconds =
     options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
+  const maxBytes = assertByteLimit(
+    'maxBytes',
+    options.maxBytes ?? MAX_MEDIA_BODY_BYTES,
+  );
   // Keyed by the capability's hash, so the table never holds the usable value itself.
   const grants = new Map<
     string,
@@ -219,9 +242,16 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       }
 
       const media = valueOrThrow(
-        await scope.run('storage', (stage) =>
-          options.store.read(grant.episodeId, stage.signal),
-        ),
+        await scope.run('storage', async (stage) => {
+          const read = await options.store.read(grant.episodeId, stage.signal, {
+            maxBytes,
+          });
+          // A body past the limit is a storage fault: "try again", never a partial or a whole
+          // delivery, and nothing of it reaches the response, a range or a length probe.
+          if (read.bytes.length > maxBytes)
+            throw new MediaTooLargeError('The stored episode', maxBytes);
+          return read;
+        }),
       );
       throwIfEnded(scope);
       const range = resolveRange(request.range, media.bytes.length);
