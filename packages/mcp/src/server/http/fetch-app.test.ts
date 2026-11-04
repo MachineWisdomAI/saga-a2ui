@@ -743,6 +743,73 @@ describe('Fetch MCP hosting request lifetime', () => {
     }
   });
 
+  /**
+   * One request in which the official handler's own work, after the body stage and before the
+   * server factory, takes 120 ms of synchronous time, whatever the machine's speed.
+   */
+  async function serveWithSlowHandler(requestMs: number): Promise<{
+    readonly response: Response;
+    readonly lifetimes: RequestLifetime[];
+    readonly failures: McpFetchFailureKind[];
+    readonly spent: boolean;
+  }> {
+    const realParse = JSON.parse.bind(JSON);
+    const realGet = Headers.prototype.get;
+    let parsed = false;
+    let spent = false;
+    const parse = vi
+      .spyOn(JSON, 'parse')
+      .mockImplementation((text, reviver) => {
+        parsed = true;
+        return realParse(text, reviver) as unknown;
+      });
+    // The first header the official handler reads after the body stage stands in for its own work
+    // (classifying and validating a large parsed request) running past the whole request budget.
+    const read = vi
+      .spyOn(Headers.prototype, 'get')
+      .mockImplementation(function (this: Headers, name: string) {
+        if (parsed && !spent) {
+          spent = true;
+          const until = performance.now() + 120;
+          while (performance.now() < until) {
+            // Spin: the work is synchronous, so no timer can interrupt it.
+          }
+        }
+        return realGet.call(this, name);
+      });
+    try {
+      const { app, lifetimes, failures } = harness({
+        budgets: { requestMs },
+      });
+      const response = await app.fetch(post('/mcp'));
+      return { response, lifetimes, failures, spent };
+    } finally {
+      read.mockRestore();
+      parse.mockRestore();
+    }
+  }
+
+  it('refuses a lifetime the official handler spent before the server factory, and builds no server', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowHandler(60);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(408);
+    expect(response.headers.get('connection')).toBe('close');
+    expect(lifetimes).toHaveLength(0);
+    // A refusal is not a factory failure, and it is not reported as one.
+    expect(failures).toEqual([]);
+  });
+
+  it('serves the identical request when the budget outlasts the handler', async () => {
+    const { response, lifetimes, failures, spent } =
+      await serveWithSlowHandler(5_000);
+    expect(spent).toBe(true);
+    expect(response.status).toBe(200);
+    expect(lifetimes).toHaveLength(1);
+    expect(lifetimes[0]?.remainingMs()).toBeGreaterThan(0);
+    expect(failures).toEqual([]);
+  });
+
   it('serves the same small body when the budget is not exhausted', async () => {
     const { app, lifetimes } = harness({ budgets: { requestMs: 5_000 } });
     const response = await app.fetch(post('/mcp'));

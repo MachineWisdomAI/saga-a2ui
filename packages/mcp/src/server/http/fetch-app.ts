@@ -150,6 +150,14 @@ function jsonRpcError(
   );
 }
 
+/** Thrown inside the server callback to stop the official handler before any application code runs. */
+class SpentLifetime extends Error {
+  constructor() {
+    super('The request lifetime was spent before the server was built.');
+    this.name = 'SpentLifetime';
+  }
+}
+
 /** A body stage that did not finish. The caller going away is not answered; a stall or a failing stream is. */
 function bodyFailure(cause: LifetimeCause): Response {
   switch (cause.kind) {
@@ -192,10 +200,21 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
   // A lifetime the factory never claims (a refusal, or a request the official handler answers without
   // building a server) is ended by the route that admitted it.
   const claimed = new WeakSet<RequestLifetime>();
+  // A lifetime that was already spent when the official handler reached the factory: the cause it
+  // ended with, for the route to answer once the handler has unwound.
+  const refused = new WeakMap<RequestLifetime, LifetimeCause>();
   const maxRequestBodySize =
     options.maxRequestBodySize ?? DEFAULT_MAX_REQUEST_BODY_SIZE;
   const endpoint = createEndpoint(
     async (lifetime) => {
+      // The official handler classifies and validates the parsed request before it calls the
+      // factory, and that work spends the same budget. The last place to refuse a spent lifetime is
+      // here, immediately before application code is built.
+      const expired = lifetime.check();
+      if (expired !== undefined) {
+        refused.set(lifetime, expired);
+        throw new SpentLifetime();
+      }
       claimed.add(lifetime);
       try {
         const server = await options.createServer(lifetime);
@@ -211,7 +230,10 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
     },
     {
       responseMode: options.responseMode ?? 'json',
-      onerror: () => report('handler'),
+      // A spent lifetime is a refusal the route answers itself, not a handler failure.
+      onerror: (error) => {
+        if (!(error instanceof SpentLifetime)) report('handler');
+      },
       maxRequestBodySize,
     },
   );
@@ -325,9 +347,12 @@ export function createMcpFetchApp(options: McpFetchAppOptions): McpFetchApp {
       if (expired !== undefined) return bodyFailure(expired);
       // A bounded `parsedBody` keeps the official handler from cloning or re-reading the request,
       // which would also discard the object-identity association with this lifetime.
-      return await endpoint.fetch(request, lifetime, {
+      const response = await endpoint.fetch(request, lifetime, {
         ...(body === undefined ? {} : { parsedBody: body.value }),
       });
+      // The factory refused a lifetime the handler had spent: answer that, not the handler's error.
+      const late = refused.get(lifetime);
+      return late === undefined ? response : bodyFailure(late);
     } finally {
       if (!claimed.has(lifetime)) lifetime.finish();
     }
