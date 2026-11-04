@@ -37,11 +37,11 @@ Behind a Node listener, pass each incoming request to `app.fetch` through your f
 
 ## What the SDK does not do
 
-The function starts no listener, reads no environment variable or file, forwards requests to no upstream, and adds no body reader, proxy or connection teardown of its own. It keeps no per-request state between requests. It supplies no authentication; verify identity in your listener or entry point and pass it to protected operations as you do today.
+The function starts no listener, reads no environment variable or file, forwards requests to no upstream, and adds no body reader of its own (it runs the official bounded reader under the request budget), proxy or connection teardown. It keeps no per-request state between requests. It supplies no authentication; verify identity in your listener or entry point and pass it to protected operations as you do today.
 
 ## Time limits
 
-The operation and request budgets start when your `createServer` callback is entered, and they bound your operations. They do not bound the time before that: the platform or listener owns network admission, the request body arriving, socket and server timeouts, and shutdown. A stalled body therefore has no SDK-enforced arrival deadline. Use the platform's request-size and network limits, and the handler's `maxRequestBodySize`. A canceled local wait does not show that a remote backend effect stopped.
+The request budget starts when the app admits a request, after the Host, Origin and path checks and before the body is read. The declared size, the observed size and the time the body takes all count against it, and `createServer` is not called for a request that ends there. A body that stalls past the budget (or past the operation budget, which also bounds the body stage) is answered once with 408, a body over `maxRequestBodySize` with 413 and malformed JSON with 400. Each refusal asks the listener to close the connection (`Connection: close`), because the rest of the body is not wanted. A `fetch` function cannot close a socket itself: the platform or listener still owns network admission, socket and server timeouts, and shutdown, so keep its own header and idle timeouts as well. A canceled local wait does not show that a remote backend effect stopped.
 
 ## Cloudflare Workers
 
