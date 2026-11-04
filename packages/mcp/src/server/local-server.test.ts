@@ -122,6 +122,64 @@ describe('local MCP request admission', () => {
     }
   });
 
+  // The router may not skip the wildcard admission middleware for a path that carries an encoded
+  // line terminator: Host and Origin validation and the request clock cover every path, found or not.
+  it.each(['%0A', '%0D', '%E2%80%A8', '%E2%80%A9'])(
+    'applies Host and Origin validation to a path with the encoded line terminator %s',
+    async (terminator) => {
+      let builds = 0;
+      const listener = await startLocalMcpServer({
+        port: 0,
+        createServer() {
+          builds++;
+          return new McpServer({ name: 'admission-test', version: '1.0.0' });
+        },
+      });
+      const { request } = await import('node:http');
+      const status = (path: string, headers: Record<string, string>) =>
+        new Promise<number | undefined>((resolve, reject) => {
+          const req = request(
+            new URL(path, listener.url),
+            { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+            (res) => {
+              res.resume();
+              res.once('end', () => resolve(res.statusCode));
+            },
+          );
+          // Node would otherwise replace the header it was given with the connection's own.
+          for (const [name, value] of Object.entries(headers))
+            req.setHeader(name, value);
+          req.once('error', reject);
+          req.end('{}');
+        });
+      try {
+        for (const path of [
+          `/mcp${terminator}`,
+          `/other${terminator}`,
+          `/${terminator}`,
+          `/mcp/${terminator}x`,
+        ]) {
+          // Refused before routing, as for any other path.
+          expect(await status(path, { Host: 'untrusted.example' }), path).toBe(
+            403,
+          );
+          expect(
+            await status(path, { Origin: 'https://untrusted.example' }),
+            path,
+          ).toBe(403);
+          // Control: a trusted caller reaches the same not-found answer, and nothing is built.
+          expect(await status(path, {}), path).toBe(404);
+        }
+        // Control: the same refusals on a path without a terminator.
+        expect(await status('/other', { Host: 'untrusted.example' })).toBe(403);
+        expect(await status('/other', {})).toBe(404);
+        expect(builds).toBe(0);
+      } finally {
+        await listener.close();
+      }
+    },
+  );
+
   it('ends a stalled body at the request deadline before invoking application code', async () => {
     const { request } = await import('node:http');
     let builds = 0;

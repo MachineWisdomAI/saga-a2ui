@@ -21,7 +21,7 @@
     "@saga-a2ui/lit": "*",
     "@saga-a2ui/lit-mcp-stack": "*",
     "@saga-a2ui/mcp": "*",
-    "hono": "4.13.13",
+    "hono": "4.13.16",
     "lit": "^3.3.3",
     "zod": "4.6.7"
   },
