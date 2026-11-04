@@ -267,7 +267,9 @@ because no application build ran.
 Every `uses` reference in `.github/workflows` and `.github/actions` is pinned to
 a full 40-character commit SHA (or, for a Docker image, a `@sha256` digest); a
 trailing comment names the release it came from. The only exemption is a
-repository-owned local path that starts with `./` and has no `..` segment. Tag
+repository-owned local path that starts with `./`, uses forward slashes only
+(a backslash is a path separator on Windows runners, so any reference containing
+one is rejected) and has no `..` segment. Tag
 and branch references, including major tags such as `@v4`, can move after
 review. The always-on CI job runs `npm run check:action-pins`
 (`scripts/check-action-pins.mjs`) to reject them, and

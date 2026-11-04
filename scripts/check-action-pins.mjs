@@ -15,7 +15,8 @@ import {
 // Reject executable workflow actions that are not pinned to an immutable
 // revision. Every `uses` entry of a step, job (reusable workflow) or composite
 // action in `.github/workflows` and `.github/actions` must be a
-// repository-owned local path (`./...` with no `..` segment), a Docker image
+// repository-owned local path (forward-slash `./...` with no `..` segment and
+// no backslash, which is a path separator on Windows runners), a Docker image
 // with a `@sha256:` digest, or a repository action pinned to a full
 // 40-character commit SHA. Branch and tag references, including major-version
 // tags, can move after review and are rejected.
@@ -56,6 +57,11 @@ const NOT_LITERAL =
 /** Return why `ref` is not immutable, or null when it is acceptable. */
 export function violation(ref) {
   if (!ref) return 'has no action reference';
+  // A backslash is a directory separator on a Windows runner, which joins a
+  // local path to the workspace without a containment check. The documented
+  // local form is forward-slash only, so no reference may carry one.
+  if (ref.includes('\\'))
+    return 'contains a backslash, which is a path separator on Windows runners';
   if (ref.startsWith('./'))
     return ref.split('/').includes('..')
       ? "is a local path that leaves the repository-owned './' form"

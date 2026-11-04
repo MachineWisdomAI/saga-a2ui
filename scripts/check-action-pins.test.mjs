@@ -72,6 +72,41 @@ test('only the repository-owned dot-slash form is local', () => {
   assert.equal(violation('./.github/actions/x'), null);
 });
 
+// On a windows-latest runner a backslash is a directory separator, so a local
+// path is checked for containment on both separators. The documented form is
+// forward-slash only, so any backslash is refused rather than normalized.
+test('refuses backslash and mixed-separator local paths', () => {
+  for (const ref of [
+    './local\\..\\..\\outside',
+    './local/..\\outside',
+    './local\\../outside',
+    './local\\..',
+    '.\\local',
+    '.\\..\\outside',
+    './.github\\actions\\local',
+    './.github/actions/local\\',
+    '..\\outside',
+    `owner/repo\\path@${SHA}`,
+    `docker://alpine\\x@${DIGEST}`,
+  ]) {
+    assert.notEqual(violation(ref), null, ref);
+    assert.equal(count(steps(`- uses: ${ref}\n`)), 1, ref);
+    assert.equal(count(job(`uses: ${ref}\n`)), 1, ref);
+    assert.equal(count(action(`- uses: ${ref}\n`)), 1, ref);
+    assert.equal(count(steps(`- uses: '${ref}'\n`)), 1, ref);
+    assert.equal(
+      count(steps(`- uses: "${ref.replaceAll('\\', '\\\\')}"\n`)),
+      1,
+      ref,
+    );
+  }
+  // The reported escape, written as the YAML a workflow would carry.
+  assert.equal(count(steps('- uses: ./local\\..\\..\\outside\n')), 1);
+  assert.equal(count(steps('- uses: "./local\\\\..\\\\..\\\\outside"\n')), 1);
+  // Forward-slash local paths stay accepted.
+  assert.equal(violation('./local/sub'), null);
+});
+
 test('recognizes every YAML shape of a uses key', () => {
   for (const item of [
     '- uses: actions/checkout@v4',
