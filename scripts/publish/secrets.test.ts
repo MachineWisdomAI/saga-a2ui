@@ -24,20 +24,43 @@ const entry = (path: string, value: string | Uint8Array): ZipEntry => ({
 const fake = (prefix: string, length: number): string =>
   `${prefix}${'Ab3dEf7hJk'.repeat(Math.ceil(length / 10)).slice(0, length)}`;
 
-/** A one-file tar (ustar). */
-function tar(name: string, content: string): Buffer {
+/** One tar member: a ustar header with a correct checksum, then the data padded to whole blocks. */
+function tarMember(
+  name: string,
+  content: string | Buffer,
+  type = '0',
+  extra: { magic?: boolean; prefix?: string } = {},
+): Buffer {
+  const data = typeof content === 'string' ? text(content) : content;
   const header = Buffer.alloc(512);
   header.write(name, 0, 'utf8');
-  header.write(
-    `${Buffer.byteLength(content).toString(8).padStart(11, '0')}\0`,
-    124,
-    'latin1',
-  );
-  header.write('0', 156, 'latin1');
-  header.write('ustar\0', 257, 'latin1');
-  const body = Buffer.alloc(Math.ceil(Buffer.byteLength(content) / 512) * 512);
-  body.write(content, 'utf8');
-  return Buffer.concat([header, body, Buffer.alloc(1024)]);
+  header.write(`${data.length.toString(8).padStart(11, '0')}\0`, 124, 'latin1');
+  header.write(type, 156, 'latin1');
+  if (extra.magic !== false) header.write('ustar\0', 257, 'latin1');
+  if (extra.prefix !== undefined) header.write(extra.prefix, 345, 'utf8');
+  header.fill(0x20, 148, 156);
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 'latin1');
+  const body = Buffer.alloc(Math.ceil(data.length / 512) * 512);
+  data.copy(body);
+  return Buffer.concat([header, body]);
+}
+
+const TAR_END = Buffer.alloc(1024);
+
+/** A one-file tar (ustar). */
+function tar(name: string, content: string): Buffer {
+  return Buffer.concat([tarMember(name, content), TAR_END]);
+}
+
+/** A PAX extended-header record. */
+function paxRecord(key: string, value: string): string {
+  const body = ` ${key}=${value}\n`;
+  let length = body.length + 1;
+  while (String(length).length + body.length !== length)
+    length = String(length).length + body.length;
+  return `${length}${body}`;
 }
 
 /** A ZIP with one deflated entry whose recorded size is `recorded`, whatever it really inflates to. */
@@ -337,11 +360,221 @@ describe('archives inside the package', () => {
     );
   });
 
-  it('reports a hostile member name with printable characters only', () => {
+  it('spends one cumulative byte budget across several gzip archives', () => {
+    const full = gzipSync(Buffer.alloc(MAX_NESTED_BYTES, 0x61));
+    const one = gzipSync(Buffer.from('b'));
+    expect(verdict([entry('full.gz', full)]).failed).toBe(false);
+    const result = verdict([entry('full.gz', full), entry('one.gz', one)]);
+    expect(result.failed).toBe(true);
+    expect(result.detail).toContain(
+      'one.gz is an archive that could not be opened',
+    );
+    expect(result.detail).not.toContain('full.gz');
+  });
+
+  it('refuses a gzip once the file budget is spent', () => {
+    const many = writeZip(
+      Array.from({ length: MAX_NESTED_ENTRIES }, (_, index) =>
+        entry(`f${index}.txt`, 'x'),
+      ),
+    );
     const result = verdict([
-      entry('a.tgz', gzipSync(tar('x\u001b[31m.env', 'k'))),
+      entry('many.zip', many),
+      entry('late.gz', gzipSync(text('hello'))),
     ]);
-    expect(result.detail).not.toContain('\u001b');
+    expect(result.failed).toBe(true);
+    expect(result.detail).toContain(
+      'late.gz is an archive that could not be opened',
+    );
+  });
+
+  it('refuses a gzip that expands past what is left of the budget', () => {
+    const half = gzipSync(Buffer.alloc(MAX_NESTED_BYTES / 2 + 1, 0x61));
+    const result = verdict([entry('a.gz', half), entry('b.gz', half)]);
+    expect(result.failed).toBe(true);
+    expect(result.detail).toContain(
+      'b.gz is an archive that could not be opened',
+    );
+    expect(result.detail).not.toContain('a.gz');
+  });
+
+  describe('a tar is read as a whole or refused', () => {
+    const secret = `password = "${fake('', 24)}"`;
+    const refused = (name: string, data: Buffer) => {
+      const result = verdict([entry(name, data)]);
+      expect(result.failed, name).toBe(true);
+      expect(result.detail, name).toContain(
+        `${name} is an archive that could not be opened`,
+      );
+    };
+
+    it('refuses a link, a device and an unknown member type', () => {
+      for (const type of ['1', '2', '3', '4', '6', '7', 'S', 'Z'])
+        refused(
+          `type-${type}.tar`,
+          Buffer.concat([tarMember('m', '', type), TAR_END]),
+        );
+    });
+
+    it('refuses a header with a wrong checksum', () => {
+      const data = tar('config.ini', secret);
+      data[0] = data[0]! ^ 0x01;
+      refused('sum.tar', data);
+    });
+
+    it('refuses an archive with no end marker, a single end block or trailing data', () => {
+      const member = tarMember('config.ini', secret);
+      refused('none.tar', member);
+      refused('one.tar', Buffer.concat([member, Buffer.alloc(512)]));
+      refused(
+        'junk.tar',
+        Buffer.concat([member, TAR_END, Buffer.from('trailing data')]),
+      );
+    });
+
+    it('refuses truncated data and a damaged size', () => {
+      const data = tar('config.ini', 'x'.repeat(2000));
+      refused('short.tar', data.subarray(0, 1200));
+      const size = tarMember('a', 'x');
+      size.write('9999999\0', 124, 'latin1');
+      refused('size.tar', Buffer.concat([size, TAR_END]));
+    });
+
+    it('names a member by its PAX path and applies the credential-store rule to it', () => {
+      const data = Buffer.concat([
+        tarMember('PaxHeader', paxRecord('path', 'conf/.env'), 'x'),
+        tarMember('harmless.txt', 'hello'),
+        TAR_END,
+      ]);
+      const result = verdict([entry('p.tar', data)]);
+      expect(result.failed).toBe(true);
+      expect(result.detail).toContain(
+        'p.tar!/conf/.env is a kind of file that holds credentials',
+      );
+    });
+
+    it('names a member by its GNU long name', () => {
+      const data = Buffer.concat([
+        tarMember('././@LongLink', 'deep/.npmrc\0', 'L'),
+        tarMember('short.txt', 'hello'),
+        TAR_END,
+      ]);
+      expect(verdict([entry('g.tar', data)]).detail).toContain(
+        'g.tar!/deep/.npmrc is a kind of file that holds credentials',
+      );
+    });
+
+    it('names a member by its ustar prefix', () => {
+      const data = Buffer.concat([
+        tarMember('.env', 'hello', '0', { prefix: 'conf' }),
+        TAR_END,
+      ]);
+      expect(verdict([entry('u.tar', data)]).detail).toContain(
+        'u.tar!/conf/.env is a kind of file that holds credentials',
+      );
+    });
+
+    it('finds a credential in a member named through a long-name header', () => {
+      const data = Buffer.concat([
+        tarMember(
+          'PaxHeader',
+          paxRecord('path', `${'d/'.repeat(80)}f.ini`),
+          'x',
+        ),
+        tarMember('f.ini', secret),
+        TAR_END,
+      ]);
+      const result = verdict([entry('long.tar', data)]);
+      expect(result.failed).toBe(true);
+      expect(result.detail).toContain(
+        'what looks like a credential assignment',
+      );
+    });
+
+    it('accepts well-formed PAX metadata that does not change how data is read', () => {
+      const data = Buffer.concat([
+        tarMember('Global', paxRecord('comment', 'a commit id'), 'g'),
+        tarMember(
+          'PaxHeader',
+          paxRecord('mtime', '1700000000.5') + paxRecord('path', 'docs/a.txt'),
+          'x',
+        ),
+        tarMember('a.txt', 'hello'),
+        tarMember('docs/', '', '5'),
+        TAR_END,
+      ]);
+      expect(verdict([entry('ok.tar', data)]).failed).toBe(false);
+    });
+
+    it('refuses PAX records that are damaged or that change the data layout', () => {
+      const pax = (body: string, type = 'x') =>
+        Buffer.concat([
+          tarMember('PaxHeader', body, type),
+          tarMember('a.txt', 'hello'),
+          TAR_END,
+        ]);
+      refused('bad-length.tar', pax('99 path=a\n'));
+      refused('no-equals.tar', pax('12 nothing x\n'));
+      refused('size.tar', pax(paxRecord('size', '1')));
+      refused('sparse.tar', pax(paxRecord('GNU.sparse.map', '0,1')));
+      refused('charset.tar', pax(paxRecord('hdrcharset', 'BINARY')));
+      refused('global-path.tar', pax(paxRecord('path', 'x'), 'g'));
+      refused(
+        'dangling.tar',
+        Buffer.concat([
+          tarMember('PaxHeader', paxRecord('path', 'x'), 'x'),
+          TAR_END,
+        ]),
+      );
+    });
+
+    it('refuses a member path outside the archive root', () => {
+      refused('up.tar', tar('../escape.txt', 'hello'));
+      refused('abs.tar', tar('/etc/passwd', 'hello'));
+    });
+
+    it('opens a tar that has no ustar magic, and refuses it when damaged', () => {
+      const old = Buffer.concat([
+        tarMember('config.ini', secret, '0', { magic: false }),
+        TAR_END,
+      ]);
+      const result = verdict([entry('old.tar', old)]);
+      expect(result.failed).toBe(true);
+      expect(result.detail).toContain('old.tar!/config.ini contains');
+      refused('old-short.tar', old.subarray(0, 600));
+    });
+  });
+
+  it('reports a hostile member name with printable characters only', () => {
+    const secret = `password = "${fake('', 24)}"`;
+    const hostile = 'x\u001b[31m\u0007\u202e';
+    for (const [label, entries, expected] of [
+      [
+        'secret in tar',
+        [entry('a.tgz', gzipSync(tar(`${hostile}.ini`, secret)))],
+        'a.tgz!/content!/x?[31m??.ini contains what looks like a credential assignment',
+      ],
+      [
+        'credential store in tar',
+        [entry('a.tgz', gzipSync(tar(`${hostile}/.env`, 'k')))],
+        'a.tgz!/content!/x?[31m??/.env is a kind of file that holds credentials',
+      ],
+      [
+        'secret in zip',
+        [entry(`${hostile}.ini`, secret)],
+        'x?[31m??.ini contains what looks like a credential assignment',
+      ],
+      [
+        'discovery credential',
+        [entry(`${hostile}.txt`, 'plain-literal-credential')],
+        'x?[31m??.txt contains the credential supplied for discovery',
+      ],
+    ] as const) {
+      const result = verdict(entries, ['plain-literal-credential']);
+      expect(result.failed, label).toBe(true);
+      expect(result.detail, label).toContain(expected);
+      expect(result.detail, label).not.toMatch(/[^\x20-\x7e]/);
+    }
   });
 });
 

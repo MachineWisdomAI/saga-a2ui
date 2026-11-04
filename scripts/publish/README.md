@@ -283,13 +283,18 @@ destructive annotation.
   The secret scan reads every file, whatever its name or extension, for common credential forms
   (private keys, cloud, source-host, registry and payment tokens, passwords in URLs, and
   `NAME=value` lines) and for the literal discovery credential. It also opens zip, gzip and tar
-  archives inside the package, up to 3 levels deep, 1,000 files and 16 MiB in all, and refuses
+  archives inside the package, up to 3 levels deep, 1,000 files and 16 MiB in all (one allowance
+  shared by every archive, checked before and after each is opened). A tar is read only when it
+  is well formed (correct header checksums, two closing empty blocks, nothing after them); its
+  members are named as an extractor would name them (ustar prefix, PAX `path`, GNU long name) and
+  a link, device, sparse or other non-regular member makes the whole tar unreadable. It refuses
   by name the files that exist to hold credentials (`.env`, `.npmrc`, SSH and cloud credential
   folders, key stores; `.env.example` is allowed). An archive it cannot open (another format,
   damaged, encrypted or over those limits) fails the check instead of passing it. Findings name
   the file and the kind, never the value. This is a screen for common forms, not proof that no
   credential is present: a value that is encoded, split, encrypted or in an unrecognised format is
-  not found, and the maintainer remains responsible for what the package carries.
+  not found, and the maintainer remains responsible for what the package carries. File names in a
+  finding are shown with printable characters only.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
   discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
   not read is not certified. A definite failure among what was read still blocks.

@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib';
-import { ZipError, readZip, type ZipEntry } from './zip.js';
+import { ZipError, readZip, safeArchivePath, type ZipEntry } from './zip.js';
 
 // Looking inside archives that a package carries (CLI3 #66, CLI4 #67). A skill or asset can be a
 // ZIP, a gzip or a tar, and a credential inside one is invisible to a scan that reads only the
@@ -29,9 +29,17 @@ function kindOf(data: Uint8Array): Kind {
   // An empty archive is only its end record; nothing is inside it to inspect.
   if (startsWith(data, [0x50, 0x4b, 0x05, 0x06])) return 'none';
   if (startsWith(data, [0x1f, 0x8b])) return 'gzip';
+  // A tar is recognised by its magic or, for the older formats without one, by a header block whose
+  // checksum is correct for its own bytes.
   if (
     data.length >= 262 &&
     Buffer.from(data.subarray(257, 262)).toString('latin1') === 'ustar'
+  )
+    return 'tar';
+  if (
+    data.length >= BLOCK &&
+    data[0] !== 0 &&
+    checksumMatches(Buffer.from(data.subarray(0, BLOCK)))
   )
     return 'tar';
   if (
@@ -53,7 +61,8 @@ function kindOf(data: Uint8Array): Kind {
 }
 
 /** A path as it is shown in a finding: printable characters only. */
-const label = (value: string): string => value.replace(/[^\x20-\x7e]/g, '?');
+export const label = (value: string): string =>
+  value.replace(/[^\x20-\x7e]/g, '?');
 
 const cString = (bytes: Buffer): string => {
   const end = bytes.indexOf(0);
@@ -62,7 +71,70 @@ const cString = (bytes: Buffer): string => {
 
 class Unreadable extends Error {}
 
-/** The regular files of a tar. Anything the reader does not understand makes the whole archive unreadable. */
+const BLOCK = 512;
+
+/** The octal field of a tar header: digits only, optionally padded with spaces and NULs. */
+function octal(field: Buffer): number | undefined {
+  const digits = field.toString('latin1').replace(/^[ \0]+|[ \0]+$/g, '');
+  if (!/^[0-7]+$/.test(digits)) return undefined;
+  const value = Number.parseInt(digits, 8);
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
+/** Whether a header block carries a correct checksum (the sum of its bytes, its own field counted as spaces). */
+function checksumMatches(header: Buffer): boolean {
+  const recorded = octal(header.subarray(148, 156));
+  if (recorded === undefined) return false;
+  let unsigned = 0;
+  let signed = 0;
+  for (let index = 0; index < BLOCK; index += 1) {
+    const byte = index >= 148 && index < 156 ? 0x20 : header[index]!;
+    unsigned += byte;
+    signed += byte > 127 ? byte - 256 : byte;
+  }
+  return recorded === unsigned || recorded === signed;
+}
+
+/**
+ * The records of a PAX extended header (`<length> <key>=<value>\n`). Only `path` changes what the
+ * next entry is called; a `size`, a sparse map or a character-set switch changes how the data
+ * after it is read, which this reader does not follow, so those make the archive unreadable.
+ */
+function paxRecords(data: Buffer): Map<string, string> {
+  const records = new Map<string, string>();
+  let at = 0;
+  while (at < data.length) {
+    const space = data.indexOf(0x20, at);
+    const digits = space < 0 ? '' : data.subarray(at, space).toString('latin1');
+    const length = Number(digits);
+    if (
+      !/^[1-9][0-9]{0,9}$/.test(digits) ||
+      space + 1 >= at + length ||
+      at + length > data.length ||
+      data[at + length - 1] !== 0x0a
+    )
+      throw new Unreadable('a damaged extended header');
+    const record = data.subarray(space + 1, at + length - 1).toString('utf8');
+    const equals = record.indexOf('=');
+    if (equals < 1) throw new Unreadable('a damaged extended header');
+    records.set(record.slice(0, equals), record.slice(equals + 1));
+    at += length;
+  }
+  for (const key of records.keys())
+    if (key === 'size' || key === 'hdrcharset' || key.startsWith('GNU.sparse'))
+      throw new Unreadable(
+        'an extended header it cannot follow (size, sparse or character set)',
+      );
+  return records;
+}
+
+/**
+ * The regular files of a tar, named as an extractor would name them (ustar prefix, PAX `path`,
+ * GNU long name). The archive must be well formed: every header has a correct checksum, every
+ * data area is present, and it ends with two empty blocks and nothing else. A link, device,
+ * sparse or other member the reader does not understand makes the whole archive unreadable, so
+ * nothing in it is skipped without being looked at.
+ */
 function readTar(
   data: Buffer,
   maxBytes: number,
@@ -71,30 +143,67 @@ function readTar(
   const members: ZipEntry[] = [];
   let at = 0;
   let total = 0;
-  while (at + 512 <= data.length) {
-    const header = data.subarray(at, at + 512);
-    if (header.every((byte) => byte === 0)) break;
-    if (header[124]! & 0x80) throw new Unreadable('a size it cannot read');
-    const size = Number.parseInt(cString(header.subarray(124, 136)).trim(), 8);
-    if (!Number.isSafeInteger(size) || size < 0)
-      throw new Unreadable('a damaged header');
-    const type = String.fromCharCode(header[156] ?? 0);
-    const prefix = cString(header.subarray(345, 500));
-    const name = cString(header.subarray(0, 100));
-    at += 512;
-    if (at + size > data.length) throw new Unreadable('truncated data');
-    if (type === '0' || type === '\0') {
-      total += size;
-      if (total > maxBytes || members.length + 1 > maxEntries)
-        throw new Unreadable('more than the scan limits');
-      members.push({
-        path: prefix === '' ? name : `${prefix}/${name}`,
-        data: data.subarray(at, at + size),
-      });
+  let pendingPath: string | undefined;
+  for (;;) {
+    if (at + BLOCK > data.length)
+      throw new Unreadable(
+        at === data.length ? 'no end-of-archive marker' : 'truncated data',
+      );
+    const header = data.subarray(at, at + BLOCK);
+    if (header.every((byte) => byte === 0)) {
+      const rest = data.subarray(at + BLOCK);
+      if (rest.length < BLOCK || !rest.every((byte) => byte === 0))
+        throw new Unreadable('a damaged end-of-archive marker');
+      if (pendingPath !== undefined)
+        throw new Unreadable('an extended header with no member after it');
+      return members;
     }
-    at += Math.ceil(size / 512) * 512;
+    if (!checksumMatches(header)) throw new Unreadable('a damaged header');
+    if (header[124]! & 0x80) throw new Unreadable('a size it cannot read');
+    const size = octal(header.subarray(124, 136));
+    if (size === undefined) throw new Unreadable('a damaged header');
+    const type = String.fromCharCode(header[156] ?? 0);
+    at += BLOCK;
+    const padded = Math.ceil(size / BLOCK) * BLOCK;
+    if (at + padded > data.length) throw new Unreadable('truncated data');
+    total += size;
+    if (total > maxBytes) throw new Unreadable('more than the scan limits');
+    const body = data.subarray(at, at + size);
+    at += padded;
+
+    if (type === 'x' || type === 'g') {
+      const records = paxRecords(body);
+      if (type === 'g') {
+        if (records.has('path'))
+          throw new Unreadable('a global extended header that renames files');
+      } else if (records.has('path')) pendingPath = records.get('path');
+      continue;
+    }
+    if (type === 'L') {
+      pendingPath = cString(body);
+      continue;
+    }
+    if (type !== '5' && type !== '0' && type !== '\0')
+      throw new Unreadable('a member that is not a regular file');
+
+    const posix =
+      Buffer.from(header.subarray(257, 263)).toString('latin1') === 'ustar\0';
+    const prefix = posix ? cString(header.subarray(345, 500)) : '';
+    const name = cString(header.subarray(0, 100));
+    const named = pendingPath ?? (prefix === '' ? name : `${prefix}/${name}`);
+    pendingPath = undefined;
+    // A folder: type 5, or the older convention of a trailing slash. It holds no data of its own.
+    if (type === '5' || named.endsWith('/')) {
+      if (size !== 0) throw new Unreadable('a folder entry with data');
+      continue;
+    }
+    const memberPath = named.replace(/^(?:\.\/)+/, '');
+    if (!safeArchivePath(memberPath))
+      throw new Unreadable('a member path outside the archive root');
+    if (members.length + 1 > maxEntries)
+      throw new Unreadable('more than the scan limits');
+    members.push({ path: memberPath, data: body });
   }
-  return members;
 }
 
 /** The entries given, plus everything found by opening the archives among them. */
@@ -127,6 +236,9 @@ export function expandArchives(entries: readonly ZipEntry[]): ExpandedArchives {
     };
     let inner: ZipEntry[];
     try {
+      // Nothing is opened once either allowance is spent: the cumulative budget fails closed.
+      if (budget.bytes <= 0 || budget.entries <= 0)
+        throw new Unreadable('more than the scan limits');
       const data = Buffer.from(entry.data);
       if (kind === 'zip')
         inner = readZip(data, {
@@ -136,11 +248,15 @@ export function expandArchives(entries: readonly ZipEntry[]): ExpandedArchives {
       else if (kind === 'tar')
         inner = readTar(data, budget.bytes, budget.entries);
       else {
-        const plain = gunzipSync(data, {
-          maxOutputLength: Math.max(budget.bytes, 1),
-        });
+        const plain = gunzipSync(data, { maxOutputLength: budget.bytes });
         inner = [{ path: 'content', data: plain }];
       }
+      // Whatever the reader returned is checked against what is left before it is accepted.
+      if (
+        inner.length > budget.entries ||
+        inner.reduce((sum, one) => sum + one.data.length, 0) > budget.bytes
+      )
+        throw new Unreadable('more than the scan limits');
     } catch (error) {
       uninspected.push(
         `${name} is an archive that could not be opened (${

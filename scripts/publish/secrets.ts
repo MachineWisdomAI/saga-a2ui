@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fail, pass, type Finding } from './record.js';
-import { expandArchives } from './nested-archives.js';
+import { expandArchives, label } from './nested-archives.js';
 import type { ZipEntry } from './zip.js';
 
 // What counts as a secret in anything a publication command writes or prints (CLI3 #66, CLI4 #67):
@@ -174,18 +174,20 @@ export function secretFinding(
 ): Finding {
   const { entries: expanded, uninspected } = expandArchives(entries);
   const leaks: string[] = [];
+  // A path is chosen by whoever built the package, so it is shown with printable characters only.
   for (const { path: file, text } of textEntries(expanded)) {
+    const shown = label(file);
     if (isCredentialStore(file))
-      leaks.push(`${file} is a kind of file that holds credentials.`);
+      leaks.push(`${shown} is a kind of file that holds credentials.`);
     const kinds = secretKinds(text);
     if (kinds.length > 0)
-      leaks.push(`${file} contains what looks like a ${kinds.join(', ')}.`);
+      leaks.push(`${shown} contains what looks like a ${kinds.join(', ')}.`);
   }
   for (const entry of expanded)
     for (const literal of literals)
       if (literal !== '' && Buffer.from(entry.data).includes(literal))
         leaks.push(
-          `${entry.path} contains the credential supplied for discovery.`,
+          `${label(entry.path)} contains the credential supplied for discovery.`,
         );
   if (leaks.length === 0 && uninspected.length === 0)
     return pass(
