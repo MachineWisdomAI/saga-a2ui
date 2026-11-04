@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
 import { captureOrdinaryLogs } from './ordinary-logs.js';
-import { PLAYBACK_RESULT_META, RECIPIENT_KEY_META } from './playback.js';
+import {
+  MEDIA_ORIGIN_META_NAME,
+  PLAYBACK_RESULT_META,
+  RECIPIENT_KEY_META,
+} from './playback.js';
+import { embedMediaOrigin } from './playback-server.js';
 import {
   callToolOverHttp,
   createRecipientKey,
@@ -685,8 +690,13 @@ describe('the player view resource', () => {
     const forAlice = await readView(h, DEV_TOKENS.alice);
     const forBob = await readView(h, DEV_TOKENS.bob);
 
-    expect(forAlice?.text).toBe(PLAYER_VIEW_HTML);
-    expect(forBob?.text).toBe(PLAYER_VIEW_HTML);
+    // The same bytes for both: the built document plus the one admitted media origin.
+    const served = embedMediaOrigin(
+      PLAYER_VIEW_HTML,
+      new URL(h.listener.url).origin,
+    );
+    expect(forAlice?.text).toBe(served);
+    expect(forBob?.text).toBe(served);
     for (const secret of [
       capability,
       DEV_TOKENS.alice,
@@ -696,6 +706,30 @@ describe('the player view resource', () => {
     ]) {
       expect(JSON.stringify([forAlice, forBob])).not.toContain(secret);
     }
+  });
+
+  it('carries the one origin the view admits, the same one its grants and its connect policy name', async () => {
+    const h = await harness();
+    const mediaOrigin = new URL(h.listener.url).origin;
+    const { publicJwk } = await createRecipientKey();
+
+    const view = await readView(h, DEV_TOKENS.alice);
+    const granted = resultOf(
+      (
+        await play(
+          h,
+          DEV_TOKENS.alice,
+          { episodeId: 'ep-1' },
+          { [RECIPIENT_KEY_META]: publicJwk },
+        )
+      ).body,
+    )._meta?.[PLAYBACK_RESULT_META] as { mediaUrl: string };
+
+    expect(view?.text).toContain(
+      `<meta name="${MEDIA_ORIGIN_META_NAME}" content="${mediaOrigin}">`,
+    );
+    expect(granted.mediaUrl).toBe(`${mediaOrigin}/playback/media/ep-1`);
+    expect(view?._meta.ui.csp.connectDomains).toEqual([mediaOrigin]);
   });
 
   it('lets the view connect to the media origin and nothing else', async () => {
