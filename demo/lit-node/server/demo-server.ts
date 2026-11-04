@@ -155,6 +155,8 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
   const standard = contentPolicy({ imageHosts });
   const strict = contentPolicy({ level: 'strict', imageHosts });
   const { views } = options;
+  // The notes endpoint's own copy, taken once: the shared constant is a mutable `URL`.
+  const notesResource = new URL(DEMO_RESOURCE.href);
 
   const application = await startEpisodeListener({
     viewHtml: views.episode,
@@ -306,7 +308,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
             html: views.notes,
             backend: world.notes,
             verifier,
-            resource: DEMO_RESOURCE,
+            resource: notesResource,
             allowedHosts,
           },
           req,

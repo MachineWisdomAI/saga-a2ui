@@ -47,12 +47,40 @@ describe('protected resource binding', () => {
     expect(decision.ok).toBe(true);
   });
 
-  it('compares identifiers, not spellings: scheme and host case, default port and a fragment', async () => {
+  it('compares identifiers, not spellings: scheme and host case and default port', async () => {
     const decision = await run(
-      info(new URL('HTTPS://SAGA.example:443/subscriptions/mcp#section')),
+      info(new URL('HTTPS://SAGA.example:443/subscriptions/mcp')),
     );
     expect(decision.ok).toBe(true);
   });
+
+  it.each([
+    ['a fragment', 'https://saga.example/subscriptions/mcp#section'],
+    ['an empty fragment', 'https://saga.example/subscriptions/mcp#'],
+  ])(
+    'refuses a credential whose resource carries %s, even though it names this endpoint',
+    async (_name, spelled) => {
+      const decision = await run(info(new URL(spelled)));
+      expect(decision).toMatchObject({ ok: false, status: 401 });
+      if (decision.ok) return;
+      expect(decision.challenge).toMatch(/error="invalid_token"/);
+      expect(decision).not.toHaveProperty('authInfo');
+    },
+  );
+
+  it.each([
+    ['a fragment', 'https://saga.example/subscriptions/mcp#section'],
+    ['an empty fragment', 'https://saga.example/subscriptions/mcp#'],
+  ])(
+    'refuses every credential when the endpoint requirement carries %s',
+    async (_name, spelled) => {
+      const decision = await run(
+        info(new URL(SUBSCRIPTIONS)),
+        new URL(spelled),
+      );
+      expect(decision).toMatchObject({ ok: false, status: 401 });
+    },
+  );
 
   it.each([
     ['a credential that names no resource', undefined],

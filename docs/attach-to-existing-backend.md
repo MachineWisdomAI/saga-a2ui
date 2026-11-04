@@ -72,7 +72,7 @@ From `templates/lit-node/server/listener.ts`:
 const decision = await authenticate(
   req,
   options.verifier,
-  options.resource,
+  resource,
   lifetime,
 );
 if (!decision.ok) {
@@ -199,7 +199,7 @@ const identify: RequestHandler = async (req, res, next) => {
   const decision = await authenticate(
     req,
     options.verifier,
-    options.resource,
+    resource,
     lifetimeOf(res),
   );
   if (!decision.ok) {
@@ -331,7 +331,7 @@ const identityHandoff = async (
   const decision = await authenticate(
     request.raw,
     options.verifier,
-    options.resource,
+    resource,
     lifetimeOf(request),
   );
   if (!decision.ok) {
@@ -452,7 +452,7 @@ From `templates/lit-hono/server/listener.ts`:
 const decision = await authenticate(
   c.req.header('authorization'),
   options.verifier,
-  options.resource,
+  resource,
   lifetime,
 );
 if (!decision.ok)
@@ -687,7 +687,7 @@ From `templates/react-hono/server/listener.ts`:
 const decision = await authenticate(
   c.req.header('authorization'),
   options.verifier,
-  options.resource,
+  resource,
   lifetime,
 );
 if (!decision.ok)

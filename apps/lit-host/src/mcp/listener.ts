@@ -233,13 +233,22 @@ interface ProtectedEndpoint {
 /** The stages this listener owns around the tool handler, each with its own safe expiry answer. */
 type OwnedStage = 'authentication' | 'body' | 'acquisition';
 
-/** Throws before the listener opens when a stated protected resource is not an absolute URL. */
-function assertResource(where: string, resource: unknown): void {
-  if (resource === undefined) return;
-  if (!(resource instanceof URL) || !/^https?:$/.test(resource.protocol))
+/**
+ * Validates a protected endpoint's resource once, before the listener opens, and returns the
+ * listener's own copy. The caller's `URL` is mutable and the listener lives as long as the process,
+ * so the accepted authority boundary is this private copy, never the object the caller still holds.
+ * Call it only for an endpoint that is configured: such an endpoint must state a resource.
+ */
+function snapshotResource(where: string, resource: unknown): URL {
+  if (
+    !(resource instanceof URL) ||
+    !/^https?:$/.test(resource.protocol) ||
+    resource.href.includes('#')
+  )
     throw new ListenerConfigurationError(
-      `${where} must be an absolute http(s) URL`,
+      `${where} must be an absolute http(s) URL without a fragment`,
     );
+  return new URL(resource.href);
 }
 
 /** Throws before the listener opens when an operation limit stated by an application is unusable. */
@@ -280,8 +289,17 @@ export async function startEpisodeListener(
     options.subscriptions?.readBoundMs,
   );
   assertOperationLimit('Answer answerBoundMs', options.answer?.answerBoundMs);
-  assertResource('Subscriptions resource', options.subscriptions?.resource);
-  assertResource('Playback resource', options.playback?.resource);
+  const subscriptionsResource =
+    options.subscriptions === undefined
+      ? undefined
+      : snapshotResource(
+          'Subscriptions resource',
+          options.subscriptions.resource,
+        );
+  const playbackResource =
+    options.playback === undefined
+      ? undefined
+      : snapshotResource('Playback resource', options.playback.resource);
   const answerStreaming =
     options.answer?.responseMode === 'event-stream'
       ? resolveStreamingPolicy(options.answer.streaming)
@@ -646,11 +664,15 @@ export async function startEpisodeListener(
   }
 
   function protectedEndpointAt(path: string): ProtectedEndpoint | undefined {
-    if (path === SUBSCRIPTIONS_PATH && options.subscriptions) {
+    if (
+      path === SUBSCRIPTIONS_PATH &&
+      options.subscriptions &&
+      subscriptionsResource
+    ) {
       const endpoint = options.subscriptions;
       return {
         policy: SUBSCRIPTIONS_POLICY,
-        requirement: subscriptionsRequirement(endpoint.resource),
+        requirement: subscriptionsRequirement(subscriptionsResource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createSubscriptionsServer({
@@ -664,11 +686,16 @@ export async function startEpisodeListener(
           }),
       };
     }
-    if (path === PLAYBACK_PATH && options.playback && mediaService) {
+    if (
+      path === PLAYBACK_PATH &&
+      options.playback &&
+      playbackResource &&
+      mediaService
+    ) {
       const endpoint = options.playback;
       return {
         policy: PLAYBACK_POLICY,
-        requirement: playbackRequirement(endpoint.resource),
+        requirement: playbackRequirement(playbackResource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createPlaybackServer({

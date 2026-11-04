@@ -438,20 +438,83 @@ describe('protected endpoint credentials', () => {
     expect(lookups).toEqual([]);
   });
 
-  it('refuses to open with a protected resource that is not an absolute http(s) URL', async () => {
-    await expect(
-      startEpisodeListener({
-        viewHtml: VIEW_HTML,
-        catalog: { find: () => undefined },
-        port: 0,
-        subscriptions: {
-          resource: 'https://saga.example/subscriptions/mcp' as never,
+  it.each([
+    ['is missing', undefined],
+    ['is a string, not a URL', 'https://saga.example/subscriptions/mcp'],
+    ['is not http(s)', new URL('file:///subscriptions/mcp')],
+    ['carries a fragment', new URL('https://saga.example/mcp#section')],
+    ['carries an empty fragment', new URL('https://saga.example/mcp#')],
+  ])(
+    'refuses to open when the subscriptions endpoint resource %s',
+    async (_name, resource) => {
+      await expect(
+        startEpisodeListener({
           viewHtml: VIEW_HTML,
-          backend: { listSubscriptions: async () => undefined },
-          verifier: createDevelopmentVerifier(),
+          catalog: { find: () => undefined },
+          port: 0,
+          subscriptions: {
+            resource: resource as never,
+            viewHtml: VIEW_HTML,
+            backend: { listSubscriptions: async () => undefined },
+            verifier: createDevelopmentVerifier(),
+          },
+        }),
+      ).rejects.toThrow(/Subscriptions resource/);
+    },
+  );
+
+  it.each([
+    ['is missing', undefined],
+    ['carries a fragment', new URL('https://saga.example/mcp#section')],
+  ])(
+    'refuses to open when the playback endpoint resource %s',
+    async (_name, resource) => {
+      await expect(
+        startEpisodeListener({
+          viewHtml: VIEW_HTML,
+          catalog: { find: () => undefined },
+          port: 0,
+          playback: {
+            resource: resource as never,
+            viewHtml: VIEW_HTML,
+            backend: {} as never,
+            mediaStore: {} as never,
+            verifier: createDevelopmentVerifier(),
+          },
+        }),
+      ).rejects.toThrow(/Playback resource/);
+    },
+  );
+
+  it('keeps the accepted resource fixed after startup: changing the caller-owned URL moves nothing', async () => {
+    const lookups: string[] = [];
+    const stated = new URL(DEV_RESOURCE);
+    const other = new URL('https://other-service.invalid/subscriptions/mcp');
+    cleanup.listener = await startEpisodeListener({
+      viewHtml: VIEW_HTML,
+      catalog: { find: () => undefined },
+      port: 0,
+      subscriptions: {
+        resource: stated,
+        viewHtml: VIEW_HTML,
+        backend: {
+          async listSubscriptions(accountId) {
+            lookups.push(accountId);
+            return accounts[accountId];
+          },
         },
-      }),
-    ).rejects.toThrow(/Subscriptions resource/);
+        // This verifier issues credentials for another service's resource.
+        verifier: createDevelopmentVerifier(other),
+      },
+    });
+    // The application changes its own object after startup; the listener must not follow it.
+    stated.href = other.href;
+    const response = await post(
+      cleanup.listener.subscriptionsUrl ?? '',
+      `Bearer ${DEV_TOKENS.alice}`,
+    );
+    expect(response.status).toBe(401);
+    expect(lookups).toEqual([]);
   });
 
   it('rejects a service-only credential with 403 insufficient_scope before any backend work', async () => {

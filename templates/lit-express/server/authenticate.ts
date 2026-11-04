@@ -20,25 +20,30 @@ const REALM = 'saga-starter';
 /**
  * Whether a verified credential was issued for this protected resource (RFC 8707). A credential that
  * names no resource, or another one, is refused: a token minted for a different service the same
- * identity provider also serves must never become authority here. A fragment is not part of a
- * resource identifier, so it is ignored on both sides.
+ * identity provider also serves must never become authority here. A resource identifier has no
+ * fragment, so a credential that names one is invalid and refused, never normalized into a match.
  */
 function isIssuedFor(resource: unknown, expected: URL): boolean {
   if (!(resource instanceof URL)) return false;
-  const bare = (value: URL): string => {
-    const copy = new URL(value);
-    copy.hash = '';
-    return copy.href;
-  };
-  return bare(resource) === bare(expected);
+  const named = resource.href;
+  return !named.includes('#') && named === expected.href;
 }
 
-/** Throws before the listener opens when the protected resource is not an absolute http(s) URL. */
-export function assertResource(resource: unknown): asserts resource is URL {
-  if (!(resource instanceof URL) || !/^https?:$/.test(resource.protocol))
+/**
+ * Validates the protected resource once, before the listener opens, and returns the listener's own
+ * copy. The caller's `URL` is mutable and the listener runs for as long as the process does, so the
+ * accepted authority boundary is this private copy, never the object the caller still holds.
+ */
+export function snapshotResource(resource: unknown): URL {
+  if (
+    !(resource instanceof URL) ||
+    !/^https?:$/.test(resource.protocol) ||
+    resource.href.includes('#')
+  )
     throw new Error(
-      'The listener is not configured: resource must be the absolute http(s) URL of the protected endpoint.',
+      'The listener is not configured: resource must be the absolute http(s) URL of the protected endpoint, without a fragment.',
     );
+  return new URL(resource.href);
 }
 
 export type AuthDecision =

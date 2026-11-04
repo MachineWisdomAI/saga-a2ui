@@ -1,7 +1,7 @@
 import Hapi from '@hapi/hapi';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { BudgetSettings } from '@saga-a2ui/mcp/server';
-import { assertResource, authenticate } from './authenticate.js';
+import { authenticate, snapshotResource } from './authenticate.js';
 import { mcpPlugin, mcpRequestLifetime } from './bridge.js';
 import {
   createAccountServer,
@@ -53,7 +53,7 @@ export interface Listener {
 export async function startListener(
   options: ListenerOptions,
 ): Promise<Listener> {
-  assertResource(options.resource);
+  const resource = snapshotResource(options.resource);
   // #region saga-snippet:prepare-view
   // Both endpoint registrations below keep one persistent handler and reuse this immutable view.
   const view = prepareStarterView(options.html, options.filename);
@@ -67,7 +67,7 @@ export async function startListener(
       const decision = await authenticate(
         typeof header === 'string' ? header : undefined,
         options.verifier,
-        options.resource,
+        resource,
         mcpRequestLifetime(request),
       );
       if (decision.ok)

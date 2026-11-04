@@ -40,16 +40,13 @@ export const playbackRequirement = (resource: URL): AuthRequirement => ({
 /**
  * Whether a verified credential was issued for this endpoint. A credential that names no resource,
  * or another one, is refused: a token minted for a different service the same verifier also
- * serves must never become authority here. A fragment is not part of a resource identifier.
+ * serves must never become authority here. A resource identifier has no fragment (RFC 8707), so a
+ * credential that names one is invalid and refused, never normalized into a match.
  */
 function isIssuedFor(resource: unknown, expected: URL): boolean {
   if (!(resource instanceof URL)) return false;
-  const bare = (value: URL): string => {
-    const copy = new URL(value);
-    copy.hash = '';
-    return copy.href;
-  };
-  return bare(resource) === bare(expected);
+  const named = resource.href;
+  return !named.includes('#') && named === expected.href;
 }
 
 /** Who is calling, as established by the verifier for exactly one request. */

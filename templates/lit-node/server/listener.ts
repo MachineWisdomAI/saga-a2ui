@@ -17,7 +17,7 @@ import {
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
 import { createEndpoint, type Endpoint } from './endpoint.js';
-import { assertResource, authenticate } from './authenticate.js';
+import { authenticate, snapshotResource } from './authenticate.js';
 import {
   createAccountServer,
   createStatusServer,
@@ -80,7 +80,7 @@ export async function startListener(
 ): Promise<Listener> {
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
-  assertResource(options.resource);
+  const resource = snapshotResource(options.resource);
   const budgets = createServerBudgets(options.budgets);
   // #region saga-snippet:prepare-view
   const view = prepareStarterView(options.html, options.filename);
@@ -299,7 +299,7 @@ export async function startListener(
     const decision = await authenticate(
       req,
       options.verifier,
-      options.resource,
+      resource,
       lifetime,
     );
     if (!decision.ok) {
