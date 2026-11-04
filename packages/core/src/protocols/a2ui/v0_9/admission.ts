@@ -45,13 +45,14 @@ export const DEFAULT_RETAINED_LIMITS: RetainedLimits = {
   maxBytes: 16 * 1024 * 1024,
 };
 
-/** What admitted input weighs; `size` of a decode result and the unit of retained accounting. */
+/** What state weighs: the unit of the session's retained accounting. */
 export interface MessageSize {
   readonly nodes: number;
   readonly bytes: number;
 }
 
-type Exceeded = 'bytes' | 'nodes' | 'depth' | 'array-items' | 'unsupported';
+type Exceeded =
+  'messages' | 'bytes' | 'nodes' | 'depth' | 'array-items' | 'unsupported';
 
 /** Throws, naming the limit, unless every supplied limit is a positive safe integer. */
 export function checkedLimits<Limits extends InputLimits | RetainedLimits>(
@@ -67,7 +68,7 @@ export function checkedLimits<Limits extends InputLimits | RetainedLimits>(
 }
 
 /** Exact UTF-8 length, without allocating. Callers bound the string's length first. */
-function utf8Length(text: string): number {
+export function utf8Length(text: string): number {
   let bytes = 0;
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index);
@@ -86,6 +87,7 @@ function utf8Length(text: string): number {
 }
 
 interface AdmitLimits {
+  readonly maxMessages: number;
   readonly maxBytes: number;
   readonly maxNodes: number;
   readonly maxDepth: number;
@@ -106,7 +108,7 @@ type Frame =
       readonly depth: number;
     };
 
-const hasOwn = (value: object, key: string): boolean =>
+export const hasOwn = (value: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
 
 /**
@@ -148,7 +150,7 @@ export function admit(
   };
 
   /** The snapshot of `raw`; sets `exceeded` instead when `raw` cannot be admitted. */
-  const visit = (raw: unknown, depth: number): unknown => {
+  const visit = (raw: unknown, depth: number, messageList = false): unknown => {
     if (depth > limits.maxDepth) {
       exceeded = 'depth';
       return undefined;
@@ -176,6 +178,12 @@ export function admit(
     }
     if (Array.isArray(raw)) {
       const length = raw.length;
+      // The message list is the root array or the envelope's `messages`; its length is
+      // read here, once, with every other array's.
+      if (messageList && length > limits.maxMessages) {
+        exceeded = 'messages';
+        return undefined;
+      }
       if (length > limits.maxArrayItems) {
         exceeded = 'array-items';
         return undefined;
@@ -198,7 +206,7 @@ export function admit(
     return target;
   };
 
-  const value = visit(root, 0);
+  const value = visit(root, 0, true);
   while (frames.length > 0 && exceeded === undefined) {
     const frame = frames.pop()!;
     if ('length' in frame) {
@@ -218,6 +226,7 @@ export function admit(
       const item = visit(
         (frame.source as Record<string, unknown>)[key],
         frame.depth + 1,
+        frame.depth === 0 && key === 'messages',
       );
       if (exceeded !== undefined) break;
       // Defined, not assigned: a key named `__proto__` is data here, never a prototype.
@@ -287,6 +296,8 @@ export function describeExceeded(
   limits: InputLimits,
 ): string {
   switch (exceeded) {
+    case 'messages':
+      return `A2UI input has more than ${limits.maxMessages} messages.`;
     case 'bytes':
       return `A2UI input is larger than ${limits.maxBytes} bytes.`;
     case 'nodes':
@@ -312,27 +323,4 @@ export function pathWithinDepth(path: string, maxDepth: number): boolean {
     if (segments > maxDepth) return false;
   }
   return true;
-}
-
-/** The upstream data model's own ceiling on an array index (`MAX_ARRAY_INDEX`). */
-const MAX_ARRAY_INDEX = 10_000;
-
-/**
- * What writing at `path` can leave behind beyond the value written. The upstream data model
- * creates every missing container along a path, and a numeric segment may create an array that
- * is then extended to that index, which the retained measure counts item by item. So each
- * segment is charged as one container, or as `index + 1` items for a numeric segment (the
- * index is capped where upstream refuses it); and the path's own bytes stand for the property
- * names it creates. An upper bound: a segment that finds its container already there is still
- * charged. Callers have already bounded the path's segments (`pathWithinDepth`).
- */
-export function pathRetainedWeight(path: string): MessageSize {
-  let nodes = 0;
-  for (const segment of path.split('/')) {
-    if (segment.length === 0) continue;
-    nodes += /^(0|[1-9]\d*)$/.test(segment)
-      ? Math.min(Number(segment), MAX_ARRAY_INDEX + 1) + 1
-      : 1;
-  }
-  return { nodes, bytes: utf8Length(path) };
 }

@@ -1,7 +1,12 @@
-import { Catalog, type ComponentApi } from '@a2ui/web_core/v0_9';
+import {
+  Catalog,
+  type ComponentApi,
+  type SurfaceModel,
+} from '@a2ui/web_core/v0_9';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from '../zod3.js';
 import { a2uiV0_9Decoder, createA2uiV0_9Decoder } from './decoder.js';
+import { measureRetained, retainedGrowth } from './retained-state.js';
 import { createMessageSession } from './session.js';
 
 // Admission is checked before Zod, before the first copy and before anything is retained, so
@@ -164,12 +169,6 @@ describe('decoder admission (before parsing and copying)', () => {
         /maxNodes/,
       );
     }
-  });
-
-  it('reports the admission size of what it accepted', () => {
-    const result = createA2uiV0_9Decoder().decode(setData('abc'));
-    expect(result.ok && result.size.bytes).toBeGreaterThan(0);
-    expect(result.ok && result.size.nodes).toBeGreaterThan(0);
   });
 });
 
@@ -386,6 +385,71 @@ describe('admission reads caller input once and builds no key lists', () => {
       if (name !== 'then') expect([name, count]).toEqual([name, 1]);
   });
 
+  /** A proxy that counts the reads of each property name. */
+  function counted<T extends object>(target: T, reads: Map<string, number>) {
+    return new Proxy(target, {
+      get(object, key, receiver) {
+        const name = String(key);
+        reads.set(name, (reads.get(name) ?? 0) + 1);
+        return Reflect.get(object, key, receiver);
+      },
+    });
+  }
+
+  it('reads the length of a root message list once, and refuses an over-long one on that read', () => {
+    const reads = new Map<string, number>();
+    const list = counted([remove], reads);
+    expect(a2uiV0_9Decoder.decode(list).ok).toBe(true);
+    expect(reads.get('length')).toBe(1);
+    expect(reads.get('0')).toBe(1);
+
+    const tooLong = new Map<string, number>();
+    const decoder = createA2uiV0_9Decoder({ maxMessages: 1 });
+    expect(decoder.decode(counted([remove, remove], tooLong)).ok).toBe(false);
+    expect(tooLong.get('length')).toBe(1);
+    expect(tooLong.get('0')).toBeUndefined();
+  });
+
+  it('reads an envelope getter and its list once, and parses the value it measured', () => {
+    let envelopeReads = 0;
+    const listReads = new Map<string, number>();
+    const envelope = {
+      get messages() {
+        envelopeReads += 1;
+        // The first read is the list that was measured; a second would be far over budget.
+        return envelopeReads === 1
+          ? counted([remove], listReads)
+          : new Array<unknown>(5_000).fill(remove);
+      },
+    };
+    const result = a2uiV0_9Decoder.decode(envelope);
+    expect(result.ok && result.messages.length).toBe(1);
+    expect(envelopeReads).toBe(1);
+    expect(listReads.get('length')).toBe(1);
+  });
+
+  it('measures a list a getter shrinks on its second read by the first read', () => {
+    let reads = 0;
+    const envelope = {
+      get messages() {
+        reads += 1;
+        return reads === 1 ? new Array<unknown>(5_000).fill(remove) : [remove];
+      },
+    };
+    const failure = failureOf(envelope);
+    expect(failure.message).toMatch(/more than 1000 messages/);
+    expect(reads).toBe(1);
+  });
+
+  it('counts messages only for the list itself, not for a key named messages deeper down', () => {
+    const decoder = createA2uiV0_9Decoder({ maxMessages: 2 });
+    expect(decoder.decode(setData({ messages: [1, 2, 3, 4] })).ok).toBe(true);
+    expect(decoder.decode({ messages: [remove, remove] }).ok).toBe(true);
+    expect(decoder.decode({ messages: [remove, remove, remove] }).ok).toBe(
+      false,
+    );
+  });
+
   it('refuses a throwing getter as malformed', () => {
     const value = {
       get boom(): string {
@@ -393,16 +457,6 @@ describe('admission reads caller input once and builds no key lists', () => {
       },
     };
     expect(failureOf(setData(value)).kind).toBe('malformed');
-  });
-
-  it('charges the containers a data path may create', () => {
-    const decoder = createA2uiV0_9Decoder();
-    const plain = decoder.decode(setData('v'));
-    const deep = decoder.decode(setData('v', '/a/b/c/12'));
-    if (!plain.ok || !deep.ok) throw new Error('expected success');
-    // three object containers, one array extended to index 12, and the path's property names
-    expect(deep.size.nodes - plain.size.nodes).toBeGreaterThanOrEqual(3 + 13);
-    expect(deep.size.bytes).toBeGreaterThan(plain.size.bytes);
   });
 });
 
@@ -481,4 +535,184 @@ describe('session retained-state admission of data paths', () => {
         throw new Error(`update ${index}: ${result.failure.message}`);
     }
   });
+
+  it('keeps accepting the same long scalar path, and still refuses a new one', () => {
+    // 4 values for the surface, 31 for the path: 35 of 60 held after the first write.
+    const { session, held } = newSession(60);
+    const path = `/a${'/a'.repeat(30)}`;
+    for (let index = 0; index < 50; index += 1) {
+      const result = session.ingest(setData(`v${index}`, path));
+      if (!result.ok)
+        throw new Error(`update ${index}: ${result.failure.message}`);
+    }
+    expect(held()).toBe(32); // 31 objects and the scalar
+    // A second path of new containers does not fit, and nothing of it is kept.
+    const other = session.ingest(setData('v', `/b${'/b'.repeat(30)}`));
+    expect(other.ok).toBe(false);
+    expect(other.ok || other.failure.kind).toBe('rejected');
+    expect(held()).toBe(32);
+    // The first path can still be replaced after the refusal.
+    expect(session.ingest(setData('again', path)).ok).toBe(true);
+  });
+
+  it('charges only the containers a path does not already have', () => {
+    // 4 values for the surface and 29 for the path: 33 of 36 held after the first write.
+    const { session, held } = newSession(36);
+    expect(session.ingest(setData('v', `/a${'/a'.repeat(28)}`)).ok).toBe(true);
+    // A branch off the 28th level makes two new containers, not thirty.
+    const branch = `${'/a'.repeat(28)}/x/y`;
+    expect(session.ingest(setData('v', branch)).ok).toBe(true);
+    expect(held()).toBeLessThanOrEqual(36);
+    // Five new containers do not fit, and none of them is kept.
+    const before = held();
+    expect(
+      session.ingest(setData('v', `${'/a'.repeat(28)}/p/q/r/s/t`)).ok,
+    ).toBe(false);
+    expect(held()).toBe(before);
+  });
+
+  it('credits the value a write replaces, and charges only the difference', () => {
+    // 4 values for the surface, 1 for the key and 40 for the object: 45 held, 46 allowed.
+    const { session, held } = newSession(46);
+    const keys = (count: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`k${index}`, index]),
+      );
+    expect(session.ingest(setData(keys(40), '/slot')).ok).toBe(true);
+    for (let index = 0; index < 20; index += 1)
+      expect(session.ingest(setData(keys(40), '/slot')).ok).toBe(true);
+    expect(session.ingest(setData(keys(41), '/slot')).ok).toBe(true); // exactly the budget
+    expect(session.ingest(setData(keys(42), '/slot')).ok).toBe(false);
+    expect(held()).toBe(43); // the refused write left the 41 keys in place
+    expect(session.ingest(setData(keys(5), '/slot')).ok).toBe(true);
+  });
+
+  it('never under-counts a batch that writes the same new path twice', () => {
+    const { session, held } = newSession(60);
+    const path = `/a${'/a'.repeat(30)}`;
+    const result = session.ingest([setData('one', path), setData('two', path)]);
+    expect(result.ok).toBe(false);
+    expect(held()).toBeLessThanOrEqual(60);
+    expect(held()).toBe(1);
+  });
+
+  it('keeps accepting a component that is replaced, without a deletion between', () => {
+    const session = createMessageSession({
+      catalogs: [catalog],
+      decoder: a2uiV0_9Decoder,
+      retainedLimits: { maxNodes: 30, maxBytes: 1_000_000 },
+    });
+    expect(session.ingest(create).ok).toBe(true);
+    for (let index = 0; index < 100; index += 1) {
+      const result = session.ingest({
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's',
+          components: [
+            { id: 'root', component: 'Panel', title: `Title ${index}` },
+          ],
+        },
+      });
+      if (!result.ok)
+        throw new Error(`update ${index}: ${result.failure.message}`);
+    }
+  });
+});
+
+describe('retained growth is never below what a batch really adds', () => {
+  // A small seeded generator, so a failure names a reproducible case.
+  function random(seed: number) {
+    let state = seed;
+    return (below: number) => {
+      state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+      return state % below;
+    };
+  }
+  const segments = ['a', 'b', '0', '1', '3', 'x~1y', 'long-name-é'];
+
+  function randomValue(next: (below: number) => number, depth = 0): unknown {
+    switch (next(depth > 2 ? 4 : 7)) {
+      case 0:
+        return 'text'.repeat(next(5));
+      case 1:
+        return next(100);
+      case 2:
+        return null;
+      case 3:
+        return true;
+      case 4:
+        return Array.from({ length: next(4) }, () =>
+          randomValue(next, depth + 1),
+        );
+      default:
+        return Object.fromEntries(
+          Array.from({ length: next(4) }, () => [
+            segments[next(segments.length)]!,
+            randomValue(next, depth + 1),
+          ]),
+        );
+    }
+  }
+
+  function randomMessage(next: (below: number) => number) {
+    if (next(6) === 0)
+      return {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's',
+          components: [
+            { id: 'root', component: 'Panel', title: 'x'.repeat(next(20)) },
+          ],
+        },
+      };
+    const path =
+      next(8) === 0
+        ? undefined
+        : `/${Array.from({ length: 1 + next(5) }, () => segments[next(segments.length)]).join('/')}`;
+    // A data model root that is not an object is refused upstream, so root writes are objects.
+    const value =
+      path === undefined ? { a: randomValue(next) } : randomValue(next);
+    return {
+      version: 'v0.9',
+      updateDataModel: {
+        surfaceId: 's',
+        ...(path === undefined ? {} : { path }),
+        ...(value === undefined ? {} : { value }),
+      },
+    };
+  }
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+    'holds for a random sequence of batches (seed %i)',
+    (seed) => {
+      const next = random(seed);
+      const limits = { maxNodes: 1_000_000, maxBytes: 100_000_000 };
+      const session = createMessageSession({
+        catalogs: [catalog],
+        decoder: a2uiV0_9Decoder,
+        retainedLimits: limits,
+      });
+      const surfaces = new Map<string, SurfaceModel<ComponentApi>>();
+      session.onSurfaceCreated((surface) => surfaces.set(surface.id, surface));
+      session.ingest(create);
+      let applied = 0;
+      for (let step = 0; step < 400; step += 1) {
+        const batch = Array.from({ length: 1 + next(3) }, () =>
+          randomMessage(next),
+        );
+        const decoded = a2uiV0_9Decoder.decode(batch);
+        if (!decoded.ok) throw new Error(decoded.failure.message);
+        const growth = retainedGrowth(decoded.messages, limits, surfaces);
+        const before = measureRetained(surfaces, limits);
+        const result = session.ingest(batch);
+        const after = measureRetained(surfaces, limits);
+        if (result.ok) applied += 1;
+        // Messages applied before a refusal stay applied, so this holds for every batch.
+        expect(growth).toBeDefined();
+        expect(after.nodes - before.nodes).toBeLessThanOrEqual(growth!.nodes);
+        expect(after.bytes - before.bytes).toBeLessThanOrEqual(growth!.bytes);
+      }
+      expect(applied).toBeGreaterThan(50);
+    },
+  );
 });

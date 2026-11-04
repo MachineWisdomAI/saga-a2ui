@@ -9,12 +9,12 @@ import {
 import {
   DEFAULT_RETAINED_LIMITS,
   checkedLimits,
-  measure,
   type MessageSize,
   type RetainedLimits,
 } from './admission.js';
 import type { DecodeFailure, MessageDecoder } from './decoder.js';
 import type { A2uiMessageVisitor, ValidatedMessage } from './message.js';
+import { measureRetained, retainedGrowth } from './retained-state.js';
 
 /** A decode failure, or the upstream processor refusing a well-formed message. */
 export interface IngestFailure {
@@ -108,62 +108,46 @@ export function createMessageSession<T extends ComponentApi>(
   };
 
   // Retained-state admission. `tally` is an upper bound of what the session keeps: it adds the
-  // size of every admitted batch (which includes the containers a data path may create) and
-  // never subtracts, so a replaced value or a deleted surface
-  // is counted until the bound is next checked against the state itself. Only a batch that
-  // would cross the limit pays for that measurement, and then it is refused only when the
-  // measured state really leaves no room.
+  // upper bound of every admitted batch and never subtracts, so a replaced value or a deleted
+  // surface is counted until the bound is next checked against the state itself. Only a batch
+  // that would cross the limit pays for that: the real state is measured and the batch is
+  // charged what it would really add to it (a value written over an existing one, or a path
+  // through containers that exist, adds little or nothing), and it is refused only when that
+  // leaves no room. The decision is made on the validated messages, before any is applied.
   const limits = checkedLimits(DEFAULT_RETAINED_LIMITS, options.retainedLimits);
   let tally: MessageSize = { nodes: 0, bytes: 0 };
   const fits = (used: MessageSize, extra: MessageSize): boolean =>
     used.nodes + extra.nodes <= limits.maxNodes &&
     used.bytes + extra.bytes <= limits.maxBytes;
-
-  const measureRetained = (): MessageSize => {
-    const roots: unknown[] = [];
-    for (const surface of processor.model.surfacesMap.values()) {
-      roots.push(
-        surface.id,
-        surface.dataModel.get('/'),
-        surface.theme,
-        surface.metadata,
-      );
-      for (const component of surface.componentsModel.values)
-        roots.push(
-          component.id,
-          component.type,
-          component.properties,
-          component.metadata,
-        );
-    }
-    // State past the limits cannot have been admitted; treat it as full.
-    return (
-      measure(roots, limits) ?? {
-        nodes: limits.maxNodes,
-        bytes: limits.maxBytes,
-      }
-    );
-  };
+  const total = (used: MessageSize, extra: MessageSize): MessageSize => ({
+    nodes: used.nodes + extra.nodes,
+    bytes: used.bytes + extra.bytes,
+  });
 
   const admitRetained = (
     messages: readonly ValidatedMessage[],
-    size: MessageSize,
   ): IngestFailure | undefined => {
     // A batch that only deletes surfaces can only shrink the state, so a full session can
     // always make room.
     if (messages.every((message) => message.accept(isDelete))) return undefined;
-    if (!fits(tally, size)) tally = measureRetained();
-    if (!fits(tally, size))
-      return {
-        kind: 'rejected',
-        message:
-          'This input would take the session past its limit on retained surface state. Delete a surface or start a new session.',
-      };
-    tally = {
-      nodes: tally.nodes + size.nodes,
-      bytes: tally.bytes + size.bytes,
+    const bound = retainedGrowth(messages, limits);
+    if (bound && fits(tally, bound)) {
+      tally = total(tally, bound);
+      return undefined;
+    }
+    const held = measureRetained(processor.model.surfacesMap, limits);
+    const growth =
+      bound && retainedGrowth(messages, limits, processor.model.surfacesMap);
+    if (growth && fits(held, growth)) {
+      tally = total(held, growth);
+      return undefined;
+    }
+    tally = held;
+    return {
+      kind: 'rejected',
+      message:
+        'This input would take the session past its limit on retained surface state. Delete a surface or start a new session.',
     };
-    return undefined;
   };
 
   return {
@@ -175,7 +159,7 @@ export function createMessageSession<T extends ComponentApi>(
         };
       const decoded = options.decoder.decode(input);
       if (!decoded.ok) return { ok: false, failure: decoded.failure };
-      const refused = admitRetained(decoded.messages, decoded.size);
+      const refused = admitRetained(decoded.messages);
       return refused
         ? { ok: false, failure: refused }
         : applyAll(decoded.messages);
