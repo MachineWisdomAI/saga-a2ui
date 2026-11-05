@@ -54,6 +54,18 @@ try {
       (workflowsOnly || file.startsWith('.github/workflows/')) &&
       /\.ya?ml$/.test(file),
   );
+  // Opaque analyzer output cannot be split into its values, so a file name holding a line feed
+  // would start a line of its own in it, and one holding a tab would look like a column break.
+  // Every line is therefore written with the analyzer's name in front of it, and a tab is written
+  // out: no line of the analyzer's can pass for the trusted `NAME: N ms; exit N` line below or
+  // for any other line this tool writes, while the lines and their indentation stay readable.
+  function analyzerLines(name, output) {
+    const lines = terminalText(output ?? '')
+      .replace(/\t/g, '\\t')
+      .split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    return lines.map((line) => `${name} | ${line}\n`).join('');
+  }
   function analyze(name, command, parameters) {
     const start = performance.now();
     const result = spawnSync(command, parameters, {
@@ -64,9 +76,10 @@ try {
       env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: undefined },
     });
     // Analyzer output repeats repository file names, which anyone who can change the repository
-    // chooses: it is written out before it reaches a terminal or CI log (SECURITY.md invariant 6).
-    process.stdout.write(terminalText(result.stdout ?? ''));
-    process.stderr.write(terminalText(result.stderr ?? ''));
+    // chooses: it is attributed and written out before it reaches a terminal or CI log
+    // (SECURITY.md invariant 6).
+    process.stdout.write(analyzerLines(name, result.stdout));
+    process.stderr.write(analyzerLines(name, result.stderr));
     const failed =
       result.error ||
       result.signal ||

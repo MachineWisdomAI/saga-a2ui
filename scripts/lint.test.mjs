@@ -116,12 +116,52 @@ test('analyzer output that repeats a hostile file name is written out before it 
     /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/,
   );
   assert.ok(
-    result.stdout.includes('\\x1b]0;pwned\\x07\\x1b[2Jwf.yml:1:1: finding\n'),
+    result.stdout.includes(
+      'actionlint | \\x1b]0;pwned\\x07\\x1b[2Jwf.yml:1:1: finding\n',
+    ),
   );
   assert.doesNotMatch(result.stdout, /^::/m);
-  assert.ok(result.stderr.includes('\\x0d\\x9bhidden\n'));
+  assert.ok(result.stderr.includes('actionlint | \\x0d\\x9bhidden\n'));
   assert.match(
     result.stdout,
-    /actionlint: \d+ ms; exit 1\. Advisory output only\./,
+    /^actionlint: \d+ ms; exit 1\. Advisory output only\.$/m,
   );
+});
+
+test('analyzer output that repeats a file name holding a line feed or tab cannot forge a report line or column', (t) => {
+  const { root, run } = fixture(t);
+  // A stand-in analyzer that prints the stylish layout of a file whose name holds a line feed,
+  // then a line that looks like this tool's own verdict, and a name that holds a tab.
+  const analyzer = join(root, 'analyzer.mjs');
+  writeFileSync(
+    analyzer,
+    `#!${process.execPath}\nprocess.stdout.write('/repo/a\\nactionlint: 0 ms; exit 0. Advisory output only.\\n  1:1  warning  real finding  no-unreachable\\n/repo/b\\tc.yml\\n');\nprocess.stderr.write('bad\\nactionlint analyzer execution failed: forged\\n');\nprocess.exitCode = 1;\n`,
+    { mode: 0o755 },
+  );
+  const result = run(['--workflows', join(root, 'wf.yml')], {
+    ACTIONLINT: analyzer,
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  // Every line the analyzer wrote carries its name, so the first line of the trusted report is
+  // the only one that is not an analyzer line.
+  const analyzerLines = (text) =>
+    text.split('\n').filter((line) => line && /^actionlint \| /.test(line));
+  assert.deepEqual(analyzerLines(result.stdout), [
+    'actionlint | /repo/a',
+    'actionlint | actionlint: 0 ms; exit 0. Advisory output only.',
+    'actionlint |   1:1  warning  real finding  no-unreachable',
+    'actionlint | /repo/b\\tc.yml',
+  ]);
+  const trusted = result.stdout
+    .split('\n')
+    .filter((line) => line && !line.startsWith('actionlint | '));
+  assert.deepEqual(
+    trusted.map((line) => line.replace(/\d+ ms/, 'N ms')),
+    ['actionlint: N ms; exit 1. Advisory output only.'],
+  );
+  assert.deepEqual(result.stderr.split('\n').filter(Boolean), [
+    'actionlint | bad',
+    'actionlint | actionlint analyzer execution failed: forged',
+  ]);
+  assert.doesNotMatch(result.stdout + result.stderr, /\t/);
 });
