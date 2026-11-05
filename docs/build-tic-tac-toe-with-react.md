@@ -90,8 +90,6 @@ The card should say: **Your React app is connected. Next, build the board.** If 
 
 The card should show the same welcome message. OpenAI’s [connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt) cover account access and changes to these menus.
 
-Both hosts can occasionally show a display error on the first load. Use the card’s **Retry** or **Try again** button once if that happens. This recovers a failed initial display; turns should update the board automatically once the game is open.
-
 ## 3. Build and play the game
 
 Stop the game server with **Ctrl-C** in its terminal. Leave the tunnel running. Follow [Build the playable game](tic-tac-toe/2-playable-game.md) to add the rules, server operations, board and turn handoff. Each section traces a part of the game and includes the complete application files. Then run:
