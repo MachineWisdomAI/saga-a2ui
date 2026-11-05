@@ -92,6 +92,18 @@ indicator in the PR or any commit still takes precedence. Pass the same body
 through `--body-file` locally; CI reads it from the pull-request event. This is a
 reviewed version decision, not permission to publish or to hide a breaking change.
 
+Before 1.0, a PR body may instead contain the standalone footer
+`Version-Bump: major` to take every unit to 1.0.0. This is the reviewed first-major
+step; a breaking indicator alone stays minor before 1.0. It moves every unit,
+whatever their patch numbers and even when the PR changes only version values, and
+keeps the prerelease channel reset to its first counter: `0.11.17-rc.1` and
+`0.11.11-rc.1` both become `1.0.0-rc.1`. `feat`, `fix`, and `!` do not change that
+result. The updater refuses the footer once any unit's baseline major is 1 or
+higher, refuses it together with `Version-Bump: patch`, and refuses it on a release
+promotion. Sibling pins mirror the new exact version, and `check` validates the
+result as for any other increment. Afterwards, the promotion title below turns
+`1.0.0-rc.1` into `1.0.0`.
+
 Every versioned unit shares one major.minor; patch numbers may differ. A minor or
 major increment (before 1.0, `feat` and `feat!`) therefore applies to every unit,
 while a patch increment applies only to the units the PR touched. Prerelease
@@ -165,6 +177,9 @@ mirrors. Captured templates and vendored packages are not owned version units.
 POINTER = '\n## Version updates\n\nFollow [the version policy](docs/version-policy.md): bump affected product versions in the original change PR; documentation, tests, CI, and development checks alone need no bump. Run the repository-local updater before review and after updating from main. Keep commit and PR titles in Conventional Commits format.\n'
 
 
+MAJOR_RELEASE = 4  # intent level selected only by the Version-Bump: major footer
+
+
 class PolicyError(ValueError):
     pass
 
@@ -231,10 +246,15 @@ def intent(title: str, body: str, commits: list[str]) -> int:
             level = max(level, 2)
     # An explicit reviewed PR decision may classify an additive feature as a patch.
     # Breaking declarations in the PR or any commit always retain their increment.
+    # Version-Bump: major is the reviewed 0.x -> 1.0.0 step (MAJOR_RELEASE), which a
+    # breaking indicator alone never takes before 1.0.
     selections = re.findall(r"^Version-Bump:[ \t]*([^\r\n]*)", body, re.MULTILINE)
     if selections:
-        if [value.strip() for value in selections] != ["patch"]:
-            raise PolicyError("Use exactly one Version-Bump: patch footer, or omit it for automatic intent")
+        values = [value.strip() for value in selections]
+        if values == ["major"]:
+            return MAJOR_RELEASE
+        if values != ["patch"]:
+            raise PolicyError("Use exactly one Version-Bump: patch or Version-Bump: major footer, or omit it for automatic intent")
         if level < 3:
             level = 1
     return level
@@ -251,7 +271,13 @@ def date_pre(pre: str | None) -> dt.date | None:
 
 def advance(version: tuple, level: int, date: dt.date) -> tuple:
     major, minor, patch, pre, _ = version
-    if level == 3 and major == 0:
+    if level == MAJOR_RELEASE:
+        if major != 0:
+            raise PolicyError(
+                f"Version-Bump: major moves 0.x to 1.0.0 only; the baseline is already {serialize(version)}. "
+                "From 1.0 onward a breaking change (! or BREAKING CHANGE:) is the major increment")
+        level = 3
+    elif level == 3 and major == 0:
         level = 2
     if level == 3:
         major, minor, patch = major + 1, 0, 0
@@ -493,6 +519,8 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
     commits = git(root, "log", "--format=%B%x00", base + "..HEAD").split("\0")
     level = intent(title, body, [c.strip() for c in commits if c.strip()])
     promote = title == "chore(release): promote version"
+    if promote and level == MAJOR_RELEASE:
+        raise PolicyError("Version-Bump: major cannot be combined with release promotion")
     raw_changes = set(git(root, "diff", "--name-only", "--no-renames", base).splitlines())
     raw_changes.update(git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     units = config["units"]
@@ -520,7 +548,8 @@ def evaluate(root: Path, args) -> list[tuple[Path, str]]:
     promoted = False
     touched = [shared or any(fnmatch.fnmatchcase(p, pat) for p in changes for pat in unit["paths"]) for unit in units]
     # A minor or major increment moves every unit; a patch increment moves only the touched ones.
-    widen = level >= 2 and any(touched) and not promote
+    # The reviewed 1.0 step moves every unit even when the PR changes only version values.
+    widen = (level == MAJOR_RELEASE or (level >= 2 and any(touched))) and not promote
     pinned = parse_version(pin["version"]) if pin else None
     pin_note = f"integration pin {pin['version']} for {pin['base']}" if pin else ""
     for unit, was_touched in zip(units, touched):
