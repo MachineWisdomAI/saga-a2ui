@@ -90,6 +90,7 @@ describe('package subpath exports', () => {
     expect(Object.keys(server).sort()).toEqual([
       'BudgetConfigurationError',
       'DEFAULT_MAX_CONCURRENT_VERIFICATIONS',
+      'DEFAULT_MAX_TOOL_INPUT_ELEMENTS',
       'DEFAULT_VERIFIER_ABANDON_MS',
       'OperationConfigurationError',
       'RequestLifetimeAttachmentError',
