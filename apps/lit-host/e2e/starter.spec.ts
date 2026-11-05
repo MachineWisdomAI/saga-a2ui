@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
@@ -145,9 +144,7 @@ for (const template of QUALIFIED_STARTERS) {
       expect(
         (result._meta as { ui: { resourceUri: string } }).ui.resourceUri,
       ).toBe(served.uri);
-      expect(served.uri).toBe(
-        `ui://views/index.${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}.html`,
-      );
+      expect(served.uri).toBe('ui://views/index.v1.html');
       expect(Buffer.from(served.html, 'utf8').equals(bytes)).toBe(true);
       expect(served.csp).toEqual({
         connectDomains: [],

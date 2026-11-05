@@ -130,7 +130,7 @@ test('the resource is linked from the tool and served with an empty-allowlist CS
   expect(
     tools.find((tool) => tool.name === EPISODE_TOOL_NAME)?._meta,
   ).toMatchObject({ ui: { resourceUri: uri } });
-  expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
+  expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/);
 
   const resource = await readView();
   expect(resource.csp).toEqual({
