@@ -13,7 +13,7 @@ import {
   ActionButtonEntry,
   createReactActions,
   defineSurface,
-  z,
+  z3,
   type RunningA2uiView,
 } from './index.js';
 import {
@@ -37,7 +37,7 @@ const CATALOG_ID = 'https://stack.example/catalogs/own/v1';
 
 const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+  schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
 };
 const Line = createComponentImplementation(LineApi, ({ props }) =>
   createElement('span', { 'data-testid': 'line' }, String(props.text ?? '')),
@@ -50,7 +50,7 @@ const catalog = new Catalog<ReactCatalogComponent>(CATALOG_ID, 'v0.9', [
 const layout = defineSurface({
   surfaceId: 'own',
   catalogId: CATALOG_ID,
-  data: z.object({ label: z.string() }),
+  data: z3.object({ label: z3.string() }),
   initial: { label: 'Waiting' },
   root: { component: 'ActionButton', bind: {}, props: { child: 'label' } },
   components: [{ id: 'label', component: 'Line', text: { path: '/label' } }],
@@ -375,7 +375,7 @@ describe('startA2uiView', () => {
   it('a catalog component that throws on the initial render fails startup as application, after cleanup', async () => {
     const BrokenApi = {
       name: 'Broken',
-      schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+      schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
     };
     const Broken = createComponentImplementation(BrokenApi, () => {
       throw new Error('component broke');
@@ -388,7 +388,7 @@ describe('startA2uiView', () => {
     const brokenLayout = defineSurface({
       surfaceId: 'own',
       catalogId: CATALOG_ID,
-      data: z.object({ label: z.string() }),
+      data: z3.object({ label: z3.string() }),
       initial: { label: 'Waiting' },
       root: { component: 'Broken', bind: { text: 'label' } },
       components: [],

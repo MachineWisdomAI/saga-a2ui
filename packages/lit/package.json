@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/lit",
   "private": false,
-  "description": "Lit binding for SAGA A2UI: mounts a core message session's surface with an application's own catalog and owns its disposal, with the optional /actions control and instance host and the optional /faithful-card element",
+  "description": "saga a2ui for Lit: render A2UI surfaces with your own web components, attach actions, and show the FaithfulCard",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -20,11 +20,11 @@
   "dependencies": {
     "@a2ui/lit": "0.13.0",
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "0.11.13-rc.1",
+    "@saga-a2ui/core": "0.12.0-rc.1",
     "lit": "^3.3.3"
   },
   "peerDependencies": {
-    "@saga-a2ui/components": "0.11.11-rc.1"
+    "@saga-a2ui/components": "0.12.0-rc.1"
   },
   "peerDependenciesMeta": {
     "@saga-a2ui/components": {
@@ -32,11 +32,11 @@
     }
   },
   "devDependencies": {
-    "@saga-a2ui/components": "0.11.11-rc.1",
+    "@saga-a2ui/components": "0.12.0-rc.1",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.11.11-rc.1",
+  "version": "0.12.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

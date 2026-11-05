@@ -42,7 +42,7 @@ import { InstanceHostProvider, useActionSetup } from './instance-host.js';
 // dispatches on the surface (the protocol path).
 
 export const CATALOG_ID =
-  'https://saga-a2ui.local/catalogs/react-action-consumer/v1';
+  'https://saga-a2ui.dev/catalogs/react-action-consumer/v1';
 export const SURFACE_ID = 'actions';
 
 type ChildReference =

@@ -6,7 +6,7 @@ import {
   createComponentImplementation,
   ListApi,
   RowApi,
-  z,
+  z3,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
 import type { ReactNode } from 'react';
@@ -38,8 +38,8 @@ function childrenOf(
 
 const LineApi = {
   name: 'Line',
-  schema: z
-    .object({ text: CommonSchemas.DynamicString, kind: z.enum(LINE_KINDS) })
+  schema: z3
+    .object({ text: CommonSchemas.DynamicString, kind: z3.enum(LINE_KINDS) })
     .strict(),
 };
 

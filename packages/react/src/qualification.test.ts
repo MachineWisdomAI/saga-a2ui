@@ -26,9 +26,12 @@ describe('the supported React and upstream A2UI versions', () => {
     expect(installed('react-dom')).toBe('19.3.1');
     expect(reactVersion).toBe(installed('react'));
     expect(reactDomVersion).toBe(installed('react-dom'));
-    // Peers and development copies name exactly that version, not a range nobody ran.
-    expect(manifest.peerDependencies.react).toBe('19.3.1');
-    expect(manifest.peerDependencies['react-dom']).toBe('19.3.1');
+    // Peers start at the version the tests ran on and accept later React 19 releases; the
+    // development copies name exactly that version.
+    expect(manifest.peerDependencies.react).toBe(`^${installed('react')}`);
+    expect(manifest.peerDependencies['react-dom']).toBe(
+      `^${installed('react-dom')}`,
+    );
     expect(manifest.devDependencies.react).toBe('19.3.1');
     expect(manifest.devDependencies['react-dom']).toBe('19.3.1');
     expect(installed('@types/react')).toBe(

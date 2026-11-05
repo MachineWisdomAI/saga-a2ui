@@ -37,6 +37,9 @@ export type {
 // The authoring surface of an own-catalog application: the layout and its schemas.
 export { defineSurface } from '@saga-a2ui/core/protocols/a2ui/v0_9';
 export type { SurfaceLayout } from '@saga-a2ui/core/protocols/a2ui/v0_9';
+// A2UI's own Zod 3, for surface and catalog schemas. Tool schemas use `zod` 4 directly.
+export { z as z3 } from '@saga-a2ui/core/protocols/a2ui/zod3';
+/** @deprecated Use `z3`; removed before 1.0. */
 export { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 // The catalog an application builds: its components over upstream's component API, and the
 // catalog value and schemas it declares them with.
