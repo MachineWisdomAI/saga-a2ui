@@ -3,6 +3,7 @@ import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   attachRequestLifetime,
   createServerBudgets,
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
@@ -28,7 +29,10 @@ export function createStatusServer(
     html: page,
     csp: CLOSED_VIEW_CSP,
   });
-  const server = new McpServer({ name: 'status', version: '0.0.0' });
+  const server = new McpServer(
+    { name: 'status', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerPublicOperation(
     server,
     {
@@ -60,7 +64,10 @@ export function createStatusServer(
 // The same operation with no view: a data operation that keeps every execution guarantee, public and
 // protected. Nothing here names the MCP Apps server API; the registration stays inside the package.
 export function createDataServer(lifetime: RequestLifetime): McpServer {
-  const server = new McpServer({ name: 'data', version: '0.0.0' });
+  const server = new McpServer(
+    { name: 'data', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   const failures = {
     absent: 'No status.',
     unavailable: 'Unavailable.',
