@@ -6,12 +6,16 @@ The helper is introduced in `0.9.0-rc.1`. Check [public installation](public-ins
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';
+import { DEFAULT_MAX_TOOL_INPUT_ELEMENTS } from '@saga-a2ui/react-mcp-stack/server';
 import { startLocalMcpServer } from '@saga-a2ui/react-mcp-stack/server/node';
 
 const listener = await startLocalMcpServer({
   port: 3000,
   createServer(lifetime) {
-    const server = new McpServer({ name: 'my-app', version: '1.0.0' });
+    const server = new McpServer(
+      { name: 'my-app', version: '1.0.0' },
+      { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+    );
     // Register your operations here, passing { lifetime } to each registration.
     return server;
   },
@@ -22,6 +26,8 @@ console.log(listener.url); // http://127.0.0.1:3000/mcp
 ```
 
 The callback creates a fresh MCP server for each admitted request. Keep shared application state, such as a game store, outside that callback. Load the built view before starting the listener, then reuse it when registering operations. The callback's `lifetime` gives each operation the same deadline as the HTTP request that carries it.
+
+Pass `maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS` as the second argument of every `McpServer` you build, as above. The official server counts a tool call's array elements and object members only when it has that option; without it, any payload within the body limit is parsed and validated. The default is 256, far above what these operations take; a larger finite number is your choice if your tools take larger structured input.
 
 The listener binds only to `127.0.0.1` and serves `/mcp`. It accepts `localhost` and `127.0.0.1` Host headers and the official MCP adapter's localhost Origin policy. Requests without an Origin header are allowed, as needed by server-to-server MCP clients. A development tunnel must forward an accepted Host header; for Cloudflare Quick Tunnel, use `--http-host-header localhost`.
 

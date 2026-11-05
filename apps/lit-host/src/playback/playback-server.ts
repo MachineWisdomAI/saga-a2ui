@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/ext-apps/server'; // saga-boundary: integration-import backend registration of the Play and Open tools and the player view resource with the MCP Apps server API; this server module is the backend side and never touches the view bridge
 import { calculateJwkThumbprint } from 'jose';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   throwIfEnded,
   valueOrThrow,
   type BoundedScope,
@@ -120,10 +121,13 @@ async function boundedHandler(
 export function createPlaybackServer(
   options: PlaybackServerOptions,
 ): McpServer {
-  const server = new McpServer({
-    name: 'saga-a2ui-playback-demo',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-a2ui-playback-demo',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   // The input is a strict object, so a forged `accountId` is rejected instead of dropped.
   // `registerAppTool` also writes the legacy flat `ui/resourceUri` key that older hosts read.
