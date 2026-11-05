@@ -244,6 +244,96 @@ class SharedMajorMinorTest(unittest.TestCase):
             self.assertIn("packages/components", result.stderr)
 
 
+FIRST_MAJOR_BASELINE = {"core": "0.11.17-rc.1", "components": "0.11.11-rc.1",
+                        "mcp": "0.11.14-rc.1", "react": "0.11.12-rc.1"}
+
+
+class FirstMajorTest(unittest.TestCase):
+    """Version-Bump: major is the reviewed opt-in from 0.x to 1.0.0."""
+
+    def run_with_body(self, repo, command, title, body):
+        body_file = repo.root.parent / "body.md"
+        body_file.write_text(body)
+        return repo.run(command, "refs/remotes/origin/main", title, None, "--body-file", str(body_file))
+
+    def test_major_footer_moves_every_unit_to_the_first_release_candidate(self):
+        for title, change in [
+            ("feat: add core feature", "packages/core/src.ts"),
+            ("fix: correct mcp", "packages/mcp/src.ts"),
+            ("feat!: change public API", "packages/react/src.ts"),
+            ("chore(release): select 1.0", None),
+        ]:
+            with self.subTest(title=title), tempfile.TemporaryDirectory() as directory:
+                repo = baseline(directory, FIRST_MAJOR_BASELINE)
+                if change:
+                    repo.write(change, "product change")
+                for command in ["update", "check"]:
+                    result = self.run_with_body(repo, command, title, "Agreed 1.0.\n\nVersion-Bump: major\n")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(repo.versions(), dict.fromkeys(UNITS, "1.0.0-rc.1"))
+                manifest = json.loads((repo.root / "packages/components/package.json").read_text())
+                self.assertEqual(manifest["dependencies"]["@saga-a2ui/core"], "1.0.0-rc.1")
+
+    def test_breaking_change_without_the_footer_stays_minor_before_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = baseline(directory, FIRST_MAJOR_BASELINE)
+            repo.write("packages/core/src.ts", "breaking")
+            result = self.run_with_body(repo, "update", "feat!: change public API", "")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(repo.versions(), dict.fromkeys(UNITS, "0.12.0-rc.1"))
+
+    def test_check_rejects_a_partial_first_major(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = baseline(directory, FIRST_MAJOR_BASELINE)
+            repo.write_state({**dict.fromkeys(UNITS, "1.0.0-rc.1"), "mcp": "0.11.14-rc.1"})
+            result = self.run_with_body(repo, "check", "chore(release): select 1.0", "Version-Bump: major\n")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("packages/mcp/package.json: expected 1.0.0-rc.1", result.stderr)
+
+    def test_major_footer_is_refused_from_one_onward(self):
+        for version in ["1.0.0-rc.1", "1.0.0", "2.3.4"]:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+                repo = baseline(directory, dict.fromkeys(UNITS, version))
+                repo.write("packages/core/src.ts", "feature")
+                before = repo.snapshot()
+                result = self.run_with_body(repo, "update", "feat: add core feature", "Version-Bump: major\n")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("Version-Bump: major moves 0.x to 1.0.0 only", result.stderr)
+                self.assertIn(version, result.stderr)
+                self.assertEqual(repo.snapshot(), before)
+
+    def test_major_footer_cannot_be_mixed_with_patch(self):
+        for body in ["Version-Bump: major\nVersion-Bump: patch\n", "Version-Bump: patch\nVersion-Bump: major\n",
+                     "Version-Bump: major\nVersion-Bump: major\n", "Version-Bump: minor\n"]:
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
+                repo = baseline(directory, FIRST_MAJOR_BASELINE)
+                repo.write("packages/core/src.ts", "feature")
+                result = self.run_with_body(repo, "update", "feat: add core feature", body)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("exactly one Version-Bump", result.stderr)
+
+    def test_major_footer_cannot_ride_on_promotion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = baseline(directory, FIRST_MAJOR_BASELINE)
+            result = self.run_with_body(repo, "update", "chore(release): promote version", "Version-Bump: major\n")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("cannot be combined with release promotion", result.stderr)
+
+    def test_promotion_after_the_first_major_yields_one_point_oh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = baseline(directory, FIRST_MAJOR_BASELINE)
+            result = self.run_with_body(repo, "update", "chore(release): select 1.0", "Version-Bump: major\n")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            repo.track("main", repo.commit("chore(release): select 1.0"))
+            repo.git("switch", "-c", "promote")
+            for command in ["update", "check"]:
+                result = self.run_with_body(repo, command, "chore(release): promote version", "")
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(repo.versions(), dict.fromkeys(UNITS, "1.0.0"))
+            manifest = json.loads((repo.root / "packages/components/package.json").read_text())
+            self.assertEqual(manifest["dependencies"]["@saga-a2ui/core"], "1.0.0")
+
+
 class IntegrationPinTest(unittest.TestCase):
     def integration(self, directory):
         """main at 0.6.4-rc.1; the integration branch already carries the pin at 0.7.0-rc.1."""
