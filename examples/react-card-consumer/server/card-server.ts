@@ -5,6 +5,7 @@ import {
   resourcePermissionsOf,
 } from '@saga-a2ui/components/faithful-card';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   operationViewFromHtml,
   registerPublicOperation,
 } from '@saga-a2ui/mcp/server';
@@ -51,10 +52,13 @@ export function createCardServer(
     title: 'Answer card',
     csp: resourcePermissionsOf(created.policy),
   });
-  const server = new McpServer({
-    name: 'react-card-consumer',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'react-card-consumer',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerPublicOperation(server, {
     name: 'answer_question',
     title: 'Answer a question',

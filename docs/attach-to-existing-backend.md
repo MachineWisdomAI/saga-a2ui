@@ -105,10 +105,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {
@@ -234,10 +237,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {
@@ -359,10 +365,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {
@@ -482,10 +491,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {
@@ -594,10 +606,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {
@@ -717,10 +732,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {

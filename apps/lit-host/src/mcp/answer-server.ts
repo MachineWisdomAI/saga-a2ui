@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerPublicOperation,
   type OperationOutcome,
   type OperationRequest,
@@ -47,10 +48,13 @@ export interface AnswerServerOptions {
  * question is never logged here; the application's own logging policy covers anything else.
  */
 export function createAnswerServer(options: AnswerServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-a2ui-answer-demo',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-a2ui-answer-demo',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   registerPublicOperation(
     server,
