@@ -17,4 +17,4 @@ date_added: 2026-10-30
 
 The rejected proposal is preserved in Git at `a0b581285ffa917f32ef5998159d2921adcdc077`. Its artifact manifests, promotion-order retention, trimming, withdrawal ledger and historical resource delivery are not implementation requirements. Its former flow diagrams were removed from the current proposal because they describe the rejected architecture.
 
-The replacement focuses on explicit compatibility versions and obtaining a supported host cache-invalidation and UI-transition contract. It does not authorize restoring retention machinery if upstream clarification is inconclusive.
+The replacement gives each view one address per compatibility major, so a compatible deploy leaves earlier tool descriptors pointing at a served document. It does not authorize restoring retention machinery.
