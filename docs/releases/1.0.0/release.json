@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "channel": "stable",
-  "revision": "a9633b399cf7318ecd934aaef192263119373692",
+  "revision": "15591e35b1287486ea789f49cd5ead998ed03b89",
   "packages": {
     "@saga-a2ui/core": "1.0.0",
     "@saga-a2ui/components": "1.0.0",

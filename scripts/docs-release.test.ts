@@ -686,9 +686,9 @@ describe('the committed releases', () => {
     expect(checkReleases(root).problems).toEqual([]);
   });
 
-  it('keep the older release when a newer one is added: each has its own directory and record', () => {
+  it('give each published release its own directory and record', () => {
     const versions = releaseVersions(root);
-    expect(versions.length).toBeGreaterThanOrEqual(2);
+    expect(versions.length).toBeGreaterThanOrEqual(1);
     for (const version of versions) {
       const spec = readSpec(root, version);
       expect(spec.version).toBe(version);
@@ -712,9 +712,7 @@ describe('the committed releases', () => {
         .version,
     );
     const byId = new Map(inventory.components.map((c) => [c.id, c.routes]));
-    expect(Object.keys(byId.get('saga-attribution')!).sort()).toEqual(
-      ['0.11.0-rc.1', '1.0.0'].sort(),
-    );
+    expect(Object.keys(byId.get('saga-attribution')!)).toEqual(['1.0.0']);
     expect(Object.keys(byId.get('faithful-card')!).sort()).toEqual(
       inventory.releases.map((release) => release.version).sort(),
     );

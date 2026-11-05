@@ -27,14 +27,44 @@ import {
 // the hosted site, which only a run of the probe against it can.
 
 const ENDPOINT = 'https://docs.example.test/mcp';
-const site = readSite();
-const cases = releaseCases(site);
-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// The site publishes one release. To show that the probe tells two releases apart, the committed
+// site is joined by a labeled prerelease whose page is the last published 0.11.0-rc.1 page, kept
+// as a fixture.
+const PRERELEASE = '0.11.0-rc.1';
+const FIXTURE = path.join(
+  root,
+  'scripts',
+  'fixtures',
+  'docs-probe',
+  PRERELEASE,
+);
+const committedSite = readSite();
+const site = {
+  releases: [
+    ...committedSite.releases,
+    {
+      version: PRERELEASE,
+      tag: 'Prerelease',
+      default: false,
+      pages: [`docs/releases/${PRERELEASE}/server-entry-points`],
+    },
+  ],
+};
+const cases = releaseCases(site);
 
 /** The committed Markdown of a release page, which the hosted site is built from. */
 const committed = (page: string): string =>
-  fs.readFileSync(path.join(root, `${page}.mdx`), 'utf8');
+  page.startsWith(`docs/releases/${PRERELEASE}/`)
+    ? fs.readFileSync(
+        path.join(
+          FIXTURE,
+          `${page.slice(`docs/releases/${PRERELEASE}/`.length)}.mdx`,
+        ),
+        'utf8',
+      )
+    : fs.readFileSync(path.join(root, `${page}.mdx`), 'utf8');
 
 interface Stand {
   /** What search returns for a query. */

@@ -3,7 +3,7 @@ title: 'Build the notes application with Lit'
 description: 'The Lit track: compose a notes application view with a stack, see how identity reaches an operation, and where each claim''s evidence stops.'
 ---
 
-> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/build-notes-with-lit.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/build-notes-with-lit.md) at source revision [`a9633b3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/LICENSE).
+> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/build-notes-with-lit.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/build-notes-with-lit.md) at source revision [`15591e3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/LICENSE).
 
 This is the Lit track. It starts after the [setup guide](/docs/releases/1.0.0/guides/getting-started): you have installed the packages or built the candidate tarballs, and you know which renderer and server you are using. The React track is [Build tic-tac-toe with React](/docs/releases/1.0.0/guides/build-tic-tac-toe-with-react); it builds a different application, so you do not need this page to follow it.
 
@@ -27,7 +27,7 @@ npm start
 
 The first block writes `apps/lit-host/dist/demo`; run the second inside it. Open the `Open the demo host page:` address it prints. The generated demo itself requires Node 22.12.0 or newer. Choose Alice in the local host page, open Notes, and press Archive on a note. The row reports the archive result. End the notes session and try another Archive: the prerequisite refuses and no archive request is sent. These are synthetic local credentials, not a production identity flow.
 
-See the [demonstration README](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/demo/lit-node/README.md) for the controls, the environment variables and what each shows.
+See the [demonstration README](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/demo/lit-node/README.md) for the controls, the environment variables and what each shows.
 
 ## Compose a view with a stack
 
@@ -95,7 +95,7 @@ The application authenticates the request and its server decides what the accoun
 | Authentication | A request with an accepted, refused or absent credential was admitted or refused | An OAuth or DCR flow, or any real identity provider |
 | Audio | The local audio clock advanced | Audio in a remote host |
 
-Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/host-compatibility.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
+Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/host-compatibility.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
 
 ## Actions
 
@@ -120,7 +120,7 @@ Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 secon
 | --- | --- | --- |
 | Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
 | Lit | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer checks cover the starter, demonstration and notes example | Starter and local fixture results do not establish every application or host combination; Windows is not qualified here |
-| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. Bounded notes observations in Claude/ChatGPT are recorded in [host compatibility](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/host-compatibility.md) | One generated React starter, `react-mcp` on Hono; no other React server pair and no React demonstration. Qualification of a particular application and host remains specific to its built artifact; no complete host matrix is claimed |
+| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. Bounded notes observations in Claude/ChatGPT are recorded in [host compatibility](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/host-compatibility.md) | One generated React starter, `react-mcp` on Hono; no other React server pair and no React demonstration. Qualification of a particular application and host remains specific to its built artifact; no complete host matrix is claimed |
 | Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp`; `hono` qualified with `react-mcp` | No full matrix; `saga init` offers those six pairs; the standalone demonstration is the Lit and Node application only |
 | Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |
 
@@ -141,4 +141,4 @@ import {A2uiSurface, Catalog, type ReactCatalogComponent} from '@saga-a2ui/react
 - Change a component and trace allowed and denied requests: the [action guide](/docs/releases/1.0.0/guides/actions). It is the next step of this track.
 - Install, create a project, serve over HTTP or attach to an existing backend: the [setup guide](/docs/releases/1.0.0/guides/getting-started).
 - Build a different application with the React stack: [Build tic-tac-toe with React](/docs/releases/1.0.0/guides/build-tic-tac-toe-with-react).
-- Where each host has been observed to work: [host compatibility](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/host-compatibility.md).
+- Where each host has been observed to work: [host compatibility](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/host-compatibility.md).

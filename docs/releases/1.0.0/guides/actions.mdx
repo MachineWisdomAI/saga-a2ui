@@ -3,13 +3,13 @@ title: 'Change a component and trace allowed and denied requests'
 description: 'Change a component and trace allowed and denied requests through prerequisites, server authorization, feedback and cleanup.'
 ---
 
-> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/actions.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/actions.md) at source revision [`a9633b3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/LICENSE).
+> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/actions.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/actions.md) at source revision [`15591e3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/LICENSE).
 
 After running the [setup guide](/docs/releases/1.0.0/guides/getting-started), use the notes application to change a control and follow an Archive press from the row through prerequisites, server authorization, feedback and cleanup. The same action definition serves every row, while each row keeps its own pending state and current note identity.
 
 Each quoted block is copied from the file named above it; `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` exercises the traces against the notes application installed from packed candidate tarballs.
 
-All seven SDK packages, including Lit and both stacks, are [published on npm](/docs/releases/1.0.0/guides/public-install). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/candidate-update-and-rollback.md)). The action APIs described here ship in the published 1.0 packages. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
+All seven SDK packages, including Lit and both stacks, are [published on npm](/docs/releases/1.0.0/guides/public-install). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/candidate-update-and-rollback.md)). The action APIs described here ship in the published 1.0 packages. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
 
 The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](/docs/releases/1.0.0/guides/getting-started) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
 
@@ -23,7 +23,7 @@ npx vitest run scripts/guide-actions.test.ts
 npx vitest run scripts/starter.test.ts
 ```
 
-The first test file installs the notes application from packed candidate tarballs into a clean directory, connects a real MCP client to its server, and presses real controls on the real action runtime. It covers every allowed, denied and refused path below. The second qualifies the starter's HTTP authentication, which the notes application leaves to its own listener. Neither needs a browser. The browser checks for the same application run in `apps/lit-host/e2e/pack1-consumers.spec.ts`; the [development reference](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/development-reference.md#local-development) lists the build and browser commands.
+The first test file installs the notes application from packed candidate tarballs into a clean directory, connects a real MCP client to its server, and presses real controls on the real action runtime. It covers every allowed, denied and refused path below. The second qualifies the starter's HTTP authentication, which the notes application leaves to its own listener. Neither needs a browser. The browser checks for the same application run in `apps/lit-host/e2e/pack1-consumers.spec.ts`; the [development reference](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/development-reference.md#local-development) lists the build and browser commands.
 
 ## Who owns what
 
@@ -512,12 +512,12 @@ The five server targets—`node`, `express`, `fastify`, `hono` and `hapi`—are 
 ### Hapi
 
 The Hapi identity handoff starts in the authentication strategy in
-[`templates/lit-hapi/server/listener.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hapi/server/listener.ts).
+[`templates/lit-hapi/server/listener.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hapi/server/listener.ts).
 The bridge admits one request lifetime before authentication. The strategy accesses it through
 `mcpRequestLifetime(request)`; `authenticate` uses it to bound verification and copies and freezes
 the verified account before the body wait. Hapi stores that
 context in `request.auth.credentials.authInfo`; the maintained
-[`bridge.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hapi/server/bridge.ts) passes `{ authInfo, lifetime, request }` to `createServer` and the auth to the Node
+[`bridge.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hapi/server/bridge.ts) passes `{ authInfo, lifetime, request }` to `createServer` and the auth to the Node
 transport. The bridge owns bounded parsing, deadlines, disconnect handling and shutdown cleanup. The protected operation’s `identityOf` hook reads that auth,
 and its handler applies the application’s policy. Tool arguments cannot name the account.
 An explicitly public route reads no credential and receives no identity.
@@ -531,7 +531,7 @@ by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 
 ## What this guide does not show
 
-- It traces a loopback run against synthetic data. It shows no real identity provider, OAuth or DCR flow, and no run in ChatGPT, Claude or Alexa+. Named-host receipts are in the [host compatibility observations](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/host-compatibility.md).
+- It traces a loopback run against synthetic data. It shows no real identity provider, OAuth or DCR flow, and no run in ChatGPT, Claude or Alexa+. Named-host receipts are in the [host compatibility observations](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/host-compatibility.md).
 - Cancellation forwarding, rollback and gesture behavior in an actual host stay unobserved.
 - The prerequisites above are guide qualification code, not part of the notes application or an SDK export. The SDK has no promise-combinator, registry or tutorial dispatcher, and this guide adds none.
 - Package publication, deployment and visibility are separate decisions this guide does not make.
@@ -539,5 +539,5 @@ by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 ## Where to go next
 
 - The setup, install and attach recipes: [Getting started](/docs/releases/1.0.0/guides/getting-started) and [Attach SAGA to an existing backend](/docs/releases/1.0.0/guides/attach-to-existing-backend).
-- The design behind the vocabulary: [action binding](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/blueprints/modules/action_binding.blueprint.md#authoring) and [request and view lifetimes](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/blueprints/features/request_view_lifetimes.blueprint.md). The Blueprints explain the approved contract, implemented scope and remaining proposals; the shipped exports and examples establish the API you can use.
-- Updating or rolling back the candidate: [Candidates: contents, update, rollback](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/candidate-update-and-rollback.md).
+- The design behind the vocabulary: [action binding](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/blueprints/modules/action_binding.blueprint.md#authoring) and [request and view lifetimes](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/blueprints/features/request_view_lifetimes.blueprint.md). The Blueprints explain the approved contract, implemented scope and remaining proposals; the shipped exports and examples establish the API you can use.
+- Updating or rolling back the candidate: [Candidates: contents, update, rollback](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/candidate-update-and-rollback.md).

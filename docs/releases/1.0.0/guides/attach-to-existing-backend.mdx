@@ -3,7 +3,7 @@ title: 'Attach SAGA to an existing backend'
 description: 'Recipes for attaching SAGA to an existing backend, cut from the maintained and qualified starter templates.'
 ---
 
-> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/attach-to-existing-backend.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/attach-to-existing-backend.md) at source revision [`a9633b3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/LICENSE).
+> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/attach-to-existing-backend.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/attach-to-existing-backend.md) at source revision [`15591e3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/LICENSE).
 
 This document is generated. Each snippet is the maintained starter template’s own text, cut from the files CI builds and qualifies, so it cannot drift from a tested file. The [setup guide](/docs/releases/1.0.0/guides/getting-started) explains the concepts and the order to read them in.
 
@@ -13,12 +13,12 @@ Attaching SAGA to a backend you already run is an integration you make in your o
 
 | Stack | Server | Maintained template | `saga init` |
 | --- | --- | --- | --- |
-| `lit-mcp` | `node` | [`lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-node) | offered |
-| `lit-mcp` | `express` | [`lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-express) | offered |
-| `lit-mcp` | `fastify` | [`lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-fastify) | offered |
-| `lit-mcp` | `hono` | [`lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hono) | offered |
-| `lit-mcp` | `hapi` | [`lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hapi) | offered |
-| `react-mcp` | `hono` | [`react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/react-hono) | offered |
+| `lit-mcp` | `node` | [`lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-node) | offered |
+| `lit-mcp` | `express` | [`lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-express) | offered |
+| `lit-mcp` | `fastify` | [`lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-fastify) | offered |
+| `lit-mcp` | `hono` | [`lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hono) | offered |
+| `lit-mcp` | `hapi` | [`lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hapi) | offered |
+| `react-mcp` | `hono` | [`react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/react-hono) | offered |
 
 A pair is listed only while CI qualifies it, and a qualified pair is not automatically offered by `saga init`: that command offers the pairs in its own list. A recipe is not a claim about any other pair, and no full matrix is claimed.
 
@@ -39,7 +39,7 @@ CI qualifies the starter’s listener and operations against real MCP clients. T
 
 ## `node` with `lit-mcp`
 
-Template: [`templates/lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-node). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+Template: [`templates/lit-node`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-node). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -166,7 +166,7 @@ attach: (surfaceView) => {
 
 ## `express` with `lit-mcp`
 
-Template: [`templates/lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-express). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+Template: [`templates/lit-express`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-express). Server adapter: `@modelcontextprotocol/express` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -296,7 +296,7 @@ attach: (surfaceView) => {
 
 ## `fastify` with `lit-mcp`
 
-Template: [`templates/lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-fastify). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+Template: [`templates/lit-fastify`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-fastify). Server adapter: `@modelcontextprotocol/fastify` 2.0.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -422,7 +422,7 @@ attach: (surfaceView) => {
 
 ## `hono` with `lit-mcp`
 
-Template: [`templates/lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+Template: [`templates/lit-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -546,7 +546,7 @@ attach: (surfaceView) => {
 
 ## `hapi` with `lit-mcp`
 
-Template: [`templates/lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/lit-hapi). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
+Template: [`templates/lit-hapi`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/lit-hapi). Server adapter: `@modelcontextprotocol/node` 2.1.1. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/lit`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/lit-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/bridge.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
@@ -659,7 +659,7 @@ attach: (surfaceView) => {
 
 ## `hono` with `react-mcp`
 
-Template: [`templates/react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692/templates/react-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/react`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react-mcp-stack`.
+Template: [`templates/react-hono`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89/templates/react-hono). Server adapter: `@modelcontextprotocol/hono` 2.0.2. SDK packages: `@saga-a2ui/core`, `@saga-a2ui/react`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react-mcp-stack`.
 
 The snippets below call the starter's own application files, which you read in the template (or in a project `saga init` created) and adapt: `server/authenticate.ts`, `server/authorization.ts`, `server/endpoint.ts`, `server/identity.ts`, `server/verifier.ts`. `server/verifier.ts` and `server/authorization.ts` are where your identity provider and your policy go; the starter ships neither.
 
