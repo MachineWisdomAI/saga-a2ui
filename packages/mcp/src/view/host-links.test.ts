@@ -135,6 +135,25 @@ describe('opening a link through the host', () => {
     await expect(pending).resolves.toBe('unavailable');
   });
 
+  it('drops the rejection of a request that fails after the signal has aborted', async () => {
+    let fail: (error: Error) => void = () => undefined;
+    let held = false;
+    const app = await connected({ openLinks: {} }, () => {
+      held = true;
+      return new Promise<{ isError?: boolean }>((_, reject) => (fail = reject));
+    });
+    const lifetime = new AbortController();
+    const pending = hostLinksFromApp(app, lifetime.signal).open(
+      'https://docs.example.com/',
+    );
+    await expect.poll(() => held).toBe(true);
+    lifetime.abort();
+    await expect(pending).resolves.toBe('unavailable');
+    // The run fails on an unhandled rejection; the late failure must not become one.
+    fail(new Error('host went away'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it('answers a request that settles before the signal aborts with its own outcome', async () => {
     const app = await connected({ openLinks: {} }, async () => ({}));
     const lifetime = new AbortController();

@@ -42,7 +42,8 @@ export function conversationFromApp(
       return 'unavailable';
     try {
       const result = await untilEnded(send(), signal);
-      if (ended()) return 'unavailable';
+      // `undefined` is the settlement of an ended view, never a host's answer.
+      if (ended() || result === undefined) return 'unavailable';
       // `ui/message` answers a refusal with `isError`. `ui/update-model-context` has an empty
       // result in the pinned bridge, which rejects any other key, so a host that refuses a context
       // update can only reject it; the same reading is kept for a bridge that ever allows it.

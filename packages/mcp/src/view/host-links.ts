@@ -24,7 +24,8 @@ export function hostLinksFromApp(app: App, signal?: AbortSignal): HostLinks {
         // Raced against the view's lifetime: the bridge cannot cancel the request, so a host that
         // never answers must not leave this call (and the link control waiting on it) pending.
         const result = await untilEnded(app.openLink({ url }), signal);
-        if (ended()) return 'unavailable';
+        // `undefined` is the settlement of an ended view, never a host's answer.
+        if (ended() || result === undefined) return 'unavailable';
         return result.isError === true ? 'denied' : 'opened';
       } catch {
         return ended() ? 'unavailable' : 'failed';
