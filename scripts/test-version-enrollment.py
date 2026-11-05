@@ -11,6 +11,12 @@ import unittest
 UPDATER = Path(__file__).with_name("mw-version.py")
 
 
+def setUpModule():
+    # The updater reads the pull-request event from GITHUB_EVENT_PATH by default. These fixture
+    # repositories state their own intent, so the PR running CI must not supply a body or title.
+    os.environ.pop("GITHUB_EVENT_PATH", None)
+
+
 class EnrollmentTest(unittest.TestCase):
     def test_existing_unversioned_manifest_gets_initial_version_then_bumps(self):
         with tempfile.TemporaryDirectory() as directory:
