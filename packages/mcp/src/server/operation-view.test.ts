@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CLOSED_VIEW_CSP } from '../policy/index.js';
 import { operationViewFromHtml } from './operation-view.js';
-import { viewUriForMajor } from './view-identity.js';
+import { viewUriForHtml, viewUriForMajor } from './view-identity.js';
 
 const HTML = '<!doctype html><html><head></head><body>view</body></html>';
 
@@ -58,11 +58,28 @@ describe('operationViewFromHtml', () => {
     ).toThrow(TypeError);
   });
 
-  it('requires the major at runtime as well as in TypeScript', () => {
+  it('keeps the unchanged digest address when the deprecated omission of major is used', () => {
+    // The deprecated 1.0.0-rc.1 transition form: required from 1.0.0.
+    const view = operationViewFromHtml({
+      html: HTML,
+      filename: 'card.html',
+      title: 'Answer card',
+    });
+    expect(view.uri).toBe(viewUriForHtml(HTML, 'card.html'));
+    expect(view.uri).toMatch(/^ui:\/\/views\/card\.[0-9a-f]{32}\.html$/);
+    expect(view.html).toBe(HTML);
+  });
+
+  it('refuses a major that is not a number', () => {
     expect(() =>
-      // @ts-expect-error The JavaScript calling convention must fail explicitly too.
-      operationViewFromHtml({ html: HTML, filename: 'card.html', title: 'A' }),
-    ).toThrow(/major/);
+      operationViewFromHtml({
+        html: HTML,
+        filename: 'card.html',
+        // @ts-expect-error A version string is not a major.
+        major: '1',
+        title: 'Answer card',
+      }),
+    ).toThrow(TypeError);
   });
 
   it('declares a closed view unless the caller names permissions', () => {
