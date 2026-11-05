@@ -23,7 +23,7 @@ import {
   type InstanceEvent,
   type ServerTransport,
 } from '@saga-a2ui/core/actions';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
+import { viewUriForMajor } from '@saga-a2ui/mcp/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type {
   Listener,
@@ -430,7 +430,7 @@ export function qualifyStarter(
       expect(result.structuredContent).toEqual({ status: 'running' });
       const uri = (result._meta as { ui: { resourceUri: string } }).ui
         .resourceUri;
-      expect(uri).toBe(viewUriForHtml(html, 'index.html'));
+      expect(uri).toBe(viewUriForMajor('index.html', 1));
 
       const { contents } = await client.readResource({ uri });
       const [content] = contents;
@@ -1167,7 +1167,7 @@ export function qualifyStarter(
         jsonrpc: '2.0',
         id: 1,
         method: 'resources/read',
-        params: { uri: viewUriForHtml(padded, 'index.html') },
+        params: { uri: viewUriForMajor('index.html', 1) },
       });
 
       const outcome = await new Promise<{

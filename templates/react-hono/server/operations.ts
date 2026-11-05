@@ -4,7 +4,7 @@ import {
   DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   registerPublicOperation,
-  viewUriForHtml,
+  viewUriForMajor,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
@@ -34,7 +34,10 @@ export class ViewArtifactMissing extends Error {
   }
 }
 
-/** Validate and fingerprint the deployment document once, before listening. */
+/**
+ * Validate the deployment document once, before listening. Its address names the view's contract
+ * major, so a compatible rebuild keeps it; raise the major only for an incompatible change.
+ */
 export function prepareStarterView(
   html: unknown,
   filename = 'index.html',
@@ -42,7 +45,7 @@ export function prepareStarterView(
   if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
     throw new ViewArtifactMissing();
   return Object.freeze({
-    uri: viewUriForHtml(html, filename),
+    uri: viewUriForMajor(filename, 1),
     title: 'Starter view',
     html,
     csp: CLOSED_VIEW_CSP,

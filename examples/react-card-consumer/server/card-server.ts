@@ -42,13 +42,15 @@ export function createCardServer(
 ): McpServer {
   const created = createContentPolicy(settings.policyConfiguration);
   if (!created.ok) throw new Error(created.failure.message);
-  // What the host mounts: the page with the policy embedded, identified by those exact bytes. An
-  // answer is never part of the page, so a new answer reuses the resource; a change to code, policy,
-  // CSS, font or artwork bytes is a new one. The origins the policy allows for images and fonts are
-  // the only declarations; the data: and blob: baseline needs none.
+  // What the host mounts: the page with the policy embedded, addressed by its contract major. An
+  // answer is never part of the page, and a rebuild of code, CSS, font or artwork keeps the address.
+  // A change to the policy changes what the page allows, so a deploy that changes it raises the
+  // major. The origins the policy allows for images and fonts are the only declarations; the data:
+  // and blob: baseline needs none.
   const view = operationViewFromHtml({
     html: embedContentPolicy(builtHtml, created.policy),
     filename: settings.filename,
+    major: 1,
     title: 'Answer card',
     csp: resourcePermissionsOf(created.policy),
   });

@@ -3,7 +3,12 @@ import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CLOSED_VIEW_CSP } from '../policy/index.js';
-import { registerPublicOperation, viewUriForHtml } from './index.js';
+import {
+  operationViewFromHtml,
+  registerPublicOperation,
+  viewUriForHtml,
+  viewUriForMajor,
+} from './index.js';
 import { startTestHost, type TestHost } from './http-host.test-support.js';
 
 // SHA-256 vectors from FIPS 180-2 (the empty message and "abc"), not computed by the code under test.
@@ -174,5 +179,158 @@ describe('a view identified by its content, served through an operation', () => 
     expect(
       (next._meta as { ui: { resourceUri: string } }).ui.resourceUri,
     ).not.toBe(linked);
+  });
+});
+
+describe('viewUriForMajor', () => {
+  it('puts the major before the extension and keeps the relative filename', () => {
+    expect(viewUriForMajor('answer.html', 1)).toBe('ui://views/answer.v1.html');
+    expect(viewUriForMajor('answer.html', 2)).toBe('ui://views/answer.v2.html');
+    expect(viewUriForMajor('cards/answer.html', 1)).toBe(
+      'ui://views/cards/answer.v1.html',
+    );
+  });
+
+  it('encodes a filename without treating its characters as URI syntax', () => {
+    expect(viewUriForMajor('my views/answer #1?.html', 3)).toBe(
+      'ui://views/my%20views/answer%20%231%3F.v3.html',
+    );
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53])(
+    'refuses %s as a major: version 1 is the first line',
+    (major) => {
+      expect(() => viewUriForMajor('answer.html', major)).toThrow(TypeError);
+      expect(() => viewUriForMajor('answer.html', major)).toThrow(/major/);
+    },
+  );
+
+  it('requires the major at runtime as well as in TypeScript', () => {
+    // @ts-expect-error The JavaScript calling convention must fail explicitly too.
+    expect(() => viewUriForMajor('answer.html')).toThrow(TypeError);
+    // @ts-expect-error A version string is not a major.
+    expect(() => viewUriForMajor('answer.html', '1')).toThrow(TypeError);
+  });
+
+  it.each([
+    '',
+    '/answer.html',
+    '../answer.html',
+    'views//answer.html',
+    'C:\\answer.html',
+    'answer.txt',
+    '.html',
+  ])('rejects a filename that viewUriForHtml rejects: %j', (filename) => {
+    expect(() => viewUriForMajor(filename, 1)).toThrow(TypeError);
+  });
+});
+
+describe('a view addressed by its contract major, served through an operation', () => {
+  const open: { host?: TestHost } = {};
+  afterEach(async () => {
+    await open.host?.close();
+    open.host = undefined;
+  });
+
+  const declaration = (view: ReturnType<typeof operationViewFromHtml>) =>
+    ({
+      name: 'echo',
+      title: 'Echo',
+      description: 'Echoes a word.',
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      input: z.object({ word: z.string().max(8) }),
+      output: z.strictObject({ word: z.string() }),
+      view,
+      failures: {
+        absent: 'None.',
+        unavailable: 'Unavailable.',
+        invalidOutput: 'Invalid.',
+      },
+      handle: (input: { word: string }) => ({
+        kind: 'record' as const,
+        record: input.word,
+      }),
+      project: (word: string) => ({ text: word, data: { word } }),
+    }) as const;
+
+  // One deploy: the application stamps its release into the final HTML and declares the view on a major.
+  const deploy = async (stamp: string, major: number) => {
+    const html = `<!doctype html><meta name="release" content="${stamp}"><title>echo</title>`;
+    const view = operationViewFromHtml({
+      html,
+      filename: 'answer.html',
+      major,
+      title: 'Echo view',
+    });
+    await open.host?.close();
+    open.host = await startTestHost({
+      jsonResponse: true,
+      buildServer: () => {
+        const server = new McpServer({ name: 'major-test', version: '0.0.0' });
+        registerPublicOperation(server, declaration(view));
+        return server;
+      },
+    });
+    const client = await open.host.connect();
+    const { tools } = await client.listTools();
+    const described = (tools[0]?._meta as { ui: { resourceUri: string } }).ui
+      .resourceUri;
+    const result = await client.callTool({
+      name: 'echo',
+      arguments: { word: 'hi' },
+    });
+    const linked = (result._meta as { ui: { resourceUri: string } }).ui
+      .resourceUri;
+    const { contents } = await client.readResource({ uri: described });
+    const [content] = contents;
+    return {
+      described,
+      linked,
+      text: content && 'text' in content ? content.text : undefined,
+    };
+  };
+
+  it('keeps the address across a compatible rebuild and serves the rebuilt, stamped document there', async () => {
+    const first = await deploy('2026.11.05-1', 1);
+    const second = await deploy('2026.11.05-2', 1);
+    expect(first.described).toBe('ui://views/answer.v1.html');
+    expect(first.linked).toBe(first.described);
+    expect(second.described).toBe(first.described);
+    expect(second.linked).toBe(first.described);
+    // A descriptor obtained before the second deploy names the address the second deploy serves.
+    expect(second.text).toContain('content="2026.11.05-2"');
+    expect(first.text).toContain('content="2026.11.05-1"');
+  });
+
+  it('moves the descriptor, the result and the resource to a new address on a major bump', async () => {
+    const before = await deploy('2026.11.05-1', 1);
+    const after = await deploy('2026.11.06-1', 2);
+    expect(after.described).toBe('ui://views/answer.v2.html');
+    expect(after.linked).toBe(after.described);
+    expect(after.described).not.toBe(before.described);
+    expect(after.text).toContain('content="2026.11.06-1"');
+  });
+
+  it('refuses a second view at the same address on one server instead of serving one of them', () => {
+    const server = new McpServer({ name: 'major-test', version: '0.0.0' });
+    const view = (html: string) =>
+      operationViewFromHtml({
+        html,
+        filename: 'answer.html',
+        major: 1,
+        title: 'Echo view',
+      });
+    registerPublicOperation(server, declaration(view('<p>a</p>')));
+    expect(() =>
+      registerPublicOperation(server, {
+        ...declaration(view('<p>b</p>')),
+        name: 'echo_again',
+      }),
+    ).toThrow(/ui:\/\/views\/answer\.v1\.html is already registered/);
   });
 });

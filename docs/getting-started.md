@@ -167,7 +167,7 @@ To preserve an existing sessionful 2025 deployment, route it explicitly using up
 
 #### Startup, view identity and shutdown
 
-Read and validate the built HTML before listening. Compute `viewUriForHtml(finalHtml, 'index.html')` once and retain the immutable `OperationView` used by discovery, tool results and resource reads. A URI such as `ui://views/index.<32-character-sha256-prefix>.html` identifies both the file and its final bytes. Rebuilding the document changes its address automatically, while identical filenames and bytes agree across replicas. Full SHA-256 checksums remain available in qualification records. Answer-specific data never enters this cached document.
+Read and validate the built HTML before listening. Compute `viewUriForMajor('index.html', 1)` once and retain the immutable `OperationView` used by discovery, tool results and resource reads. The address `ui://views/index.v1.html` names the file and the view's contract major, not its bytes: a compatible rebuild, including a new release stamp in the document, keeps it, so a host that kept a tool descriptor from before a deploy still reads a document that is served. Raise the major only for an incompatible change to what the view reads or what its actions do. Answer-specific data never enters this cached document.
 
 On `SIGINT` or `SIGTERM`, the starter stops admission, cancels active request lifetimes, closes both persistent MCP handlers, then closes the Node HTTP listener and connections. `handler.close()` aborts modern exchanges and subscription streams; legacy exchanges also need request/connection teardown. The [Hono Node guide](https://hono.dev/docs/getting-started/nodejs) likewise makes the application's underlying HTTP server responsible for shutdown.
 

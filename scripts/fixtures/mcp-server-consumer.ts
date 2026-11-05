@@ -6,7 +6,7 @@ import {
   DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   registerPublicOperation,
-  viewUriForHtml,
+  viewUriForMajor,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
@@ -24,7 +24,7 @@ export function createStatusServer(
   lifetime: RequestLifetime,
 ): McpServer {
   const view: OperationView = Object.freeze({
-    uri: viewUriForHtml(page, 'index.html'),
+    uri: viewUriForMajor('index.html', 1),
     title: 'Status',
     html: page,
     csp: CLOSED_VIEW_CSP,
