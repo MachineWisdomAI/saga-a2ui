@@ -1,0 +1,95 @@
+---
+title: 'ActionButton'
+sidebarTitle: 'ActionButton'
+description: 'A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.'
+---
+
+> Documents saga a2ui **0.11.0-rc.1** (prerelease). This catalog entry is generated from the package manifests and entry points at source revision [`fb4126c`](https://github.com/MachineWisdomAI/saga-a2ui/tree/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/LICENSE).
+
+A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.
+
+Renderers: Lit and React.
+
+## Entry points
+
+| Import | Registry version | Role |
+| --- | --- | --- |
+| `@saga-a2ui/core/actions/action-button-schema` | `@saga-a2ui/core@0.11.0-rc.1` | Renderer-neutral contract of the control: a strict schema with no action property |
+| `@saga-a2ui/react/actions` | `@saga-a2ui/react@0.11.0-rc.1` | React control and action setup |
+| `@saga-a2ui/lit/actions` | `@saga-a2ui/lit@0.11.0-rc.1` | Lit control and action setup |
+
+## Exports
+
+The names below are read from the entry point sources at the pinned revision.
+
+### `@saga-a2ui/core/actions/action-button-schema`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/core/src/actions/action-button-schema.ts).
+
+Values: `ActionButtonApi`.
+
+Types: none.
+
+### `@saga-a2ui/react/actions`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/react/src/actions/index.ts).
+
+Values: `ActionButton`, `ActionButtonEntry`, `ActionsScope`, `InstanceHostProvider`, `createReactActions`, `useActionSetup`.
+
+Types: `ActionButtonActivation`, `ActionButtonEvents`, `ReactActions`, `ReactActionsOptions`.
+
+### `@saga-a2ui/lit/actions`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/packages/lit/src/actions/index.ts).
+
+Values: `ActionButton`, `ActionButtonElement`, `actionButtonEntry`, `createLitActions`.
+
+Types: `ActionButtonActivation`, `ActionButtonEvents`, `LitActionsOptions`.
+
+## Static demonstration
+
+Two ActionButton instances in a row of the notes application's layout. Neither names an action. It is a copy of lines from [`examples/pack1-consumer/src/notes-surface.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/fb4126cc5a9ac2e7f9cd916c377d24b237d00bb8/examples/pack1-consumer/src/notes-surface.ts) at the pinned revision, not a live rendering.
+
+```ts
+{
+  id: 'note-actions',
+  component: 'Row',
+  children: ['row-read', 'row-archive'],
+},
+{
+  id: 'row-read',
+  component: 'ActionButton',
+  child: 'row-read-label',
+},
+{
+  id: 'row-read-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Mark read',
+},
+{
+  id: 'row-archive',
+  component: 'ActionButton',
+  child: 'row-archive-label',
+},
+{
+  id: 'row-archive-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Archive',
+},
+```
+
+## Usage
+
+- [Change a component and trace allowed and denied requests](/docs/releases/0.11.0-rc.1/guides/actions)
+- [Component definition, template and instance](/docs/releases/0.11.0-rc.1/guides/getting-started#component-definition-template-and-instance)
+
+## Evidence and limits
+
+- The notes application runs with Lit controls and, through a React consumer, with React controls in a local fixture host. The guide lists what each renderer has and has not shown. ([Renderer evidence](/docs/releases/0.11.0-rc.1/guides/actions#what-each-renderer-and-server-has-shown))
+- In ChatGPT web and Claude web, allowed and refused in-card server requests were observed. ([ChatGPT and Claude](/docs/releases/0.11.0-rc.1/guides/host-compatibility#chatgpt-and-claude))
+- In the Alexa+ simulator, an in-card server call reached a response but the waiting card did not receive a usable completion in the recorded probes. ([Alexa+](/docs/releases/0.11.0-rc.1/guides/host-compatibility#alexa+))
+- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.
+
+Back to the [component catalog](/docs/releases/0.11.0-rc.1/components/index).

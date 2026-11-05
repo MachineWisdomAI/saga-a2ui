@@ -9,7 +9,10 @@ import {
   startListener,
   type Listener,
 } from '../../templates/lit-node/server/listener.js';
+import type { ByteBudget } from '../maintainer-network.js';
 import { runCli, type Environment } from '../saga.js';
+import { discoverEndpoint, toolDigest } from './endpoint.js';
+import type { FileBudget } from './bounded-read.js';
 import type { ValidatorLoad } from './chatgpt.js';
 import type { PluginValidator } from './claude-plugin.js';
 import { publicationTool } from './publish.js';
@@ -44,6 +47,7 @@ beforeAll(async () => {
       verifyAccessToken: () =>
         Promise.reject(new Error('this fixture is public')),
     },
+    resource: new URL('https://fixture.invalid/account/mcp'),
     authorize: async () => true,
     port: 0,
   });
@@ -192,6 +196,47 @@ export function wire(
   };
 }
 
+/**
+ * Writes the maintainer's fixture calls file (`saga-fixture-calls/1`), outside any application
+ * directory, and returns its path for `--invoke-fixture`. Each call is pinned (`toolSha256`) to the
+ * definition the fixture endpoint serves, as a maintainer does after reading the record's tool
+ * digests; a call for a tool the endpoint does not serve is pinned to an arbitrary digest. `rewrite`
+ * is the same edit the run under test will see, so a pin can be made against a definition and the
+ * run against another.
+ */
+export async function fixtureCallsFile(
+  options: {
+    readonly rewrite?: Parameters<typeof wire>[0];
+    readonly calls?: readonly {
+      readonly tool: string;
+      readonly arguments?: Record<string, unknown>;
+    }[];
+  } = {},
+): Promise<string> {
+  const found = await discoverEndpoint(PUBLISHED, {
+    fetch: wire(options.rewrite).fetch,
+  });
+  if (found.kind !== 'discovered') throw new Error(found.reason);
+  const calls = (options.calls ?? [{ tool: 'get_status', arguments: {} }]).map(
+    (call) => {
+      const tool = found.snapshot.tools.find((one) => one.name === call.tool);
+      return {
+        ...call,
+        toolSha256: tool === undefined ? '0'.repeat(64) : toolDigest(tool),
+      };
+    },
+  );
+  const file = path.join(
+    fs.mkdtempSync(path.join(root, 'calls-')),
+    'fixture-calls.json',
+  );
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ format: 'saga-fixture-calls/1', calls }),
+  );
+  return file;
+}
+
 export interface Run {
   readonly code: number;
   readonly out: string;
@@ -201,6 +246,8 @@ export interface Run {
 export interface Options {
   readonly cwd?: string;
   readonly wire?: Wire;
+  readonly networkBudget?: ByteBudget;
+  readonly localBudget?: FileBudget;
   readonly validators?: ValidatorLoad;
   readonly pluginValidator?: PluginValidator;
   readonly environment?: Record<string, string>;
@@ -225,6 +272,8 @@ export async function saga(
       load: async () => publicationTool,
       environment: options.environment ?? {},
       fetch: (options.wire ?? wire()).fetch,
+      networkBudget: options.networkBudget,
+      localBudget: options.localBudget,
       validators: options.validators,
       pluginValidator: options.pluginValidator,
       now: options.now,

@@ -220,7 +220,11 @@ function assemble(context: TargetContext): Assembled {
 
   let icon: DossierFile | undefined;
   if (connector.icon !== undefined) {
-    const read = readApplicationFile(loaded.directory, connector.icon);
+    const read = readApplicationFile(
+      loaded.directory,
+      connector.icon,
+      loaded.localBudget,
+    );
     if (read.ok) {
       const file = `assets/icon${path.extname(connector.icon).toLowerCase()}`;
       entries.push({ path: file, data: read.data });
@@ -229,31 +233,38 @@ function assemble(context: TargetContext): Assembled {
   }
 
   const screenshots: ConnectorDossier['listing']['screenshots'][number][] = [];
-  (connector.screenshots ?? []).forEach((shot, index) => {
-    if (path.extname(shot.file).toLowerCase() !== '.png') {
-      unreadable.push({
-        source: shot.file,
-        reason:
-          'A screenshot must be a PNG file; video and GIF are not accepted.',
+  // One more than a dossier can hold is read, so a surplus is still reported; the rest are not opened.
+  (connector.screenshots ?? [])
+    .slice(0, MAX_SCREENSHOTS + 1)
+    .forEach((shot, index) => {
+      if (path.extname(shot.file).toLowerCase() !== '.png') {
+        unreadable.push({
+          source: shot.file,
+          reason:
+            'A screenshot must be a PNG file; video and GIF are not accepted.',
+        });
+        return;
+      }
+      const read = readApplicationFile(
+        loaded.directory,
+        shot.file,
+        loaded.localBudget,
+      );
+      if (!read.ok) {
+        unreadable.push({ source: shot.file, reason: read.reason });
+        return;
+      }
+      const file = `screenshots/${String(index + 1).padStart(2, '0')}.png`;
+      entries.push({ path: file, data: read.data });
+      const size = pngSize(read.data);
+      screenshots.push({
+        file,
+        sha256: sha256(read.data),
+        prompt: shot.prompt,
+        width: size?.width ?? null,
+        height: size?.height ?? null,
       });
-      return;
-    }
-    const read = readApplicationFile(loaded.directory, shot.file);
-    if (!read.ok) {
-      unreadable.push({ source: shot.file, reason: read.reason });
-      return;
-    }
-    const file = `screenshots/${String(index + 1).padStart(2, '0')}.png`;
-    entries.push({ path: file, data: read.data });
-    const size = pngSize(read.data);
-    screenshots.push({
-      file,
-      sha256: sha256(read.data),
-      prompt: shot.prompt,
-      width: size?.width ?? null,
-      height: size?.height ?? null,
     });
-  });
 
   const snapshot = evidence.snapshot;
   const tools: DossierTool[] = (snapshot?.tools ?? [])
@@ -271,7 +282,12 @@ function assemble(context: TargetContext): Assembled {
   const bundle =
     bundleInput === undefined
       ? undefined
-      : assembleBundle(input, bundleInput, loaded.directory);
+      : assembleBundle(
+          input,
+          bundleInput,
+          loaded.directory,
+          loaded.localBudget,
+        );
   if (bundle !== undefined) entries.push(...bundle.entries);
 
   const { publisher } = input;

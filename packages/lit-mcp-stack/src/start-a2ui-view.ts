@@ -8,8 +8,10 @@ import {
   type A2uiActions,
   type A2uiUpdateResult,
 } from '@saga-a2ui/lit';
+import type { Conversation } from '@saga-a2ui/core/conversation';
 import type { HostLinks } from '@saga-a2ui/core/host-links';
 import {
+  conversationFromApp,
   hostLinksFromApp,
   type HostContext,
   type ToolInput,
@@ -40,6 +42,8 @@ export interface ViewHost {
   readonly server: ServerTransport<ServerReply>;
   /** The one way to ask the host to open a link, for an optional card the application's catalog includes. Ends with the view. */
   readonly links: HostLinks;
+  /** The one way to add a message to the conversation, optionally with context for the assistant. Ends with the view. */
+  readonly conversation: Conversation;
 }
 
 /** The typed way to change what a running view shows. */
@@ -157,6 +161,7 @@ export function startA2uiViewOn<TData>(
                   app.callServerTool(request, requestOptions),
               },
               links: hostLinksFromApp(app, lifetime.signal),
+              conversation: conversationFromApp(app, lifetime.signal),
             }),
           )
         : makeActions;

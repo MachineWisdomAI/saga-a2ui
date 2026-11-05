@@ -16,7 +16,8 @@ npx tsx scripts/saga.ts publish prepare --target claude  --release path/to/saga-
 ```
 
 Options: `--against DIR` compares with an earlier output and fails when its evidence is stale;
-`--invoke-fixture` calls the tools the release input declares under `fixture.calls`;
+`--invoke-fixture FILE` calls the tools your own `saga-fixture-calls/1` file authorizes (see
+below; the release input chooses no call);
 `--bearer-env NAME` reads a bearer credential from that environment variable for a read-only look
 at a protected endpoint. A verdict other than `ready` exits 1.
 
@@ -27,14 +28,26 @@ the smallest input that carries what the host needs and nothing it does not: the
 `publisher` (who the listing belongs to; the operator running the tool and the SDK's npm publisher
 are never substituted for it) with credited `contributors` kept apart, the listing text and links,
 PNG or SVG `assets`, the `build` directory and its view files, the `endpoint`, and optional
-`review`, `publication` and `fixture` sections. Paths are relative to the file. It holds no
+`review` and `publication` sections. Paths are relative to the file. It holds no
 credential; reviewer credentials, authentication and publisher verification stay in the host's
 portal. A working example is [`fixture/notes-app`](fixture/notes-app).
 
 `listing` and `assets` (with `review` and `publication`) belong to the ChatGPT target, and a `claude`
-section belongs to the Claude target. Each target needs only its own: a release input for Claude alone
-has no `listing`, and the `chatgpt` target says so and prepares nothing when `listing` or `assets` is
-missing. `claude` is the one section whose missing fields are findings instead of a parse error
+section belongs to the Claude target. The ChatGPT target requires `listing`. Branding is optional:
+each of `assets.logo`, `assets.composerIcon`, `assets.logoDark` and `assets.composerIconDark` that
+you omit uses the bundled SAGA A2UI dragon, in the light or dark artwork that suits the field (the
+composer icons are the transparent head crop of the mark; the logos are the full mark on a solid tile; see
+[`assets/brand/plugin`](../../assets/brand/plugin/README.md)). A dark default follows its light
+field: `logoDark` and `composerIconDark` default to the dragon only when `logo` or `composerIcon`
+also uses the dragon, so your own light branding is never paired with SAGA's dark artwork. Supply
+your own paths to use your application's branding; an application that supplies a light file and
+no dark file gets no dark variant. Supplied files are preserved, and an invalid supplied file
+remains an error. These defaults
+affect newly prepared ChatGPT packages; they do not update an installed App or establish how a host
+renders an existing connection. Claude submissions still use their own supplied connector icon.
+The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
+`git lfs pull --include='assets/brand/plugin/*.png'` before preparing a default-branded package.
+`claude` is the one section whose missing fields are findings instead of a parse error
 (below), so a maintainer sees every missing piece at once.
 
 ## What is produced (ChatGPT)
@@ -50,6 +63,14 @@ missing. `claude` is the one section whose missing fields are findings instead o
   resource, the package digest and every file's digest, the deployment identity, the validator
   identity and documentation date, and the pending handoff. It has no timestamp, so unchanged
   inputs reproduce it too.
+
+  The source revision is read from the application directory's `.git` files (`HEAD`, the branch it
+  names, `packed-refs`, a linked worktree's pointer); Git is never run there, because a repository
+  can name programs in its own configuration and the release input chooses the directory. For the
+  same reason none of those files is read through a symbolic link, so a link cannot make another
+  local file become `source.revision`, and `source.dirty` is always `null`: whether tracked files
+  differ from the commit is not established. `source.revision` is `null` when no readable
+  repository is found.
 
 Any failed check leaves only `findings.json`: no package that could be mistaken for a complete one.
 The output is a new directory, or a directory this tool generated earlier, replaced only after the
@@ -67,6 +88,13 @@ about a failure is never printed or recorded; only a fixed diagnostic kind is (a
 challenge, timeout, HTTP status, network error, unusable answer).
 The same holds for a failure nobody anticipated: every error the command raises is caught and
 reported through that redactor (exit code 1), never rethrown to a caller that prints it raw.
+
+After redaction, the last step before a terminal or CI log is `terminalText`
+(`scripts/terminal-text.mjs`). A server name, tool name, file name or analyzer report is chosen by
+someone else, so its control characters (escape sequences, carriage returns, the bidirectional
+overrides) are written out as visible escapes such as `\x1b`, and a line that begins with `::` is
+defanged so it is not read as a GitHub Actions workflow command. Ordinary text, line breaks and
+tabs are unchanged.
 
 ## The Claude connector dossier (CLI4)
 
@@ -145,8 +173,10 @@ pending handoff.
 and, much later, a listing someone can install. `handoff` is the record of that work, kept in a directory
 of your choosing, so it can stop at any point (a closed browser, a colleague taking over, a timeout whose
 outcome nobody saw) and resume without a second upload and without a prepared package, a submission or an
-approval being mistaken for a live listing. It reads and writes local files only. It calls no host and
-no network, has no submission interface, hosting or credential of its own, and submits nothing: the
+approval being mistaken for a live listing. Apart from `begin`, which assesses the release again
+(below), every action reads and writes local files only and makes no network call. `begin` reads the
+application's own endpoint as `check` does, and calls a tool there only for a fixture calls file you name.
+No action calls a host directory, and the command has no submission interface, hosting or credential of its own, and submits nothing: the
 publisher submits by hand in the host's documented flow
 ([ChatGPT](https://developers.openai.com/plugins/deploy/submission),
 [Claude](https://claude.com/docs/connectors/building/submission), portal
@@ -155,7 +185,7 @@ publisher submits by hand in the host's documented flow
 From the SDK source checkout, use these command forms. Replace placeholders and choose one value where alternatives are shown.
 
 ```text
-npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --authority-ref "owner agreement, ticket 12"
+npx tsx scripts/saga.ts publish handoff begin               --handoff DIR --prepared ./publication --release path/to/saga-publication.json --authority-ref "owner agreement, ticket 12" [--invoke-fixture FILE] [--bearer-env NAME]
 npx tsx scripts/saga.ts publish handoff status              --handoff DIR [--prepared ./publication-now]
 npx tsx scripts/saga.ts publish handoff attempt             --handoff DIR --prepared ./publication-now
 npx tsx scripts/saga.ts publish handoff confirm-submission  --handoff DIR --reference <the host's reference> [--observed-at TIME]
@@ -164,11 +194,34 @@ npx tsx scripts/saga.ts publish handoff record-review       --handoff DIR --stat
 npx tsx scripts/saga.ts publish handoff record-listing      --handoff DIR --prepared ./publication-now --state verified-live|not-listed --host "<named host>" --evidence REF [--observed-at TIME]
 ```
 
+**Readiness is assessed again, never read from a file.** `findings.json` and the archive beside it are
+plain files: whoever can write one can write the other to match, so a record that says `ready` and an
+archive with the digest it names prove only that the two agree. `begin` therefore runs the checks of
+`check` itself, with `--release` (and `--bearer-env` or `--invoke-fixture` where `prepare` needed them),
+against the release input, the build and the endpoint as they are now. It reads the endpoint as `check` does
+and calls no tool unless `--invoke-fixture` is given. It records a handoff only when that fresh assessment is
+`ready` and the prepared output matches it by the rule `--against` uses (the release input, the views, the
+tool definitions, the served resources, the deployment identity, the packages, the validators, the
+fixture invocation and the package digest). What is pinned is the fresh assessment, not the prepared
+record. A prepared output that was edited, or that the release has moved on from, is refused with what
+differs.
+
+The fixture invocation is part of that comparison: a digest of the calls declared (each tool, the
+definition digest it is pinned to and its arguments, in order), whether they ran, and the digest of each
+result. Only the digest of the calls is recorded, never the arguments. A preparation made with
+`--invoke-fixture` begins only with the same declared calls and the same results, so omitting the
+fixture, a changed result, a failing call or a call with other arguments (even one that returns the same
+result) is refused, and a fixture given over a preparation made without one is refused as well. A
+preparation made without a fixture still begins without one, and the handoff records that no fixture
+ran. Every record `prepare` writes holds the fixture section, so a prepared record without it is
+refused, whether or not `--invoke-fixture` is given. Only the pinned release of a handoff begun before
+the section was pinned may lack it, and `status --prepared` has nothing of it to compare.
+
 **What the record holds.** `begin` reads a `prepare` output that is intact (its package matches the
-digest in its record) and whose verdict is `ready`, and pins it: the host (target, directory name,
+digest in its record) and whose verdict is `ready`, checks it against that fresh assessment, and pins the assessment: the host (target, directory name,
 guide and portal), the application and its publisher, the exact release evidence (source revision, release
 input and view digests, the tool definitions, served resources and contract digest, the deployment
-identity, the declared and installed `@saga-a2ui` packages, the validators and the package digest) and the
+identity, the declared and installed `@saga-a2ui` packages, the validators, the fixture invocation and the package digest) and the
 references to the intended publisher's authority. Authority references are pointers (an agreement, a
 ticket, an owner's confirmation) that this tool does not verify, and every free-text field is refused when
 it looks like a credential. The handoff identity is derived from the host, the application, the publisher
@@ -208,13 +261,22 @@ directory by its identity, and a path replaced or renamed under it is refused wi
 nothing changed or removed in the directory now at the path. Where the system names no open directory (macOS),
 the command's temporary file is removed only while its name still shows the file it wrote; after a replacement
 it can stay behind, in the directory that was moved, as an ignored dot-file. A record that was altered, has a missing event or holds other files is refused and
-never repaired.
+never repaired. So is a record larger than any this command writes, before an event is parsed: more than
+1000 events, a first event over 16 MiB, a later event over 16 KiB, events together over 24 MiB, or an event nested
+more than 64 levels deep (the limits are in `bounded-read.ts`). The directory listing is also bounded: it is
+refused once it holds more than 1000 visible events or more than 2000 entries in total, counting the ignored
+dot-files. The command applies the same limits to what it writes, before anything is staged or linked: a `begin`
+whose authority references make the first event too large, or an event that would take the record past the
+event count, size, nesting or total limit, is refused with nothing recorded (and a directory `begin` created
+is removed again). A record that already holds 1000 events accepts no further event; begin a new record for
+further work.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,
 a built view, a tool definition, a served resource and its metadata, the server instructions, the
 deployment identity, the packages, the validators, how much of the endpoint was read and the package
-content. A preparation that is not `ready` is never current. When stale, `status` lists what changed and
+content. A preparation that is not `ready` is never current. This comparison reads the `--prepared` record, a file the maintainer controls: it notices honest change and is not
+readiness evidence (`begin` assesses the release again for that). When stale, `status` lists what changed and
 exits 1, and `attempt` and `record-listing` are refused for the old release; begin a new handoff for the new
 one. What the host already holds for the old release stays as recorded, and a verified listing is reported
 as observed for the earlier release. `attempt` and `record-listing` require `--prepared`, so readiness is
@@ -259,14 +321,76 @@ destructive annotation.
   grammar of its own, so undefined entities, unbound prefixes, repeated attributes and truncated
   documents are refused) and have an `svg` root element in the SVG namespace, with no entity
   declarations. If that parser cannot be loaded, the assets finding is `unknown`, not a pass.
-  The secret scan looks for credential patterns and for the literal discovery credential; findings
-  name the kind, never the value.
+  The secret scan reads every file, whatever its name or extension, for common credential forms
+  (private keys, cloud, source-host, registry and payment tokens, passwords in URLs, and
+  `NAME=value` lines) and for the literal discovery credential. It also opens zip, gzip and tar
+  archives inside the package, up to 3 levels deep, 1,000 files and 16 MiB in all (one allowance
+  shared by every archive, checked before and after each is opened). A tar is read only when it
+  is well formed (correct header checksums, two closing empty blocks, nothing after them); its
+  members are named as an extractor would name them (ustar prefix, PAX `path`, GNU long name) and
+  a link, device, sparse or other non-regular member makes the whole tar unreadable. It refuses
+  by name the files that exist to hold credentials (`.env`, `.npmrc`, SSH and cloud credential
+  folders, key stores; `.env.example` is allowed). An archive it cannot open (another format,
+  damaged, encrypted or over those limits) fails the check instead of passing it. Findings name
+  the file and the kind, never the value. This is a screen for common forms, not proof that no
+  credential is present: a value that is encoded, split, encrypted or in an unrecognised format is
+  not found, and the maintainer remains responsible for what the package carries. File names in a
+  finding are shown with printable characters only.
 - Reading is bounded (20 pages of each list, 50 views), and a bound that is reached makes the
   discovery, tool and view findings `unknown` and the record's `endpoint.complete` false: what was
   not read is not certified. A definite failure among what was read still blocks.
-- Fixture invocation (`--invoke-fixture`): only the declared calls, and only to a tool that
-  advertises `readOnlyHint: true`; others are refused without a call. Only a digest of each result
-  is kept, and it is labelled fixture evidence, separate from real-host observations.
+- Fixture invocation (`--invoke-fixture FILE`): only the calls in your own calls file (at most 50,
+  with arguments of at most 16 KiB each), and only to a tool the file pins by `toolSha256` (the
+  digest the record reports for that tool) whose definition the endpoint still advertises unchanged
+  and with `readOnlyHint: true`. The digest is the authority; the hint can only narrow it. Anything
+  else is refused without a call. Only a digest of each result is kept, and it is labelled fixture
+  evidence, separate from real-host observations.
+
+  The calls file is the maintainer's, not the application's: the release input and the endpoint it
+  names are lower-trust than the person running the command, so neither chooses a tool, its
+  arguments or the definition it is called against. Keep the file outside the application's tree
+  and read each digest from a record you reviewed. The format is JSON, and the file is read like any
+  other input, sized before it is read:
+
+  ```json
+  {
+    "format": "saga-fixture-calls/1",
+    "calls": [{ "tool": "get_status", "toolSha256": "<64 hex digits>", "arguments": {} }]
+  }
+  ```
+
+## Network admission
+
+Every request the publication tool and `scripts/docs-probe.ts` make goes through one module,
+`scripts/maintainer-network.ts`; neither command constructs an MCP transport or calls `fetch` itself.
+The module admits a request or refuses it with a fixed message that carries nothing the remote side
+wrote:
+
+- **Destination.** HTTPS only, no credentials in the URL, a public-looking host name and no IP
+  literal. A refused endpoint is not contacted, and no bearer is sent to it.
+- **Connected address.** The host name is resolved inside the connection, and an answer outside the
+  public range refuses the connection, so the address that was checked is the address that is used.
+- **Redirects.** Followed only for an uncredentialed `GET` or `HEAD`, at most three, and each hop is
+  admitted again. A request that carries a bearer is never redirected.
+- **Credential.** `--bearer-env` gives the bearer to this module, which attaches it to the first
+  request to the endpoint's own origin and nowhere else.
+- **Operations.** Discovery authorizes no tool call. A fixture call needs the exact name and digest
+  the maintainer's own calls file pins; neither the release input nor what the endpoint advertises
+  about a tool adds to that.
+- **Size.** Each response is counted as it streams, against a per-response limit and one allowance
+  shared by everything one assessment reads (discovery and the fixture run draw on the same
+  allowance); lists an endpoint returns are cut at 200 items per page. A
+  file the release input names is sized before it is read (`bounded-read.ts`): the input itself
+  (1 MiB), each built view (8 MiB, 64 MiB together), an earlier output and an application asset.
+  Every local file one command reads (the release input, the fixture calls file, views, application
+  files and trees, an earlier record and archive) also draws on one allowance of 256 MiB, made at the
+  command's entry and carried on the loaded release input, so categories that are each within their
+  own limit cannot add up to more. The per-file and per-tree limits stay as the narrower bounds.
+  The documentation probe requests at most four pages at once (`PAGE_CONCURRENCY`).
+
+If a refusal needs repairing, change `RefusalKind`, the address list or `createAdmittedFetch` in
+`maintainer-network.ts` (or the limits in `bounded-read.ts`); there is no second copy of a rule to
+keep in step. Tests replace only the lowest layer (the connector), never the rules.
 
 ## Recorded decisions
 

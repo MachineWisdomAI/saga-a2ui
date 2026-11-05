@@ -312,6 +312,7 @@ describe('snippets', () => {
     ['lit-express', 'req.auth = decision.authInfo'],
     ['lit-fastify', 'reply.code(decision.status)'],
     ['lit-hono', 'decision.authInfo'],
+    ['react-hono', 'decision.authInfo'],
   ] as const)(
     '%s: carry the identity handoff and the direct attachment a developer is meant to copy',
     (name, handoff) => {
@@ -329,6 +330,26 @@ describe('snippets', () => {
       );
     },
   );
+
+  it('are read from .tsx files too, and carry the language of the file they come from', () => {
+    const language = (name: string) =>
+      Object.fromEntries(
+        extractSnippets(templateDirectory(name)).map((snippet) => [
+          snippet.name,
+          [snippet.file, snippet.language],
+        ]),
+      );
+    // The React template's view is a .tsx file, so its snippet is shown as TSX; the Lit template's stays TS.
+    expect(language('react-hono')['bind-action']).toEqual([
+      'src/view.tsx',
+      'tsx',
+    ]);
+    expect(language('react-hono')['register-protected-operation']).toEqual([
+      'server/operations.ts',
+      'ts',
+    ]);
+    expect(language('lit-hono')['bind-action']).toEqual(['src/view.ts', 'ts']);
+  });
 
   it('are written as files into a new directory, never over an existing one', () => {
     const target = path.join(work, 'snippet-files');

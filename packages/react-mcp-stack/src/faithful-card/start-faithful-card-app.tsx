@@ -261,6 +261,16 @@ export function startFaithfulCardAppOn(
           presentation,
         });
       },
+      // An over-budget result is never held or read: the card clears and says so, as for any
+      // result its reader rejects.
+      onToolResultRefused(refusal) {
+        try {
+          report(refusal, 'result');
+        } catch {
+          // A reporter that throws must not stop the answer from clearing.
+        }
+        problem(texts.problem);
+      },
       ...(options.onError === undefined ? {} : { onError: options.onError }),
       retire() {
         view.consent.retire();

@@ -6,9 +6,14 @@
 export {
   attachRequestLifetime,
   createServerBudgets,
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   operationViewFromHtml,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  type BudgetSettings,
+  type LifetimeCause,
+  type OperationOutcome,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';

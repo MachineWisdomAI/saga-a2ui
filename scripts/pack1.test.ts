@@ -261,7 +261,7 @@ describe('the seven owned packages, packed', () => {
       '@modelcontextprotocol/server',
     ])
       expect(range('mcp', 'dependencies', dependency), dependency).toBe(
-        '2.3.1',
+        '2.4.0',
       );
     expect(range('mcp', 'dependencies', '@modelcontextprotocol/ext-apps')).toBe(
       '2.0.3',

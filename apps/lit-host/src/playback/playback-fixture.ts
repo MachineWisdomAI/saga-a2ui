@@ -8,7 +8,7 @@ import {
 import type { AddressInfo } from 'node:net';
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import type { ContentPolicy } from '@saga-a2ui/components/faithful-card';
-import { createDevelopmentVerifier } from '../mcp/dev-auth.js';
+import { createDevelopmentVerifier, DEV_RESOURCE } from '../mcp/dev-auth.js';
 import type { OAuthTokenVerifier } from '@modelcontextprotocol/server';
 import type { BudgetSettings } from '@saga-a2ui/mcp/server';
 import {
@@ -38,6 +38,8 @@ export interface CountingPlayback {
   readonly entitlementChecks: { accountId: string; episodeId: string }[];
   /** Every protected media read, in order. */
   readonly mediaReads: string[];
+  /** The `maxBytes` hint each protected media read was given, in order. */
+  readonly mediaReadLimits: number[];
   /** Grants or revokes access between requests, as the application's subscription rules would. */
   setEntitled(accountId: string, episodeIds: readonly string[]): void;
   /** From now on the entitlement lookup throws `message` (or works again when omitted). */
@@ -92,6 +94,7 @@ export function countingPlayback(
   ];
   const entitlementChecks: { accountId: string; episodeId: string }[] = [];
   const mediaReads: string[] = [];
+  const mediaReadLimits: number[] = [];
   let entitlementFault = options?.failEntitlementWith;
   let readFault: string | undefined;
   let heldRead:
@@ -105,6 +108,7 @@ export function countingPlayback(
   return {
     entitlementChecks,
     mediaReads,
+    mediaReadLimits,
     setEntitled(accountId, episodeIds) {
       entitlements.set(accountId, new Set(episodeIds));
     },
@@ -163,9 +167,10 @@ export function countingPlayback(
       },
     },
     store: {
-      async read(episodeId) {
+      async read(episodeId, _signal, limits) {
         if (readFault) throw new Error(readFault);
         mediaReads.push(episodeId);
+        mediaReadLimits.push(limits.maxBytes);
         const held = heldRead;
         heldRead = undefined;
         if (held) {
@@ -201,6 +206,8 @@ export interface PlaybackHarnessOptions {
   readonly failEntitlementWith?: string;
   readonly capabilityTtlSeconds?: number;
   readonly nowSeconds?: () => number;
+  /** The media service's byte limit. Defaults to the service's own. */
+  readonly mediaMaxBytes?: number;
   /** The listener's budgets, and the playback route's own over them. */
   readonly budgets?: BudgetSettings;
   readonly playbackBudgets?: BudgetSettings;
@@ -230,6 +237,7 @@ export async function startPlaybackHarness(
       backend: playback.backend,
       mediaStore: playback.store,
       verifier: options.verifier ?? createDevelopmentVerifier(),
+      resource: DEV_RESOURCE,
       ...(options.playbackBudgets === undefined
         ? {}
         : { budgets: options.playbackBudgets }),
@@ -239,6 +247,9 @@ export async function startPlaybackHarness(
       ...(options.nowSeconds === undefined
         ? {}
         : { nowSeconds: options.nowSeconds }),
+      ...(options.mediaMaxBytes === undefined
+        ? {}
+        : { mediaMaxBytes: options.mediaMaxBytes }),
     },
   });
   return { listener, playback };

@@ -18,15 +18,15 @@ npm start          # prints the two endpoint URLs; PORT=0 picks a free port
 - `…/account/mcp` is protected: `get_account` runs only for a request whose bearer credential your
   verifier accepted, and shows that request's own account.
 
-The protected endpoint refuses every credential until you replace `server/verifier.ts`. That is
+The protected endpoint refuses every credential until you replace `server/verifier.ts`. Your verifier must also return the `resource` the credential was issued for (RFC 8707); `server/main.ts` states this endpoint's URL, and a credential issued for any other resource is refused. That is
 deliberate: the starter ships no identity provider.
 
 ## The tested recipe
 
-The versions in `package.json` are exact and are the ones this starter is tested with: Hono 4.13.13
-and `@hono/node-server` 1.19.17 (the Node host for Hono), the official `@modelcontextprotocol/hono`
+The versions in `package.json` are exact and are the ones this starter is tested with: Hono 4.13.16
+and `@hono/node-server` 2.1.5 (the Node host for Hono), the official `@modelcontextprotocol/hono`
 2.0.2 (peers: `hono` ^4.11.4 and `@modelcontextprotocol/server` ^2.3.0, which the pinned
-`@modelcontextprotocol/server` 2.3.1 satisfies) and Node 22.12.0 or later. Change one and run the
+`@modelcontextprotocol/server` 2.4.0 satisfies) and Node 22.12.0 or later. Change one and run the
 starter's build and your own checks again.
 
 ## What is yours

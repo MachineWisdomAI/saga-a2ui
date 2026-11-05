@@ -14,6 +14,8 @@ import {
   z,
   type ActionBinding,
   type ActionButtonActivation,
+  type AppendResult,
+  type Conversation,
   type ErrorPhase,
   type ReactCatalogComponent,
   type RunningA2uiView,
@@ -39,8 +41,12 @@ import {
   attachRequestLifetime,
   createServerBudgets,
   operationViewFromHtml,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  type BudgetSettings,
+  type LifetimeCause,
+  type OperationOutcome,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/react-mcp-stack/server';
@@ -209,8 +215,13 @@ export function composeServerSide(html: string): {
   };
 }
 // The remaining server entry names an application's MCP server composes with its own server object.
-export { attachRequestLifetime, registerPublicOperation };
+export {
+  attachRequestLifetime,
+  registerProtectedOperation,
+  registerPublicOperation,
+};
 export type { RequestLifetime };
+export type { BudgetSettings, LifetimeCause, OperationOutcome };
 
 // The actions, layout components and failures an application writes, all from the stack. An action
 // is defined once from the stack's `Action`, attached to a rendered control through the binding the
@@ -258,3 +269,28 @@ export function startOwnOnce(
   }
   return undefined;
 }
+
+// What an action does to add a message to the conversation, from the stack alone: the context
+// travels with the message and is best effort, and an application reads the result, never
+// treating `appended` as the assistant having acted. Real types, no casts.
+export function handOver(
+  conversation: ViewHost['conversation'],
+): Promise<AppendResult> {
+  return conversation.appendMessage('Your move', {
+    role: 'user',
+    context: {
+      text: 'The board',
+      data: { game: { gameId: 'g1' } },
+      bestEffort: true,
+    },
+  });
+}
+export function whatToTellThePerson(result: AppendResult): string | undefined {
+  if (result.outcome === 'appended')
+    return result.context === undefined
+      ? undefined
+      : `The assistant has no board (${result.context}).`;
+  return `Nothing was added (${result.outcome} at ${result.stage}).`;
+}
+export const conversationOf = (host: ViewHost): Conversation =>
+  host.conversation;

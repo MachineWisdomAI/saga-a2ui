@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import type { FetchLike } from '@modelcontextprotocol/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   startListener,
   type Listener,
@@ -14,6 +14,7 @@ import {
   prepareStarter,
   type BuiltStarter,
 } from '../build-starter.js';
+import { ByteBudget, DEFAULT_TOTAL_BYTES } from '../maintainer-network.js';
 import { createWorkDirectory } from '../packed-consumer.js';
 import { runCli } from '../saga.js';
 import type { ValidatorLoad } from './chatgpt.js';
@@ -25,6 +26,7 @@ import {
   editing,
   here,
   listing,
+  fixtureCallsFile,
   png,
   recordOf,
   root,
@@ -43,12 +45,49 @@ import {
   sha256,
   type PublicationRecord,
 } from './record.js';
+import {
+  readApplicationFile,
+  readApplicationTree,
+} from './application-files.js';
+import {
+  FileBudget,
+  MAX_PREPARATION_BYTES,
+  readBounded,
+} from './bounded-read.js';
+import { discoverEndpoint, toolDigest } from './endpoint.js';
+import { iconProblem } from './images.js';
 import { readZip } from './zip.js';
 
 // `saga publish check|prepare --target chatgpt` as a maintainer runs it, on the fixture application of
 // harness.ts.
 
 const ARCHIVE_FILE = ARCHIVE_FILES.chatgpt;
+
+// The canonical dragon artwork (assets/brand/plugin/README.md): each branding field, its file, and
+// the SHA-256 recorded for provenance. Replacing a file is a change to this table and that README.
+const BRAND = path.join(here, '..', '..', 'assets', 'brand', 'plugin');
+const FIELDS = [
+  'composerIcon',
+  'composerIconDark',
+  'logo',
+  'logoDark',
+] as const;
+const BUNDLED: Record<(typeof FIELDS)[number], string> = {
+  composerIcon: 'composer-icon-light.png',
+  composerIconDark: 'composer-icon-dark.png',
+  logo: 'logo-light.png',
+  logoDark: 'logo-dark.png',
+};
+const DIGESTS: Record<string, string> = {
+  'composer-icon-light.png':
+    '59b21877707e9f3ae59c47ea5a00bed4938a0c7a99903a555155f06b6ae61a2d',
+  'composer-icon-dark.png':
+    '87f6878befdebe02ef954dbd2c92a47c0a84f803033ae0da279f031d93ea7013',
+  'logo-light.png':
+    '66f444d50e29b7317bbf0a0743fa08630239e7f2e17f022d25dc042e01c7e95c',
+  'logo-dark.png':
+    '3dab20a89fd8318abab9b83ab6490162ab5ccc4d0157a37d2af3afbd4e59c07c',
+};
 
 const release = (app: string): string =>
   path.join(app, 'saga-publication.json');
@@ -91,6 +130,177 @@ const prepare = (
   );
 
 describe('a ready application', () => {
+  it('packages SAGA branding when the application supplies no assets', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      delete input.assets;
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+
+    expect(run.code, run.out + run.err).toBe(0);
+    const out = path.join(cwd, 'publication');
+    const entries = readZip(fs.readFileSync(path.join(out, ARCHIVE_FILE)));
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    const branding = manifest.extensions['com.openai'].interface;
+    expect(branding.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    expect(branding.composerIconDark).toBe(
+      './assets/saga-a2ui/composer-icon-dark.png',
+    );
+    expect(branding.logo).toBe('./assets/saga-a2ui/logo-light.png');
+    expect(branding.logoDark).toBe('./assets/saga-a2ui/logo-dark.png');
+    // The real bytes of the canonical dragon artwork are in the package, and nothing else is.
+    for (const field of FIELDS)
+      expect(files.get(branding[field].slice(2))).toEqual(
+        fs.readFileSync(path.join(BRAND, BUNDLED[field])),
+      );
+    expect(
+      entries.filter((entry) => entry.path.startsWith('assets/')),
+    ).toHaveLength(4);
+    expect(status(recordOf(out), 'package.assets')).toBe('pass');
+  });
+
+  describe('the bundled dragon artwork', () => {
+    const header = (file: string) => {
+      const data = fs.readFileSync(path.join(BRAND, file));
+      // IHDR: width, height, bit depth, color type.
+      return {
+        data,
+        width: data.readUInt32BE(16),
+        height: data.readUInt32BE(20),
+        colorType: data[25],
+      };
+    };
+
+    it('is real PNG data of the canonical files, not a Git LFS pointer', () => {
+      for (const [field, file] of Object.entries(BUNDLED)) {
+        const { data } = header(file);
+        expect(data.subarray(0, 8), field).toEqual(
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        );
+        expect(sha256(data), file).toBe(DIGESTS[file]);
+        expect(iconProblem(file, data), file).toBeNull();
+      }
+    });
+
+    it('gives each field the treatment its surface needs', () => {
+      // Composer icons are transparent squares (an alpha channel, or a palette with a tRNS chunk);
+      // logos are solid tiles (no alpha channel, no transparency chunk).
+      const transparent = (data: Buffer, colorType: number | undefined) =>
+        colorType === 4 ||
+        colorType === 6 ||
+        data.includes(Buffer.from('tRNS', 'latin1'));
+      for (const file of [
+        'composer-icon-light.png',
+        'composer-icon-dark.png',
+      ]) {
+        const { data, width, height, colorType } = header(file);
+        expect([width, height], file).toEqual([128, 128]);
+        expect(transparent(data, colorType), file).toBe(true);
+      }
+      for (const file of ['logo-light.png', 'logo-dark.png']) {
+        const { data, width, height, colorType } = header(file);
+        expect([width, height], file).toEqual([512, 512]);
+        expect(transparent(data, colorType), file).toBe(false);
+      }
+      // The light and dark artwork are different files.
+      expect(DIGESTS['composer-icon-light.png']).not.toBe(
+        DIGESTS['composer-icon-dark.png'],
+      );
+      expect(DIGESTS['logo-light.png']).not.toBe(DIGESTS['logo-dark.png']);
+    });
+  });
+
+  it('defaults a dark field with its light field and lets a supplied dark file win', async () => {
+    const app = copyFixture();
+    fs.copyFileSync(
+      path.join(app, 'assets/logo.svg'),
+      path.join(app, 'assets/logo-night.svg'),
+    );
+    editInput(app, (input) => {
+      input.assets = { logoDark: 'assets/logo-night.svg' };
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const out = path.join(cwd, 'publication');
+    const files = new Map(
+      readZip(fs.readFileSync(path.join(out, ARCHIVE_FILE))).map((entry) => [
+        entry.path,
+        entry.data,
+      ]),
+    );
+    const branding = JSON.parse(files.get('plugin.json')!.toString())
+      .extensions['com.openai'].interface;
+    expect(branding.logo).toBe('./assets/saga-a2ui/logo-light.png');
+    expect(branding.logoDark).toBe('./assets/logo-night.svg');
+    expect(branding.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    expect(branding.composerIconDark).toBe(
+      './assets/saga-a2ui/composer-icon-dark.png',
+    );
+    // The overridden dark logo displaces the bundled one.
+    expect(files.has('assets/saga-a2ui/logo-dark.png')).toBe(false);
+    expect(files.get('assets/logo-night.svg')).toEqual(
+      fs.readFileSync(path.join(app, 'assets/logo-night.svg')),
+    );
+    expect(status(recordOf(out), 'package.assets')).toBe('pass');
+  });
+
+  it('keeps application branding whole, adding no SAGA dark artwork', async () => {
+    const app = copyFixture();
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const entries = readZip(
+      fs.readFileSync(path.join(cwd, 'publication', ARCHIVE_FILE)),
+    );
+    const manifest = JSON.parse(
+      entries.find((entry) => entry.path === 'plugin.json')!.data.toString(),
+    );
+    const branding = manifest.extensions['com.openai'].interface;
+    expect(branding.logo).toBe('./assets/logo.svg');
+    expect(branding.composerIcon).toBe('./assets/icon.svg');
+    expect(branding.logoDark).toBeUndefined();
+    expect(branding.composerIconDark).toBeUndefined();
+    expect(
+      entries.some((entry) => entry.path.startsWith('assets/saga-a2ui/')),
+    ).toBe(false);
+  });
+
+  it('keeps a supplied logo while defaulting an omitted composer icon', async () => {
+    const app = copyFixture();
+    editInput(app, (input) => {
+      input.assets = { logo: 'assets/logo.svg' };
+    });
+    const cwd = workspace();
+    const run = await prepare(app, 'publication', { cwd });
+    expect(run.code, run.out + run.err).toBe(0);
+    const entries = readZip(
+      fs.readFileSync(path.join(cwd, 'publication', ARCHIVE_FILE)),
+    );
+    const files = new Map(entries.map((entry) => [entry.path, entry.data]));
+    const manifest = JSON.parse(files.get('plugin.json')!.toString());
+    expect(manifest.extensions['com.openai'].interface.logo).toBe(
+      './assets/logo.svg',
+    );
+    expect(manifest.extensions['com.openai'].interface.composerIcon).toBe(
+      './assets/saga-a2ui/composer-icon-light.png',
+    );
+    // The supplied logo has no dark file, so the dragon's dark logo is not paired with it.
+    expect(
+      manifest.extensions['com.openai'].interface.logoDark,
+    ).toBeUndefined();
+    expect(files.has('assets/saga-a2ui/logo-dark.png')).toBe(false);
+    expect(files.get('assets/logo.svg')).toEqual(
+      fs.readFileSync(path.join(app, 'assets/logo.svg')),
+    );
+  });
+
   it('check passes every check, reads the endpoint without calling a tool, and writes nothing', async () => {
     const app = copyFixture();
     const cwd = workspace();
@@ -131,6 +341,7 @@ describe('a ready application', () => {
           throw new Error('public fixture');
         },
       },
+      resource: new URL('https://fixture.invalid/account/mcp'),
       authorize: async () => true,
       port: 0,
     });
@@ -508,6 +719,37 @@ describe('inputs that must prevent a ready claim', () => {
     ).toMatch(/outside the directory of the release input/);
   });
 
+  it('a build directory the release input points outside the application', async () => {
+    const outside = path.join(root, 'outside-build');
+    const { record } = await blocked((app) => {
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'view.html'), '<html></html>');
+      editInput(
+        app,
+        (input) => (input.build.directory = path.relative(app, outside)),
+      );
+    }, 'build.directory');
+    expect(
+      record.findings.find((finding) => finding.id === 'build.directory')
+        ?.summary,
+    ).toMatch(/outside the directory of the release input/);
+    // The view is not read from there either, so the record names no digest of it.
+    expect(
+      status(record, 'build.views') === 'pass',
+      'a view outside the application was accepted',
+    ).toBe(false);
+  });
+
+  it('a build directory that is a link to somewhere else', async () => {
+    const outside = path.join(root, 'outside-link-build');
+    await blocked((app) => {
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'view.html'), '<html></html>');
+      fs.rmSync(path.join(app, 'build'), { recursive: true });
+      fs.symlinkSync(outside, path.join(app, 'build'), 'dir');
+    }, 'build.directory');
+  });
+
   describe('an icon that is not a complete, valid image', () => {
     const withLogo =
       (name: string, data: Buffer | string) =>
@@ -526,6 +768,20 @@ describe('inputs that must prevent a ready claim', () => {
         record.findings.find((finding) => finding.id === 'package.assets')
           ?.detail,
       ).toMatch(/logo\.png is not a valid PNG: it is truncated/);
+    });
+
+    it('a supplied dark logo that is not a valid image, which the bundled dark logo never replaces', async () => {
+      const { record } = await blocked((app) => {
+        fs.writeFileSync(path.join(app, 'assets', 'logo-night.png'), 'x');
+        editInput(
+          app,
+          (input) => (input.assets.logoDark = 'assets/logo-night.png'),
+        );
+      }, 'package.assets');
+      expect(
+        record.findings.find((finding) => finding.id === 'package.assets')
+          ?.detail,
+      ).toMatch(/logo-night\.png is not a valid PNG/);
     });
 
     it('a PNG without its IEND chunk', async () => {
@@ -873,7 +1129,7 @@ describe('what cannot be concluded is never a pass', () => {
 });
 
 describe('tool calls', () => {
-  it('discovery calls no tool even when the release input declares fixture calls', async () => {
+  it('discovery calls no tool, whatever else is on the command line', async () => {
     const seen = wire();
     expect((await check(copyFixture(), { wire: seen })).code).toBe(0);
     expect(seen.methods.filter((method) => method === 'tools/call')).toEqual(
@@ -881,15 +1137,15 @@ describe('tool calls', () => {
     );
   });
 
-  it('--invoke-fixture calls exactly the declared read-only tool, records only a digest of its result, and labels it fixture evidence', async () => {
+  it('--invoke-fixture calls exactly the tool its calls file authorizes, records only a digest of its result, and labels it fixture evidence', async () => {
     const seen = wire();
     const cwd = workspace();
-    const run = await prepare(
-      copyFixture(),
-      'publication',
-      { cwd, wire: seen },
-      ['--invoke-fixture'],
-    );
+    const app = copyFixture();
+    const calls = await fixtureCallsFile();
+    const run = await prepare(app, 'publication', { cwd, wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
 
     expect(run.code, run.out).toBe(0);
     expect(
@@ -897,6 +1153,7 @@ describe('tool calls', () => {
     ).toHaveLength(1);
     expect(run.out).toMatch(/fixture evidence, not a real-host observation/);
     const record = recordOf(path.join(cwd, 'publication'));
+    expect(record.fixture.declared).toBe(1);
     expect(record.fixture.invoked).toBe(true);
     expect(record.fixture.invocations).toEqual([
       {
@@ -909,27 +1166,425 @@ describe('tool calls', () => {
     expect(record.endpoint.toolCallsDuringDiscovery).toBe(0);
   });
 
-  it('refuses to call a declared tool the endpoint does not advertise', async () => {
+  it('the release input chooses no call: a fixture section in it is refused, and no tool is called', async () => {
     const seen = wire();
     const app = copyFixture();
-    editInput(
-      app,
-      (input) =>
-        (input.fixture.calls = [{ tool: 'delete_everything', arguments: {} }]),
+    const found = await discoverEndpoint(PUBLISHED, { fetch: wire().fetch });
+    if (found.kind !== 'discovered') throw new Error(found.reason);
+    editInput(app, (input) => {
+      input.fixture = {
+        calls: [
+          {
+            tool: 'get_status',
+            toolSha256: toolDigest(found.snapshot.tools[0]!),
+            arguments: {},
+          },
+        ],
+      };
+    });
+    const run = await check(app, { wire: seen });
+
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/fixture/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses a calls file that does not pin the digest of the tool definition, whatever the endpoint asserts', async () => {
+    const seen = wire();
+    const file = path.join(workspace(), 'unpinned.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: 'saga-fixture-calls/1',
+        calls: [{ tool: 'get_status', arguments: {} }],
+      }),
     );
-    const run = await check(app, { wire: seen }, ['--invoke-fixture']);
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      file,
+    ]);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/cannot be used/);
+    expect(run.out).toMatch(/toolSha256/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses a calls file that is missing, malformed or in another format, without a call', async () => {
+    const dir = workspace();
+    const malformed = path.join(dir, 'malformed.json');
+    fs.writeFileSync(malformed, '{');
+    const foreign = path.join(dir, 'foreign.json');
+    fs.writeFileSync(foreign, JSON.stringify({ calls: [] }));
+    for (const file of [path.join(dir, 'absent.json'), malformed, foreign]) {
+      const seen = wire();
+      const run = await check(copyFixture(), { wire: seen }, [
+        '--invoke-fixture',
+        file,
+      ]);
+      expect(run.code).toBe(1);
+      expect(run.out).toMatch(/fixture calls file cannot be used/);
+      expect(seen.methods).not.toContain('tools/call');
+    }
+  });
+
+  it('refuses a call when the endpoint now advertises another definition than the one pinned', async () => {
+    const calls = await fixtureCallsFile();
+    const seen = wire((method, response) =>
+      method === 'tools/list'
+        ? redescribe(response, 'Now does more')
+        : response,
+    );
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
+
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/get_status: refused/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('does not let a read-only assertion stand in for the pinned digest', async () => {
+    const readOnly = (method: string, response: Response) =>
+      method === 'tools/list'
+        ? redescribe(response, undefined, true)
+        : response;
+    const calls = await fixtureCallsFile({ rewrite: readOnly });
+    // The pin matches, but the endpoint no longer asserts the hint: the hint can only narrow the call.
+    const seen = wire((method, response) =>
+      method === 'tools/list'
+        ? redescribe(response, undefined, false)
+        : response,
+    );
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
+    expect(run.out).toMatch(/get_status: refused/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('refuses to call an authorized tool the endpoint does not advertise', async () => {
+    const seen = wire();
+    const calls = await fixtureCallsFile({
+      calls: [{ tool: 'delete_everything', arguments: {} }],
+    });
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      calls,
+    ]);
 
     expect(run.code).toBe(1);
     expect(run.out).toMatch(/delete_everything: refused/);
     expect(seen.methods).not.toContain('tools/call');
   });
 
-  it('--invoke-fixture without declared calls fails instead of silently doing nothing', async () => {
-    const app = copyFixture();
-    editInput(app, (input) => delete input.fixture);
-    const run = await check(app, {}, ['--invoke-fixture']);
+  it('--invoke-fixture needs its calls file', async () => {
+    const run = await check(copyFixture(), {}, ['--invoke-fixture']);
+    expect(run.code).not.toBe(0);
+    expect(run.err).toMatch(/invoke-fixture/);
+  });
+
+  it('draws discovery and the fixture run on one network allowance', async () => {
+    const calls = await fixtureCallsFile();
+    // What discovery alone reads from the fixture endpoint.
+    const measured = new ByteBudget();
+    expect((await check(copyFixture(), { networkBudget: measured })).code).toBe(
+      0,
+    );
+    const discovered = DEFAULT_TOTAL_BYTES - measured.remaining;
+    expect(discovered).toBeGreaterThan(0);
+
+    // An allowance that discovery alone nearly spends leaves the fixture run only the remainder.
+    const seen = wire();
+    const run = await check(
+      copyFixture(),
+      { wire: seen, networkBudget: new ByteBudget(discovered + 1) },
+      ['--invoke-fixture', calls],
+    );
     expect(run.code).toBe(1);
-    expect(run.out).toMatch(/declares no fixture\.calls/);
+    expect(run.out).toMatch(/get_status: error/);
+    expect(seen.methods).not.toContain('tools/call');
+  }, 30_000);
+});
+
+describe('the local input allowance', () => {
+  it('draws the release input, a view, the assets and the fixture calls on one allowance', async () => {
+    const calls = await fixtureCallsFile();
+    // What a whole run reads from disk when every category is within its own limit.
+    const measured = new FileBudget(MAX_PREPARATION_BYTES);
+    expect(
+      (
+        await check(copyFixture(), { localBudget: measured }, [
+          '--invoke-fixture',
+          calls,
+        ])
+      ).code,
+    ).toBe(0);
+    const read = MAX_PREPARATION_BYTES - measured.remaining;
+    expect(read).toBeGreaterThan(0);
+
+    // One byte less than the run needs: no single file is over any limit, yet the last read is refused.
+    const seen = wire();
+    const run = await check(
+      copyFixture(),
+      { wire: seen, localBudget: new FileBudget(read - 1) },
+      ['--invoke-fixture', calls],
+    );
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/files together are too large/);
+    expect(seen.methods).not.toContain('tools/call');
+  }, 30_000);
+
+  it('refuses a release input that the allowance cannot hold', async () => {
+    const run = await check(copyFixture(), { localBudget: new FileBudget(1) });
+    expect(run.code).not.toBe(0);
+    expect(run.err).toMatch(/files together are too large/);
+  });
+
+  it('counts an earlier output against the same allowance', async () => {
+    const out = path.join(workspace(), 'earlier');
+    expect((await prepare(copyFixture(), out)).code).toBe(0);
+    const measured = new FileBudget(MAX_PREPARATION_BYTES);
+    const base = await check(copyFixture(), { localBudget: measured }, [
+      '--against',
+      out,
+    ]);
+    expect(base.code).toBe(0);
+    const read = MAX_PREPARATION_BYTES - measured.remaining;
+    const refused = await check(
+      copyFixture(),
+      { localBudget: new FileBudget(read - 1) },
+      ['--against', out],
+    );
+    expect(refused.code).toBe(1);
+    expect(refused.out).toMatch(/record\.integrity/);
+    expect(refused.out).toMatch(/files together are too large/);
+  }, 30_000);
+
+  it('lets several individually valid trees and files exhaust one allowance', () => {
+    const app = workspace();
+    for (const name of ['a', 'b', 'c'])
+      (fs.mkdirSync(path.join(app, name), { recursive: true }),
+        fs.writeFileSync(path.join(app, name, 'f.txt'), Buffer.alloc(1000)));
+    fs.writeFileSync(path.join(app, 'readme.md'), Buffer.alloc(1000));
+    const shared = new FileBudget(3500);
+    expect(readApplicationTree(app, 'a', shared).ok).toBe(true);
+    expect(readApplicationTree(app, 'b', shared).ok).toBe(true);
+    expect(readApplicationFile(app, 'readme.md', shared).ok).toBe(true);
+    // 500 bytes remain: the next tree is within its own 5 MiB limit but not within what is left.
+    expect(shared.remaining).toBe(500);
+    const refused = readApplicationTree(app, 'c', shared);
+    expect(refused.ok).toBe(false);
+    expect(shared.remaining).toBe(500);
+  });
+
+  it('refuses before allocating when any one allowance cannot hold the file', () => {
+    const file = path.join(workspace(), 'big.bin');
+    fs.writeFileSync(file, Buffer.alloc(4096));
+    const allocate = vi.spyOn(Buffer, 'allocUnsafe');
+    try {
+      const roomy = new FileBudget(1_000_000);
+      const tight = new FileBudget(4095);
+      expect(() => readBounded(file, 1_000_000, roomy, tight)).toThrow(
+        /together are too large/,
+      );
+      expect(allocate).not.toHaveBeenCalled();
+      // A refusal takes nothing from either allowance.
+      expect(roomy.remaining).toBe(1_000_000);
+      expect(tight.remaining).toBe(4095);
+      expect(readBounded(file, 1_000_000, roomy, undefined)).toHaveLength(4096);
+      expect(roomy.remaining).toBe(1_000_000 - 4096);
+    } finally {
+      allocate.mockRestore();
+    }
+  });
+});
+
+/** The tools/list answer with the first tool's description or read-only hint changed, as an endpoint could change what it says. */
+async function redescribe(
+  response: Response,
+  description?: string,
+  readOnlyHint?: boolean,
+): Promise<Response> {
+  const body = (await response.json()) as {
+    result: { tools: { description?: string; annotations?: object }[] };
+  };
+  const [tool] = body.result.tools;
+  if (tool !== undefined) {
+    if (description !== undefined) tool.description = description;
+    if (readOnlyHint !== undefined)
+      tool.annotations = { ...tool.annotations, readOnlyHint };
+  }
+  return new Response(JSON.stringify(body), {
+    status: response.status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+describe('network admission of the endpoint', () => {
+  const contacted = (): { urls: string[]; wire: Wire } => {
+    const urls: string[] = [];
+    return {
+      urls,
+      wire: {
+        methods: [],
+        fetch: async (url) => {
+          urls.push(String(url));
+          return new Response('unreachable', { status: 503 });
+        },
+      },
+    };
+  };
+
+  it.each([
+    'https://127.0.0.1/status/mcp',
+    'https://localhost/status/mcp',
+    'https://169.254.169.254/latest/meta-data',
+    'http://notes.example.com/status/mcp',
+    'https://user:pw@notes.example.com/status/mcp',
+  ])('sends nothing, and no credential, to %s', async (url) => {
+    const app = copyFixture();
+    editInput(app, (input) => (input.endpoint.url = url));
+    const seen = contacted();
+    const run = await check(
+      app,
+      {
+        wire: seen.wire,
+        environment: { NOTES_TOKEN: 'discovery-credential-0123456789' },
+      },
+      ['--bearer-env', 'NOTES_TOKEN'],
+    );
+    expect(run.code).toBe(1);
+    expect(seen.urls).toEqual([]);
+    expect(run.out).toMatch(/endpoint\.discovery/);
+    expect(run.out).not.toContain('discovery-credential-0123456789');
+  });
+
+  it('never moves the credential to another origin when the endpoint redirects', async () => {
+    const urls: string[] = [];
+    const authorizations: (string | null)[] = [];
+    const redirecting: Wire = {
+      methods: [],
+      fetch: async (url, init) => {
+        urls.push(String(url));
+        authorizations.push(new Headers(init?.headers).get('authorization'));
+        return new Response(null, {
+          status: 307,
+          headers: { location: 'https://collector.example.net/steal' },
+        });
+      },
+    };
+    const run = await check(
+      copyFixture(),
+      {
+        wire: redirecting,
+        environment: { NOTES_TOKEN: 'discovery-credential-0123456789' },
+      },
+      ['--bearer-env', 'NOTES_TOKEN'],
+    );
+    expect(run.code).toBe(1);
+    expect(urls).toEqual([PUBLISHED]);
+    expect(authorizations).toEqual(['Bearer discovery-credential-0123456789']);
+    expect(run.out).toContain('A redirect was refused.');
+    expect(run.out).not.toContain('discovery-credential-0123456789');
+  });
+
+  it('reads no more of an oversized answer than the limit and says it could not read the endpoint', async () => {
+    const oversized: Wire = {
+      methods: [],
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              controller.enqueue(new Uint8Array(1024 * 1024));
+            },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+    };
+    const run = await check(copyFixture(), { wire: oversized });
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/larger than the limit this tool reads/);
+  });
+
+  it('refuses a release input larger than the tool reads, before parsing it', async () => {
+    const app = copyFixture();
+    fs.writeFileSync(
+      release(app),
+      JSON.stringify({ padding: 'x'.repeat(2 * 1024 * 1024) }),
+    );
+    const run = await check(app, {});
+    expect(run.code).toBe(1);
+    expect(run.err + run.out).toMatch(/cannot be read: It is larger than/);
+  });
+
+  it('refuses a release input that lists more views than the tool reads', async () => {
+    const app = copyFixture();
+    editInput(
+      app,
+      (input) =>
+        (input.build.views = Array.from(
+          { length: 201 },
+          (_, i) => `view-${i}.html`,
+        )),
+    );
+    expect((await check(app, {})).err).toMatch(/build\.views/);
+  });
+
+  it('refuses a calls file that lists more fixture calls than the tool makes', async () => {
+    const file = path.join(workspace(), 'many.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: 'saga-fixture-calls/1',
+        calls: Array.from({ length: 51 }, () => ({
+          tool: 'get_status',
+          toolSha256: '0'.repeat(64),
+        })),
+      }),
+    );
+    const seen = wire();
+    const run = await check(copyFixture(), { wire: seen }, [
+      '--invoke-fixture',
+      file,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/calls/);
+    expect(seen.methods).not.toContain('tools/call');
+  });
+
+  it('counts a served view in bytes, not characters, before it allocates', async () => {
+    // 3,000,000 characters of three UTF-8 bytes each: under the limit as characters, over it as bytes.
+    const from = vi.spyOn(Buffer, 'from');
+    try {
+      const run = await check(copyFixture(), {
+        wire: editing('resources/read', (result) => {
+          result.contents[0].text = '€'.repeat(3_000_000);
+        }),
+      });
+      expect(run.out).toMatch(/It is larger than 8388608 bytes/);
+      const allocated = from.mock.results.flatMap((one) =>
+        one.type === 'return' && Buffer.isBuffer(one.value)
+          ? [one.value.length]
+          : [],
+      );
+      expect(Math.max(0, ...allocated)).toBeLessThanOrEqual(8 * 1024 * 1024);
+    } finally {
+      from.mockRestore();
+    }
+  });
+
+  it('refuses a built view larger than the tool reads without reading it', async () => {
+    const app = copyFixture();
+    fs.writeFileSync(
+      path.join(app, 'build', 'view.html'),
+      Buffer.alloc(9 * 1024 * 1024, 'a'),
+    );
+    const run = await check(app, {});
+    expect(run.code).toBe(1);
+    expect(run.out).toMatch(/view\.html It is larger than 8388608 bytes/);
   });
 });
 
@@ -1120,6 +1775,7 @@ describe('a complete built application (the qualified lit-node starter)', () => 
             new Error('this application is read without an account'),
           ),
       },
+      resource: new URL('https://fixture.invalid/account/mcp'),
       authorize: async () => true,
       port: 0,
     });

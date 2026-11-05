@@ -1,5 +1,12 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import {
+  MAX_ARCHIVE_BYTES,
+  InputRefused,
+  MAX_RECORD_BYTES,
+  preparationBudget,
+  readBounded,
+  type FileBudget,
+} from './bounded-read.js';
 import {
   ARCHIVE_FILES,
   RECORD_FILE,
@@ -32,11 +39,19 @@ export type PreviousOutput =
 
 const ARCHIVE_NAMES: readonly string[] = Object.values(ARCHIVE_FILES);
 
-export function readPreviousOutput(directory: string): PreviousOutput {
+/** `localBudget` is the command's allowance; a command that reads only this output (a handoff) gets its own. */
+export function readPreviousOutput(
+  directory: string,
+  localBudget: FileBudget = preparationBudget(),
+): PreviousOutput {
   let record: PublicationRecord;
   let recordSha256: string;
   try {
-    const bytes = fs.readFileSync(path.join(directory, RECORD_FILE));
+    const bytes = readBounded(
+      path.join(directory, RECORD_FILE),
+      MAX_RECORD_BYTES,
+      localBudget,
+    );
     record = JSON.parse(bytes.toString('utf8')) as PublicationRecord;
     recordSha256 = sha256(bytes);
   } catch {
@@ -64,14 +79,21 @@ export function readPreviousOutput(directory: string): PreviousOutput {
     };
   let bytes: Buffer;
   try {
-    bytes = fs.readFileSync(path.join(directory, file));
-  } catch {
+    bytes = readBounded(
+      path.join(directory, file),
+      MAX_ARCHIVE_BYTES,
+      localBudget,
+    );
+  } catch (error) {
     return {
       kind: 'found',
       record,
       recordSha256,
       intact: false,
-      problem: `The record names ${file}, which is missing.`,
+      problem:
+        error instanceof InputRefused
+          ? `The record names ${file}, which cannot be read: ${error.message}`
+          : `The record names ${file}, which is missing.`,
     };
   }
   return sha256(bytes) === record.artifact.sha256
@@ -88,10 +110,15 @@ export function readPreviousOutput(directory: string): PreviousOutput {
 const same = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** What differs between an earlier record and the one just computed, in words. Empty when nothing the evidence depends on changed. */
+/**
+ * What differs between an earlier record and the one just computed, in words. Empty when nothing the
+ * evidence depends on changed. `historicalPin` is true only when `previous` was read back from an
+ * already-begun handoff, which may hold no fixture section; a prepared record is never exempt.
+ */
 export function staleness(
   previous: ReleaseEvidence,
   current: ReleaseEvidence,
+  options: { readonly historicalPin?: boolean } = {},
 ): string[] {
   const changes: string[] = [];
   if (previous.target !== current.target)
@@ -151,6 +178,17 @@ export function staleness(
     changes.push(
       'the validator or the documentation it was checked against changed',
     );
+  // A fixture invocation is evidence only for the release it ran against: the calls declared (by the
+  // digest of the tool, definition and arguments), whether they ran, and the digest of each result.
+  // An opted-in assessment is not the same assessment as one made without the fixture, whichever way
+  // the difference runs. Every record `prepare` writes holds the section, so a record without it is
+  // not what `prepare` wrote and is stale; only a pinned release of a handoff begun before the section
+  // was pinned may lack it, and it has nothing to compare (`options.historicalPin`).
+  if (previous.fixture === undefined) {
+    if (!options.historicalPin)
+      changes.push('the fixture evidence is missing from the earlier record');
+  } else if (!same(previous.fixture, current.fixture))
+    changes.push('the fixture invocation changed');
   if (previous.endpoint.complete !== current.endpoint.complete)
     changes.push('how much of the endpoint could be read changed');
   if (previous.artifact?.sha256 !== current.artifact?.sha256)

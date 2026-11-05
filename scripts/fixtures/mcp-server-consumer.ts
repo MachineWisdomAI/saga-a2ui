@@ -3,6 +3,8 @@ import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   attachRequestLifetime,
   createServerBudgets,
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
   type OperationView,
@@ -27,7 +29,10 @@ export function createStatusServer(
     html: page,
     csp: CLOSED_VIEW_CSP,
   });
-  const server = new McpServer({ name: 'status', version: '0.0.0' });
+  const server = new McpServer(
+    { name: 'status', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerPublicOperation(
     server,
     {
@@ -43,6 +48,64 @@ export function createStatusServer(
         unavailable: 'Unavailable.',
         invalidOutput: 'Invalid output.',
       },
+      handle: () => ({
+        kind: 'record',
+        record: { status: 'running' as const },
+      }),
+      project: (record) => ({
+        text: 'The service is running.',
+        data: { status: record.status },
+      }),
+    },
+    { lifetime },
+  );
+  return server;
+}
+// The same operation with no view: a data operation that keeps every execution guarantee, public and
+// protected. Nothing here names the MCP Apps server API; the registration stays inside the package.
+export function createDataServer(lifetime: RequestLifetime): McpServer {
+  const server = new McpServer(
+    { name: 'data', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
+  const failures = {
+    absent: 'No status.',
+    unavailable: 'Unavailable.',
+    invalidOutput: 'Invalid output.',
+  };
+  registerPublicOperation(
+    server,
+    {
+      name: 'read_status',
+      title: 'Read the service status',
+      description: 'Returns whether the service is running.',
+      annotations: { readOnlyHint: true },
+      input: z.strictObject({}),
+      output: StatusOutput,
+      failures,
+      handle: () => ({
+        kind: 'record',
+        record: { status: 'running' as const },
+      }),
+      project: (record) => ({
+        text: 'The service is running.',
+        data: { status: record.status },
+      }),
+    },
+    { lifetime },
+  );
+  registerProtectedOperation(
+    server,
+    {
+      name: 'read_my_status',
+      title: 'Read my service status',
+      description: 'Returns the status for the signed-in user.',
+      annotations: { readOnlyHint: true },
+      input: z.strictObject({}),
+      output: StatusOutput,
+      failures: { ...failures, signInRequired: 'Sign in.' },
+      identity: (authInfo) =>
+        authInfo === undefined ? undefined : { clientId: authInfo.clientId },
       handle: () => ({
         kind: 'record',
         record: { status: 'running' as const },

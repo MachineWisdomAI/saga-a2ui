@@ -1,0 +1,94 @@
+---
+title: 'ActionButton'
+sidebarTitle: 'ActionButton'
+description: 'A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.'
+---
+
+> Documents saga a2ui **0.7.6** (stable). This catalog entry is generated from the package manifests and entry points at source revision [`5995b1f`](https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/LICENSE).
+>
+> The Lit packages (`@saga-a2ui/lit`, `@saga-a2ui/lit-mcp-stack`) were first published to npm at 0.7.7-rc.1. Where this snapshot mentions them, it describes source at the pinned revision, not packages you can install at 0.7.6.
+
+A control whose layout names no action. The application attaches an action to each rendered instance, so one definition serves every row while each row keeps its own state.
+
+Renderers: Lit and React.
+
+## Entry points
+
+| Import | Registry version | Role |
+| --- | --- | --- |
+| `@saga-a2ui/core/actions/action-button-schema` | `@saga-a2ui/core@0.7.6` | Renderer-neutral contract of the control: a strict schema with no action property |
+| `@saga-a2ui/react/actions` | `@saga-a2ui/react@0.7.6` | React control and action setup |
+| `@saga-a2ui/lit/actions` | Not published to npm at this release | Lit control and action setup |
+
+## Exports
+
+The names below are read from the entry point sources at the pinned revision.
+
+### `@saga-a2ui/core/actions/action-button-schema`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/core/src/actions/action-button-schema.ts).
+
+Values: `ActionButtonApi`.
+
+Types: none.
+
+### `@saga-a2ui/react/actions`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react/src/actions/index.ts).
+
+Values: `ActionButton`, `ActionButtonEntry`, `ActionsScope`, `InstanceHostProvider`, `createReactActions`, `useActionSetup`.
+
+Types: `ActionButtonActivation`, `ActionButtonEvents`, `ReactActions`, `ReactActionsOptions`.
+
+### `@saga-a2ui/lit/actions`
+
+Source: [entry point at the pinned revision](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit/src/actions/index.ts).
+
+Values: `ActionButton`, `ActionButtonElement`, `actionButtonEntry`, `createLitActions`.
+
+Types: `ActionButtonActivation`, `ActionButtonEvents`, `LitActionsOptions`.
+
+## Static demonstration
+
+Two ActionButton instances in a row of the notes application's layout. Neither names an action. It is a copy of lines from [`examples/pack1-consumer/src/notes-surface.ts`](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/examples/pack1-consumer/src/notes-surface.ts) at the pinned revision, not a live rendering.
+
+```ts
+{
+  id: 'note-actions',
+  component: 'Row',
+  children: ['row-read', 'row-archive'],
+},
+{
+  id: 'row-read',
+  component: 'ActionButton',
+  child: 'row-read-label',
+},
+{
+  id: 'row-read-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Mark read',
+},
+{
+  id: 'row-archive',
+  component: 'ActionButton',
+  child: 'row-archive-label',
+},
+{
+  id: 'row-archive-label',
+  component: 'Line',
+  kind: 'body',
+  text: 'Archive',
+},
+```
+
+## Usage
+
+This release has no guide for this component. The exports above are its reference.
+
+## Evidence and limits
+
+- No guide of this release records a renderer or host qualification for this control.
+- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.
+
+Back to the [component catalog](/docs/releases/0.7.6/components/index).

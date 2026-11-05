@@ -1,4 +1,12 @@
+import {
+  assertByteLimit,
+  MAX_DECODED_MEDIA_BYTES,
+  MediaTooLargeError,
+} from './media-limits.js';
 import type { AudioPlayer } from './playback-view.js';
+
+/** A decoded Web Audio buffer holds 32-bit floats. */
+const FLOAT_SAMPLE_BYTES = 4;
 
 /**
  * The one foreground player, on Web Audio: the bytes arrive through `fetch` (where the capability
@@ -24,7 +32,18 @@ function within<T>(call: Promise<T>): Promise<T | typeof LATE> {
   });
 }
 
-export function createWebAudioPlayer(): AudioPlayer {
+export interface WebAudioPlayerOptions {
+  /** The most memory the decoded samples may take. Defaults to `MAX_DECODED_MEDIA_BYTES`. */
+  readonly maxDecodedBytes?: number;
+}
+
+export function createWebAudioPlayer(
+  options: WebAudioPlayerOptions = {},
+): AudioPlayer {
+  const maxDecodedBytes = assertByteLimit(
+    'maxDecodedBytes',
+    options.maxDecodedBytes ?? MAX_DECODED_MEDIA_BYTES,
+  );
   let context: AudioContext | undefined;
   let source: AudioBufferSourceNode | undefined;
   let endedListener: (() => void) | undefined;
@@ -82,6 +101,13 @@ export function createWebAudioPlayer(): AudioPlayer {
         throw new Error('prepare() was not called inside a user activation');
       const buffer = await ctx.decodeAudioData(bytes);
       if (context !== ctx) throw new Error('stopped');
+      // The platform decodes in one step, so the size can only be judged once it is known. An
+      // oversized result is dropped here, before any node holds it or plays it.
+      if (
+        buffer.length * buffer.numberOfChannels * FLOAT_SAMPLE_BYTES >
+        maxDecodedBytes
+      )
+        throw new MediaTooLargeError('The decoded audio', maxDecodedBytes);
       const node = ctx.createBufferSource();
       node.buffer = buffer;
       node.connect(ctx.destination);

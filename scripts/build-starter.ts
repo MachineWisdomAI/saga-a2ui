@@ -44,6 +44,7 @@ export const starterDist = (name: string): string =>
 const QUALIFICATION_ENTRY = `export { startListener } from './server/listener.js';
 export { ACCOUNT_SCOPE } from './server/authenticate.js';
 export { ViewArtifactMissing } from './server/operations.js';
+export { VIEW_MARKER } from './src/contract.js';
 `;
 
 export interface PreparedStarter {

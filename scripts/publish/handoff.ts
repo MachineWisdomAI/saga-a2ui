@@ -3,6 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { sameDirectory } from '../starter-template.js';
+import {
+  FileBudget,
+  InputRefused,
+  MAX_HANDOFF_BEGIN_BYTES,
+  MAX_HANDOFF_EVENTS,
+  MAX_HANDOFF_EVENT_BYTES,
+  MAX_HANDOFF_JSON_DEPTH,
+  MAX_HANDOFF_RECORD_BYTES,
+  exceedsJsonDepth,
+  handoffEventRefusal,
+  readBounded,
+} from './bounded-read.js';
 import { readPreviousOutput, staleness } from './previous.js';
 import {
   ARCHIVE_FILES,
@@ -11,10 +23,12 @@ import {
   TARGET_NAMES,
   canonicalDigest,
   sha256,
+  type PublicationRecord,
   type ReleaseEvidence,
   type TargetName,
 } from './record.js';
 import { secretKinds } from './secrets.js';
+import { terminalValue } from '../terminal-text.mjs';
 
 // `saga publish handoff` (CLI5 #68): the resumable record of one prepared release's trip through a
 // host directory's own submission flow. Preparing a package (CLI3, CLI4) submits nothing; this
@@ -22,8 +36,10 @@ import { secretKinds } from './secrets.js';
 // host's portal, so the work can be interrupted, resumed and handed to someone else without a
 // second upload and without a prepared package ever being mistaken for a live listing.
 //
-// It calls no network and no host. There is no submission API here, no hosted service and no
-// credential: the maintainer submits in the portal as the intended publisher, and this module
+// Apart from `begin`, it calls no network and no host. `begin` assesses the release again as `check`
+// does: it reads the application's endpoint, and calls a tool there only for a fixture calls file the
+// maintainer names. No action here calls a host directory. There is no submission API here, no hosted
+// service and no credential: the maintainer submits in the portal as the intended publisher, and this module
 // writes down the attempt before and the portal's reference after.
 //
 // The record is a directory of numbered event files, appended and never rewritten:
@@ -79,7 +95,26 @@ export interface HandoffRequest {
   readonly host: string | undefined;
   /** The reference to that observation. */
   readonly evidence: string | undefined;
+  /** `begin` only: the release input the prepared output came from, which `begin` assesses again itself. */
+  readonly release?: string | undefined;
+  /** `begin` only: the environment variable holding a bearer credential for the read-only look at a protected endpoint. */
+  readonly bearerEnv?: string | undefined;
+  /** `begin` only: the maintainer's own `saga-fixture-calls/1` file, as for `prepare`. */
+  readonly invokeFixture?: string | undefined;
 }
+
+/**
+ * A fresh assessment of the release, made by this run and not read from a file: the same checks
+ * `prepare` runs, against the release input, the build and the endpoint as they are now.
+ */
+export type Reassessment =
+  | {
+      readonly ok: true;
+      readonly record: PublicationRecord;
+      /** The findings as `check` prints them, shown when the fresh assessment is not ready. */
+      readonly report: string;
+    }
+  | { readonly ok: false; readonly problem: string };
 
 export interface HandoffIo {
   readonly cwd: string;
@@ -87,6 +122,13 @@ export interface HandoffIo {
   readonly stderr: (text: string) => void;
   readonly signal?: AbortSignal | undefined;
   readonly now: () => Date;
+  /**
+   * Assesses the release again for `begin` (the target is the prepared record's). Readiness is
+   * pinned only from this result: a findings record and its archive are files a maintainer, a
+   * script or a build step can write, so on their own they are not evidence of readiness.
+   */
+  readonly reassess?:
+    ((target: TargetName) => Promise<Reassessment>) | undefined;
 }
 
 const EXIT_REFUSED = 1;
@@ -199,6 +241,8 @@ type ReadRecord =
       readonly events: readonly HandoffEvent[];
       readonly tipSha256: string;
       readonly identity: fs.BigIntStats;
+      /** The bytes of all the events read, which the next event is added to before it is admitted. */
+      readonly bytes: number;
     }
   | { readonly ok: false; readonly problem: string };
 
@@ -206,7 +250,9 @@ type ReadRecord =
  * Reads a handoff directory back: a real directory holding only this tool's numbered events (a
  * temporary file from an interrupted write, named with a leading dot, is ignored), contiguous from
  * one, each in this format and naming the digest of the one before it. Anything else is refused,
- * not repaired: a damaged record is for a person to look at.
+ * not repaired: a damaged record is for a person to look at. A record larger than any this command
+ * writes is refused the same way: too many events, an event or the whole record over its size, or
+ * an event nested too deep, each found before that event is allocated or parsed.
  */
 function readRecord(directory: string): ReadRecord {
   let stat: fs.BigIntStats;
@@ -223,11 +269,28 @@ function readRecord(directory: string): ReadRecord {
       ok: false,
       problem: `${directory} is not a directory this command created.`,
     };
-  const names = fs
-    .readdirSync(directory)
-    .filter((name) => !name.startsWith('.'))
-    .sort();
+  const listed = listEvents(directory);
+  if ('problem' in listed) return { ok: false, problem: listed.problem };
+  const names = listed.names.sort();
   const events: HandoffEvent[] = [];
+  // Sizes first, from the directory: a record over its total is refused before one event is read.
+  let total = 0;
+  for (const name of names) {
+    try {
+      total += fs.statSync(path.join(directory, name)).size;
+    } catch {
+      return {
+        ok: false,
+        problem: `${name} cannot be read as an event of a handoff record.`,
+      };
+    }
+    if (total > MAX_HANDOFF_RECORD_BYTES)
+      return {
+        ok: false,
+        problem: `${directory} holds more than ${MAX_HANDOFF_RECORD_BYTES} bytes of events, which is more than a handoff record this command writes.`,
+      };
+  }
+  const budget = new FileBudget(MAX_HANDOFF_RECORD_BYTES);
   let tip: string | null = null;
   for (const [index, name] of names.entries()) {
     if (EVENT_FILE.exec(name)?.[1] !== String(index + 1).padStart(6, '0'))
@@ -235,7 +298,25 @@ function readRecord(directory: string): ReadRecord {
         ok: false,
         problem: `${directory} holds ${name}, which is not the next event of a handoff record; it is not one this command wrote, or an event is missing.`,
       };
-    const bytes = fs.readFileSync(path.join(directory, name));
+    let bytes: Buffer;
+    try {
+      bytes = readBounded(
+        path.join(directory, name),
+        index === 0 ? MAX_HANDOFF_BEGIN_BYTES : MAX_HANDOFF_EVENT_BYTES,
+        budget,
+      );
+    } catch (error) {
+      if (!(error instanceof InputRefused)) throw error;
+      return {
+        ok: false,
+        problem: `${name} is not an event this command wrote: ${error.message}`,
+      };
+    }
+    if (exceedsJsonDepth(bytes, MAX_HANDOFF_JSON_DEPTH))
+      return {
+        ok: false,
+        problem: `${name} is nested deeper than ${MAX_HANDOFF_JSON_DEPTH} levels, which no event of a handoff record is.`,
+      };
     let parsed: ReturnType<typeof EventSchema.safeParse>;
     try {
       parsed = EventSchema.safeParse(JSON.parse(bytes.toString('utf8')));
@@ -275,9 +356,36 @@ function readRecord(directory: string): ReadRecord {
       ok: false,
       problem: `${directory} was replaced while the record was being read; nothing was read from it that can be trusted.`,
     };
-  return { ok: true, events, tipSha256: tip, identity: stat };
+  return { ok: true, events, tipSha256: tip, identity: stat, bytes: total };
 }
 
+/**
+ * The names in a record directory that are events (a leading dot marks an ignored temporary file),
+ * counted as they are listed so that a directory of very many entries is never held.
+ */
+function listEvents(
+  directory: string,
+): { readonly names: string[] } | { readonly problem: string } {
+  const names: string[] = [];
+  let entries = 0;
+  const handle = fs.opendirSync(directory);
+  try {
+    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+      entries += 1;
+      if (!entry.name.startsWith('.')) names.push(entry.name);
+      if (names.length > MAX_HANDOFF_EVENTS || entries > 2 * MAX_HANDOFF_EVENTS)
+        return {
+          problem: `${directory} holds more than ${MAX_HANDOFF_EVENTS} entries, which is more than a handoff record this command writes.`,
+        };
+    }
+  } finally {
+    handle.closeSync();
+  }
+  return { names };
+}
+
+/** An event this command would write that its own reader would refuse; the text names the limit and is safe to show. */
+class Oversized extends Error {}
 class Raced extends Error {}
 class Interrupted extends Error {}
 class Replaced extends Error {}
@@ -289,6 +397,18 @@ function isDirectoryAt(directory: string, identity: fs.BigIntStats): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Admits an event only if `readRecord` would read it back: the same count, size, depth and
+ * record-total limits, applied to the serialized bytes before anything is staged or linked.
+ */
+function admit(seq: number, content: Buffer, recordBytes: number): void {
+  const refusal = handoffEventRefusal(seq, content, recordBytes);
+  if (refusal !== undefined)
+    throw new Oversized(
+      `${refusal}, which is more than a record this command can read back.`,
+    );
 }
 
 /** The directory held open by its identity: a rename or replacement of its path afterwards does not change which directory this is. */
@@ -316,11 +436,26 @@ const OPEN_DIRECTORY =
 function appendEvent(
   directory: string,
   bound: fs.BigIntStats,
-  previous: { readonly seq: number; readonly tipSha256: string | null },
+  previous: {
+    readonly seq: number;
+    readonly tipSha256: string | null;
+    /** The bytes of the events already in the record. */
+    readonly bytes: number;
+  },
   body: EventBody,
   now: Date,
   signal: AbortSignal | undefined,
 ): void {
+  const seq = previous.seq + 1;
+  const event = {
+    format: HANDOFF_FORMAT,
+    seq,
+    previousSha256: previous.tipSha256,
+    recordedAt: now.toISOString(),
+    ...body,
+  };
+  const content = Buffer.from(`${JSON.stringify(event, null, 2)}\n`);
+  admit(seq, content, previous.bytes);
   let handle: number;
   try {
     handle = fs.openSync(directory, OPEN_DIRECTORY);
@@ -336,14 +471,6 @@ function appendEvent(
     const through = fs.existsSync(`/proc/self/fd/${handle}`)
       ? `/proc/self/fd/${handle}`
       : directory;
-    const seq = previous.seq + 1;
-    const event = {
-      format: HANDOFF_FORMAT,
-      seq,
-      previousSha256: previous.tipSha256,
-      recordedAt: now.toISOString(),
-      ...body,
-    };
     const staged = path.join(
       through,
       `.${eventFile(seq)}.tmp-${randomBytes(6).toString('hex')}`,
@@ -351,7 +478,7 @@ function appendEvent(
     const written = fs.openSync(staged, 'wx');
     let ours: fs.BigIntStats;
     try {
-      fs.writeFileSync(written, `${JSON.stringify(event, null, 2)}\n`);
+      fs.writeFileSync(written, content);
       ours = fs.fstatSync(written, { bigint: true });
     } finally {
       fs.closeSync(written);
@@ -513,7 +640,9 @@ function freshnessOf(
   if (current.kind === 'missing')
     return { kind: 'unusable', problem: current.problem };
   if (!current.intact) return { kind: 'unusable', problem: current.problem };
-  const changes = staleness(begin.release, current.record);
+  const changes = staleness(begin.release, current.record, {
+    historicalPin: true,
+  });
   if (current.record.verdict !== 'ready')
     changes.push(
       `the current preparation is ${current.record.verdict}, not ready`,
@@ -677,7 +806,7 @@ function decideAttempt({ request, status, freshness }: Context): Decision {
       [
         `Recorded the start of a submission attempt (event ${eventFile(seq)}). This tool submits nothing: submit by hand, as the intended publisher, in the host's own flow.`,
         '',
-        `Host: ${begin.host.name}`,
+        `Host: ${terminalValue(begin.host.name)}`,
         `Guide: ${begin.host.guide}`,
         ...(begin.host.portal === null ? [] : [`Portal: ${begin.host.portal}`]),
         `Publisher: ${begin.release.application.publisher.name}. Authority recorded for it (not verified here): ${begin.authority.join('; ')}`,
@@ -907,10 +1036,10 @@ function statusReport(
   const lines = [
     `saga publish handoff status (${begin.host.target}): ${begin.handoffId}`,
     '',
-    `Host: ${begin.host.name}`,
-    `Application: ${begin.release.application.name} ${begin.release.application.version}; publisher ${begin.release.application.publisher.name}`,
-    `Release: package ${begin.release.artifact?.file ?? ''} sha256 ${begin.release.artifact?.sha256 ?? ''}; source ${begin.release.source.revision ?? 'unknown'}${begin.release.source.dirty === true ? ' (modified)' : ''}; deployment identity ${begin.release.endpoint.deploymentIdentity.status}`,
-    `Authority references (recorded, not verified): ${begin.authority.join('; ')}`,
+    `Host: ${terminalValue(begin.host.name)}`,
+    `Application: ${terminalValue(begin.release.application.name)} ${terminalValue(begin.release.application.version)}; publisher ${terminalValue(begin.release.application.publisher.name)}`,
+    `Release: package ${terminalValue(begin.release.artifact?.file ?? '')} sha256 ${begin.release.artifact?.sha256 ?? ''}; source ${terminalValue(begin.release.source.revision ?? 'unknown')}${begin.release.source.dirty === true ? ' (modified)' : ''}; deployment identity ${begin.release.endpoint.deploymentIdentity.status}`,
+    `Authority references (recorded, not verified): ${begin.authority.map(terminalValue).join('; ')}`,
     '',
   ];
   const row = (label: string, value: string): void =>
@@ -919,12 +1048,12 @@ function statusReport(
     'Preparation',
     stale
       ? `stale (was ready when recorded ${begin.recordedAt})`
-      : `ready (recorded ${begin.recordedAt}; ${begin.release.artifact?.file ?? ''} bound to ${begin.preparedRecordSha256.slice(0, 12)})`,
+      : `ready (recorded ${begin.recordedAt}; ${terminalValue(begin.release.artifact?.file ?? '')} bound to ${begin.preparedRecordSha256.slice(0, 12)})`,
   );
   row(
     'Submission',
     submission.state === 'submitted'
-      ? `submitted, reference ${submission.reference} (observed ${submission.observedAt})`
+      ? `submitted, reference ${terminalValue(submission.reference)} (observed ${submission.observedAt})`
       : submission.state === 'attempt-unresolved'
         ? `UNRESOLVED attempt since ${submission.startedAt}; the host may hold it`
         : 'not submitted',
@@ -939,7 +1068,7 @@ function statusReport(
     'Live listing',
     listing.state === 'not-verified'
       ? 'not verified (neither a package, a submission nor an approval is a live listing)'
-      : `${listing.state} on ${listing.host} (${listing.evidence}; observed ${listing.observedAt})${stale && listing.state === 'verified-live' ? '; observed for the earlier release, so recheck it on the named host' : ''}`,
+      : `${listing.state} on ${terminalValue(listing.host)} (${terminalValue(listing.evidence)}; observed ${listing.observedAt})${stale && listing.state === 'verified-live' ? '; observed for the earlier release, so recheck it on the named host' : ''}`,
   );
   lines.push('');
   switch (freshness.kind) {
@@ -955,12 +1084,12 @@ function statusReport(
       break;
     case 'stale':
       lines.push(
-        `Freshness: STALE. Changed since this record was begun: ${freshness.changes.join('; ')}.`,
+        `Freshness: STALE. Changed since this record was begun: ${freshness.changes.map(terminalValue).join('; ')}.`,
         'Readiness is invalidated: no new attempt or listing is recorded against this release. Rerun prepare and begin a new handoff; what the host already holds for the old release stays as recorded.',
       );
       break;
     case 'unusable':
-      lines.push(`Freshness: unknown. ${freshness.problem}`);
+      lines.push(`Freshness: unknown. ${terminalValue(freshness.problem)}`);
       break;
   }
   const next =
@@ -1008,12 +1137,19 @@ const statDirectory = (directory: string): fs.BigIntStats | undefined => {
   }
 };
 
-/** `begin`: pins one prepared, ready release to the host it was prepared for and to the authority references of its intended publisher. */
-function begin(request: HandoffRequest, io: HandoffIo): number {
+/**
+ * `begin`: pins one ready release to the host it was prepared for and to the authority references of
+ * its intended publisher. The prepared output is only what is being handed off: its record and
+ * archive are plain files, so whoever can write one can write the other to match. Readiness is
+ * therefore decided by assessing the release again here, and the prepared output must agree with
+ * that assessment byte for byte in the package and in every piece of evidence a later comparison uses.
+ */
+async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   if (
     !requireOption(io, 'begin', {
       handoff: request.handoff,
       prepared: request.prepared,
+      release: request.release,
     })
   )
     return EXIT_USAGE;
@@ -1037,13 +1173,13 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
   );
   if (prepared.kind === 'missing') {
     io.stderr(
-      `saga publish handoff begin: ${prepared.problem} Pass the directory a \`saga publish prepare\` run wrote.\n`,
+      `saga publish handoff begin: ${terminalValue(prepared.problem)} Pass the directory a \`saga publish prepare\` run wrote.\n`,
     );
     return EXIT_REFUSED;
   }
   if (!prepared.intact) {
     io.stderr(
-      `saga publish handoff begin: the prepared output was altered or is incomplete: ${prepared.problem} Run prepare again.\n`,
+      `saga publish handoff begin: the prepared output was altered or is incomplete: ${terminalValue(prepared.problem)} Run prepare again.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1065,7 +1201,7 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
   const parent = path.dirname(directory);
   if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
     io.stderr(
-      `saga publish handoff begin: the parent directory ${parent} does not exist; create it first or choose a path inside an existing directory.\n`,
+      `saga publish handoff begin: the parent directory ${terminalValue(parent)} does not exist; create it first or choose a path inside an existing directory.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1076,16 +1212,52 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
       fs.readdirSync(directory).some((name) => !name.startsWith('.')))
   ) {
     io.stderr(
-      `saga publish handoff begin: ${directory} ${existing.isDirectory() ? 'already holds files; resume a record there with `handoff status`, or choose a new directory' : 'is not a directory'}. Nothing was changed.\n`,
+      `saga publish handoff begin: ${terminalValue(directory)} ${existing.isDirectory() ? 'already holds files; resume a record there with `handoff status`, or choose a new directory' : 'is not a directory'}. Nothing was changed.\n`,
     );
     return EXIT_REFUSED;
   }
+  // The assessment is this run's own: nothing of it is read from the prepared output.
+  if (io.reassess === undefined) {
+    io.stderr(
+      'saga publish handoff begin: this installation cannot assess the release again, so it will not take the prepared record as evidence of readiness. Nothing was recorded.\n',
+    );
+    return EXIT_REFUSED;
+  }
+  const fresh = await io.reassess(record.target);
+  if (io.signal?.aborted) {
+    io.stderr(
+      'saga publish handoff begin: interrupted; nothing was recorded.\n',
+    );
+    return EXIT_INTERRUPTED;
+  }
+  if (!fresh.ok) {
+    io.stderr(
+      `saga publish handoff begin: the release could not be assessed again: ${terminalValue(fresh.problem)}\nNothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+  const assessed = fresh.record;
+  if (assessed.verdict !== 'ready' || assessed.artifact === null) {
+    io.stderr(
+      `saga publish handoff begin: assessed again now, the release is ${assessed.verdict}, not ready, so there is nothing to hand off. The prepared record is not evidence of readiness.\n${fresh.report}Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+  // The prepared output is the release only when it holds what the fresh assessment produced.
+  const changes = staleness(record, assessed);
+  if (changes.length > 0) {
+    io.stderr(
+      `saga publish handoff begin: the prepared output does not match the release as assessed now: ${changes.map(terminalValue).join('; ')}. Run prepare again and pass that directory. Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
+  }
+
   const created = existing === undefined;
   if (created) fs.mkdirSync(directory);
   const ours = statDirectory(directory);
   if (ours === undefined) {
     io.stderr(
-      `saga publish handoff begin: ${directory} could not be read after it was made. Nothing was recorded.\n`,
+      `saga publish handoff begin: ${terminalValue(directory)} could not be read after it was made. Nothing was recorded.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1101,30 +1273,31 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
       fs.rmdirSync(directory);
   };
 
-  const host = HOST_DIRECTORIES[record.target];
+  const host = HOST_DIRECTORIES[assessed.target];
   const body: EventBody = {
     type: 'begin',
     handoffId: canonicalDigest({
-      target: record.target,
-      application: record.application.name,
-      publisher: record.application.publisher.name,
-      package: record.artifact.sha256,
+      target: assessed.target,
+      application: assessed.application.name,
+      publisher: assessed.application.publisher.name,
+      package: assessed.artifact.sha256,
     }).slice(0, 16),
     host: {
-      target: record.target,
+      target: assessed.target,
       name: host.name,
       guide: host.guide,
       portal: host.portal,
     },
-    preparedRecordSha256: prepared.recordSha256,
-    release: pinned(record),
+    // The digest of the record `prepare` writes for this assessment: what this handoff is bound to.
+    preparedRecordSha256: sha256(`${JSON.stringify(assessed, null, 2)}\n`),
+    release: pinned(assessed),
     authority,
   };
   try {
     appendEvent(
       directory,
       ours,
-      { seq: 0, tipSha256: null },
+      { seq: 0, tipSha256: null, bytes: 0 },
       body,
       io.now(),
       io.signal,
@@ -1135,9 +1308,9 @@ function begin(request: HandoffRequest, io: HandoffIo): number {
   }
   io.stdout(
     [
-      `Began a ${host.name} handoff ${(body as EventOf<'begin'>).handoffId} in ${request.handoff}.`,
-      `Pinned release: ${record.artifact.file} sha256 ${record.artifact.sha256}; contract ${record.endpoint.contractSha256 ?? 'not read'}; deployment identity ${record.endpoint.deploymentIdentity.status}.`,
-      `Publisher: ${record.application.publisher.name}; authority references recorded, not verified: ${authority.join('; ')}.`,
+      `Began a ${terminalValue(host.name)} handoff ${(body as EventOf<'begin'>).handoffId} in ${terminalValue(request.handoff as string)}.`,
+      `Pinned release: ${terminalValue(assessed.artifact.file)} sha256 ${assessed.artifact.sha256}; contract ${assessed.endpoint.contractSha256 ?? 'not read'}; deployment identity ${assessed.endpoint.deploymentIdentity.status}.`,
+      `Publisher: ${terminalValue(assessed.application.publisher.name)}; authority references recorded, not verified: ${authority.map(terminalValue).join('; ')}.`,
       'Preparation is recorded as ready. Nothing is submitted, in review or live.',
       "Next: `saga publish handoff attempt`, then submit by hand in the host's own flow.",
       'Nothing was deployed, uploaded, submitted or published.',
@@ -1156,6 +1329,7 @@ function pinned(record: ReleaseEvidence): ReleaseEvidence {
     application,
     inputs,
     endpoint,
+    fixture,
     validators,
     artifact,
     handoff,
@@ -1167,6 +1341,7 @@ function pinned(record: ReleaseEvidence): ReleaseEvidence {
     application,
     inputs,
     endpoint,
+    fixture,
     validators,
     artifact,
     handoff,
@@ -1179,6 +1354,12 @@ function failedAppend(error: unknown, io: HandoffIo, action: string): number {
       `saga publish handoff ${action}: interrupted; nothing was recorded.\n`,
     );
     return EXIT_INTERRUPTED;
+  }
+  if (error instanceof Oversized) {
+    io.stderr(
+      `saga publish handoff ${action}: ${error.message} Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
   }
   if (error instanceof Replaced) {
     io.stderr(
@@ -1235,7 +1416,9 @@ export async function runHandoff(
     return EXIT_USAGE;
   const read = readRecord(path.resolve(io.cwd, request.handoff as string));
   if (!read.ok) {
-    io.stderr(`saga publish handoff ${request.action}: ${read.problem}\n`);
+    io.stderr(
+      `saga publish handoff ${request.action}: ${terminalValue(read.problem)}\n`,
+    );
     return EXIT_REFUSED;
   }
   const status = deriveStatus(read.events);
@@ -1246,6 +1429,12 @@ export async function runHandoff(
     return report.attention ? EXIT_REFUSED : 0;
   }
   if (!requireOption(io, request.action, neededBy(request))) return EXIT_USAGE;
+  if (read.events.length >= MAX_HANDOFF_EVENTS) {
+    io.stderr(
+      `saga publish handoff ${request.action}: the record already holds ${MAX_HANDOFF_EVENTS} events, the most this command reads back, so nothing was recorded. Begin a new record for further work.\n`,
+    );
+    return EXIT_REFUSED;
+  }
   const decision = decide({
     request,
     status,
@@ -1254,11 +1443,13 @@ export async function runHandoff(
     freshness,
   });
   if (decision.kind === 'refuse') {
-    io.stderr(`saga publish handoff ${request.action}: ${decision.message}\n`);
+    io.stderr(
+      `saga publish handoff ${request.action}: ${terminalValue(decision.message)}\n`,
+    );
     return EXIT_REFUSED;
   }
   if (decision.kind === 'unchanged') {
-    io.stdout(`${decision.message}\n`);
+    io.stdout(`${terminalValue(decision.message)}\n`);
     return 0;
   }
   const last = read.events[read.events.length - 1] as HandoffEvent;
@@ -1266,7 +1457,7 @@ export async function runHandoff(
     appendEvent(
       path.resolve(io.cwd, request.handoff as string),
       read.identity,
-      { seq: last.seq, tipSha256: read.tipSha256 },
+      { seq: last.seq, tipSha256: read.tipSha256, bytes: read.bytes },
       decision.body,
       io.now(),
       io.signal,

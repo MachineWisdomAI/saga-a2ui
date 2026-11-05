@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,10 +10,24 @@ import {
   sameDirectory,
   type OutputFile,
 } from '../starter-template.js';
+import {
+  FileBudget,
+  MAX_RECORD_BYTES,
+  MAX_VIEW_BYTES,
+  MAX_VIEW_TOTAL_BYTES,
+  preparationBudget,
+  readBounded,
+} from './bounded-read.js';
 import { chatgptTarget, type ValidatorLoad } from './chatgpt.js';
 import { claudeTarget } from './claude.js';
 import type { PluginValidator } from './claude-plugin.js';
-import { runHandoff, type HandoffRequest } from './handoff.js';
+import { ByteBudget } from '../maintainer-network.js';
+import { loadFixtureCalls, type FixtureCall } from './fixture-calls.js';
+import {
+  runHandoff,
+  type HandoffRequest,
+  type Reassessment,
+} from './handoff.js';
 import {
   discoverEndpoint,
   invokeFixture,
@@ -23,6 +36,7 @@ import {
   type EndpointSnapshot,
 } from './endpoint.js';
 import { readPreviousOutput, staleness } from './previous.js';
+import { sourceOf } from './source.js';
 import {
   ARCHIVE_FILES,
   RECORD_FILE,
@@ -41,6 +55,7 @@ import {
 } from './record.js';
 import { loadReleaseInput, type LoadedReleaseInput } from './release-input.js';
 import { redactSecrets, secretKinds } from './secrets.js';
+import { terminalText, terminalValue } from '../terminal-text.mjs';
 import type { Evidence, PublicationTarget } from './target.js';
 
 // `saga publish check|prepare` (CLI3 #66, CLI4 #67): validates a built application, its deployed
@@ -67,7 +82,11 @@ export interface PublishRequest {
   readonly out?: string | undefined;
   /** An earlier output directory to compare with; changed inputs make its evidence stale. */
   readonly against?: string | undefined;
-  readonly invokeFixture: boolean;
+  /**
+   * `--invoke-fixture FILE`: the maintainer's own `saga-fixture-calls/1` file (fixture-calls.ts), the
+   * only source of tool-call authority. Without it no tool is called.
+   */
+  readonly invokeFixture?: string | undefined;
   /** The name of an environment variable holding a bearer credential for read-only discovery of a protected endpoint. */
   readonly bearerEnv?: string | undefined;
 }
@@ -81,6 +100,10 @@ export interface PublishIo {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** The network seam for the endpoint. Defaults to the platform's `fetch`. */
   readonly fetch?: FetchLike | undefined;
+  /** What all responses of one assessment may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly networkBudget?: ByteBudget | undefined;
+  /** What all local files of one command may add up to. Defaults to the module's allowance; a test supplies a smaller one. */
+  readonly localBudget?: FileBudget | undefined;
   /** The ChatGPT manifest validators. Defaults to the pinned official schemas; a test supplies an unavailable one. */
   readonly validators?: ValidatorLoad | undefined;
   /** The validator of the optional Claude plugin bundle. Defaults to Claude Code's `claude plugin validate`; a test supplies another. */
@@ -92,7 +115,7 @@ export interface PublishIo {
 /** What `saga.ts` loads, only when a publication command runs. */
 export interface PublicationTool {
   run(request: PublishRequest, io: PublishIo): Promise<number>;
-  /** `saga publish handoff` (CLI5): the resumable record of a prepared release's manual submission. It reads local files only. */
+  /** `saga publish handoff` (CLI5): the resumable record of a prepared release's manual submission. Only `begin` reads the endpoint (it assesses the release again); the other actions read local files only. */
   handoff(request: HandoffRequest, io: PublishIo): Promise<number>;
 }
 
@@ -111,24 +134,42 @@ interface BuiltView {
   readonly data: Buffer | null;
 }
 
+class BuildRootOutside extends Error {}
+
+/**
+ * The canonical build directory, bound to the admitted application root before any view is
+ * checked: the directory of the release input. `build.directory` is text from that file, so a
+ * path, a `..` or a link that leads elsewhere must not become the root the views are measured
+ * against (SECURITY.md invariants 5 and 9).
+ */
+function buildRoot(loaded: LoadedReleaseInput): string {
+  const application = fs.realpathSync(loaded.directory);
+  const real = fs.realpathSync(
+    path.resolve(loaded.directory, loaded.input.build.directory),
+  );
+  if (real !== application && !real.startsWith(`${application}${path.sep}`))
+    throw new BuildRootOutside();
+  if (!fs.statSync(real).isDirectory()) throw new Error('not a directory');
+  return real;
+}
+
 /** Reads the built views named by the release input. A view that is missing, a link or outside the build directory is a finding. */
 function readBuild(loaded: LoadedReleaseInput): {
   readonly views: BuiltView[];
   readonly findings: Finding[];
 } {
   const { build } = loaded.input;
-  const buildDirectory = path.resolve(loaded.directory, build.directory);
   const findings: Finding[] = [];
   let realBuild: string;
   try {
-    realBuild = fs.realpathSync(buildDirectory);
-    if (!fs.statSync(realBuild).isDirectory())
-      throw new Error('not a directory');
-  } catch {
+    realBuild = buildRoot(loaded);
+  } catch (error) {
     findings.push(
       fail(
         'build.directory',
-        `The build directory ${build.directory} does not exist.`,
+        error instanceof BuildRootOutside
+          ? `The build directory ${build.directory} is outside the directory of the release input.`
+          : `The build directory ${build.directory} does not exist.`,
         'Build the application, or correct build.directory in the release input.',
       ),
     );
@@ -144,6 +185,7 @@ function readBuild(loaded: LoadedReleaseInput): {
     };
   }
   const problems: string[] = [];
+  const viewBudget = new FileBudget(MAX_VIEW_TOTAL_BYTES);
   const views = build.views.map((file): BuiltView => {
     const missing: BuiltView = {
       file,
@@ -160,7 +202,12 @@ function readBuild(loaded: LoadedReleaseInput): {
       if (real !== realBuild && !real.startsWith(`${realBuild}${path.sep}`))
         throw new Error('is outside the build directory');
       if (!fs.statSync(real).isFile()) throw new Error('is not a file');
-      const data = fs.readFileSync(real);
+      const data = readBounded(
+        real,
+        MAX_VIEW_BYTES,
+        viewBudget,
+        loaded.localBudget,
+      );
       if (data.length === 0) throw new Error('is empty');
       return {
         file,
@@ -201,10 +248,15 @@ function readBuild(loaded: LoadedReleaseInput): {
 function sagaPackages(
   loaded: LoadedReleaseInput,
 ): PublicationRecord['application']['sagaPackages'] {
-  for (const directory of [
-    path.resolve(loaded.directory, loaded.input.build.directory),
-    loaded.directory,
-  ]) {
+  let build: string | null = null;
+  try {
+    buildRoot(loaded);
+    build = path.resolve(loaded.directory, loaded.input.build.directory);
+  } catch {
+    // an outside or missing build directory is a finding of its own; its package.json is not read
+  }
+  for (const directory of [build, loaded.directory]) {
+    if (directory === null) continue;
     try {
       const manifest = JSON.parse(
         fs.readFileSync(path.join(directory, 'package.json'), 'utf8'),
@@ -250,23 +302,6 @@ function installedVersion(directory: string, name: string): string | null {
       // not here; look one level up
     }
     if (path.dirname(current) === current) return null;
-  }
-}
-
-function sourceOf(directory: string): PublicationRecord['source'] {
-  const git = (args: string[]): string =>
-    execFileSync('git', args, {
-      cwd: directory,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  try {
-    return {
-      revision: git(['rev-parse', 'HEAD']),
-      dirty: git(['status', '--porcelain=v1', '--untracked-files=no']) !== '',
-    };
-  } catch {
-    return { revision: null, dirty: null };
   }
 }
 
@@ -521,6 +556,9 @@ async function assess(
         ),
   );
 
+  // One allowance for everything this assessment reads from the network: discovery and a fixture run
+  // draw on the same budget, so neither can spend what the other was promised.
+  const budget = io.networkBudget ?? new ByteBudget();
   let discovery: Discovery;
   const discoverable = /^https?:$/.test(safeProtocol(input.endpoint.url));
   if (!discoverable)
@@ -534,6 +572,7 @@ async function assess(
       fetch: io.fetch,
       signal: io.signal,
       bearer,
+      budget,
     });
   if (discovery.kind === 'discovered') {
     const partial = discovery.snapshot.truncated;
@@ -643,19 +682,26 @@ async function assess(
   });
   findings.push(...prepared.findings);
 
-  // Fixture invocation: only when asked, only what the release input declares.
-  const declared = input.fixture?.calls ?? [];
+  // Fixture invocation: only when asked, and only the calls the maintainer's own file authorizes.
+  // The release input and the endpoint are lower-trust than the maintainer and choose no call.
+  let declared: readonly FixtureCall[] = [];
   let invocations: FixtureInvocation[] = [];
-  if (request.invokeFixture) {
-    if (declared.length === 0) {
+  if (request.invokeFixture !== undefined) {
+    const loadedCalls = loadFixtureCalls(
+      path.resolve(io.cwd, request.invokeFixture),
+      loaded.localBudget,
+    );
+    if (!loadedCalls.ok) {
       findings.push(
         fail(
           'fixture.invocation',
-          '--invoke-fixture was given but the release input declares no fixture.calls.',
-          'Declare the fixture calls to make, or omit --invoke-fixture.',
+          '--invoke-fixture was given but its fixture calls file cannot be used.',
+          'Name a saga-fixture-calls/1 file that lists the calls to make, or omit --invoke-fixture.',
+          loadedCalls.problem,
         ),
       );
     } else if (discovery.kind !== 'discovered') {
+      declared = loadedCalls.calls;
       findings.push(
         unknown(
           'fixture.invocation',
@@ -664,11 +710,12 @@ async function assess(
         ),
       );
     } else {
+      declared = loadedCalls.calls;
       invocations = await invokeFixture(
         input.endpoint.url,
         declared,
         discovery.snapshot.tools,
-        { fetch: io.fetch, signal: io.signal, bearer },
+        { fetch: io.fetch, signal: io.signal, bearer, budget },
       );
       const bad = invocations.filter((one) => one.outcome !== 'ok');
       findings.push(
@@ -726,7 +773,8 @@ async function assess(
       },
       fixture: {
         declared: declared.length,
-        invoked: request.invokeFixture && invocations.length > 0,
+        callsSha256: declaredCallsDigest(declared),
+        invoked: request.invokeFixture !== undefined && invocations.length > 0,
         invocations,
       },
       artifact,
@@ -756,7 +804,10 @@ async function assess(
       };
   const extra: Finding[] = [];
   if (request.against !== undefined) {
-    const previous = readPreviousOutput(path.resolve(io.cwd, request.against));
+    const previous = readPreviousOutput(
+      path.resolve(io.cwd, request.against),
+      loaded.localBudget,
+    );
     if (previous.kind === 'missing') {
       extra.push(
         fail(
@@ -849,7 +900,10 @@ const GENERATED_FILES = new Set<string>([
 ]);
 
 /** Whether `directory` is something this tool generated: a real directory holding only its own files and a record in its format. */
-function isGeneratedOutput(directory: string): boolean {
+function isGeneratedOutput(
+  directory: string,
+  localBudget: FileBudget,
+): boolean {
   try {
     if (!fs.lstatSync(directory).isDirectory()) return false;
     const names = fs.readdirSync(directory);
@@ -861,7 +915,11 @@ function isGeneratedOutput(directory: string): boolean {
     return (
       (
         JSON.parse(
-          fs.readFileSync(path.join(directory, RECORD_FILE), 'utf8'),
+          readBounded(
+            path.join(directory, RECORD_FILE),
+            MAX_RECORD_BYTES,
+            localBudget,
+          ).toString('utf8'),
         ) as { format?: unknown }
       ).format === RECORD_FORMAT
     );
@@ -880,6 +938,7 @@ async function writeOutput(
   target: string,
   files: readonly OutputFile[],
   signal: AbortSignal | undefined,
+  localBudget: FileBudget,
 ): Promise<void> {
   if (!fs.existsSync(target) && !isSymlink(target)) {
     await createDirectoryInterruptibly(target, files, { signal });
@@ -895,7 +954,7 @@ async function writeOutput(
   const earlier = statDirectory(target);
   if (
     earlier === undefined ||
-    !isGeneratedOutput(target) ||
+    !isGeneratedOutput(target, localBudget) ||
     !isSameDirectory(statDirectory(target), earlier)
   ) {
     throw new TemplateError(
@@ -921,7 +980,7 @@ async function writeOutput(
   if (
     staged === undefined ||
     !isSameDirectory(statDirectory(target), earlier) ||
-    !isGeneratedOutput(target)
+    !isGeneratedOutput(target, localBudget)
   ) {
     discardStaging();
     throw replaced();
@@ -986,19 +1045,22 @@ function report(record: PublicationRecord, request: PublishRequest): string {
     '',
   ];
   for (const finding of record.findings) {
-    lines.push(`  ${mark[finding.status]} ${finding.id}: ${finding.summary}`);
+    lines.push(
+      `  ${mark[finding.status]} ${terminalValue(finding.id)}: ${terminalValue(finding.summary)}`,
+    );
     if (finding.status !== 'pass') {
       if (finding.detail !== undefined)
-        lines.push(`          ${finding.detail}`);
+        lines.push(`          ${terminalValue(finding.detail)}`);
       if (finding.repair !== undefined)
-        lines.push(`          Repair: ${finding.repair}`);
+        lines.push(`          Repair: ${terminalValue(finding.repair)}`);
     }
   }
   lines.push('', 'Pending handoff (this tool does not do these):');
-  for (const item of record.handoff) lines.push(`  - ${item.summary}`);
+  for (const item of record.handoff)
+    lines.push(`  - ${terminalValue(item.summary)}`);
   lines.push(
     '',
-    `Deployment identity: ${record.endpoint.deploymentIdentity.status}. ${record.endpoint.deploymentIdentity.basis}`,
+    `Deployment identity: ${record.endpoint.deploymentIdentity.status}. ${terminalValue(record.endpoint.deploymentIdentity.basis)}`,
   );
   return `${lines.join('\n')}\n`;
 }
@@ -1007,7 +1069,10 @@ function report(record: PublicationRecord, request: PublishRequest): string {
  * The same `io` whose two output channels pass everything through `redactSecrets` first, with the
  * credential supplied for discovery as a literal. Every line this command prints, a finding, an
  * error or a path, goes through it, so no reporting path can disclose a credential that an
- * endpoint echoed or an input carried, whatever wording produced it.
+ * endpoint echoed or an input carried, whatever wording produced it. Redaction comes first and
+ * the terminal-safe rendering last: an endpoint's server and tool names, a file name and an
+ * analyzer's report are chosen by someone else, and their control characters are written out
+ * (SECURITY.md invariant 6) so they cannot act on the terminal or CI log that shows them.
  */
 function withRedactedOutput(
   io: PublishIo,
@@ -1018,8 +1083,8 @@ function withRedactedOutput(
   const literals = supplied === undefined || supplied === '' ? [] : [supplied];
   return {
     ...io,
-    stdout: (text) => io.stdout(redactSecrets(text, literals)),
-    stderr: (text) => io.stderr(redactSecrets(text, literals)),
+    stdout: (text) => io.stdout(terminalText(redactSecrets(text, literals))),
+    stderr: (text) => io.stderr(terminalText(redactSecrets(text, literals))),
   };
 }
 
@@ -1037,13 +1102,13 @@ export const publicationTool: PublicationTool = {
         return EXIT_INTERRUPTED;
       }
       io.stderr(
-        `saga publish: ${error instanceof Error ? error.message : String(error)}\nNothing was prepared; fix the problem named above and rerun.\n`,
+        `saga publish: ${terminalValue(error instanceof Error ? error.message : String(error))}\nNothing was prepared; fix the problem named above and rerun.\n`,
       );
       return EXIT_NOT_READY;
     }
   },
   async handoff(request, unredacted) {
-    const io = withRedactedOutput(unredacted, undefined);
+    const io = withRedactedOutput(unredacted, request.bearerEnv);
     // As for `run`: every failure is reported through the redacted channels and never rethrown.
     try {
       return await runHandoff(request, {
@@ -1052,15 +1117,70 @@ export const publicationTool: PublicationTool = {
         stderr: io.stderr,
         signal: io.signal,
         now: io.now ?? (() => new Date()),
+        reassess: (target) => reassessRelease(request, target, io),
       });
     } catch (error) {
       io.stderr(
-        `saga publish handoff ${request.action}: ${error instanceof Error ? error.message : String(error)}\nRead the record with \`handoff status\` before deciding again.\n`,
+        `saga publish handoff ${request.action}: ${terminalValue(error instanceof Error ? error.message : String(error))}\nRead the record with \`handoff status\` before deciding again.\n`,
       );
       return EXIT_NOT_READY;
     }
   },
 };
+
+/**
+ * `handoff begin`: the checks of `check`, run again against the release input, the build and the
+ * endpoint as they are now, with nothing read from an earlier output. Failures come back as
+ * a problem, never as a thrown error that could carry an unredacted message.
+ */
+async function reassessRelease(
+  request: HandoffRequest,
+  targetName: TargetName,
+  io: PublishIo,
+): Promise<Reassessment> {
+  const target = targetFor(targetName, io);
+  if (target === undefined || request.release === undefined)
+    return { ok: false, problem: 'there is no release input to assess.' };
+  try {
+    const loaded = loadReleaseInput(
+      path.resolve(io.cwd, request.release),
+      io.localBudget ?? preparationBudget(),
+    );
+    if (!loaded.ok) return { ok: false, problem: loaded.problem };
+    const unusable = target.inputProblem(loaded.loaded.input);
+    if (unusable !== null) return { ok: false, problem: unusable };
+    const asked: PublishRequest = {
+      command: 'check',
+      target: targetName,
+      release: request.release,
+      invokeFixture: request.invokeFixture,
+      bearerEnv: request.bearerEnv,
+    };
+    const { record } = await assess(asked, target, loaded.loaded, io);
+    return { ok: true, record, report: report(record, asked) };
+  } catch (error) {
+    return {
+      ok: false,
+      problem: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * The digest that identifies the calls a maintainer declared: tool, reviewed definition digest and
+ * arguments, in the order given. The arguments are digested and never recorded (they may hold domain
+ * data). `null` when no call was declared.
+ */
+function declaredCallsDigest(calls: readonly FixtureCall[]): string | null {
+  if (calls.length === 0) return null;
+  return canonicalDigest(
+    calls.map((call) => ({
+      tool: call.tool,
+      toolSha256: call.toolSha256,
+      arguments: call.arguments ?? {},
+    })),
+  );
+}
 
 /** The target a request names, built with the seams this run was given, or `undefined` when no such target exists. */
 function targetFor(name: string, io: PublishIo): PublicationTarget | undefined {
@@ -1080,7 +1200,7 @@ async function execute(
   const target = targetFor(request.target, io);
   if (target === undefined) {
     io.stderr(
-      `saga publish: the ${request.target} target is not supported; the supported targets are ${TARGET_NAMES.join(' and ')}.\n`,
+      `saga publish: the ${terminalValue(request.target)} target is not supported; the supported targets are ${TARGET_NAMES.join(' and ')}.\n`,
     );
     return 2;
   }
@@ -1090,17 +1210,20 @@ async function execute(
     );
     return EXIT_INTERRUPTED;
   }
-  const loaded = loadReleaseInput(path.resolve(io.cwd, request.release));
+  const loaded = loadReleaseInput(
+    path.resolve(io.cwd, request.release),
+    io.localBudget ?? preparationBudget(),
+  );
   if (!loaded.ok) {
     io.stderr(
-      `saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`,
+      `saga publish: ${terminalValue(loaded.problem)}\nNothing was prepared; fix the release input and rerun.\n`,
     );
     return EXIT_NOT_READY;
   }
   const unusable = target.inputProblem(loaded.loaded.input);
   if (unusable !== null) {
     io.stderr(
-      `saga publish: ${unusable}\nNothing was prepared; complete the release input and rerun.\n`,
+      `saga publish: ${terminalValue(unusable)}\nNothing was prepared; complete the release input and rerun.\n`,
     );
     return EXIT_NOT_READY;
   }
@@ -1130,7 +1253,7 @@ async function execute(
       !fs.statSync(path.dirname(destination)).isDirectory()
     ) {
       io.stderr(
-        `saga publish: the parent directory ${path.dirname(destination)} does not exist; create it first or choose a path inside an existing directory.\n`,
+        `saga publish: the parent directory ${terminalValue(path.dirname(destination))} does not exist; create it first or choose a path inside an existing directory.\n`,
       );
       return EXIT_NOT_READY;
     }
@@ -1143,7 +1266,12 @@ async function execute(
     if (archive !== null)
       files.push({ path: target.archiveFile, content: () => archive });
     try {
-      await writeOutput(destination, files, io.signal);
+      await writeOutput(
+        destination,
+        files,
+        io.signal,
+        loaded.loaded.localBudget,
+      );
     } catch (error) {
       if (error instanceof ExportInterrupted) {
         io.stderr(
@@ -1151,11 +1279,11 @@ async function execute(
         );
         return EXIT_INTERRUPTED;
       }
-      io.stderr(`saga publish: ${(error as Error).message}\n`);
+      io.stderr(`saga publish: ${terminalValue((error as Error).message)}\n`);
       return EXIT_NOT_READY;
     }
     io.stdout(
-      `\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${target.archiveFile} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`,
+      `\nWrote ${terminalValue(request.out)}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${target.archiveFile} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`,
     );
   }
   io.stdout('Nothing was deployed, uploaded, submitted or published.\n');

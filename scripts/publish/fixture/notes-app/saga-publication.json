@@ -87,6 +87,5 @@
   "publication": {
     "countries": ["US"],
     "release_notes": "Initial fixture release."
-  },
-  "fixture": { "calls": [{ "tool": "get_status", "arguments": {} }] }
+  }
 }

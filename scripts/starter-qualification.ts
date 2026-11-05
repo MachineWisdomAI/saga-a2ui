@@ -36,6 +36,7 @@ import {
   type BuiltStarter,
 } from './build-starter.js';
 import { createWorkDirectory } from './packed-consumer.js';
+import { RawHttpConnection, type RawResponse } from './raw-http-connection.js';
 import type { QualifiedStarter } from './qualified-starters.js';
 
 // Qualifies a server pair of the `lit-mcp` stack: a maintained starter template (templates/lit-node
@@ -81,6 +82,7 @@ export function qualifyStarter(
     startListener(options: ListenerOptions): Promise<Listener>;
     readonly ACCOUNT_SCOPE: string;
     readonly ViewArtifactMissing: new () => Error;
+    readonly VIEW_MARKER: string;
   }
 
   const ACCOUNT_A = 'qualification-account-a';
@@ -93,7 +95,16 @@ export function qualifyStarter(
     service: 'qualification-token-service',
     otherScope: 'qualification-token-other-scope',
     expired: 'qualification-token-expired',
+    infiniteExpiry: 'qualification-token-infinite-expiry',
+    nanExpiry: 'qualification-token-nan-expiry',
+    unsafeExpiry: 'qualification-token-unsafe-expiry',
+    noResource: 'qualification-token-no-resource',
+    otherResource: 'qualification-token-other-resource',
+    fragmentResource: 'qualification-token-fragment-resource',
   } as const;
+  // The protected endpoint's canonical URL, and a different service the same identity provider serves.
+  const RESOURCE = new URL('https://starter.example/account/mcp');
+  const OTHER_RESOURCE = new URL('https://other-service.example/account/mcp');
 
   const work = createWorkDirectory('saga-starter-test-');
   let built: BuiltStarter;
@@ -144,11 +155,13 @@ export function qualifyStarter(
       accountId: string | undefined,
       scopes: string[],
       expiresAt = nowSeconds() + 3600,
+      resource: URL | null = RESOURCE,
     ): AuthInfo => ({
       token,
       clientId: 'qualification-client',
       scopes,
       expiresAt,
+      ...(resource === null ? {} : { resource }),
       ...(accountId === undefined ? {} : { extra: { accountId } }),
     });
     switch (token) {
@@ -164,6 +177,23 @@ export function qualifyStarter(
         return user(ACCOUNT_A, ['something:else']);
       case TOKEN.expired:
         return user(ACCOUNT_A, [scope], nowSeconds() - 60);
+      case TOKEN.infiniteExpiry: // a verifier that reports a credential which never ends
+        return user(ACCOUNT_A, [scope], Infinity);
+      case TOKEN.nanExpiry:
+        return user(ACCOUNT_A, [scope], NaN);
+      case TOKEN.unsafeExpiry:
+        return user(ACCOUNT_A, [scope], 1e300);
+      case TOKEN.noResource:
+        return user(ACCOUNT_A, [scope], undefined, null); // a valid account credential that names no resource
+      case TOKEN.otherResource:
+        return user(ACCOUNT_A, [scope], undefined, OTHER_RESOURCE); // a valid account credential issued for another service
+      case TOKEN.fragmentResource:
+        return user(
+          ACCOUNT_A,
+          [scope],
+          undefined,
+          new URL(`${RESOURCE.href}#section`),
+        ); // names this endpoint, with a fragment no resource identifier has
       default:
         return undefined;
     }
@@ -175,6 +205,7 @@ export function qualifyStarter(
       verifier?: (calls: Running['calls'], hooks: Hooks) => OAuthTokenVerifier;
       budgets?: ListenerOptions['budgets'];
       html?: string;
+      resource?: URL;
     } = {},
   ): Promise<Running> {
     const calls = { verifier: 0, authorize: 0 };
@@ -197,6 +228,7 @@ export function qualifyStarter(
         return options.html ?? html;
       },
       verifier,
+      resource: options.resource ?? RESOURCE,
       authorize: async (identity, signal) => {
         calls.authorize += 1;
         await hooks.beforeAuthorize?.(identity.accountId, signal);
@@ -440,6 +472,17 @@ export function qualifyStarter(
       ['a credential the verifier does not know', 'Bearer nobody', 401],
       ['an expired credential', `Bearer ${TOKEN.expired}`, 401],
       [
+        'a credential whose expiry is infinite',
+        `Bearer ${TOKEN.infiniteExpiry}`,
+        401,
+      ],
+      ['a credential whose expiry is NaN', `Bearer ${TOKEN.nanExpiry}`, 401],
+      [
+        'a credential whose expiry is beyond the safe range',
+        `Bearer ${TOKEN.unsafeExpiry}`,
+        401,
+      ],
+      [
         'a credential without the required scope',
         `Bearer ${TOKEN.otherScope}`,
         403,
@@ -448,6 +491,21 @@ export function qualifyStarter(
         'a service credential that names no account',
         `Bearer ${TOKEN.service}`,
         403,
+      ],
+      [
+        'an account credential that names no protected resource',
+        `Bearer ${TOKEN.noResource}`,
+        401,
+      ],
+      [
+        'an account credential issued for another protected resource',
+        `Bearer ${TOKEN.otherResource}`,
+        401,
+      ],
+      [
+        'an account credential whose resource carries a fragment',
+        `Bearer ${TOKEN.fragmentResource}`,
+        401,
       ],
     ] as const)(
       'fails closed for %s: it is refused at HTTP with a challenge and no protected work starts',
@@ -462,6 +520,42 @@ export function qualifyStarter(
         expect(calls.authorize).toBe(0);
       },
     );
+
+    it('refuses to open with a protected resource that is not an absolute http(s) URL', async () => {
+      for (const resource of [
+        undefined,
+        'https://starter.example/mcp',
+        new URL('file:///account/mcp'),
+        new URL('https://starter.example/account/mcp#section'),
+        new URL('https://starter.example/account/mcp#'),
+      ])
+        await expect(
+          entry.startListener({
+            html,
+            verifier: {
+              verifyAccessToken: () => Promise.reject(new Error('unused')),
+            },
+            resource: resource as never,
+            authorize: async () => true,
+            port: 0,
+          }),
+        ).rejects.toThrow(/resource/);
+    });
+
+    it('keeps the accepted resource fixed after startup: changing the caller-owned URL moves nothing', async () => {
+      const stated = new URL(RESOURCE);
+      const { listener, calls } = await start({ resource: stated });
+      // The application changes its own object after startup; the listener must not follow it.
+      stated.href = OTHER_RESOURCE.href;
+      const moved = await rawCall(
+        listener.accountUrl,
+        `Bearer ${TOKEN.otherResource}`,
+      );
+      expect(moved.status).toBe(401);
+      expect(calls.authorize).toBe(0);
+      const kept = await rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`);
+      expect(kept.status).not.toBe(401);
+    });
 
     it('does not so much as ask the verifier when there is no credential', async () => {
       const { listener, calls } = await start();
@@ -505,6 +599,7 @@ export function qualifyStarter(
         clientId: 'qualification-client',
         scopes: [],
         expiresAt: nowSeconds() + 3600,
+        resource: RESOURCE,
         extra: {},
       };
       const { listener } = await start({
@@ -577,6 +672,78 @@ export function qualifyStarter(
       expect(result.structuredContent).toEqual({ status: 'running' });
     });
 
+    it('hands the verifier a signal that aborts when its stage ends, and bounds how many abandoned calls pile up', async () => {
+      const signals: (AbortSignal | undefined)[] = [];
+      const { listener, calls } = await start({
+        budgets: { operationMs: 100, requestMs: 1_000 },
+        verifier: (counted) => ({
+          // Ignores its signal and never answers: the request stops waiting, the call keeps running.
+          verifyAccessToken: (_token, signal?: AbortSignal) => {
+            counted.verifier += 1;
+            signals.push(signal);
+            return new Promise<AuthInfo>(() => undefined);
+          },
+        }),
+      });
+      const flood = await Promise.all(
+        Array.from({ length: 80 }, () =>
+          rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+        ),
+      );
+      expect(flood.every((response) => response.status === 503)).toBe(true); // refused, not 401 and never accepted
+      expect(calls.verifier).toBeLessThanOrEqual(64); // the rest never reached the application's verifier
+      expect(calls.verifier).toBeGreaterThan(0);
+      expect(signals.every((signal) => signal?.aborted === true)).toBe(true); // each abandoned call was told to stop
+
+      // The calls that ignore their signal are still running, so their slots are still taken: a later
+      // wave is refused without reaching the verifier, and the number of running calls does not grow.
+      const reached = calls.verifier;
+      const later = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+        ),
+      );
+      expect(later.every((response) => response.status === 503)).toBe(true);
+      expect(calls.verifier).toBe(reached);
+
+      const result = await (
+        await connect(listener.statusUrl)
+      ).callTool({ name: 'get_status', arguments: {} });
+      expect(result.structuredContent).toEqual({ status: 'running' }); // the public endpoint is unaffected
+    });
+
+    it('keeps serving credentials while a verifier that honors its signal is abandoned again and again', async () => {
+      let running = 0;
+      const { listener, calls } = await start({
+        budgets: { operationMs: 50, requestMs: 1_000 },
+        verifier: (counted) => ({
+          // Stops when told to: the slot of each abandoned call comes back.
+          verifyAccessToken: (_token, signal?: AbortSignal) => {
+            counted.verifier += 1;
+            running += 1;
+            return new Promise<AuthInfo>((_resolve, reject) => {
+              signal?.addEventListener('abort', () => {
+                running -= 1;
+                reject(new Error('stopped'));
+              });
+            });
+          },
+        }),
+      });
+      for (let wave = 0; wave < 3; wave += 1) {
+        const responses = await Promise.all(
+          Array.from({ length: 80 }, () =>
+            rawCall(listener.accountUrl, `Bearer ${TOKEN.a}`),
+          ),
+        );
+        expect(responses.every((response) => response.status === 503)).toBe(
+          true,
+        ); // each wave waited, was cut off and answered 503, never 401
+      }
+      expect(running).toBe(0); // every abandoned call actually stopped
+      expect(calls.verifier).toBeGreaterThan(64); // so later waves still reached the verifier
+    });
+
     it('refuses an invalid budget before it opens a port', async () => {
       await expect(
         entry.startListener({
@@ -584,6 +751,7 @@ export function qualifyStarter(
           verifier: {
             verifyAccessToken: () => Promise.reject(new Error('unused')),
           },
+          resource: RESOURCE,
           authorize: async () => true,
           port: 0,
           budgets: { operationMs: 0 },
@@ -725,6 +893,266 @@ export function qualifyStarter(
         jsonrpc: '2.0',
         error: { code: -32700 },
       });
+    });
+
+    // An answer given before the body has arrived (a refusal, a missing route, a missing credential)
+    // must not leave the connection waiting for the rest of a body that never comes. These cases read
+    // the answer off a real TCP connection, framing included: it must be whole, and the same answer
+    // the listener gives when the whole body is delivered, before the connection closes.
+    // Hapi's own router answers an unknown path, and only after it has read the payload under its own
+    // bounded payload timeout; the plugin owns the routes it registers, not that fallback.
+    type RefusalPlace = 'status' | 'account' | 'elsewhere';
+    const REFUSALS: readonly (readonly [
+      label: string,
+      place: RefusalPlace,
+      host: string | undefined,
+      status: number,
+    ])[] = [
+      ['an untrusted Host', 'status', 'untrusted.example', 403],
+      ['an unknown path', 'elsewhere', undefined, 404],
+      ['a missing credential', 'account', undefined, 401],
+    ];
+    const refusalPlaces = REFUSALS.filter(
+      ([, place]) => !(template === 'lit-hapi' && place === 'elsewhere'),
+    );
+
+    function refusalTarget(listener: Listener, place: RefusalPlace): string {
+      return place === 'status'
+        ? listener.statusUrl
+        : place === 'account'
+          ? listener.accountUrl
+          : new URL('/elsewhere', listener.statusUrl).href;
+    }
+
+    /** What the listener answers to the same refusal when the request body is delivered whole. */
+    async function wholeAnswer(
+      target: string,
+      host: string | undefined,
+    ): Promise<RawResponse> {
+      const connection = await RawHttpConnection.open(target);
+      try {
+        connection.request('POST', target, {
+          host,
+          declaredLength: 1,
+          body: '{',
+        });
+        return await connection.readResponse(3_000);
+      } finally {
+        connection.destroy();
+      }
+    }
+
+    /** The parts of an answer that say what was decided; connection housekeeping and the date are left out. */
+    function decided(response: RawResponse): {
+      status: number;
+      body: string;
+      challenge: string | undefined;
+      type: string | undefined;
+      allow: string | undefined;
+    } {
+      return {
+        status: response.status,
+        body: response.body,
+        challenge: response.headers['www-authenticate'],
+        type: response.headers['content-type'],
+        allow: response.headers['allow'],
+      };
+    }
+
+    it.each(refusalPlaces)(
+      'answers %s completely, then closes the connection, while the request body is incomplete',
+      async (_label, place, host, status) => {
+        const { listener, calls } = await start();
+        const target = refusalTarget(listener, place);
+        const expected = await wholeAnswer(target, host);
+        expect(expected.status).toBe(status);
+
+        const connection = await RawHttpConnection.open(target);
+        try {
+          connection.request('POST', target, {
+            host,
+            declaredLength: 1000,
+            body: '{',
+          });
+          // The whole response, with its framing, arrives although the body never finishes.
+          const refused = await connection.readResponse(3_000);
+          expect(decided(refused)).toEqual(decided(expected));
+          const answered = Date.now();
+
+          // Then the listener drops the connection, within a bounded time, writing nothing more.
+          expect(await connection.waitForClose(3_000)).toBe(true);
+          expect(Date.now() - answered).toBeLessThan(2_500);
+          expect(connection.pending).toBe('');
+          expect(calls.authorize).toBe(0);
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    // Hapi closes the connection itself whenever it answers with the payload unread, whether or not the
+    // rest of the body then arrives, so a kept connection is not something its refusals promise. The
+    // other starters run the SDK's close-after-answer step, which keeps a connection whose body
+    // finishes in time; this case holds that to the same-socket standard.
+    it.skipIf(template === 'lit-hapi')(
+      'keeps the connection when the rest of a refused request body arrives promptly, and answers the next requests on it',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const expectedHost = await wholeAnswer(
+          listener.statusUrl,
+          'untrusted.example',
+        );
+        const expectedCredential = await wholeAnswer(
+          listener.accountUrl,
+          undefined,
+        );
+
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, { declaredLength: 3, body: '{' });
+          const first = await connection.readResponse(3_000);
+          expect(first.status).toBe(404);
+
+          // The rest of the declared body arrives inside the drain window; it is consumed, not parsed as a request.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          connection.write('  ');
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          expect(connection.pending).toBe('');
+          expect(connection.isClosed).toBe(false);
+
+          // The same socket then carries two more refusals and a served call, each answered whole and for itself.
+          const port = connection.localPort;
+          connection.request('POST', listener.statusUrl, {
+            host: 'untrusted.example',
+            declaredLength: 1,
+            body: '{',
+          });
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedHost),
+          );
+          connection.request('POST', listener.accountUrl, {
+            declaredLength: 1,
+            body: '{',
+          });
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedCredential),
+          );
+          const call = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: { name: 'get_status', arguments: {} },
+          });
+          connection.request('POST', listener.statusUrl, {
+            headers: ['Accept: application/json, text/event-stream'],
+            declaredLength: Buffer.byteLength(call),
+            body: call,
+          });
+          const served = await connection.readResponse(5_000);
+          expect(served.status).toBe(200);
+          expect(served.body).toContain('running');
+          expect(connection.localPort).toBe(port);
+
+          // Nothing else was written, and the connection is still open well past the drain window.
+          expect(await connection.waitForClose(800)).toBe(false);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    // The drain is bounded by bytes as well as by time. A remainder far over the cap that arrives at
+    // once completes its body at once, and the request queued behind it is already in the same write:
+    // the connection is still dropped at the cap and the queued request is never served. The SDK's own
+    // listeners hold the 1 MiB cap. The Hono starters use the pinned `@hono/node-server` adapter, whose
+    // own drain is bounded at 500 ms and 64 MiB, and hapi closes by itself, so neither keeps that cap.
+    it.skipIf(
+      template === 'lit-hapi' ||
+        template === 'lit-hono' ||
+        template === 'react-hono',
+    )(
+      'drops the connection at the byte cap when an oversized remainder arrives at once with the next request queued behind it',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const declared = 2 * 1024 * 1024 + 2;
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, {
+            declaredLength: declared,
+            body: '{',
+          });
+          expect((await connection.readResponse(3_000)).status).toBe(404);
+
+          const next = new URL(listener.statusUrl);
+          connection.write(
+            `${'x'.repeat(declared - 1)}POST ${next.pathname} HTTP/1.1\r\nHost: untrusted.example\r\nContent-Length: 0\r\n\r\n`,
+          );
+          expect(await connection.waitForClose(3_000)).toBe(true);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    it.skipIf(template === 'lit-hapi')(
+      'answers both requests queued behind a small remainder in the same write, each whole and with nothing stray',
+      async () => {
+        const { listener } = await start();
+        const unknown = refusalTarget(listener, 'elsewhere');
+        const expectedHost = await wholeAnswer(
+          listener.statusUrl,
+          'untrusted.example',
+        );
+        const expectedCredential = await wholeAnswer(
+          listener.accountUrl,
+          undefined,
+        );
+        const connection = await RawHttpConnection.open(unknown);
+        try {
+          connection.request('POST', unknown, { declaredLength: 3, body: '{' });
+          expect((await connection.readResponse(3_000)).status).toBe(404);
+
+          const status = new URL(listener.statusUrl);
+          const account = new URL(listener.accountUrl);
+          connection.write(
+            `  POST ${status.pathname} HTTP/1.1\r\nHost: untrusted.example\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{` +
+              `POST ${account.pathname} HTTP/1.1\r\nHost: ${account.host}\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{`,
+          );
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedHost),
+          );
+          expect(decided(await connection.readResponse(3_000))).toEqual(
+            decided(expectedCredential),
+          );
+          expect(await connection.waitForClose(800)).toBe(false);
+          expect(connection.pending).toBe('');
+        } finally {
+          connection.destroy();
+        }
+      },
+    );
+
+    it('keeps serving other callers after refusing a request whose body never finished', async () => {
+      const { listener } = await start();
+      const stalled = await RawHttpConnection.open(listener.statusUrl);
+      try {
+        stalled.request('POST', listener.statusUrl, {
+          host: 'untrusted.example',
+          declaredLength: 1000,
+          body: '{',
+        });
+        expect((await stalled.readResponse(3_000)).status).toBe(403);
+        const result = await (
+          await connect(listener.statusUrl)
+        ).callTool({ name: 'get_status', arguments: {} });
+        expect(result.structuredContent).toEqual({ status: 'running' });
+      } finally {
+        stalled.destroy();
+      }
     });
 
     it('a finite response that cannot be delivered in time is destroyed, not left holding the connection', async () => {
@@ -975,11 +1403,14 @@ export function qualifyStarter(
       ).toMatch(/throw\s+new\s+OAuthError\(\s*OAuthErrorCode\.InvalidToken/);
       // SDK behavior is imported, not reimplemented: no copy of the runtime's modules in the starter's own source.
       const own = exported
-        .filter((one) => one.file.endsWith('.ts'))
+        .filter((one) => /\.tsx?$/.test(one.file))
         .map((one) => one.text)
         .join('\n');
+      // The starter imports its authoring surface from the one stack package its template declares.
       expect(own).toMatch(
-        /import\s*\{[^}]*\bAction\b[^}]*\}\s*from\s*'@saga-a2ui\/lit-mcp-stack'/,
+        new RegExp(
+          `import\\s*\\{[^}]*\\bAction\\b[^}]*\\}\\s*from\\s*'@saga-a2ui/${built.metadata.stack}-stack'`,
+        ),
       );
       expect(own).not.toMatch(
         /function\s+(createBinding|createInstanceHost|registerProtectedOperation|createMessageSession)\b/,
@@ -1002,7 +1433,7 @@ export function qualifyStarter(
         /NodeStreamableHTTPServerTransport|verifyAccessToken|registerProtectedOperation|@modelcontextprotocol\/(node|express)|localhostHostValidation/,
       );
       expect(html).not.toMatch(/(?:from|import|require)\s*\(?\s*["']node:/);
-      expect(html).toContain('<starter-app');
+      expect(html).toContain(entry.VIEW_MARKER); // the element this template's view renders into
     });
   });
 

@@ -11,7 +11,11 @@ import {
   ANSWER_VIEW_URI,
 } from './answer.js';
 import type { AnswerBackend } from './answer-server.js';
-import { createDevelopmentVerifier, DEV_TOKENS } from './dev-auth.js';
+import {
+  createDevelopmentVerifier,
+  DEV_RESOURCE,
+  DEV_TOKENS,
+} from './dev-auth.js';
 import {
   startEpisodeListener,
   type EpisodeListener,
@@ -161,7 +165,12 @@ describe('which layer reports each failure', () => {
   ) =>
     ({
       budgets,
-      subscriptions: { viewHtml: VIEW_HTML, backend, verifier },
+      subscriptions: {
+        viewHtml: VIEW_HTML,
+        backend,
+        verifier,
+        resource: DEV_RESOURCE,
+      },
     }) satisfies Partial<EpisodeListenerOptions>;
 
   it.each([
@@ -412,6 +421,7 @@ describe('what an observer of any layer can learn', () => {
       };
       const listener = await start({
         subscriptions: {
+          resource: DEV_RESOURCE,
           viewHtml: VIEW_HTML,
           verifier,
           backend: {
@@ -768,6 +778,7 @@ describe('a request that is cancelled, abandoned or resumed', () => {
     };
     const listener = await start({
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend,
         verifier: createDevelopmentVerifier(),
@@ -800,6 +811,7 @@ describe('what a caller’s own claims cannot do', () => {
     const lookups: string[] = [];
     const listener = await start({
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         verifier: createDevelopmentVerifier(),
         backend: {

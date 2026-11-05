@@ -14,18 +14,27 @@ import type {
 } from '../../../templates/lit-node/server/listener.js';
 import type { HostedResource } from './host-fixture/host.js';
 
-// Each qualified `lit-mcp` starter (templates/lit-node on Node, templates/lit-express on Express, templates/lit-fastify on Fastify, templates/lit-hono on Hono,
-// see scripts/qualified-starters.ts), in a real browser. The page under test is the one the
+// Each qualified starter (the `lit-mcp` templates on Node, Express, Fastify, Hono and Hapi, and
+// templates/react-hono, the `react-mcp` stack on Hono; see scripts/qualified-starters.ts), in a real browser. The page under test is the one the
 // starter's own build produced from packed SDK tarballs (scripts/build-starter.ts)
 // and the one its server serves over a real MCP connection. It is mounted in the sandboxed
 // iframe of the local host fixture under the CSP the server declared, and every result reaches it
 // over the fixture's real AppBridge. The local host fixture is not evidence of any actual
 // assistant host. The identities below belong to this specification; the starter has none.
 
+const RESOURCE = new URL('https://starter.example/account/mcp');
+
 interface Entry {
   startListener(options: ListenerOptions): Promise<Listener>;
   readonly ACCOUNT_SCOPE: string;
 }
+
+/**
+ * The element a template's view renders into, which is what an ended view must leave empty:
+ * `<starter-app>` for a Lit template, `#root` for a React template.
+ */
+const containerOf = (template: string): string =>
+  template.startsWith('react-') ? '#root' : 'starter-app';
 
 for (const template of QUALIFIED_STARTERS) {
   test.describe(template, () => {
@@ -55,11 +64,13 @@ for (const template of QUALIFIED_STARTERS) {
         clientId: 'browser-spec',
         scopes: [entry.ACCOUNT_SCOPE],
         expiresAt: 9_999_999_999,
+        resource: RESOURCE,
         extra: { accountId: ACCOUNT },
       };
       listener = await entry.startListener({
         html: bytes.toString('utf8'),
         verifier: { verifyAccessToken: async () => credential },
+        resource: RESOURCE,
         authorize: async () => true,
         port: 0,
       });
@@ -192,9 +203,11 @@ for (const template of QUALIFIED_STARTERS) {
             clientId: 'browser-spec',
             scopes: [entry.ACCOUNT_SCOPE],
             expiresAt: 9_999_999_999,
+            resource: RESOURCE,
             extra: { accountId: accounts[token] ?? '' },
           }),
         },
+        resource: RESOURCE,
         // Neither request is answered until both handlers are inside the application's policy at once.
         authorize: async (identity) => {
           arrived.push(identity.accountId);
@@ -307,7 +320,10 @@ for (const template of QUALIFIED_STARTERS) {
         await expect(view.getByTestId('view-status'), ending).toHaveText(
           CLOSED_TEXT,
         );
-        await expect(view.locator('starter-app > *'), ending).toHaveCount(0);
+        await expect(
+          view.locator(`${containerOf(template)} > *`),
+          ending,
+        ).toHaveCount(0);
 
         await retained?.evaluate((button) => (button as HTMLElement).click());
         await page.waitForTimeout(150);

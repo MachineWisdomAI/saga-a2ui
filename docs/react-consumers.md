@@ -11,11 +11,76 @@ import {startA2uiView, defineSurface, z, ActionButton, createReactActions} from 
 import {FaithfulCardApp, startFaithfulCardApp} from '@saga-a2ui/react-mcp-stack/faithful-card';
 ```
 
-The main entry is for an application's own catalog. An application that installs the stack writes it against the stack's exports alone (`Catalog`, `CommonSchemas`, `createComponentImplementation`, `ReactCatalogComponent`, `defineSurface`, `z`, the action names and the failures it catches), declaring no `@a2ui/*` package, no Zod and no other SAGA package; the `/faithful-card` entry starts a card application from one validated definition. A server composes the same application from the stack's `/content-policy` entry (`createContentPolicy`, `embedContentPolicy`) and its Node-only `/server` entry (`createServerBudgets`, `registerPublicOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`), so one install serves both sides without a browser bundle ever importing a server module. The definition's one `result` reader receives the whole delivered result (error flag, content blocks and structured content) and supplies its own rejection wording; `readingProfile` tells its `hostContext` callback whether the host is read on a device, and the application maps that onto its own tokens ([details](development-reference.md#reading-the-whole-result)). The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
+The main entry is for an application's own catalog. Use its exported `z` for catalog schemas; an application that also defines MCP tools declares Zod 4 separately for those tool schemas. An application that installs the stack writes it against the stack's exports alone (`Catalog`, `CommonSchemas`, `createComponentImplementation`, `ReactCatalogComponent`, `defineSurface`, `z`, the action names and the failures it catches), without a direct `@a2ui/*` dependency, a separate Zod dependency for the catalog, or another SAGA package; the `/faithful-card` entry starts a card application from one validated definition. A server composes the same application from the stack's `/content-policy` entry (`createContentPolicy`, `embedContentPolicy`) and its Node-only `/server` entry (`createServerBudgets`, `registerPublicOperation`, `registerProtectedOperation`, `operationViewFromHtml`, `viewUriForHtml`, `attachRequestLifetime`), so one install serves both sides without a browser bundle ever importing a server module. The definition's one `result` reader receives the whole delivered result (error flag, content blocks and structured content) and supplies its own rejection wording; `readingProfile` tells its `hostContext` callback whether the host is read on a device, and the application maps that onto its own tokens ([details](development-reference.md#reading-the-whole-result)). The stack connects the React renderer to MCP Apps delivery, so the application writes no A2UI message, imports no bridge and orders no handshake: it states its layout, its catalog, what a result means and what ending the view takes with it. `@saga-a2ui/core`, `@saga-a2ui/components`, `@saga-a2ui/mcp`, `@saga-a2ui/react` and the MCP Apps bridge are regular dependencies of the stack, so one install suffices under a strict (pnpm) layout.
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the absence of a generated React starter does not mean the React stack lacks a working application path.
+The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the generated React starter covers one server (`react-mcp` on Hono), and an application on another server or an existing React application integrates the stack directly, which is a working application path.
+
+## Add a message to the conversation
+
+A view can reach the conversation around it. The `actions` callback of `startA2uiView` receives `host.conversation` beside `host.server`, and `appendMessage` adds a message to the conversation as the person, which gives the assistant its turn:
+
+```ts
+actions: (host) => {
+  const play = Action.server<ActionButtonActivation>('play-square', host.server)
+    .run(({params, call}) => call('play_move', params))
+    .onSuccess(({result}) => {
+      const game = board.present(result);
+      // Start the append; the hook has a five-second budget and the host may wait for the person to confirm.
+      void host.conversation
+        .appendMessage(`Your move in game ${game.gameId}. Read it with get_game, then play O.`, {
+          context: {text: 'The accepted game.', data: {game}, bestEffort: true},
+        })
+        .then((result) => {
+          if (!board.isShowing(game)) return; // a newer game or move is on screen
+          if (result.outcome !== 'appended') board.say('Tell the assistant it is their move.');
+        });
+    })
+    .build();
+  return createReactActions({attach: (view) => view.watchById('square', ActionButton, (handle) => handle.bindAction('activate', play))});
+},
+```
+
+`appendMessage(text, {role?, context?})` resolves, and never rejects, with an `AppendResult`:
+
+| Result | Meaning |
+| --- | --- |
+| `{outcome: 'appended'}` | The host accepted the message. This is a prompt delivered, not the assistant having acted. |
+| `{outcome: 'appended', context}` | As above, but a best-effort `context` was skipped; `context` says why (`'denied'`, `'unavailable'` or `'failed'`). |
+| `{outcome, stage: 'context'}` | The context could not be delivered and was not best effort, so the message was not sent. |
+| `{outcome, stage: 'message'}` | The message itself was refused (`'denied'`), not offered by the host or the view has ended (`'unavailable'`), or could not complete (`'failed'`). |
+
+`context` is information for the assistant's next turn that the conversation does not show: `text` becomes a content block and `data` becomes `structuredContent` of a `ui/update-model-context` request, which the stack sends before the `ui/message` request, never in parallel, and only for a host that advertises the matching capability (`updateModelContext`, `message`). Context blocks the message by default; set `bestEffort: true` only when the assistant has another way to get the information, such as a tool the message names. Nothing is retried: a request that fails or times out may still have been carried out, and a repeated message would ask the assistant twice. When the view ends, an outstanding or later call resolves `unavailable` and sends nothing further.
+
+The application owns everything about the conversation: whether to append, what the text says, what context goes with it, and what the person sees when nothing was appended (compare the application's own identity for the state on screen first, because the append settles after the action's `current()` has gone false). The server stays authoritative; an appended message authorizes nothing. The Lit stack offers the same `host.conversation`. Whether Claude, ChatGPT or Alexa+ show the message, or how their assistants respond, is not established by the local checks; see the [host compatibility guide](host-compatibility.md).
+
+A server can also declare an operation with no view. Omit `view` from the declaration given to `registerPublicOperation` or `registerProtectedOperation` (both from the stack's `/server` entry); the operation keeps its input and output contracts, annotations, budgets, cancellation and safe failures, and carries no UI association: no view resource and no `_meta.ui` on the tool definition or on any result.
+
+For a local Node server, the optional [local MCP listener](local-mcp-server.md) handles HTTP transport and request lifetimes while your app supplies its operations.
+
+## Removable credit
+
+An application with its own catalog can credit the framework without a FaithfulCard. `SagaAttribution` is a small line, "Built with saga a2ui", whose name asks the host to open `https://saga-ai.dev/`. Render it where you want it and pass the host's link seam from the actions factory:
+
+```tsx
+import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';
+import '@saga-a2ui/react-mcp-stack/attribution.css';
+
+let links: HostLinks | undefined;
+startA2uiView({
+  // ...
+  actions: (host) => {
+    links = host.links; // asks the host to open a link; ends with the view
+    return undefined;
+  },
+});
+
+// Wherever the application renders its footer:
+<footer><SagaAttribution links={links} /></footer>
+```
+
+To remove the credit, delete the element; there is nothing to configure and no account or payment. Optional `prefix`, `name` and `href` (an absolute `https:` URL) change the wording and destination, and only your own code supplies them. Without `links`, or with a destination that is not acceptable, nothing is clickable and nothing navigates. A host that does not open the link leaves the credit in place with a short message and the destination as text. The component makes no network request of its own and carries no card, Markdown parser or components package. Style it with `.saga-attribution` or the `--saga-attribution-*` tokens documented at the top of the stylesheet. Removing it removes no licence notice or answer-source attribution; those are not part of it. The design is [own-catalog attribution](../blueprints/features/own_catalog_attribution.blueprint.md).
 
 ## React in Ansari Faithful Answers
 
@@ -34,7 +99,7 @@ The [notes React view](../examples/pack1-consumer/src/notes-react-view.tsx) is a
 
 Follow the [action guide](actions.md#trace-one-press-allowed-and-denied) for the complete server authorization and outcome trace. An expired session can stop Archive before its protected request; cancellation after sending that request leaves its effect uncertain. The application presents that uncertainty and does not retry the write automatically.
 
-This is an existing application example, not a React starter command. Use [public installation](public-install.md) for the stack and exact peers, and [Getting started](getting-started.md) for a runnable local demo.
+This is an existing application example. To start a new React application on Hono, run `saga init --a2ui-stack react-mcp --server hono` as [Getting started](getting-started.md#create-a-new-project) describes; the starter holds the same public status, protected account and local Clear action as the Lit starters. Use [public installation](public-install.md) for the stack and exact peers.
 
 ## The React integration surface
 
@@ -82,12 +147,14 @@ For pnpm, merge this into the destination root `pnpm-workspace.yaml` (preserve i
 ```yaml
 overrides:
   '@a2ui/markdown-it': '0.2.1'
+  dompurify: '3.4.17'
+  '@hono/node-server': '2.1.5'
 ```
 
 For npm, use root `package.json`:
 
 ```json
-{"overrides": {"@a2ui/markdown-it": "0.2.1"}}
+{"overrides": {"@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"}}
 ```
 
 Then regenerate and commit the destination's root lockfile. An override in a dependency's manifest is not inherited by consumers; a direct dependency pin in SAGA also does not constrain every transitive resolution. This is a required consumer setting until the supported upstream combination changes.

@@ -568,7 +568,7 @@ describe('the repository consumers hold application meaning only', () => {
     );
   });
 
-  it('asserts all five maintained templates are present and scanned', () => {
+  it('asserts all six maintained templates are present and scanned', () => {
     const directories = fs
       .readdirSync(path.join(repoRoot, 'templates'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

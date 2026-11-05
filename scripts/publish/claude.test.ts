@@ -11,6 +11,7 @@ import {
   editInput,
   editing,
   listing,
+  fixtureCallsFile,
   png,
   recordOf,
   saga,
@@ -26,7 +27,7 @@ import {
   sha256,
   type PublicationRecord,
 } from './record.js';
-import { readZip } from './zip.js';
+import { readZip, writeZip } from './zip.js';
 
 // `saga publish check|prepare --target claude` as a maintainer runs it, on the fixture application of
 // harness.ts and the same release input that prepares the ChatGPT package. The Claude materials are
@@ -279,9 +280,7 @@ describe('a ready connector', () => {
       { cwd },
     );
     expect(chatgpt.code).toBe(1);
-    expect(chatgpt.err).toMatch(
-      /no listing and assets, which the chatgpt target needs/,
-    );
+    expect(chatgpt.err).toMatch(/no listing, which the chatgpt target needs/);
     expect(chatgpt.out).toBe('');
   });
 
@@ -719,8 +718,12 @@ describe('what cannot be concluded is never a pass', () => {
     expect((await check(app, { wire: seen })).code).toBe(0);
     expect(seen.methods).not.toContain('tools/call');
 
+    const calls = await fixtureCallsFile();
     const invoked = wire();
-    const run = await check(app, { wire: invoked }, ['--invoke-fixture']);
+    const run = await check(app, { wire: invoked }, [
+      '--invoke-fixture',
+      calls,
+    ]);
     expect(run.code, run.out).toBe(0);
     expect(
       invoked.methods.filter((method) => method === 'tools/call'),
@@ -999,6 +1002,48 @@ describe('the optional plugin bundle', () => {
       expect(listing(path.join(cwd, 'publication'))).toEqual([RECORD_FILE]);
     },
   );
+
+  it('a credential inside an archive in a skill is found and nothing is released', async () => {
+    const cwd = workspace();
+    const app = withBundle(claudeApp(), (skill) =>
+      fs.writeFileSync(
+        path.join(skill, 'samples.zip'),
+        writeZip([
+          {
+            path: 'config.ini',
+            data: Buffer.from('api_key = "synthetic-credential-0005"\n'),
+          },
+        ]),
+      ),
+    );
+    const run = await prepare(app, 'publication', {
+      cwd,
+      pluginValidator: validator(accepted),
+    });
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toMatch(
+      /FAIL\s+package\.secrets[\s\S]*skills\/notes-status\/samples\.zip!\/config\.ini contains what looks like a credential assignment/,
+    );
+    expect(run.out + run.err).not.toContain('synthetic-credential');
+    expect(listing(path.join(cwd, 'publication'))).toEqual([RECORD_FILE]);
+  });
+
+  it('an archive in a skill that cannot be opened is refused, not passed', async () => {
+    const app = withBundle(claudeApp(), (skill) =>
+      fs.writeFileSync(
+        path.join(skill, 'samples.xz'),
+        Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 1, 2, 3]),
+      ),
+    );
+    const run = await prepare(app, 'publication', {
+      cwd: workspace(),
+      pluginValidator: validator(accepted),
+    });
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toMatch(
+      /FAIL\s+package\.secrets[\s\S]*samples\.xz is an archive in a format that cannot be opened/,
+    );
+  });
 
   it('a credential in the bundled license is found', async () => {
     const cwd = workspace();

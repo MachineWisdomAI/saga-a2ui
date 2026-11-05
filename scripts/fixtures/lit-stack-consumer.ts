@@ -15,7 +15,9 @@ import {
   z,
   type ActionBinding,
   type ActionButtonActivation,
+  type AppendResult,
   type BoundSurface,
+  type Conversation,
   type ErrorPhase,
   type HostLinks,
   type LitComponentApi,
@@ -40,6 +42,7 @@ import {
   attachRequestLifetime,
   createServerBudgets,
   operationViewFromHtml,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
   type OperationView,
@@ -223,5 +226,34 @@ export function composeServerSide(page: string): {
     uri: viewUriForHtml(served, 'answer.html'),
   };
 }
-export { attachRequestLifetime, registerPublicOperation };
+export {
+  attachRequestLifetime,
+  registerProtectedOperation,
+  registerPublicOperation,
+};
 export type { RequestLifetime };
+
+// What an action does to add a message to the conversation, from the stack alone: the context
+// travels with the message and is best effort, and an application reads the result, never
+// treating `appended` as the assistant having acted. Real types, no casts.
+export function handOver(
+  conversation: ViewHost['conversation'],
+): Promise<AppendResult> {
+  return conversation.appendMessage('Your move', {
+    role: 'user',
+    context: {
+      text: 'The board',
+      data: { game: { gameId: 'g1' } },
+      bestEffort: true,
+    },
+  });
+}
+export function whatToTellThePerson(result: AppendResult): string | undefined {
+  if (result.outcome === 'appended')
+    return result.context === undefined
+      ? undefined
+      : `The assistant has no board (${result.context}).`;
+  return `Nothing was added (${result.outcome} at ${result.stage}).`;
+}
+export const conversationOf = (host: ViewHost): Conversation =>
+  host.conversation;

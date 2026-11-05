@@ -17,6 +17,7 @@ import {
   repoRoot,
   type PackedSdk,
 } from './packed-consumer.js';
+import { readContainedFile } from './owned-filesystem.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
 import { DOWNLOAD_SCRIPTS } from '../demo/lit-node/download-scripts.js';
 import {
@@ -163,9 +164,7 @@ export function prepareDemo(work: string): PreparedDemo {
     if (
       !fs
         .readFileSync(shipped)
-        .equals(
-          fs.readFileSync(path.join(templateDirectory(DEMO_TEMPLATE), file)),
-        )
+        .equals(readContainedFile(templateDirectory(DEMO_TEMPLATE), file))
     ) {
       throw new Error(
         `${file} was altered on export; the demonstration must use the starter's glue as it ships`,
@@ -310,7 +309,9 @@ export function writeDownload(
         scripts: DOWNLOAD_SCRIPTS,
         engines: { node: '>=22.12.0' },
         dependencies,
-        overrides: { '@a2ui/markdown-it': '0.2.1' },
+        overrides: JSON.parse(
+          fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+        ).overrides,
       },
       null,
       2,

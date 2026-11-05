@@ -24,11 +24,15 @@ Use stable `snake_case` capability and module names. Codebase paths mirror the i
 | --- | --- |
 | FaithfulCard content policies | [Content safety](features/content_safety_levels.blueprint.md) |
 | Server integration and request identity | [Reusable MCP connector](features/reusable_mcp_connector.blueprint.md) and [request/view lifetimes](features/request_view_lifetimes.blueprint.md) |
+| Fetch/Workers MCP delivery | [Fetch MCP hosting](features/fetch_mcp_hosting.blueprint.md) (approved, including the admission-time request budget) |
+| Permanent Tic Tac Toe demonstration | [Hosted Tic Tac Toe](features/hosted_tic_tac_toe.blueprint.md) (approved) |
+| A removable framework credit for a React own-catalog application | [Own-catalog attribution](features/own_catalog_attribution.blueprint.md) |
 | Application-owned outcome feedback and labels | [Application-owned feedback](features/application_owned_feedback.blueprint.md) (draft) |
 | Stack packages, typed surfaces and the card application | [View composition](features/view_composition.blueprint.md) (its Status lists every landed revision) |
 | UI actions and rendering | [Action binding](modules/action_binding.blueprint.md) and [Lit adapter](features/reusable_lit_adapter.blueprint.md) |
 | Protected media | [Authorized playback](features/authorized_playback.blueprint.md) |
 | Project setup and host submission | [Application setup](features/application_setup.blueprint.md) and [host publication](features/host_publication.blueprint.md) |
+| A React starter, the tic-tac-toe guide and messages from a view to the conversation | [Getting-started tracks](features/getting_started_tracks.blueprint.md) and [view conversation](features/view_conversation.blueprint.md) (both approved; their Status sections record implementation and acceptance) |
 
 Each design's Status section separates its approved scope, implemented slices and outstanding acceptance. Host publication has working ChatGPT and Claude preparation commands; a fixture-verified local resumable-handoff record is also implemented, and none of these tools establishes publication. For working setup instructions, use [Getting started](../docs/getting-started.md).
 

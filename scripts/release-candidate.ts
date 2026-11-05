@@ -6,6 +6,8 @@ import { FAITHFUL_CARD_CONTRACT_VERSION } from '@saga-a2ui/components/faithful-c
 import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { CATALOG_ID } from '../examples/pack1-consumer/src/notes-surface.js';
 import { sha256Hex, summarizeReceipt } from './candidate-identity.js';
+import { OwnedDirectory, UnsafePath } from './owned-filesystem.js';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 import {
   candidateVersion,
   createWorkDirectory,
@@ -18,11 +20,11 @@ import {
 } from './packed-consumer.js';
 
 // PACK2: prepares the release candidate of the owned packages as CI artifacts and says exactly what
-// it is. It packs the five packages with the candidate prerelease identity (see `candidateVersion`),
+// it is. It packs the seven packages with the candidate prerelease identity (see `candidateVersion`),
 // checks that every consumer build installed exactly those tarballs, installs them with the real
 // package manager into a clean directory, records the matched package/resource/catalog set and the
 // tested recipe, and can check an installed set against that record. It publishes nothing: the
-// tarballs stay `private`, so `npm publish` refuses them, and the files go only to the output
+// tarballs stay private and target an invalid registry, and the files go only to the output
 // directory, which CI uploads as a workflow artifact.
 //
 //   npm run build                                  # builds the consumers whose identities are checked
@@ -792,7 +794,7 @@ export function candidateRecord(
       },
       upstream: {
         a2ui: '@a2ui/web_core 0.13.0, @a2ui/lit 0.13.0, @a2ui/react 0.13.0',
-        mcp: '@modelcontextprotocol/client, core, server 2.3.1; ext-apps 2.0.3',
+        mcp: '@modelcontextprotocol/client, core, server 2.4.0; ext-apps 2.0.3',
         zod: "zod 4.6.7 (MCP seam and components); zod 3.25.76 only as core's zod3 alias",
         react:
           'react and react-dom 19.3.1 (exact peers of @saga-a2ui/react only)',
@@ -934,13 +936,19 @@ const dist = (...parts: string[]): string =>
   path.join(repoRoot, 'apps', 'lit-host', ...parts);
 
 /** Packs the candidate into `outDirectory`, runs the install checks and writes the record and summary. */
-export function writeCandidate(outDirectory: string): Record<string, unknown> {
+export function writeCandidate(requested: string): Record<string, unknown> {
+  // The output directory is created by this run or authenticated (a real directory the user owns,
+  // never a link) before anything below it is removed or written (SECURITY.md invariant 5).
+  const out = OwnedDirectory.create(requested);
+  if (fs.realpathSync(out.path) === fs.realpathSync(repoRoot))
+    throw new UnsafePath(
+      'The candidate output cannot be the repository root: its packages directory is source.',
+    );
   const revision = sourceRevision();
   const version = candidateVersion(revision.commit, revision.dirty);
   const work = createWorkDirectory('saga-candidate-');
   try {
-    const packages = path.join(outDirectory, 'packages');
-    fs.rmSync(packages, { recursive: true, force: true });
+    const packages = out.resetChild('packages');
     const packed = packSdkPackages(work, SDK_PACKAGES, packages, version);
 
     const clean = path.join(work, 'consumer');
@@ -962,10 +970,7 @@ export function writeCandidate(outDirectory: string): Record<string, unknown> {
         })
       : [];
     if (installed.ok)
-      fs.copyFileSync(
-        lockfile,
-        path.join(outDirectory, 'consumer-package-lock.json'),
-      );
+      out.writeFile('consumer-package-lock.json', fs.readFileSync(lockfile));
     const resolved = installed.ok
       ? Object.fromEntries(
           Object.entries(
@@ -1047,15 +1052,8 @@ export function writeCandidate(outDirectory: string): Record<string, unknown> {
         : null,
       generatedAt: new Date().toISOString(),
     });
-    fs.mkdirSync(outDirectory, { recursive: true });
-    fs.writeFileSync(
-      path.join(outDirectory, 'candidate.json'),
-      `${JSON.stringify(record, null, 2)}\n`,
-    );
-    fs.writeFileSync(
-      path.join(outDirectory, 'CANDIDATE.md'),
-      candidateSummary(record),
-    );
+    out.writeFile('candidate.json', `${JSON.stringify(record, null, 2)}\n`);
+    out.writeFile('CANDIDATE.md', candidateSummary(record));
     return record;
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -1078,7 +1076,7 @@ function expectedFrom(record: {
 }
 
 const USAGE =
-  'usage: release-candidate.ts pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
+  'usage: release-candidate.ts tarballs --out NEW_DIR | pack --out DIR | verify --candidate FILE --modules DIR --combination own|card|browse-and-play-application [--page FILE]';
 
 interface VerifiedRecord {
   readonly version: string;
@@ -1167,6 +1165,45 @@ export function verifyCommand(argv: readonly string[]): VerifyOutcome {
 
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
+  if (command === 'tarballs') {
+    // A fresh directory keeps the previous install's artifacts available for rollback.
+    const owned = OwnedDirectory.create(path.resolve(required(rest, '--out')), {
+      fresh: true,
+    });
+    const output = owned.path;
+    const work = createWorkDirectory('saga-local-tarballs-');
+    try {
+      const source = sourceRevision();
+      const packages = packSdkPackages(
+        work,
+        SDK_PACKAGES,
+        owned.ensureChild('packages'),
+        candidateVersion(source.commit, source.dirty),
+      );
+      const root = readJson<{ overrides: Record<string, unknown> }>(
+        path.join(repoRoot, 'package.json'),
+      );
+      const overrides = {
+        ...root.overrides,
+        ...Object.fromEntries(
+          packages.map((one) => [
+            `@saga-a2ui/${one.name}`,
+            `file:${one.tarball}`,
+          ]),
+        ),
+      };
+      owned.writeFile(
+        'npm-overrides.json',
+        `${JSON.stringify({ source, overrides }, null, 2)}\n`,
+      );
+      console.log(
+        `Private development tarballs in ${terminalValue(output)}. Nothing published; application qualification has not run.`,
+      );
+      return 0;
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
+  }
   if (command === 'pack') {
     const record = writeCandidate(path.resolve(required(rest, '--out')));
     const install = (
@@ -1181,7 +1218,7 @@ function main(argv: string[]): number {
     const probe = (
       record.versionMismatch as { installProbe: { refused: boolean } }
     ).installProbe;
-    console.log(`candidate ${String(record.version)} written`);
+    console.log(`candidate ${terminalValue(String(record.version))} written`);
     if (
       !install.ok ||
       !install.treeValid ||
@@ -1197,8 +1234,9 @@ function main(argv: string[]): number {
   }
   if (command === 'verify') {
     const result = verifyCommand(rest);
-    for (const line of result.errors) console.error(line);
-    console.log(result.summary);
+    // A diagnostic can carry a path, a package name or text from a candidate record.
+    for (const line of result.errors) console.error(terminalText(line));
+    console.log(terminalText(result.summary));
     return result.exitCode;
   }
   console.error(USAGE);
@@ -1209,5 +1247,16 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  process.exitCode = main(process.argv.slice(2));
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    // An unexpected failure (a pack, a write, a path the command was given) is reported like any
+    // other output: its message can carry a path or text from a candidate record, so its control
+    // characters are written out (SECURITY.md invariant 6) before Node would print it raw.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `release-candidate: ${error instanceof Error ? error.name : 'Error'}: ${terminalValue(message)}`,
+    );
+    process.exitCode = 1;
+  }
 }

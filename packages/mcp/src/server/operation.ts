@@ -13,6 +13,12 @@ import type {
 import type { z } from 'zod';
 import type { ViewCsp } from '../policy/index.js';
 import {
+  admitOutput,
+  outputLimitProblems,
+  resolveOutputLimits,
+  type OutputLimits,
+} from './output-budget.js';
+import {
   createServerBudgets,
   throwIfEnded,
   valueOrThrow,
@@ -20,7 +26,8 @@ import {
   type RequestLifetime,
 } from './lifetime.js';
 
-// Declared MCP operations. The application owns the listener, authentication, domain
+// Declared MCP operations. An operation may present its result in a view or, with `view` omitted,
+// return only data and text; everything else about it is identical (see `register`). The application owns the listener, authentication, domain
 // authorization and every backend effect; it hands this module an operation declaration and an
 // MCP server it created. This module validates the input before the handler runs, waits for the
 // handler only within its bound, projects the handler's record explicitly, validates that
@@ -34,7 +41,11 @@ import {
 // budget. Unreleased preparation slice (CORE1): the full SSE/progress and delayed-completion
 // matrix remains CORE3's.
 
-/** The view the host mounts for an operation's result. The application builds it from its built bundle. */
+/**
+ * The view the host mounts for an operation's result. The application builds it from its built
+ * bundle. An operation that omits it has no view: it is declared and executed identically and
+ * carries no UI association at all.
+ */
 export interface OperationView {
   readonly uri: string;
   /** Resource name shown in `resources/list`. */
@@ -121,7 +132,12 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
   readonly input: Input;
   /** Runtime contract for the structured result. Strict contracts keep private fields out. */
   readonly output: Output;
-  readonly view: OperationView;
+  /**
+   * Optional. Present, the tool is linked to this view and the view is served as a resource.
+   * Omitted, the tool is a plain data operation: no resource is registered and no `_meta.ui`
+   * appears on the tool definition or on any result, successful or failed.
+   */
+  readonly view?: OperationView;
   /**
    * This operation's own limit for its complete handler and projection: the per-operation override
    * of the operation limit. Omitted, the route's or SDK instance's operation limit applies, else
@@ -129,6 +145,13 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
    * never extend the request.
    */
   readonly boundMs?: number;
+  /**
+   * Optional. The most this operation may return: combined text and structured size in bytes,
+   * nesting depth and value count. Omitted fields keep the SDK defaults (1 MiB, 32 levels, 100,000
+   * values). A result over any limit is answered with the declared `invalidOutput` text and
+   * nothing is serialized. Raise a limit only for an operation whose legitimate results need it.
+   */
+  readonly outputLimits?: OutputLimits;
 }
 
 /** Where an operation finds the request it serves. Absent, it runs under the SDK defaults. */
@@ -212,6 +235,7 @@ interface UncheckedDeclaration {
     readonly signInRequired?: unknown;
   };
   readonly boundMs?: number;
+  readonly outputLimits?: unknown;
   readonly handle?: unknown;
   readonly project?: unknown;
   readonly identity?: unknown;
@@ -235,13 +259,14 @@ function assertConfigured(
   needs(isSchema(declaration.input), 'input contract');
   needs(isSchema(declaration.output), 'output contract');
   const view = declaration.view;
+  // Omitting the view is a declaration. A view that is present must be complete.
   needs(
-    view !== undefined &&
-      isText(view.uri) &&
-      isText(view.title) &&
-      typeof view.html === 'string' &&
-      view.csp !== undefined,
-    'view',
+    view === undefined ||
+      (isText(view.uri) &&
+        isText(view.title) &&
+        typeof view.html === 'string' &&
+        view.csp !== undefined),
+    'view (complete, or omitted)',
   );
   const failures = declaration.failures;
   needs(
@@ -262,6 +287,7 @@ function assertConfigured(
     !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)
   )
     problems.push('boundMs must be a finite positive number');
+  problems.push(...outputLimitProblems(declaration.outputLimits));
   if (problems.length > 0)
     throw new OperationConfigurationError(
       isText(declaration.name) ? String(declaration.name) : '(unnamed)',
@@ -274,11 +300,18 @@ const isThenable = (value: unknown): boolean =>
   value !== null &&
   isFunction((value as { then?: unknown }).then);
 
-/** A projection callback's answer, checked as the untrusted value it is. `data` is validated separately against the output contract. */
-const isProjection = (value: unknown): value is Projection =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as { text?: unknown }).text === 'string';
+/**
+ * A projection callback's answer, checked as the untrusted value it is, with `text` and `data` each
+ * read exactly once. `data` is validated separately against the output contract.
+ */
+function readProjection(
+  value: unknown,
+): { readonly text: string; readonly data: unknown } | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const text = (value as { text?: unknown }).text;
+  const data = (value as { data?: unknown }).data;
+  return typeof text === 'string' ? { text, data } : undefined;
+}
 
 const SDK_DEFAULTS = createServerBudgets();
 
@@ -323,7 +356,7 @@ function requestFor(
 async function execute<Found>(
   declaration: Pick<
     Declaration<z.ZodObject, z.ZodObject>,
-    'output' | 'boundMs'
+    'output' | 'boundMs' | 'outputLimits'
   > & { readonly failures: OperationFailures },
   ctx: ServerContext,
   lifetime: RequestLifetime,
@@ -371,13 +404,27 @@ async function execute<Found>(
         throwIfEnded(scope);
         // The callback is application code: a projection that is not the declared shape is a contract
         // break like invalid data, not a thrown fault and never something the SDK serializes.
-        if (!isProjection(projection))
+        // Each field is read once, so a getter cannot answer differently the second time.
+        const fields = readProjection(projection);
+        if (!fields) return failure(declaration.failures.invalidOutput);
+        // The result is bounded before the contract parses it, and again after, because a contract
+        // may transform what it accepts. Each check reads the value once into a copy: the contract
+        // parses the first copy and the transport receives the second, so what was measured is what
+        // is returned, whatever the application's own objects do later.
+        const admission = admitOutput(
+          resolveOutputLimits(declaration.outputLimits),
+        );
+        if (!admission.text(fields.text))
           return failure(declaration.failures.invalidOutput);
-        const parsed = declaration.output.safeParse(projection.data);
+        const input = admission.data(fields.data);
+        if (!input) return failure(declaration.failures.invalidOutput);
+        const parsed = declaration.output.safeParse(input.value);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
+        const output = admission.data(parsed.data);
+        if (!output) return failure(declaration.failures.invalidOutput);
         return {
-          content: [{ type: 'text' as const, text: projection.text }],
-          structuredContent: parsed.data,
+          content: [{ type: 'text' as const, text: fields.text }],
+          structuredContent: output.value as Record<string, unknown>,
         };
       },
       {
@@ -423,17 +470,36 @@ function linkedToView(
 }
 
 /**
- * Registers the tool and its view on the server. The server has parsed `args` with the
- * declaration's input contract before `callback` runs, so a wrapper that knows the contract's
- * type states that fact (`args as z.output<Input>`). Structured content leaves `callback` already
- * validated against the declaration's output contract. Every result `callback` returns, success or
- * safe failure, leaves linked to the declaration's view.
+ * Registers the tool, and its view when it has one, on the server. The server has parsed `args`
+ * with the declaration's input contract before `callback` runs, so a wrapper that knows the
+ * contract's type states that fact (`args as z.output<Input>`). Structured content leaves
+ * `callback` already validated against the declaration's output contract.
+ *
+ * With a view, every result `callback` returns, success or safe failure, leaves linked to it.
+ * Without one, the tool is declared on the server with the same title, description, contracts and
+ * annotations and the same callback, and the view is the only thing missing: nothing is linked,
+ * no resource is registered, and `callback` already produces no `_meta`.
  */
 function register(
   server: McpServer,
   declaration: Declaration<z.ZodObject, z.ZodObject>,
   callback: (args: unknown, ctx: ServerContext) => Promise<CallToolResult>,
 ): void {
+  const { view } = declaration;
+  if (view === undefined) {
+    server.registerTool(
+      declaration.name,
+      {
+        title: declaration.title,
+        description: declaration.description,
+        inputSchema: declaration.input,
+        outputSchema: declaration.output,
+        annotations: declaration.annotations,
+      },
+      (args, ctx) => callback(args, ctx),
+    );
+    return;
+  }
   registerAppTool(
     server,
     declaration.name,
@@ -443,12 +509,10 @@ function register(
       inputSchema: declaration.input,
       outputSchema: declaration.output,
       annotations: declaration.annotations,
-      _meta: { ui: { resourceUri: declaration.view.uri } },
+      _meta: { ui: { resourceUri: view.uri } },
     },
-    async (args, ctx) =>
-      linkedToView(await callback(args, ctx), declaration.view),
+    async (args, ctx) => linkedToView(await callback(args, ctx), view),
   );
-  const { view } = declaration;
   registerAppResource(server, view.title, view.uri, {}, async () => ({
     contents: [
       {
@@ -461,7 +525,7 @@ function register(
   }));
 }
 
-/** Declares an explicitly public operation and its view on an application-owned MCP server. */
+/** Declares an explicitly public operation, and its view when it has one, on an application-owned MCP server. */
 export function registerPublicOperation<
   Input extends z.ZodObject,
   Output extends z.ZodObject,
@@ -486,8 +550,8 @@ export function registerPublicOperation<
 
 /**
  * Declares an operation that acts for a verified identity. Registration fails, with the missing
- * requirement named, unless the identity resolver, sign-in failure text, projection and view
- * are all configured. With no acceptable identity the handler never runs, and neither does it for a
+ * requirement named, unless the identity resolver, sign-in failure text and projection
+ * are all configured (and the view, when one is declared). With no acceptable identity the handler never runs, and neither does it for a
  * call that was cancelled or whose request already ended before the handler could start.
  */
 export function registerProtectedOperation<

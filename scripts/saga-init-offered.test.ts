@@ -11,6 +11,7 @@ import {
   sourceRevision,
   buildConsumerFromConfig,
   type PackedPackage,
+  type SdkPackage,
 } from './packed-consumer.js';
 import { SUPPORTED_PAIRS, runCli } from './saga.js';
 import { readTemplateMetadata, templateDirectory } from './starter-template.js';
@@ -23,26 +24,42 @@ import { readTemplateMetadata, templateDirectory } from './starter-template.js';
 // (starter*.test.ts, apps/lit-host/e2e/starter.spec.ts) and is not repeated here.
 
 const work = createWorkDirectory('saga-init-offered-');
-let packed: PackedPackage[] = [];
 let version = '';
+
+/** The SDK packages every offered pair's template names, packed once for all of them. */
+const packedSet = (): SdkPackage[] =>
+  [
+    ...new Set(
+      SUPPORTED_PAIRS.flatMap(
+        (pair) =>
+          readTemplateMetadata(templateDirectory(pair.template)).sdkPackages,
+      ),
+    ),
+  ].sort();
+const packedByName = new Map<string, PackedPackage>();
 
 beforeAll(() => {
   const { commit, dirty } = sourceRevision();
   version = candidateVersion(commit, dirty);
-  packed = packSdkPackages(
+  for (const one of packSdkPackages(
     work,
-    ['core', 'lit', 'components', 'mcp', 'lit-mcp-stack'],
+    packedSet(),
     path.join(work, 'tarballs'),
     version,
-  );
+  ))
+    packedByName.set(one.name, one);
 }, 300_000);
 
 afterAll(() => fs.rmSync(work, { recursive: true, force: true }));
 
-async function init(cwd: string, server: string): Promise<string> {
+async function init(
+  cwd: string,
+  stack: string,
+  server: string,
+): Promise<string> {
   let err = '';
   const code = await runCli(
-    ['init', '--a2ui-stack', 'lit-mcp', '--server', server, 'project'],
+    ['init', '--a2ui-stack', stack, '--server', server, 'project'],
     {
       cwd,
       sdkVersion: () => version,
@@ -53,7 +70,7 @@ async function init(cwd: string, server: string): Promise<string> {
     },
   );
   if (code !== 0)
-    throw new Error(`saga init lit-mcp on ${server} exited ${code}: ${err}`);
+    throw new Error(`saga init ${stack} on ${server} exited ${code}: ${err}`);
   return path.join(cwd, 'project');
 }
 
@@ -61,9 +78,15 @@ describe.each(SUPPORTED_PAIRS)(
   'the project saga init creates for $stack on $server',
   (pair) => {
     it('installs the matching packed candidates, type-checks and builds with its own configuration', async () => {
-      const cwd = fs.mkdtempSync(path.join(work, `${pair.server}-`));
-      const project = await init(cwd, pair.server);
+      const cwd = fs.mkdtempSync(
+        path.join(work, `${pair.stack}-${pair.server}-`),
+      );
+      const project = await init(cwd, pair.stack, pair.server);
       const metadata = readTemplateMetadata(templateDirectory(pair.template));
+      // The packages this pair's template names, from the one packed set; no other is installed into it.
+      const packed = metadata.sdkPackages.map(
+        (name) => packedByName.get(name) as PackedPackage,
+      );
 
       // The pins the command wrote are exactly the candidate that is installed.
       const manifest = JSON.parse(

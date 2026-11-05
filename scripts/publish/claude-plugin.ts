@@ -6,6 +6,7 @@ import {
   readApplicationFile,
   readApplicationTree,
 } from './application-files.js';
+import type { FileBudget } from './bounded-read.js';
 import type { ClaudePluginBundleInput, ReleaseInput } from './release-input.js';
 import { redactSecrets } from './secrets.js';
 import { safeArchivePath, type ZipEntry } from './zip.js';
@@ -43,6 +44,7 @@ export function assembleBundle(
   input: ReleaseInput,
   bundle: ClaudePluginBundleInput,
   directory: string,
+  localBudget: FileBudget,
 ): AssembledBundle {
   const entries: ZipEntry[] = [];
   const problems: string[] = [];
@@ -54,7 +56,7 @@ export function assembleBundle(
     ['README', bundle.readme],
     ['license', bundle.license],
   ] as const) {
-    const read = readApplicationFile(directory, source);
+    const read = readApplicationFile(directory, source, localBudget);
     if (read.ok) add(label === 'README' ? 'README.md' : 'LICENSE', read.data);
     else problems.push(`The ${label} ${source}: ${read.reason}`);
   }
@@ -70,7 +72,7 @@ export function assembleBundle(
       continue;
     }
     taken.set(name, source);
-    const tree = readApplicationTree(directory, source);
+    const tree = readApplicationTree(directory, source, localBudget);
     if (!tree.ok) {
       problems.push(`The skill ${source}: ${tree.reason}`);
       continue;

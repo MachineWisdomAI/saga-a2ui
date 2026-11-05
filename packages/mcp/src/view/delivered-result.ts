@@ -2,6 +2,12 @@ import type {
   ContentBlock,
   DeliveredResult,
 } from '@saga-a2ui/core/delivered-result';
+import {
+  admitToolResult,
+  ToolResultRefused,
+  toolResultLimits,
+  type ToolResultLimits,
+} from './result-admission.js';
 import type { ToolResult } from './run-tool-result-view.js';
 
 /**
@@ -14,10 +20,19 @@ import type { ToolResult } from './run-tool-result-view.js';
  * A tool result arrives from the host's bridge unchecked. One whose content cannot be carried
  * faithfully (not a list of blocks, or a block without a type, or a text block without its text)
  * throws a `TypeError`; the caller handles that as a failed reading.
+ *
+ * The result is also counted against one admission budget (bytes, values, depth, array items and
+ * content blocks; `limits` chooses other values than the defaults) before any block is looked at
+ * or carried. A result over it throws a {@link ToolResultRefused}, a `TypeError` too, and nothing
+ * of it is mapped.
  */
 export function deliveredResultFromToolResult(
   result: ToolResult,
+  limits?: Partial<ToolResultLimits>,
 ): DeliveredResult {
+  const budget = toolResultLimits(limits);
+  const admission = admitToolResult(result, budget);
+  if (!admission.ok) throw new ToolResultRefused(admission.exceeded, budget);
   if (typeof result !== 'object' || result === null)
     throw new TypeError('The tool result is not an object.');
   const { content, isError, structuredContent } = result as {

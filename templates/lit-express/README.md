@@ -19,7 +19,7 @@ npm start          # prints the two endpoint URLs; PORT=0 picks a free port
 - `…/account/mcp` is protected: `get_account` runs only for a request whose bearer credential your
   verifier accepted, and shows that request's own account.
 
-The protected endpoint refuses every credential until you replace `server/verifier.ts`. That is
+The protected endpoint refuses every credential until you replace `server/verifier.ts`. Your verifier must also return the `resource` the credential was issued for (RFC 8707); `server/main.ts` states this endpoint's URL, and a credential issued for any other resource is refused. That is
 deliberate: the starter ships no identity provider.
 
 ## What is yours
@@ -73,5 +73,5 @@ second status.
 
 The starter pins the tested recipe exactly: `express` 5.3.0, `@modelcontextprotocol/express` 2.0.2
 (peers `express` `^4.18.0 || ^5.0.0` and `@modelcontextprotocol/server` `^2.3.0`),
-`@modelcontextprotocol/node` 2.1.1 and `@modelcontextprotocol/server` 2.3.1, on Node 22.12 or newer.
+`@modelcontextprotocol/node` 2.1.1 and `@modelcontextprotocol/server` 2.4.0, on Node 22.12 or newer.
 Express 4 satisfies the adapter's peer range but is not the tested recipe.

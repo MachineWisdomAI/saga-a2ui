@@ -23,7 +23,7 @@ import express, {
   type Response,
 } from 'express';
 import { createEndpoint, type Endpoint } from './endpoint.js';
-import { authenticate } from './authenticate.js';
+import { authenticate, snapshotResource } from './authenticate.js';
 import {
   createAccountServer,
   createStatusServer,
@@ -60,6 +60,12 @@ export interface ListenerOptions {
   readonly filename?: string;
   /** Decides who a bearer credential belongs to. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * The protected endpoint's canonical URL as clients and your identity provider know it (RFC 8707).
+   * A credential the verifier accepts is refused unless it names exactly this resource. Behind an
+   * ingress this is the public URL, not the loopback address the listener binds.
+   */
+  readonly resource: URL;
   /** Decides what a verified account may see. */
   readonly authorize: AccountServerOptions['authorize'];
   /** Use 0 for an ephemeral port. */
@@ -225,6 +231,49 @@ async function readJsonBody(
 }
 
 /**
+ * Whatever answers a request before its body has fully arrived (a refusal, a missing route, an
+ * authentication failure) leaves a remainder nobody wants, and a sender that stalls must not hold
+ * the connection for it. After the answer is sent, the rest is read and discarded for a short window
+ * and up to a byte cap; a body still unfinished then is dropped together with its connection. A body
+ * that does finish in time keeps the connection usable. Call it first for every request, before
+ * anything can answer.
+ *
+ * The listener goes ahead of Node's own `finish` handling on purpose: that handling dumps a request
+ * nobody is reading, and a dumped body is discarded by the parser without ever reaching a `data`
+ * listener, so the byte cap could not see it and a body that completed at once would end the drain
+ * unchecked. Reading from here keeps the remainder countable.
+ */
+function closeUnfinishedBodyAfterAnswer(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  res.prependOnceListener('finish', () => {
+    if (req.complete || req.destroyed || res.destroyed) return;
+    let discarded = 0;
+    const settle = () => {
+      clearTimeout(timer);
+      req.off('data', onData);
+      req.off('end', settle);
+      req.off('close', settle);
+    };
+    const drop = () => {
+      settle();
+      req.socket.destroySoon();
+    };
+    const onData = (chunk: Buffer | string) => {
+      discarded += chunk.length;
+      if (discarded > 1024 * 1024) drop();
+    };
+    const timer = setTimeout(drop, 500);
+    timer.unref();
+    req.on('data', onData);
+    req.on('end', settle);
+    req.on('close', settle);
+    req.resume();
+  });
+}
+
+/**
  * Connects one request's lifetime to its response when the request is admitted. The transport
  * finishing the response ends the lifetime; the caller going away does too. In the other direction,
  * a request deadline that passes before the response is delivered destroys the response, which
@@ -269,6 +318,7 @@ export async function startListener(
 ): Promise<Listener> {
   // Prepare and validate deployment inputs once, before opening the port. Each request
   // reuses the same HTML and URI while owning its server, identity and lifetime.
+  const resource = snapshotResource(options.resource);
   const budgets = createServerBudgets(options.budgets);
   // #region saga-snippet:prepare-view
   const view = prepareStarterView(options.html, options.filename);
@@ -297,6 +347,7 @@ export async function startListener(
 
   /** The first middleware: the request's clock starts here, before any credential or body wait. */
   const admit: RequestHandler = (req, res, next) => {
+    closeUnfinishedBodyAfterAnswer(req, res);
     if (stopping) {
       res.writeHead(503).end();
       return;
@@ -311,7 +362,12 @@ export async function startListener(
   // Who is asking is decided before any server is built. The verified context travels to the tool
   // only as the transport's per-request auth (`req.auth`); no tool argument can name an account.
   const identify: RequestHandler = async (req, res, next) => {
-    const decision = await authenticate(req, options.verifier, lifetimeOf(res));
+    const decision = await authenticate(
+      req,
+      options.verifier,
+      resource,
+      lifetimeOf(res),
+    );
     if (!decision.ok) {
       res
         .writeHead(

@@ -136,10 +136,14 @@ function writeApp(
   fs.writeFileSync(
     path.join(app, 'pnpm-workspace.yaml'),
     'packages: []\noverrides:\n' +
-      Object.entries(options.overrides)
+      Object.entries({
+        ...JSON.parse(
+          fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+        ).overrides,
+        ...options.overrides,
+      })
         .map(([name, file]) => `  "${name}": "${file}"\n`)
-        .join('') +
-      '  "@a2ui/markdown-it": "0.2.1"\n',
+        .join(''),
   );
   const consumer = options.jsx ? 'consumer.tsx' : 'consumer.ts';
   fs.copyFileSync(
@@ -461,7 +465,7 @@ try {
     dependencies: {
       '@saga-a2ui/mcp':
         tarballs['@saga-a2ui/mcp'] ?? fail('mcp was not packed'),
-      '@modelcontextprotocol/server': '2.3.1',
+      '@modelcontextprotocol/server': '2.4.0',
       zod: '4.6.7',
     },
     development: BUILD_TOOLS,

@@ -782,7 +782,11 @@ describe('registration', () => {
     ['an identity resolver', { identity: undefined }, /identity/],
     ['a sign-in failure text', { failures: FAILURES }, /signInRequired/],
     ['a projection', { project: undefined }, /project/],
-    ['a view', { view: undefined }, /view/],
+    [
+      'a complete view, when one is declared',
+      { view: { uri: 'ui://x' } },
+      /view/,
+    ],
     ['an output contract', { output: undefined }, /output/],
   ])(
     'refuses a protected operation without %s, before registering anything',

@@ -72,6 +72,8 @@ npm start          # prints both URLs; PORT=0 picks a free port
 
 `npm run typecheck` checks the view and server. `/status/mcp` is public;
 `/account/mcp` refuses every credential until you implement [verifier.ts](server/verifier.ts).
+Your verifier must also return the `resource` the credential was issued for (RFC 8707); `server/main.ts`
+states this endpoint's URL, and a credential issued for any other resource is refused.
 The starter ships no accounts, sample data or test verifier.
 
 ```text

@@ -12,10 +12,10 @@
     "start": "node dist/server.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/fastify": "2.0.1",
     "@modelcontextprotocol/node": "2.1.1",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "@saga-a2ui/components": "*",
     "@saga-a2ui/core": "*",
     "@saga-a2ui/lit": "*",
@@ -32,7 +32,9 @@
     "vite-plugin-singlefile": "2.3.3"
   },
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1"
+    "@a2ui/markdown-it": "0.2.1",
+    "dompurify": "3.4.17",
+    "@hono/node-server": "2.1.5"
   },
   "engines": {
     "node": ">=22.12.0"

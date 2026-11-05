@@ -13,7 +13,11 @@ import { BudgetConfigurationError } from '@saga-a2ui/mcp/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ANSWER_TOOL_NAME, ANSWER_UNAVAILABLE_TEXT } from './answer.js';
 import type { AnswerBackend } from './answer-server.js';
-import { createDevelopmentVerifier, DEV_TOKENS } from './dev-auth.js';
+import {
+  createDevelopmentVerifier,
+  DEV_RESOURCE,
+  DEV_TOKENS,
+} from './dev-auth.js';
 import {
   ListenerConfigurationError,
   startEpisodeListener,
@@ -251,6 +255,7 @@ describe('credential verification', () => {
     const listener = await start({
       budgets: { operationMs: 80, requestMs: 2_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: noting(lookups) },
         verifier,
@@ -275,6 +280,7 @@ describe('credential verification', () => {
     const listener = await start({
       budgets: { operationMs: 60, requestMs: 2_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: noting(lookups) },
         verifier,
@@ -293,6 +299,7 @@ describe('credential verification', () => {
     });
     const listener = await start({
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: async () => undefined },
         verifier,
@@ -315,6 +322,7 @@ describe('credential verification', () => {
     const listener = await start({
       budgets: { operationMs: 5_000, requestMs: 450 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: () => ((started += 1), never()) },
         verifier,
@@ -342,6 +350,7 @@ describe('body ingestion', () => {
     const listener = await start({
       budgets: { operationMs: 100, requestMs: 2_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: noting(lookups) },
         verifier: createDevelopmentVerifier(),
@@ -368,6 +377,7 @@ describe('body ingestion', () => {
     const listener = await start({
       budgets: { operationMs: 5_000, requestMs: 5_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: noting(lookups) },
         verifier: createDevelopmentVerifier(),
@@ -414,6 +424,7 @@ describe('body ingestion', () => {
     const listener = await start({
       budgets: { operationMs: 300, requestMs: 2_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: async () => accountFor('Alice') },
         verifier: createDevelopmentVerifier(),
@@ -450,6 +461,7 @@ describe('the tool handler', () => {
     const listener = await start({
       budgets: { operationMs: 120, requestMs: 5_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend,
         verifier: createDevelopmentVerifier(),
@@ -478,6 +490,7 @@ describe('the tool handler', () => {
     const listener = await start({
       budgets: { operationMs: 80 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: {
           listSubscriptions: (_id, signal) => (signals.push(signal), never()),
@@ -494,6 +507,7 @@ describe('the tool handler', () => {
     const listener = await start({
       budgets: { operationMs: 5_000, requestMs: 5_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: () => never() },
         verifier: createDevelopmentVerifier(),
@@ -514,6 +528,7 @@ describe('the tool handler', () => {
     const listener = await start({
       budgets: { operationMs: 5_000, requestMs: 5_000 },
       subscriptions: {
+        resource: DEV_RESOURCE,
         viewHtml: VIEW_HTML,
         backend: { listSubscriptions: () => never() },
         verifier: createDevelopmentVerifier(),

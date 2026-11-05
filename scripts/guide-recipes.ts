@@ -135,7 +135,7 @@ function recipe(name: string): string {
       '',
       `From \`templates/${name}/${snippet.file}\`:`,
       '',
-      '```ts',
+      `\`\`\`${snippet.language}`,
       dedent(snippet.text),
       '```',
     );

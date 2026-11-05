@@ -23,6 +23,7 @@ import {
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
 import {
+  capabilityTtlProblem,
   createMediaService,
   type MediaStore,
 } from '../playback/media-service.js';
@@ -40,8 +41,8 @@ import {
 import { createAnswerServer, type AnswerBackend } from './answer-server.js';
 import {
   authenticate,
-  PLAYBACK_REQUIREMENT,
-  SUBSCRIPTIONS_REQUIREMENT,
+  playbackRequirement,
+  subscriptionsRequirement,
   type AuthRequirement,
 } from './request-auth.js';
 import { createEpisodeServer, type EpisodeCatalog } from './server.js';
@@ -59,6 +60,8 @@ import {
 } from './protected-request.js';
 import {
   bindResponseToLifetime,
+  closeUnfinishedBodyAfterAnswer,
+  ListenerConfigurationError,
   mayAnswer,
   resolveStreamingPolicy,
   type StreamingPolicy,
@@ -82,6 +85,12 @@ export interface SubscriptionsEndpointOptions {
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
   /**
+   * This endpoint's canonical URL as clients and the identity provider know it (RFC 8707). A
+   * credential the verifier accepts is refused unless it names exactly this resource. There is no
+   * default: a listener that guessed it from its own address would be wrong behind any ingress.
+   */
+  readonly resource: URL;
+  /**
    * This browse read's own limit: the per-operation override of the operation limit. Omitted, the
    * route's or listener's operation limit applies. It never extends the request. A later
    * resolution is not returned.
@@ -99,10 +108,18 @@ export interface PlaybackEndpointOptions {
   readonly mediaStore: MediaStore;
   /** Decides who each request is. The application chooses it; nothing here falls back to a default. */
   readonly verifier: OAuthTokenVerifier;
+  /**
+   * This endpoint's canonical URL as clients and the identity provider know it (RFC 8707). A
+   * credential the verifier accepts is refused unless it names exactly this resource. There is no
+   * default: a listener that guessed it from its own address would be wrong behind any ingress.
+   */
+  readonly resource: URL;
   /** Lifetime of an issued media capability. Defaults to the service's short default. */
   readonly capabilityTtlSeconds?: number;
   /** Test seam for the media service's clock. */
   readonly nowSeconds?: () => number;
+  /** The most bytes one episode may be. Defaults to the media service's own limit. */
+  readonly mediaMaxBytes?: number;
   /**
    * This route's budgets, over the listener's. They apply to the Play tool and, separately for each
    * request, to every media acquisition: an acquisition starts a new deadline and inherits nothing
@@ -220,6 +237,24 @@ interface ProtectedEndpoint {
 /** The stages this listener owns around the tool handler, each with its own safe expiry answer. */
 type OwnedStage = 'authentication' | 'body' | 'acquisition';
 
+/**
+ * Validates a protected endpoint's resource once, before the listener opens, and returns the
+ * listener's own copy. The caller's `URL` is mutable and the listener lives as long as the process,
+ * so the accepted authority boundary is this private copy, never the object the caller still holds.
+ * Call it only for an endpoint that is configured: such an endpoint must state a resource.
+ */
+function snapshotResource(where: string, resource: unknown): URL {
+  if (
+    !(resource instanceof URL) ||
+    !/^https?:$/.test(resource.protocol) ||
+    resource.href.includes('#')
+  )
+    throw new ListenerConfigurationError(
+      `${where} must be an absolute http(s) URL without a fragment`,
+    );
+  return new URL(resource.href);
+}
+
 /** Throws before the listener opens when an operation limit stated by an application is unusable. */
 function assertOperationLimit(
   where: string,
@@ -258,6 +293,22 @@ export async function startEpisodeListener(
     options.subscriptions?.readBoundMs,
   );
   assertOperationLimit('Answer answerBoundMs', options.answer?.answerBoundMs);
+  const subscriptionsResource =
+    options.subscriptions === undefined
+      ? undefined
+      : snapshotResource(
+          'Subscriptions resource',
+          options.subscriptions.resource,
+        );
+  const playbackResource =
+    options.playback === undefined
+      ? undefined
+      : snapshotResource('Playback resource', options.playback.resource);
+  const ttlProblem = capabilityTtlProblem(
+    options.playback?.capabilityTtlSeconds,
+  );
+  if (ttlProblem !== undefined)
+    throw new ListenerConfigurationError(ttlProblem);
   const answerStreaming =
     options.answer?.responseMode === 'event-stream'
       ? resolveStreamingPolicy(options.answer.streaming)
@@ -287,6 +338,9 @@ export async function startEpisodeListener(
         ...(playback.nowSeconds === undefined
           ? {}
           : { nowSeconds: playback.nowSeconds }),
+        ...(playback.mediaMaxBytes === undefined
+          ? {}
+          : { maxBytes: playback.mediaMaxBytes }),
       })
     : undefined;
 
@@ -312,6 +366,7 @@ export async function startEpisodeListener(
   }
 
   http.on('request', (req, res) => {
+    closeUnfinishedBodyAfterAnswer(req, res);
     let path = '/';
     try {
       path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
@@ -622,11 +677,15 @@ export async function startEpisodeListener(
   }
 
   function protectedEndpointAt(path: string): ProtectedEndpoint | undefined {
-    if (path === SUBSCRIPTIONS_PATH && options.subscriptions) {
+    if (
+      path === SUBSCRIPTIONS_PATH &&
+      options.subscriptions &&
+      subscriptionsResource
+    ) {
       const endpoint = options.subscriptions;
       return {
         policy: SUBSCRIPTIONS_POLICY,
-        requirement: SUBSCRIPTIONS_REQUIREMENT,
+        requirement: subscriptionsRequirement(subscriptionsResource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createSubscriptionsServer({
@@ -640,11 +699,16 @@ export async function startEpisodeListener(
           }),
       };
     }
-    if (path === PLAYBACK_PATH && options.playback && mediaService) {
+    if (
+      path === PLAYBACK_PATH &&
+      options.playback &&
+      playbackResource &&
+      mediaService
+    ) {
       const endpoint = options.playback;
       return {
         policy: PLAYBACK_POLICY,
-        requirement: PLAYBACK_REQUIREMENT,
+        requirement: playbackRequirement(playbackResource),
         verifier: endpoint.verifier,
         createServer: (lifetime) =>
           createPlaybackServer({

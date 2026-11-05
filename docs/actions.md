@@ -254,6 +254,7 @@ The notes application answers a missing credential at the tool level, with a sen
 | --- | --- | --- |
 | No `Authorization` header | `401`, `WWW-Authenticate: Bearer realm="saga-starter"` | The verifier is not even asked. |
 | A header that is not `Bearer …`, an unknown credential, an expired credential | `401`, `error="invalid_token"` | |
+| A valid credential issued for another protected resource, or naming none (RFC 8707 `resource`) | `401`, `error="invalid_token"` | Compared with the `resource` URL the listener was started with, before scope or account is read. |
 | A credential without the `account:read` scope | `403`, `error="insufficient_scope", scope="account:read"` | |
 | A valid credential that names no account (a service credential) | `403`, `insufficient_scope` | The operation fails closed without running. |
 | A verifier that fails or never answers | `503`, no challenge | Not the caller's fault; cut off by the request's clock. |
@@ -476,7 +477,7 @@ Claim only what the evidence supports. The runnable tutorial stays on the qualif
 | | Shown | Not shown |
 | --- | --- | --- |
 | **Lit** | Action controls and typed surfaces: `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs | A Windows run; this tutorial itself makes no actual-host claim |
-| **React** | Action controls and typed surfaces: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host | Generated tooling: no React starter, template, CLI pair or authenticated recipe. The application integration itself is implemented |
+| **React** | Action controls and typed surfaces: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host. Generated tooling: one React starter, `react-mcp` on Hono, and its generated recipe, qualified from packed tarballs | No other React pair, no authenticated React recipe and no actual-host run of the React starter. The application integration itself is implemented |
 | **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
 
 On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react-mcp-stack`. The renderer package owns that implementation and the stack re-exports it. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.

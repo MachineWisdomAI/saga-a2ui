@@ -5,6 +5,7 @@ import {
   type AuthInfo,
   type OAuthTokenVerifier,
 } from '@modelcontextprotocol/server';
+import { boundVerifier } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 
 // Application-owned request authentication for protected MCP endpoints. A pluggable
@@ -15,20 +16,51 @@ import { z } from 'zod';
 export const SUBSCRIPTIONS_SCOPE = 'subscriptions:read';
 export const PLAYBACK_SCOPE = 'playback:play';
 
-/** What one protected endpoint requires of a credential: the challenge realm and the scope. */
+/**
+ * What one protected endpoint requires of a credential: the challenge realm, the scope and the
+ * protected resource the credential must have been issued for (RFC 8707). The resource is the
+ * endpoint's canonical URL as clients and the identity provider know it.
+ */
 export interface AuthRequirement {
   readonly realm: string;
   readonly scope: string;
+  readonly resource: URL;
 }
 
-export const SUBSCRIPTIONS_REQUIREMENT: AuthRequirement = {
+export const subscriptionsRequirement = (resource: URL): AuthRequirement => ({
   realm: 'saga-a2ui-subscriptions',
   scope: SUBSCRIPTIONS_SCOPE,
-};
-export const PLAYBACK_REQUIREMENT: AuthRequirement = {
+  resource,
+});
+export const playbackRequirement = (resource: URL): AuthRequirement => ({
   realm: 'saga-a2ui-playback',
   scope: PLAYBACK_SCOPE,
-};
+  resource,
+});
+
+/**
+ * Whether a verified credential was issued for this endpoint. A credential that names no resource,
+ * or another one, is refused: a token minted for a different service the same verifier also
+ * serves must never become authority here. A resource identifier has no fragment (RFC 8707), so a
+ * credential that names one is invalid and refused, never normalized into a match.
+ */
+function isIssuedFor(resource: unknown, expected: URL): boolean {
+  if (!(resource instanceof URL)) return false;
+  const named = resource.href;
+  return !named.includes('#') && named === expected.href;
+}
+
+/**
+ * Whether a value is a usable timestamp in seconds: a finite number no larger in magnitude than
+ * the largest integer a double holds exactly. Fractions are allowed (`Date.now() / 1000`).
+ */
+function isSafeSeconds(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= Number.MAX_SAFE_INTEGER
+  );
+}
 
 /** Who is calling, as established by the verifier for exactly one request. */
 export interface VerifiedIdentity {
@@ -110,12 +142,16 @@ function reject(
 
 /**
  * Checks the `Authorization` header: a bearer credential the verifier accepts, not expired,
- * carrying the endpoint's required scope, and naming an account. Anything else is refused with
+ * issued for this endpoint's protected resource, carrying the endpoint's required scope, and
+ * naming an account. Anything else is refused with
  * the HTTP status and `WWW-Authenticate` challenge RFC 6750 prescribes, before any protected work.
  *
- * The verifier takes only the token, so it cannot be asked to stop: the caller bounds the wait and
- * passes `gate`, which aborts when that wait is over. A verifier that answers after `gate` aborted is
- * dropped before its result is examined or an authorization snapshot is made.
+ * The caller bounds the wait and passes `gate`, which aborts when that wait is over. The verifier is
+ * handed `gate` as its cancellation signal and runs under `boundVerifier`'s concurrency cap and hard
+ * limit; a call keeps its slot until the verifier settles, so abandoned work cannot pile up past the
+ * cap (a verifier that ignores the signal and never settles keeps its slot). A full cap or an
+ * abandoned call is a verifier failure (500), never a rejected credential. A verifier that answers after `gate` aborted is dropped before its result is
+ * examined or an authorization snapshot is made.
  */
 export async function authenticate(
   request: Pick<IncomingMessage, 'headers'>,
@@ -139,7 +175,7 @@ export async function authenticate(
 
   let authInfo: AuthInfo;
   try {
-    authInfo = await verifier.verifyAccessToken(match[1]);
+    authInfo = await boundVerifier(verifier).verifyAccessToken(match[1], gate);
   } catch (error) {
     if (
       OAuthError.isInstance(error) &&
@@ -149,11 +185,21 @@ export async function authenticate(
     return { ok: false, status: 500, error: 'server_error', fault: error };
   }
   if (gate.aborted) return { ok: false, status: 500, error: 'server_error' }; // a late identity is dropped, never snapshotted
-  if (
-    typeof authInfo.expiresAt !== 'number' ||
-    authInfo.expiresAt <= nowSeconds()
-  ) {
+  // Every comparison with NaN is false, and nothing is later than Infinity, so a non-finite
+  // reading on either side would read as "not expired" forever. Both must be finite and safe.
+  const now = nowSeconds();
+  if (!isSafeSeconds(now))
+    return { ok: false, status: 500, error: 'server_error' };
+  if (!isSafeSeconds(authInfo.expiresAt) || authInfo.expiresAt <= now) {
     return reject(requirement, 401, 'invalid_token', 'Token has expired');
+  }
+  if (!isIssuedFor(authInfo.resource, requirement.resource)) {
+    return reject(
+      requirement,
+      401,
+      'invalid_token',
+      'Credential was not issued for this resource',
+    );
   }
   if (!authInfo.scopes.includes(requirement.scope)) {
     return reject(

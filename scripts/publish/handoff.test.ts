@@ -6,13 +6,24 @@ import {
   copyFixture,
   editInput,
   editing,
+  fixtureCallsFile,
+  recordOf,
   saga,
   wire,
   workspace,
   type Options,
   type Run,
 } from './harness.js';
-import { ARCHIVE_FILES, RECORD_FILE } from './record.js';
+import {
+  MAX_HANDOFF_BEGIN_BYTES,
+  MAX_HANDOFF_EVENT_BYTES,
+  MAX_HANDOFF_EVENTS,
+  MAX_HANDOFF_JSON_DEPTH,
+  MAX_HANDOFF_RECORD_BYTES,
+  handoffEventRefusal,
+} from './bounded-read.js';
+import { staleness } from './previous.js';
+import { ARCHIVE_FILES, RECORD_FILE, sha256 } from './record.js';
 
 // `saga publish handoff` as a maintainer runs it (CLI5 #68), on the fixture application of harness.ts:
 // prepare a release, begin a handoff for it, record the manual submission, the host's review and the
@@ -45,6 +56,7 @@ const prepare = (
   target: 'chatgpt' | 'claude',
   out: string,
   options?: Options,
+  extra: readonly string[] = [],
 ): Promise<Run> =>
   saga(
     [
@@ -56,6 +68,7 @@ const prepare = (
       release(app),
       '--out',
       out,
+      ...extra,
     ],
     options,
   );
@@ -79,26 +92,42 @@ async function prepared(
 interface Session {
   readonly cwd: string;
   readonly time: ReturnType<typeof clock>;
-  /** Every JSON-RPC method any handoff command sent anywhere. Always empty. */
+  /** Every JSON-RPC method any handoff command other than `begin` sent anywhere. Always empty. */
   readonly network: string[];
+  /** Every JSON-RPC method `begin` sent: it assesses the release again, as `check` does, and calls no tool. */
+  readonly assessed: string[];
   readonly run: (args: readonly string[], options?: Options) => Promise<Run>;
 }
 
-/** Runs handoff commands in `cwd` with one clock and one recording network seam. */
-function session(cwd: string): Session {
+/**
+ * Runs handoff commands in `cwd` with one clock and one recording network seam. `begin` assesses
+ * the release again, so when the application is given it is passed as `--release` unless the case
+ * gives its own.
+ */
+function session(cwd: string, app?: string): Session {
   const time = clock();
   const seen = wire();
+  const assessed: string[] = [];
   return {
     cwd,
     time,
     network: seen.methods,
-    run: (args, options = {}) =>
-      saga(['publish', 'handoff', ...args], {
+    assessed,
+    run: async (args, options = {}) => {
+      const begins = args[0] === 'begin';
+      const given =
+        begins && app !== undefined && !args.includes('--release')
+          ? [...args, '--release', release(app)]
+          : args;
+      const run = await saga(['publish', 'handoff', ...given], {
         cwd,
         wire: seen,
         now: time.now,
         ...options,
-      }),
+      });
+      if (begins) assessed.push(...seen.methods.splice(0));
+      return run;
+    },
   };
 }
 
@@ -127,7 +156,7 @@ async function begun(target: 'chatgpt' | 'claude' = 'claude'): Promise<{
   readonly out: string;
 }> {
   const { app, cwd, out } = await prepared(target);
-  const s = session(cwd);
+  const s = session(cwd, app);
   const run = await s.run([
     'begin',
     '--handoff',
@@ -249,7 +278,7 @@ describe('beginning a handoff', () => {
 
   it('refuses a release that is not ready, an altered package and a missing or secret-bearing authority reference, and writes nothing', async () => {
     const { app, cwd } = await prepared();
-    const s = session(cwd);
+    const s = session(cwd, app);
 
     editInput(
       app,
@@ -311,6 +340,461 @@ describe('beginning a handoff', () => {
     expect(s.network).toEqual([]);
   });
 
+  /** Rewrites a prepared output's record and package by hand, the two files a self-authored "ready" has to agree in. */
+  function forge(
+    cwd: string,
+    directory: string,
+    change: (record: Record<string, any>) => Buffer,
+  ): void {
+    const file = path.join(cwd, directory, RECORD_FILE);
+    const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+      string,
+      any
+    >;
+    const bytes = change(record);
+    fs.writeFileSync(path.join(cwd, directory, ARCHIVE_FILES.claude), bytes);
+    record.artifact = {
+      file: ARCHIVE_FILES.claude,
+      sha256: sha256(bytes),
+      bytes: bytes.length,
+      files: [],
+    };
+    fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+  }
+
+  it('does not take a self-authored ready record and its matching package as evidence of readiness', async () => {
+    const { app, cwd } = await prepared();
+    // The release is blocked: the deployment reports a version the release input does not expect.
+    editInput(
+      app,
+      (input) => (input.endpoint.expectedServer.version = '9.9.9'),
+    );
+    expect((await prepare(app, 'claude', 'forged', { cwd })).code).toBe(1);
+    expect(fs.existsSync(path.join(cwd, 'forged', ARCHIVE_FILES.claude))).toBe(
+      false,
+    );
+    // Then the record is edited to say ready, with a package it names by digest. The two files agree
+    // with each other, which is all the earlier `begin` asked of them.
+    forge(cwd, 'forged', (record) => {
+      record.verdict = 'ready';
+      record.findings = record.findings.map((finding: any) => ({
+        id: finding.id,
+        status: 'pass',
+        summary: finding.summary,
+      }));
+      return Buffer.from('not a connector dossier');
+    });
+    const sound = recordOf(path.join(cwd, 'forged'));
+    expect(sound.verdict).toBe('ready');
+
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      'forged',
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/assessed again now, the release is blocked/);
+    expect(run.err).toMatch(/not evidence of readiness/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    expect(s.network).toEqual([]);
+  });
+
+  it('does not take a package swapped together with its record for the one the release produces', async () => {
+    const { app, cwd, out } = await prepared();
+    // The release is ready, but the package that would be submitted is not what it produces.
+    forge(cwd, out, () => Buffer.from('another package, with its own digest'));
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(
+      /does not match the release as assessed now: the package content changed/,
+    );
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('does not begin for a release that changed after it was prepared, and names what changed', async () => {
+    const { app, cwd, out } = await prepared();
+    editInput(
+      app,
+      (input) => (input.endpoint.expectedServer.version = '9.9.9'),
+    );
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/assessed again now, the release is blocked/);
+    expect(run.err).toMatch(/Deployment identity: mismatch/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('names what changed when the release is still ready but is no longer the one that was prepared', async () => {
+    const { app, cwd, out } = await prepared();
+    editInput(app, (input) => {
+      input.claude.connector.oneLiner = 'Shows whether the service is up.';
+    });
+    const s = session(cwd, app);
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+
+    expect(run.code, run.out + run.err).toBe(1);
+    expect(run.err).toMatch(/does not match the release as assessed now/);
+    expect(run.err).toMatch(/the release input changed/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+  });
+
+  it('assesses the release again, without calling a tool, and needs the release input to do so', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd);
+    const missing = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toMatch(/--release is required/);
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+
+    const ok = session(cwd, app);
+    expect(ok.network).toEqual([]);
+    const run = await ok.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(run.code, run.err).toBe(0);
+    expect(ok.assessed).toContain('initialize');
+    expect(ok.assessed).toContain('tools/list');
+    expect(ok.assessed).not.toContain('tools/call');
+    expect(ok.network).toEqual([]);
+  });
+
+  describe('when the preparation opted in to a fixture invocation', () => {
+    const beginArgs = (out: string, ...extra: string[]): string[] => [
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+      ...extra,
+    ];
+
+    /** A release prepared with a fixture call that succeeded, in a workspace of its own. */
+    async function preparedWithFixture(): Promise<{
+      readonly app: string;
+      readonly cwd: string;
+      readonly out: string;
+      readonly calls: string;
+    }> {
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile();
+      const run = await prepare(app, 'chatgpt', 'publication', { cwd }, [
+        '--invoke-fixture',
+        calls,
+      ]);
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(recordOf(path.join(cwd, 'publication')).fixture.invoked).toBe(
+        true,
+      );
+      return { app, cwd, out: 'publication', calls };
+    }
+
+    /** Replaces the result of every `tools/call` the endpoint answers, as an endpoint whose answer changed would. */
+    const answering =
+      (text: string) =>
+      async (method: string, response: Response): Promise<Response> => {
+        if (method !== 'tools/call') return response;
+        const body = (await response.json()) as Record<string, any>;
+        body.result = { content: [{ type: 'text', text }] };
+        return new Response(JSON.stringify(body), {
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+
+    it('assesses with the same fixture and pins the invocation it saw', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      const methods: string[] = [];
+      const seen = wire();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls), {
+        wire: seen,
+      });
+      methods.push(...seen.methods);
+
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(methods.filter((method) => method === 'tools/call')).toHaveLength(
+        1,
+      );
+      const pinned = events(cwd)[0]!.release;
+      expect(pinned.fixture).toEqual(recordOf(path.join(cwd, out)).fixture);
+      expect(pinned.fixture.invoked).toBe(true);
+      expect(pinned.fixture.invocations).toEqual([
+        {
+          tool: 'get_status',
+          outcome: 'ok',
+          resultSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+      ]);
+    });
+
+    it('does not begin without the fixture the preparation was made with, and calls no tool', async () => {
+      const { app, cwd, out } = await preparedWithFixture();
+      const seen = wire();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out), { wire: seen });
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(seen.methods).not.toContain('tools/call');
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the fixture now returns another result', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls), {
+        wire: wire(answering('another answer')),
+      });
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the fixture now fails', async () => {
+      const { app, cwd, out } = await preparedWithFixture();
+      const refused = await fixtureCallsFile({
+        calls: [{ tool: 'delete_everything', arguments: {} }],
+      });
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', refused));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/not ready/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin with a fixture over a preparation made without one', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      const calls = await fixtureCallsFile();
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out, '--invoke-fixture', calls));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('still begins without a fixture over a preparation made without one, and pins that no fixture ran', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out));
+
+      expect(run.code, run.out + run.err).toBe(0);
+      expect(s.assessed).not.toContain('tools/call');
+      expect(events(cwd)[0]!.release.fixture).toEqual({
+        declared: 0,
+        callsSha256: null,
+        invoked: false,
+        invocations: [],
+      });
+    });
+
+    /** Removes the fixture section from a prepared record by hand; the package is untouched, so its digest still matches. */
+    function withoutFixtureSection(cwd: string, out: string): void {
+      const file = path.join(cwd, out, RECORD_FILE);
+      const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+        string,
+        any
+      >;
+      expect(record.fixture).toBeDefined();
+      delete record.fixture;
+      fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+    }
+
+    it('does not begin from a prepared record whose fixture section was removed, with the fixture or without it', async () => {
+      const { app, cwd, out, calls } = await preparedWithFixture();
+      withoutFixtureSection(cwd, out);
+
+      for (const extra of [[], ['--invoke-fixture', calls]]) {
+        const s = session(cwd, app);
+        const run = await s.run(beginArgs(out, ...extra));
+        expect(run.code, run.out + run.err).toBe(1);
+        expect(run.err).toMatch(/does not match the release as assessed now/);
+        expect(run.err).toMatch(
+          /the fixture evidence is missing from the earlier record/,
+        );
+        expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+      }
+    });
+
+    it('does not begin from a fixtureless prepared record whose fixture section was removed', async () => {
+      const { app, cwd, out } = await prepared('chatgpt');
+      withoutFixtureSection(cwd, out);
+      const s = session(cwd, app);
+      const run = await s.run(beginArgs(out));
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(
+        /the fixture evidence is missing from the earlier record/,
+      );
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('does not begin when the declared call has other arguments, though it returns the same result', async () => {
+      // An endpoint that ignores its arguments answers every call alike.
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile();
+      const made = await prepare(
+        app,
+        'chatgpt',
+        'publication',
+        { cwd, wire: wire(answering('same answer')) },
+        ['--invoke-fixture', calls],
+      );
+      expect(made.code, made.out + made.err).toBe(0);
+      const other = await fixtureCallsFile({
+        calls: [{ tool: 'get_status', arguments: { verbose: true } }],
+      });
+      const s = session(cwd, app);
+      const run = await s.run(
+        beginArgs('publication', '--invoke-fixture', other),
+        { wire: wire(answering('same answer')) },
+      );
+
+      expect(run.code, run.out + run.err).toBe(1);
+      expect(run.err).toMatch(/does not match the release as assessed now/);
+      expect(run.err).toMatch(/the fixture invocation changed/);
+      expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+    });
+
+    it('pins a digest of the declared calls and keeps the arguments out of every record', async () => {
+      const marker = 'argument-marker-7f3a';
+      const app = copyFixture();
+      const cwd = workspace();
+      const calls = await fixtureCallsFile({
+        calls: [{ tool: 'get_status', arguments: { note: marker } }],
+      });
+      const made = await prepare(
+        app,
+        'chatgpt',
+        'publication',
+        { cwd, wire: wire(answering('same answer')) },
+        ['--invoke-fixture', calls],
+      );
+      expect(made.code, made.out + made.err).toBe(0);
+      const s = session(cwd, app);
+      const run = await s.run(
+        beginArgs('publication', '--invoke-fixture', calls),
+        { wire: wire(answering('same answer')) },
+      );
+      expect(run.code, run.out + run.err).toBe(0);
+
+      const pinned = events(cwd)[0]!.release.fixture;
+      expect(pinned.callsSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(pinned.callsSha256).toBe(
+        recordOf(path.join(cwd, 'publication')).fixture.callsSha256,
+      );
+      const everything = [
+        fs.readFileSync(path.join(cwd, 'publication', RECORD_FILE), 'utf8'),
+        ...fs
+          .readdirSync(path.join(cwd, HANDOFF))
+          .map((name) =>
+            fs.readFileSync(path.join(cwd, HANDOFF, name), 'utf8'),
+          ),
+        run.out,
+        run.err,
+      ].join('\n');
+      expect(everything).not.toContain(marker);
+    });
+
+    describe('comparing a pinned release with a newer preparation', () => {
+      const fixtureSection = {
+        declared: 1,
+        callsSha256: 'a'.repeat(64),
+        invoked: true,
+        invocations: [],
+      };
+
+      it('requires the fixture section of a prepared record, and only a pin from an earlier handoff may lack it', async () => {
+        const { cwd, out } = await preparedWithFixture();
+        const { fixture: _fixture, ...bare } = recordOf(path.join(cwd, out));
+        const current = recordOf(path.join(cwd, out));
+
+        expect(staleness(bare, current)).toEqual([
+          'the fixture evidence is missing from the earlier record',
+        ]);
+        expect(staleness(bare, current, { historicalPin: true })).toEqual([]);
+        expect(staleness(current, current)).toEqual([]);
+        expect(
+          staleness({ ...current, fixture: fixtureSection }, current, {
+            historicalPin: true,
+          }),
+        ).toEqual(['the fixture invocation changed']);
+      });
+    });
+  });
+
+  it('keeps the assessment options to begin', async () => {
+    const { app, cwd } = await begun().then((one) => ({
+      ...one,
+      cwd: one.s.cwd,
+    }));
+    const s = session(cwd);
+    const run = await s.run([
+      'status',
+      '--handoff',
+      HANDOFF,
+      '--release',
+      release(app),
+    ]);
+    expect(run.code).toBe(2);
+    expect(run.err).toMatch(/--release belongs to saga publish handoff begin/);
+  });
+
   it('does not begin over a record that exists', async () => {
     const { s, out } = await begun();
     const again = await s.run([
@@ -329,10 +813,10 @@ describe('beginning a handoff', () => {
   });
 
   it('leaves no new directory when interrupted before the record exists', async () => {
-    const { cwd, out } = await prepared();
+    const { app, cwd, out } = await prepared();
     const controller = new AbortController();
     controller.abort();
-    const run = await session(cwd).run(
+    const run = await session(cwd, app).run(
       [
         'begin',
         '--handoff',
@@ -614,8 +1098,8 @@ describe('an uncertain submission', () => {
   });
 
   it('writes the first event only into the directory it made: a path replaced meanwhile is refused and left alone', async () => {
-    const { cwd, out } = await prepared();
-    const s = session(cwd);
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
     const run = await s.run(
       [
         'begin',
@@ -1422,5 +1906,227 @@ describe('the command line', () => {
     expect((await s.run(['status', '--handoff', 'missing'])).err).toMatch(
       /does not exist/,
     );
+  });
+});
+
+describe('a handoff directory larger than any record this command writes', () => {
+  const eventPath = (cwd: string, seq: number): string =>
+    path.join(cwd, HANDOFF, `${String(seq).padStart(6, '0')}.json`);
+  /** Replaces the first event with itself plus `extra` inside the pinned release; the record has one event, so no chain link depends on it. */
+  async function singleEvent(
+    extra: unknown,
+  ): Promise<{ readonly s: Session; readonly first: string }> {
+    const { s } = await begun();
+    const first = eventPath(s.cwd, 1);
+    const event = JSON.parse(fs.readFileSync(first, 'utf8'));
+    event.release.padding = extra;
+    fs.writeFileSync(first, `${JSON.stringify(event, null, 2)}\n`);
+    return { s, first };
+  }
+
+  it('reads a record with a large pinned release and nested evidence, as before', async () => {
+    const nested = Array.from({ length: 40 }).reduce<unknown>(
+      (inner) => ({ inner }),
+      'x'.repeat(1024 * 1024),
+    );
+    const { s } = await singleEvent(nested);
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('refuses a record of more events than this command writes, before reading any of them', async () => {
+    const { s } = await begun();
+    for (let seq = 2; seq <= 1001; seq += 1)
+      fs.writeFileSync(eventPath(s.cwd, seq), '{}');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses a record that cannot be listed in bounded work: very many ignored temporary files', async () => {
+    const { s } = await begun();
+    for (let n = 0; n < 2001; n += 1)
+      fs.writeFileSync(path.join(s.cwd, HANDOFF, `.tmp-${n}`), '');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses an event over its size without allocating it', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024 + 1);
+    const begin = await statusOf(s);
+    expect(begin.code).toBe(1);
+    expect(begin.err).toMatch(/larger than 16777216 bytes/);
+
+    const { s: later } = await submitted();
+    fs.truncateSync(eventPath(later.cwd, 2), 16 * 1024 + 1);
+    const run = await statusOf(later);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/000002\.json is not an event.*larger than 16384/);
+  });
+
+  it('refuses a record whose events add up to more than a record this command writes', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024);
+    for (let seq = 2; seq <= 600; seq += 1) {
+      fs.writeFileSync(eventPath(s.cwd, seq), '');
+      fs.truncateSync(eventPath(s.cwd, seq), 16 * 1024);
+    }
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 25165824 bytes of events/);
+  });
+
+  it('refuses an event nested deeper than any event is, whatever its size', async () => {
+    const depth = 200_000;
+    const { s, first } = await singleEvent('');
+    const event = fs.readFileSync(first, 'utf8');
+    fs.writeFileSync(
+      first,
+      event.replace(
+        '"padding": ""',
+        `"padding": ${'['.repeat(depth)}${']'.repeat(depth)}`,
+      ),
+    );
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('does not count brackets inside strings as nesting', async () => {
+    const { s } = await singleEvent('[{'.repeat(500) + '\\"[');
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('reads a record of exactly the most events, and records no event after it', async () => {
+    const { s } = await begun();
+    let tip = sha256(fs.readFileSync(eventPath(s.cwd, 1)));
+    for (let seq = 2; seq <= 1000; seq += 1) {
+      const bytes = `${JSON.stringify(
+        {
+          format: 'saga-publication-handoff/1',
+          seq,
+          previousSha256: tip,
+          recordedAt: '2026-10-21T09:05:00.000Z',
+          type: 'submission-attempt',
+        },
+        null,
+        2,
+      )}\n`;
+      fs.writeFileSync(eventPath(s.cwd, seq), bytes);
+      tip = sha256(Buffer.from(bytes));
+    }
+    expect((await statusOf(s)).err).not.toMatch(/more than|altered/);
+    const run = await s.run([
+      'void-attempt',
+      '--handoff',
+      HANDOFF,
+      '--inspected',
+      'the portal',
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/already holds 1000 events/);
+    expect(fs.existsSync(eventPath(s.cwd, 1001))).toBe(false);
+  });
+});
+
+describe('a handoff event this command would write that it could not read back', () => {
+  const bytes = (size: number): Uint8Array => new Uint8Array(size).fill(0x20);
+  const nested = (depth: number): Uint8Array =>
+    Buffer.from(`${'['.repeat(depth)}${']'.repeat(depth)}`);
+
+  it('admits ordinary events, and events exactly at each limit', () => {
+    expect(handoffEventRefusal(1, bytes(2000), 0)).toBeUndefined();
+    expect(handoffEventRefusal(2, bytes(400), 2000)).toBeUndefined();
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES), 0),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES), 2000),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(
+        MAX_HANDOFF_EVENTS,
+        bytes(400),
+        MAX_HANDOFF_RECORD_BYTES - 400,
+      ),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH), 2000),
+    ).toBeUndefined();
+  });
+
+  it('refuses a first event, a later event, a count, a total and a depth over the limits the reader refuses by', () => {
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES + 1), 0),
+    ).toMatch(/larger than 16777216 bytes/);
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES + 1), 2000),
+    ).toMatch(/larger than 16384 bytes/);
+    expect(
+      handoffEventRefusal(MAX_HANDOFF_EVENTS + 1, bytes(400), 2000),
+    ).toMatch(/more than 1000 events/);
+    expect(
+      handoffEventRefusal(2, bytes(400), MAX_HANDOFF_RECORD_BYTES - 399),
+    ).toMatch(/together would be larger than 25165824 bytes/);
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH + 1), 2000),
+    ).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('refuses a begin whose authority references together are over the first event limit, and records nothing', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(
+      /larger than 16777216 bytes.*Nothing was recorded/s,
+    );
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+
+    const ordinary = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(ordinary.code, ordinary.out + ordinary.err).toBe(0);
+    expect((await statusOf(s)).code).toBe(0);
+  });
+
+  it('leaves an existing empty directory empty when its begin is refused', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    fs.mkdirSync(path.join(cwd, HANDOFF));
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(fs.readdirSync(path.join(cwd, HANDOFF))).toEqual([]);
   });
 });

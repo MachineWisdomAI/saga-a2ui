@@ -6,7 +6,9 @@
 export {
   attachRequestLifetime,
   createServerBudgets,
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   operationViewFromHtml,
+  registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
   type OperationView,

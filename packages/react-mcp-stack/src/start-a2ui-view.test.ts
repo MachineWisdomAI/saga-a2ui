@@ -26,7 +26,7 @@ import {
   watchClose,
   type TestHost,
 } from './stack.test-support.js';
-import { startA2uiViewOn } from './start-a2ui-view.js';
+import { startA2uiViewOn, type ViewHost } from './start-a2ui-view.js';
 import { StartFailure } from './start-failure.js';
 
 // An own-catalog application started by the stack's main entry, over a real bridge joined to a
@@ -166,6 +166,59 @@ describe('startA2uiView', () => {
     await vi.waitFor(() => expect(errors).toEqual([['input broke', 'input']]));
     await host.bridge.sendToolResult(toolResult({ label: 'Still here' }));
     await vi.waitFor(() => expect(label()?.textContent).toBe('Still here'));
+  });
+
+  it('gives the actions factory a conversation that adds a message through the host, and that ends with the view', async () => {
+    host = await startTestHost({ hostCapabilities: { message: {} } });
+    const messages: unknown[] = [];
+    host.bridge.onmessage = async (params) => {
+      messages.push(params);
+      return {};
+    };
+    let conversation: ViewHost['conversation'] | undefined;
+    const view = await start({
+      actions: (viewHost) => {
+        conversation = viewHost.conversation;
+        return undefined;
+      },
+    });
+    await view.ready;
+    await expect(conversation?.appendMessage('Your move')).resolves.toEqual({
+      outcome: 'appended',
+    });
+    expect(messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Your move' }] },
+    ]);
+    await view.dispose();
+    await expect(conversation?.appendMessage('Late')).resolves.toEqual({
+      outcome: 'unavailable',
+      stage: 'message',
+    });
+    expect(messages).toHaveLength(1);
+  });
+
+  it('gives the actions factory the host link seam: one request to the host, and none once the view has ended', async () => {
+    host = await startTestHost({ hostCapabilities: { openLinks: {} } });
+    const opened: string[] = [];
+    host.bridge.onopenlink = async ({ url }) => {
+      opened.push(url);
+      return {};
+    };
+    let links: ViewHost['links'] | undefined;
+    const view = await start({
+      actions: (viewHost) => {
+        links = viewHost.links;
+        return undefined;
+      },
+    });
+    await view.ready;
+    await expect(links?.open('https://saga-ai.dev/')).resolves.toBe('opened');
+    expect(opened).toEqual(['https://saga-ai.dev/']);
+    await view.dispose();
+    await expect(links?.open('https://saga-ai.dev/')).resolves.toBe(
+      'unavailable',
+    );
+    expect(opened).toHaveLength(1);
   });
 
   it('refuses a second start on a running container; restarts after dispose', async () => {
