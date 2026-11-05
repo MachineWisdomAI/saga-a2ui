@@ -198,7 +198,7 @@ describe('release pages in a response', () => {
   it('does not accept a response that only mentions a version', () => {
     const [stable] = cases;
     expect(stable).toBeDefined();
-    const verdict = judge(stable!, releasePagesIn('This is 0.7.6 guidance.'));
+    const verdict = judge(stable!, releasePagesIn('This is 1.0.0 guidance.'));
     expect(verdict.passed).toBe(false);
   });
 
@@ -258,7 +258,7 @@ describe('the MCP probe', () => {
     expect(report.cases.map((entry) => entry.passed)).toEqual([false, true]);
     expect(report.cases[0]?.missing).toEqual(stable!.required);
     expect(report.cases[0]?.foreign).toEqual(stable!.forbidden);
-    expect(report.cases[0]?.reason).toContain('does not match release 0.7.6');
+    expect(report.cases[0]?.reason).toContain('does not match release 1.0.0');
     expect(report.passed).toBe(false);
   });
 
@@ -328,7 +328,7 @@ describe('the MCP probe', () => {
     expect(report.cases[0]?.versionFilter?.foreign).toEqual([
       cases[1]!.expectedPage,
     ]);
-    expect(report.cases[0]?.reason).toContain('filtered to 0.7.6');
+    expect(report.cases[0]?.reason).toContain('filtered to 1.0.0');
     expect(report.passed).toBe(false);
   });
 

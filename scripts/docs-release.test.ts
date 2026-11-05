@@ -712,8 +712,9 @@ describe('the committed releases', () => {
         .version,
     );
     const byId = new Map(inventory.components.map((c) => [c.id, c.routes]));
-    // SagaAttribution is not an export of the stable packages, so it has no stable route.
-    expect(Object.keys(byId.get('saga-attribution')!)).toEqual(['0.11.0-rc.1']);
+    expect(Object.keys(byId.get('saga-attribution')!).sort()).toEqual(
+      ['0.11.0-rc.1', '1.0.0'].sort(),
+    );
     expect(Object.keys(byId.get('faithful-card')!).sort()).toEqual(
       inventory.releases.map((release) => release.version).sort(),
     );
@@ -737,8 +738,12 @@ describe('the committed releases', () => {
     });
     for (const entry of config.navigation.versions) {
       const spec = readSpec(root, entry.version);
-      for (const version of Object.values(spec.packages))
-        expect(version).toBe(entry.version);
+      // Packages share the release's major.minor; their patch numbers may differ.
+      const line = entry.version.replace(/^(\d+\.\d+)\..*$/, '$1');
+      for (const version of Object.values(spec.packages)) {
+        expect(version.startsWith(`${line}.`)).toBe(true);
+        expect(/-/.test(version)).toBe(entry.tag !== 'Stable');
+      }
     }
   });
 });

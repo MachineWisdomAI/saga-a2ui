@@ -68,7 +68,7 @@ async function bodyText(response: Response): Promise<string> {
 
 export interface ReleasePage {
   readonly version: string;
-  /** The page path as listed in docs.json, for example `docs/releases/0.7.6/installation`. */
+  /** The page path as listed in docs.json, for example `docs/releases/1.0.0/installation`. */
   readonly page: string;
 }
 
@@ -130,19 +130,19 @@ export interface SearchCase {
 export const FACTS: Readonly<
   Record<string, Pick<SearchCase, 'required' | 'forbidden'>>
 > = {
-  '0.7.6': {
+  '1.0.0': {
     required: [
-      '0.7.6 (stable)',
-      'does not export /server/http or /server/node',
+      '1.0.1 (stable)',
+      'This release exports /server, /server/http, and /server/node',
     ],
-    forbidden: ['exports /server, /server/http, and /server/node'],
+    forbidden: ['(prerelease)', 'This prerelease exports'],
   },
   '0.11.0-rc.1': {
     required: [
       '0.11.0-rc.1 (prerelease)',
-      'exports /server, /server/http, and /server/node',
+      'This prerelease exports /server, /server/http, and /server/node',
     ],
-    forbidden: ['does not export'],
+    forbidden: ['(stable)', 'This release exports'],
   },
 };
 
@@ -152,8 +152,8 @@ export function plain(markdown: string): string {
 }
 
 /**
- * One question per release about the same topic. The pages give different answers (the stable
- * release lacks the HTTP and Node server entry points), so a wrong release cannot answer correctly.
+ * One question per release about the same topic. Each page names its own version and channel, so a
+ * wrong release cannot answer correctly.
  */
 export function releaseCases(
   site: DocsSite,
