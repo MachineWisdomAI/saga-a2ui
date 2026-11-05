@@ -22,7 +22,7 @@ These are the files after [the first lesson](../1-first-card.md). Vite generates
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
-    "@saga-a2ui/react-mcp-stack": "0.11.0-rc.1",
+    "@saga-a2ui/react-mcp-stack": "1.0.0-rc.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zod": "4.6.7"
@@ -227,7 +227,7 @@ import {
   createComponentImplementation,
   defineSurface,
   startA2uiView,
-  z,
+  z3,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
 
@@ -235,7 +235,7 @@ const catalogId = 'https://tic-tac-toe.example/catalogs/welcome/v1';
 const Message = createComponentImplementation(
   {
     name: 'Message',
-    schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+    schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
   },
   ({ props }) => <p role="status">{String(props.text ?? '')}</p>,
 );
@@ -245,7 +245,7 @@ const catalog = new Catalog<ReactCatalogComponent>(catalogId, 'v0.9', [
 const layout = defineSurface({
   surfaceId: 'welcome',
   catalogId,
-  data: z.object({ message: z.string() }),
+  data: z3.object({ message: z3.string() }),
   initial: { message: 'Connecting…' },
   root: { component: 'Message', bind: { text: 'message' }, props: {} },
   components: [],
@@ -259,8 +259,8 @@ export async function startView(): Promise<void> {
     catalog,
     layout,
     onToolResult: (result, running) => {
-      const parsed = z
-        .object({ message: z.string() })
+      const parsed = z3
+        .object({ message: z3.string() })
         .safeParse(result.structuredContent);
       running.surface.update({
         message: parsed.success
@@ -291,6 +291,7 @@ export function prepareBoardViews(html: string): OperationView {
   return operationViewFromHtml({
     html,
     filename: 'welcome.html',
+    major: 1,
     title: 'Tic-tac-toe',
   });
 }

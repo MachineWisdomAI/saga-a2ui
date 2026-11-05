@@ -6,7 +6,7 @@ You’ll create an app in your own directory, install saga from npm, and open it
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
 
-A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/6431e6a984c88eca6904b75b760a57d0e2edde16/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/9f3c0f825e1515dda947ea76c22d58d30cdac413/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
 
 ## Before you start
 
@@ -44,7 +44,7 @@ The game has no sign-in. Anyone with the tunnel address can create a game, and a
 
 Follow [Connect a React component to a server result](tic-tac-toe/1-first-card.md). You will generate a React/TypeScript project with Vite, add an operation that returns a message, and display that result in a React component. The lesson includes the installation and build commands; run them in your own app directory.
 
-The walkthrough pins `@saga-a2ui/react-mcp-stack` to `0.11.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
+The walkthrough pins `@saga-a2ui/react-mcp-stack` to `1.0.0-rc.1` and uses exact versions of its dependencies. Use those versions; the npm `next` tag can move. The stack includes the local HTTP/MCP listener, so your app only defines its operations, components and state.
 
 The lesson's consumer-root overrides keep `@a2ui/markdown-it` at the compatible version and replace vulnerable DOMPurify and Hono dependencies with patched versions. Keep them when regenerating your lockfile; see the [complete override recipe](public-install.md#install-one-stack-plus-framework-peers).
 

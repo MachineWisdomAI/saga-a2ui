@@ -14,7 +14,7 @@ This is the 1.0 identity contract. Version 1 is the first line.
 
 ## Status
 
-- Design: approved on 5 November 2026 at [`c9c44aaa01f3547f1bc3fbcd30273235d61d6f35`](https://github.com/MachineWisdomAI/saga-a2ui/blob/c9c44aaa01f3547f1bc3fbcd30273235d61d6f35/blueprints/features/semantic_view_versioning.blueprint.md) by the delivery coordinator under authority delegated by the owner for the 1.0 release. It narrows the 31 October draft (`04a8cc632a551c373953bba23f4120b7b267ff0c`) to the 1.0 identity change. Later edits to this file record status and the implementation choices noted under "Where it lands". The delivery coordinator also directed, on 5 November 2026, that 1.0.0-rc.1 accept an omitted `major` (see Public API) so that pinned consumers can move before 1.0.0 requires it.
+- Design: approved on 5 November 2026 at [`c9c44aaa01f3547f1bc3fbcd30273235d61d6f35`](https://github.com/MachineWisdomAI/saga-a2ui/blob/c9c44aaa01f3547f1bc3fbcd30273235d61d6f35/blueprints/features/semantic_view_versioning.blueprint.md) by the delivery coordinator under authority delegated by the owner for the 1.0 release. It narrows the 31 October draft (`04a8cc632a551c373953bba23f4120b7b267ff0c`) to the 1.0 identity change. Later edits to this file record status and the implementation choices noted under "Where it lands".
 - Implementation: implemented in [PR #357](https://github.com/MachineWisdomAI/saga-a2ui/pull/357); the landed commit is recorded after merge.
 - Predecessor: [retained view resources](retained_view_resources.blueprint.md), rejected at its proposed revision `a0b581285ffa917f32ef5998159d2921adcdc077`. No part of it was implemented or approved.
 
@@ -74,7 +74,7 @@ const view = operationViewFromHtml({
 
 The same function is exported from `@saga-a2ui/mcp/server` and from both stacks' `/server` entries (`@saga-a2ui/lit-mcp-stack/server`, `@saga-a2ui/react-mcp-stack/server`), so an application keeps importing from its one stack.
 
-- `major` is required from 1.0.0, so that no application keeps the per-deploy address by default. 1.0.0-rc.1 still accepts its omission, through a deprecated overload that keeps the earlier digest address, so consumers pinned to a published SDK can move to `major` before 1.0.0 removes it.
+- `major` is required, so that no application keeps the per-deploy address by default. Omitting it is a type error and, from untyped JavaScript, a `TypeError` at construction.
 - `major` must be a safe integer of at least 1. Zero, a negative number, a fraction, `NaN` and a string throw `TypeError` naming the option.
 - A new export, `viewUriForMajor(filename, major)`, returns the address for an application that builds its `OperationView` by hand. It applies the same validation and needs neither `node:crypto` nor the filesystem.
 - `viewUriForHtml` stays exported and unchanged as a content digest. `operationViewFromHtml` no longer calls it.
@@ -102,7 +102,7 @@ Through the public `@saga-a2ui/mcp/server` entry, with the MCP client reading wh
 1. **Compatible rebuild keeps the address.** Two documents that differ only in their build stamp, both at major 1, give the same `view.uri`. After registering each in turn, `tools/list` names that address in `_meta.ui.resourceUri`, and a result carries it.
 2. **A major bump changes the address.** The same document at major 1 and major 2 gives `ui://views/answer.v1.html` and `ui://views/answer.v2.html`. `viewUriForMajor` agrees with `operationViewFromHtml`, including for a filename with a directory.
 3. **The stamp is in the document.** `resources/read` of the registered address returns the exact stamped HTML.
-4. **Invalid input is refused.** A zero, negative, fractional or non-number `major` throws `TypeError`; the existing invalid-filename cases still throw. In 1.0.0-rc.1, an omitted `major` gives the unchanged digest address.
+4. **Invalid input is refused.** A missing, zero, negative, fractional or non-number `major` throws `TypeError`; the existing invalid-filename cases still throw.
 5. **Duplicate address.** A second view at the same filename and major on one server fails at registration.
 6. **Deployment check.** Publish and candidate rehearsal accept a server whose major-line address serves the build's bytes, and refuse one that serves other bytes there.
 7. **Both stacks.** Each stack's `/server` export test lists `viewUriForMajor`, and the existing packed-consumer qualification passes with consumers supplying `major: 1`.

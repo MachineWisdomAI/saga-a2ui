@@ -432,7 +432,7 @@ export function prepareBoardViews(html: unknown): BoardViews {
   if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
     throw new ViewArtifactMissing();
   const board = (filename: string, title: string): OperationView =>
-    operationViewFromHtml({ html, filename, title });
+    operationViewFromHtml({ html, filename, major: 1, title });
   return Object.freeze({
     newGame: board('new-game.html', 'Tic-tac-toe board (new game)'),
     showGame: board('show-game.html', 'Tic-tac-toe board (show game)'),
@@ -817,7 +817,7 @@ import {
   ListApi,
   RowApi,
   SagaAttribution,
-  z,
+  z3,
   type HostLinks,
   type ReactCatalogComponent,
 } from '@saga-a2ui/react-mcp-stack';
@@ -846,10 +846,10 @@ function childrenOf(
 
 const LineApi = {
   name: 'Line',
-  schema: z
+  schema: z3
     .object({
       text: CommonSchemas.DynamicString,
-      kind: z.enum(['body', 'status']),
+      kind: z3.enum(['body', 'status']),
     })
     .strict(),
 };
@@ -873,7 +873,7 @@ const Line: ReactCatalogComponent = createComponentImplementation(
 const GameDetails: ReactCatalogComponent = createComponentImplementation(
   {
     name: 'GameDetails',
-    schema: z.object({ gameId: CommonSchemas.DynamicString }).strict(),
+    schema: z3.object({ gameId: CommonSchemas.DynamicString }).strict(),
   },
   ({ props }) => (
     <details>
@@ -909,7 +909,7 @@ const Board: ReactCatalogComponent = createComponentImplementation(
 
 const SquareFaceApi = {
   name: 'SquareFace',
-  schema: z
+  schema: z3
     .object({
       mark: CommonSchemas.DynamicString,
       label: CommonSchemas.DynamicString,
@@ -934,7 +934,7 @@ const SquareFace: ReactCatalogComponent = createComponentImplementation(
 
 const ShownApi = {
   name: 'Shown',
-  schema: z
+  schema: z3
     .object({
       when: CommonSchemas.DynamicString,
       child: CommonSchemas.ComponentId,
@@ -960,10 +960,18 @@ function createCredit(
   links: () => HostLinks | undefined,
 ): ReactCatalogComponent {
   return createComponentImplementation(
-    { name: 'Credit', schema: z.object({}).strict() },
+    { name: 'Credit', schema: z3.object({}).strict() },
     () => (
       <footer className="credit">
-        <SagaAttribution links={links()} />
+        <SagaAttribution links={links()} name="saga-a2ui" />
+        {', '}
+        <SagaAttribution
+          links={links()}
+          prefix="learn"
+          name="how to build your Saga"
+          href="https://docs.saga-a2ui.dev/docs/releases/0.11.0-rc.1/guides/build-tic-tac-toe-with-react"
+        />
+        {'.'}
       </footer>
     ),
   );
@@ -988,7 +996,7 @@ export const boardEntries: readonly ReactCatalogComponent[] = [
 const required = {
   name: 'required',
   returnType: 'boolean',
-  schema: z.object({ value: z.any() }).strict(),
+  schema: z3.object({ value: z3.any() }).strict(),
   execute: (args: Record<string, unknown>): boolean =>
     args.value !== undefined && args.value !== null && args.value !== '',
 };
@@ -1015,7 +1023,7 @@ export function createBoardCatalog(
 <summary>Complete src/surface.ts</summary>
 
 ```ts file=src/surface.ts
-import { defineSurface, z } from '@saga-a2ui/react-mcp-stack';
+import { defineSurface, z3 } from '@saga-a2ui/react-mcp-stack';
 import { VIEW_TEXT } from './text.js';
 
 // The layout of the board: its data and its components. The layout gives the markup its IDs and its
@@ -1030,28 +1038,28 @@ export const SQUARE_ID = 'square';
 export const NEW_GAME_ID = 'new-game';
 export const CHECK_ID = 'check-move';
 
-const SquareDataSchema = z.object({
+const SquareDataSchema = z3.object({
   /** The square's number, 0 to 8, which the square action sends. */
-  index: z.number(),
+  index: z3.number(),
   /** What a screen reader says: "Row 1, column 2, empty". */
-  label: z.string(),
+  label: z3.string(),
   /** "X", "O" or empty. */
-  mark: z.string(),
+  mark: z3.string(),
   /** Non-empty when the square can be played now; an empty string disables the control. */
-  playable: z.string(),
+  playable: z3.string(),
   /** Non-empty for the three squares of a winning line. */
-  winning: z.string(),
+  winning: z3.string(),
 });
 
-const BoardDataSchema = z.object({
-  gameId: z.string(),
+const BoardDataSchema = z3.object({
+  gameId: z3.string(),
   /** The one status line: whose turn it is, how the game ended, or what to do next. */
-  status: z.string(),
-  squares: z.array(SquareDataSchema),
+  status: z3.string(),
+  squares: z3.array(SquareDataSchema),
   /** Non-empty when "Check for the assistant's move" should be offered. */
-  canCheck: z.string(),
+  canCheck: z3.string(),
   /** The moves so far, in words, one line each. */
-  history: z.array(z.object({ text: z.string() })),
+  history: z3.array(z3.object({ text: z3.string() })),
 });
 
 export const boardSurface = defineSurface({
@@ -1149,7 +1157,7 @@ export const boardSurface = defineSurface({
 });
 
 /** The data the surface shows: replaced whole by each update. */
-export type BoardData = z.infer<typeof BoardDataSchema>;
+export type BoardData = z3.infer<typeof BoardDataSchema>;
 ```
 
 </details>
@@ -1232,6 +1240,10 @@ body {
 }
 .credit {
   margin-top: 1rem;
+}
+
+.credit .saga-attribution {
+  display: inline;
 }
 ```
 
