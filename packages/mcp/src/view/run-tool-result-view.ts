@@ -4,6 +4,12 @@ import type {
   McpUiToolResultNotification,
 } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/client';
+import {
+  admitToolResult,
+  ToolResultRefused,
+  toolResultLimits,
+  type ToolResultLimits,
+} from './result-admission.js';
 
 // Browser-side lifetime of an MCP Apps view. Everything imported above is a type, so this module
 // adds no server code and no renderer to a view bundle.
@@ -51,9 +57,26 @@ export interface ToolResultViewDependencies {
   /**
    * Called for each delivered result, and only once the view is ready: a result that arrives
    * earlier is held, a later one replaces it, and the latest is delivered once, after the host
-   * context. Never called after the view has ended.
+   * context. Never called after the view has ended. A result over the admission budget
+   * (`resultLimits`) is never held and never delivered here: see `onToolResultRefused`.
    */
   readonly onToolResult: (result: ToolResult) => void;
+  /**
+   * Optional. The finite limits a delivered result and a delivered tool input must stay within
+   * to be held or handed on: bytes, values, depth, array items and content blocks. Defaults to
+   * {@link DEFAULT_TOOL_RESULT_LIMITS}; a limit that is not a positive whole number throws a
+   * `RangeError` before anything connects. The count happens before the view keeps or walks the
+   * value, so what is over the budget costs the view no retention and no copy.
+   */
+  readonly resultLimits?: Partial<ToolResultLimits>;
+  /**
+   * Optional. Called in place of `onToolResult` for a result that is over the budget, at the
+   * point that result would have been delivered: the latest result decides, so a refusal that a
+   * later admitted result replaced is not told. The refusal names the limit and carries nothing
+   * of the result. The application shows that its answer could not be displayed. Without it the
+   * refusal is reported to `onError` (phase `result`).
+   */
+  readonly onToolResultRefused?: (refusal: ToolResultRefused) => void;
   /**
    * Optional. The notification that a tool call is starting, with its own params. It carries the
    * business arguments of that call, the only place they appear; it is not that call's response
@@ -110,7 +133,9 @@ export interface ToolResultView {
  * Starting:
  * - Every handler is installed before `connect`, so a result the host sends right after
  *   initialization is handled, once.
- * - Input and results that arrive before the view is ready are held (the latest of each).
+ * - Input and results that arrive before the view is ready are held (the latest of each), but
+ *   only when they are within the admission budget: a value is counted before it is held, and one
+ *   over the budget is refused (see `resultLimits`, `onToolResultRefused`).
  * - When the handshake and `readyWhen` have both succeeded, the caller receives the host context,
  *   then the held input, then the held result, and `ready` resolves. A callback that throws
  *   during this fails startup as `application`.
@@ -130,11 +155,13 @@ export function runToolResultView(
 ): ToolResultView {
   const { app } = deps;
   const lifetime = new AbortController();
+  const limits = toolResultLimits(deps.resultLimits);
   const report = deps.onError ?? ((error) => console.error(error));
 
   let phase: 'starting' | 'ready' | 'ended' = 'starting';
   let heldInput: ToolInput | undefined;
   let heldResult: ToolResult | undefined;
+  let heldRefusal: ToolResultRefused | undefined;
   let ending: Promise<void> | undefined;
 
   const readiness = deferred();
@@ -156,15 +183,42 @@ export function runToolResultView(
     }
   };
 
+  /** The refusal of `value`, or undefined when it is within the budget. Counted, never copied. */
+  const refusalOf = (value: unknown): ToolResultRefused | undefined => {
+    const admission = admitToolResult(value, limits);
+    return admission.ok
+      ? undefined
+      : new ToolResultRefused(admission.exceeded, limits);
+  };
+  /** Tells the application its latest result was refused, else reports it. */
+  const refuse = (refusal: ToolResultRefused): void => {
+    if (deps.onToolResultRefused) deps.onToolResultRefused(refusal);
+    else reportError(refusal, 'result');
+  };
+
+  // Admission comes first in both handlers: a value over the budget is not held while the view
+  // starts and is not handed to the application afterwards.
   const onToolInput = (input: ToolInput): void => {
+    if (phase === 'ended') return;
+    const refusal = refusalOf(input);
+    if (refusal !== undefined) {
+      // The earlier held input is not this call's; an input is never delivered out of order.
+      if (phase === 'starting') heldInput = undefined;
+      reportError(refusal, 'input');
+      return;
+    }
     if (phase === 'starting') heldInput = input;
-    else if (phase === 'ready')
-      guarded('input', () => deps.onToolInput?.(input));
+    else guarded('input', () => deps.onToolInput?.(input));
   };
   const onToolResult = (result: ToolResult): void => {
-    if (phase === 'starting') heldResult = result;
-    else if (phase === 'ready')
-      guarded('result', () => deps.onToolResult(result));
+    if (phase === 'ended') return;
+    const refusal = refusalOf(result);
+    if (phase === 'starting') {
+      // The latest result decides: it replaces whatever was held, a refusal included.
+      heldResult = refusal === undefined ? result : undefined;
+      heldRefusal = refusal;
+    } else if (refusal !== undefined) guarded('result', () => refuse(refusal));
+    else guarded('result', () => deps.onToolResult(result));
   };
   const onHostContextChanged = (): void => {
     // The App merges each partial change into its context; the caller receives the whole.
@@ -189,6 +243,7 @@ export function runToolResultView(
     lifetime.abort();
     heldInput = undefined;
     heldResult = undefined;
+    heldRefusal = undefined;
     removeHandlers();
 
     let teardownFailed: { readonly error: unknown } | undefined;
@@ -267,7 +322,8 @@ export function runToolResultView(
     try {
       applyHostContext();
       if (heldInput !== undefined) deps.onToolInput?.(heldInput);
-      if (heldResult !== undefined) deps.onToolResult(heldResult);
+      if (heldRefusal !== undefined) refuse(heldRefusal);
+      else if (heldResult !== undefined) deps.onToolResult(heldResult);
     } catch (cause) {
       if (phase === 'starting')
         await end(new ViewStartFailure('application', cause));
@@ -276,6 +332,7 @@ export function runToolResultView(
     if (phase !== 'starting') return; // a callback ended the view
     heldInput = undefined;
     heldResult = undefined;
+    heldRefusal = undefined;
     phase = 'ready';
     readiness.resolve();
   }
