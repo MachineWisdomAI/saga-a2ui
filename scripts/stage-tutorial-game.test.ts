@@ -74,11 +74,12 @@ it('accepts the pinned decompressed archive and rejects changed bytes', async ()
   ).rejects.toThrow();
 });
 
-it('stops inflating at the expanded ceiling instead of hashing the whole output', async () => {
-  // About 1 GiB when inflated, about 1 MiB compressed: it fits the compressed ceiling.
-  const bomb = gzipSync(Buffer.alloc(1024 * 1024 * 1024));
-  expect(bomb.length).toBeLessThan(archiveLimits.compressedBytes);
-  await expect(verifyExampleArchive(bomb, '0'.repeat(64))).rejects.toThrow(
+it('applies the default expanded ceiling to an archive one byte over it', async () => {
+  // One byte over the default ceiling, a few tens of KiB compressed: it fits
+  // the default compressed ceiling, so only the expanded ceiling can refuse it.
+  const over = gzipSync(Buffer.alloc(archiveLimits.expandedBytes + 1));
+  expect(over.length).toBeLessThan(archiveLimits.compressedBytes);
+  await expect(verifyExampleArchive(over, '0'.repeat(64))).rejects.toThrow(
     'expanded limit',
   );
 });
