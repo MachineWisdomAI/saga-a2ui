@@ -268,7 +268,9 @@ const messageText = (request: Heard | undefined): string =>
   (request?.params.content as Array<{ text: string }>)[0]!.text;
 
 test.describe('the framework credit', () => {
-  const CREDIT = 'Built with saga a2ui';
+  const CREDIT = 'Built with saga-a2ui';
+  const TUTORIAL =
+    'https://docs.saga-a2ui.dev/docs/releases/0.11.0-rc.1/guides/build-tic-tac-toe-with-react';
 
   /** A host that opens links, recording each destination it was asked for. */
   async function hostOpeningLinks(page: Page): Promise<string[]> {
@@ -288,8 +290,10 @@ test.describe('the framework credit', () => {
     await expect(board.status()).toHaveText(TEXT.yourTurn);
     await expect(board.view.getByText(CREDIT)).toBeVisible();
     expect(opened).toEqual([]);
-    await board.button('saga a2ui').click();
+    await board.button('saga-a2ui').click();
     await expect.poll(() => opened).toEqual(['https://saga-ai.dev/']);
+    await board.button('how to build your Saga').click();
+    await expect.poll(() => opened).toEqual(['https://saga-ai.dev/', TUTORIAL]);
   });
 
   test('shows on a finished game', async ({ page }) => {
@@ -461,7 +465,7 @@ test.describe('the board', () => {
   }) => {
     const board = await open(page);
     await expect(board.status()).toHaveText(TEXT.yourTurn);
-    await expect(board.view.getByRole('button')).toHaveCount(11); // nine squares, New game and the credit's link
+    await expect(board.view.getByRole('button')).toHaveCount(12); // nine squares, New game and the credit's two links
     for (let at = 0; at < 9; at += 1)
       await expect(
         board.square(Math.floor(at / 3) + 1, (at % 3) + 1),

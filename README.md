@@ -40,6 +40,16 @@ saga a2ui's [FaithfulCard component](docs/react-consumers.md) presents Markdown 
 
 Your application chooses which links may open and which image hosts are allowed. For content that needs more restrictive handling, links can remain inactive and images can wait until the reader chooses to load them. These settings let you adapt the presentation to where your content comes from and what readers should be able to do with it.
 
+### Hardened for security
+
+saga a2ui's code was [Daybreak Blue certified](https://github.com/MachineWisdomAI/saga-a2ui/releases/tag/daybreak-blue-certified) in November 2026, after more than five days of security scanning and remediation with OpenAI Daybreak Blue at Extra High. The final scan covered all 1,033 tracked files and found no new reportable findings. 37 findings were closed through 27 independently reviewed pull requests.
+
+saga a2ui bounds every path where it meets untrusted input:
+- Conversation payloads and operation results are size- and shape-checked.
+- Protected media is capped.
+- Each served card carries a Content-Security-Policy derived from its content policy.
+- Known issues in upstream MCP and A2UI libraries are blocked before they can be reached.
+
 ## Try the podcast demo
 
 Explore a Patreon-style subscription and podcast experience using synthetic accounts and media. Browse episodes, switch accounts and try protected playback, including denied access and expired playback grants. The demo runs locally and does not connect to Patreon.

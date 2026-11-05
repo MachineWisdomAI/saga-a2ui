@@ -142,7 +142,6 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 
 ## Limits
 
-- [On 2026-10-18](https://github.com/MachineWisdomAI/saga-a2ui/issues/12#issuecomment-6250638974) the v0.1.0 playback implementation ran in ChatGPT web and Claude web, both in Edge: an explicit Play completed the entitlement check and delivered private playback metadata without a tool or protocol error.
 - Recipient binding uses the host's forwarding of `_meta` on the view's proxied `tools/call`, and media delivery uses iframe `fetch` with custom headers to the declared origin. When a host drops the request metadata, Play fails closed as `unsupported`, with no entitlement check or protected fetch; the local host fixture tests that path.
 - The view admits one media origin, written into the served player document by the application (`<meta name="saga-media-origin">`, the same origin the grant and the resource's `connect-src` name). A grant whose media URL is not exactly that origin plus the selected episode's path is refused before any proof is signed or request sent, so the check does not depend on the host enforcing the resource's CSP. This binds the destination to what the application served; it does not pin DNS, and a host that rewrites the served document as well as the grant is outside it.
 - The built player fetches the whole body and never sends `Range`. Range handling is tested at the service's HTTP edge through the real listener.

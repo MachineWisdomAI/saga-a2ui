@@ -1,6 +1,6 @@
 import { CLOSED_VIEW_CSP, type ViewCsp } from '../policy/index.js';
 import type { OperationView } from './operation.js';
-import { viewUriForHtml, viewUriForMajor } from './view-identity.js';
+import { viewUriForMajor } from './view-identity.js';
 
 /**
  * Builds the view an operation links its results to from the final HTML text. The address is
@@ -12,8 +12,7 @@ import { viewUriForHtml, viewUriForMajor } from './view-identity.js';
  * stamp written into it identifies the build that rendered without affecting the address.
  *
  * A filename that is not a relative `.html` file, or a `major` that is not a safe integer of at
- * least 1, throws `TypeError`. Omitting `major` is deprecated and keeps the earlier digest address
- * (`viewUriForHtml(html, filename)`); it is required from 1.0.0.
+ * least 1 (including a missing one), throws `TypeError`.
  *
  * `csp` is structural: any value with some of the host permission fields works, so a package that
  * describes what a document needs (for example the components package's `resourcePermissionsOf`)
@@ -24,31 +23,18 @@ import { viewUriForHtml, viewUriForMajor } from './view-identity.js';
 export interface OperationViewSettings {
   readonly html: string;
   readonly filename: string;
-  /** Major version of the view's contract. Version 1 is the first line. Required from 1.0.0. */
-  readonly major?: number;
+  /** Major version of the view's contract. Version 1 is the first line. */
+  readonly major: number;
   readonly title: string;
   readonly csp?: Partial<ViewCsp>;
 }
 
 export function operationViewFromHtml(
-  settings: OperationViewSettings & { readonly major: number },
-): OperationView;
-/**
- * @deprecated Pass `major`; required from 1.0.0. Without it the view keeps the content-digest
- * address of `viewUriForHtml(html, filename)`, which changes with every byte of the document.
- */
-export function operationViewFromHtml(
-  settings: OperationViewSettings & { readonly major?: undefined },
-): OperationView;
-export function operationViewFromHtml(
   settings: OperationViewSettings,
 ): OperationView {
   const { csp = {} } = settings;
   return {
-    uri:
-      settings.major === undefined
-        ? viewUriForHtml(settings.html, settings.filename)
-        : viewUriForMajor(settings.filename, settings.major),
+    uri: viewUriForMajor(settings.filename, settings.major),
     title: settings.title,
     html: settings.html,
     csp: {
