@@ -969,7 +969,7 @@ function createCredit(
           links={links()}
           prefix="learn"
           name="how to build your Saga"
-          href="https://docs.saga-a2ui.dev/docs/releases/0.11.0-rc.1/guides/build-tic-tac-toe-with-react"
+          href="https://docs.saga-a2ui.dev/docs/releases/1.0.0/guides/build-tic-tac-toe-with-react"
         />
         {'.'}
       </footer>
