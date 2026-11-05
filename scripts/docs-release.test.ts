@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   buildRelease,
-  correctedPages,
   checkReleases,
   gitTree,
   readSpec,
@@ -797,10 +796,8 @@ describe.each(releaseVersions(root))(
       'is reproduced exactly by the generator from the pinned revision',
       () => {
         const built = buildRelease(spec, gitTree(root, spec.revision));
-        const corrected = correctedPages(spec);
         for (const [relative, content] of built.files) {
           if (relative === 'components/catalog.json') continue;
-          if (corrected.has(relative)) continue;
           expect(
             fs.readFileSync(
               path.join(root, `docs/releases/${version}/${relative}`),
