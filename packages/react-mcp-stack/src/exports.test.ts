@@ -96,7 +96,6 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'defineSurface',
       'readingProfile',
       'startA2uiView',
-      'z',
       'z3',
     ]);
     expect(Object.keys(card).sort()).toEqual([
