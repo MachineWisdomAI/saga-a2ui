@@ -2,7 +2,7 @@
 
 `startLocalMcpServer` runs an application's MCP operations on a local Node server. It handles HTTP admission, the MCP transport, request deadlines and shutdown. Your application supplies the operations, rendered view and stored data.
 
-The helper is introduced in `0.9.0-rc.1`. Check [public installation](public-install.md) for registry availability before choosing a version. Import it from your stack's `/server/node` entry; the Lit stack offers the same helper. A lower-level integration can import it from `@saga-a2ui/mcp/server/node`.
+The helper is introduced in `0.9.0-rc.1`. It ships in the 1.0 packages; see [public installation](public-install.md) for the install recipe. Import it from your stack's `/server/node` entry; the Lit stack offers the same helper. A lower-level integration can import it from `@saga-a2ui/mcp/server/node`.
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';

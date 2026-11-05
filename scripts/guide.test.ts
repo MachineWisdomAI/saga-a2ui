@@ -680,9 +680,43 @@ describe('the evidence rules in the guides', () => {
       expect(guide).toContain(`@saga-a2ui/${name}`);
     }
     expect(guide).toContain('seven-package release set');
-    expect(guide).toContain('@saga-a2ui/react-mcp-stack@0.8.1-rc.1');
-    expect(guide).toContain('@saga-a2ui/lit-mcp-stack@0.8.0-rc.1');
     expect(guide).toContain('public-install.md');
+    // The public-install integrity table is the one record of the current release. Every exact pin
+    // the setup guide and the install recipes give must name the version that table records, and
+    // the table must describe one stable release line (shared major.minor, no prerelease).
+    const install = read('docs/public-install.md');
+    const released = new Map(
+      [
+        ...install.matchAll(
+          /^\| `@saga-a2ui\/([a-z-]+)` \| `(\d+\.\d+\.\d+)` \| `sha512-[^`]+` \|$/gm,
+        ),
+      ].map(([, name, version]) => [name, version]),
+    );
+    expect([...released.keys()].sort()).toEqual(
+      [
+        'components',
+        'core',
+        'lit',
+        'lit-mcp-stack',
+        'mcp',
+        'react',
+        'react-mcp-stack',
+      ].sort(),
+    );
+    const lines = new Set(
+      [...released.values()].map((v) => v.split('.').slice(0, 2).join('.')),
+    );
+    expect(lines.size).toBe(1);
+    expect(Number([...lines][0].split('.')[0])).toBeGreaterThanOrEqual(1);
+    for (const doc of [guide, install]) {
+      const pins = [...doc.matchAll(/@saga-a2ui\/([a-z-]+)@(\S+)/g)];
+      expect(pins.map(([, name]) => name).sort()).toEqual(
+        expect.arrayContaining(['lit-mcp-stack', 'react-mcp-stack']),
+      );
+      for (const [, name, version] of pins) {
+        expect(`${name}@${version}`).toBe(`${name}@${released.get(name)}`);
+      }
+    }
     expect(guide).toMatch(/not a public registry release/i);
     expect(guide).not.toMatch(
       /there is no release|packages are private, unpublished and unversioned/i,
