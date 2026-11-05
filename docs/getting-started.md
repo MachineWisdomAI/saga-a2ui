@@ -26,7 +26,7 @@ If you are unsure, read the React track first. Its ideas carry over: the layout,
 
 ## Install a published stack
 
-The current seven-package release set is an RC published under `next`: `@saga-a2ui/react-mcp-stack` is `0.8.1-rc.1`, and the other six packages are `0.8.0-rc.1`. Pin these exact versions rather than relying on mutable tags. The [release receipt](https://github.com/MachineWisdomAI/saga-a2ui/pull/340) records the source revision, registry integrity and anonymous installation checks. See [public installation](public-install.md) for registry checks and package selection.
+The current seven-package release set is saga a2ui 1.0, published under `latest` and `next`: `@saga-a2ui/lit-mcp-stack` and `@saga-a2ui/react-mcp-stack` are `1.0.1`, `@saga-a2ui/mcp` is `1.0.2`, and core, components, Lit and React are `1.0.0`. Pin these exact versions rather than relying on mutable tags. See [public installation](public-install.md) for registry integrity and package selection.
 
 Use Node 22.12.0 or newer and a bundler that handles TypeScript source. The packages export source rather than precompiled JavaScript. This registry path configures an existing application; the local demonstration in the [Lit track](build-notes-with-lit.md#start-from-the-demo) is the quickest way to see a complete view before integrating your own backend. In your application's root `package.json`, merge this override with your existing settings before installing:
 
@@ -39,16 +39,16 @@ A2UI 0.13.0 permits a newer Markdown package whose peer requirements target A2UI
 Choose one stack for that application. For Lit:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@0.8.0-rc.1 lit@3.3.3
+npm install --save-exact --strict-peer-deps @saga-a2ui/lit-mcp-stack@1.0.1 lit@3.3.3
 ```
 
 For React:
 
 ```sh
-npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@0.8.1-rc.1 react@19.3.1 react-dom@19.3.1
+npm install --save-exact --strict-peer-deps @saga-a2ui/react-mcp-stack@1.0.1 react@19.3.1 react-dom@19.3.1
 ```
 
-Each stack brings core, components, MCP and its renderer at the matching SDK version. Your application does not need to install those packages separately for the stack's API. Keep the resulting lockfile. Existing applications should reconcile their framework version with these peer requirements before proceeding.
+Each stack brings core, components, MCP and its renderer at the exact versions it pins. Your application does not need to install those packages separately for the stack's API. Keep the resulting lockfile. Existing applications should reconcile their framework version with these peer requirements before proceeding.
 
 Use the main entry for an application-owned catalog, `/faithful-card` for the optional card application and `/server` for server integration. Import server code only in the server build. Installing the package does not create a project, start a backend or register an application with a host.
 

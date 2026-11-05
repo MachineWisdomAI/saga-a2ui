@@ -4,7 +4,7 @@ After running the [setup guide](getting-started.md), use the notes application t
 
 Each quoted block is copied from the file named above it; `scripts/guide-actions-document.test.ts` checks that copy. `scripts/guide-actions.test.ts` exercises the traces against the notes application installed from packed candidate tarballs.
 
-All seven SDK packages, including Lit and both stacks, are [published on npm](public-install.md). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](candidate-update-and-rollback.md)). The action APIs described here also ship in `0.7.7-rc.1`. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
+All seven SDK packages, including Lit and both stacks, are [published on npm](public-install.md). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](candidate-update-and-rollback.md)). The action APIs described here ship in the published 1.0 packages. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
 
 The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
 
