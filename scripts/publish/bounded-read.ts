@@ -19,6 +19,17 @@ export const MAX_ARCHIVE_BYTES = 128 * 1024 * 1024;
 /** The largest single application file: the most any image check accepts. */
 export const MAX_APPLICATION_FILE_BYTES = 20 * 1024 * 1024;
 /**
+ * What one handoff record may hold (CLI5). Every event but the first is a few hundred bytes of
+ * short text; the first pins the release evidence, which is derived from a record of at most
+ * {@link MAX_RECORD_BYTES}. A record is refused past these before any event is parsed, and
+ * `handoff` records no event that would make its own record unreadable.
+ */
+export const MAX_HANDOFF_EVENTS = 1000;
+export const MAX_HANDOFF_BEGIN_BYTES = 16 * 1024 * 1024;
+export const MAX_HANDOFF_EVENT_BYTES = 16 * 1024;
+export const MAX_HANDOFF_RECORD_BYTES = 24 * 1024 * 1024;
+export const MAX_HANDOFF_JSON_DEPTH = 64;
+/**
  * What every local file of one publication command may add up to: the release input, the fixture
  * calls, the built views, the application files and trees, and an earlier record and archive. One
  * allowance is made at the command's entry and passed to each reader, so categories that are each
@@ -80,4 +91,50 @@ export function readBounded(
   } finally {
     fs.closeSync(handle);
   }
+}
+
+/**
+ * Whether JSON text nests objects and arrays deeper than `limit`, found by scanning the bytes
+ * (strings and escapes skipped) so the answer comes before `JSON.parse` builds anything. Text that
+ * is not valid JSON may be answered either way; the parser refuses it afterwards.
+ */
+export function exceedsJsonDepth(data: Uint8Array, limit: number): boolean {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (const byte of data) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (byte === 0x5c) escaped = true;
+      else if (byte === 0x22) inString = false;
+    } else if (byte === 0x22) inString = true;
+    else if (byte === 0x7b || byte === 0x5b) {
+      depth += 1;
+      if (depth > limit) return true;
+    } else if (byte === 0x7d || byte === 0x5d) depth -= 1;
+  }
+  return false;
+}
+
+/**
+ * Why a handoff event of `content` bytes, the `seq`-th of a record that already holds `recordBytes`,
+ * would make its record unreadable, or `undefined` when it would be read back. These are the limits
+ * the reader refuses by, applied to what is about to be written so that the command never creates
+ * a record it cannot read.
+ */
+export function handoffEventRefusal(
+  seq: number,
+  content: Uint8Array,
+  recordBytes: number,
+): string | undefined {
+  const limit = seq === 1 ? MAX_HANDOFF_BEGIN_BYTES : MAX_HANDOFF_EVENT_BYTES;
+  if (seq > MAX_HANDOFF_EVENTS)
+    return `the record would hold more than ${MAX_HANDOFF_EVENTS} events`;
+  if (content.length > limit)
+    return `the event would be larger than ${limit} bytes`;
+  if (recordBytes + content.length > MAX_HANDOFF_RECORD_BYTES)
+    return `the events together would be larger than ${MAX_HANDOFF_RECORD_BYTES} bytes`;
+  if (exceedsJsonDepth(content, MAX_HANDOFF_JSON_DEPTH))
+    return `the event would be nested deeper than ${MAX_HANDOFF_JSON_DEPTH} levels`;
+  return undefined;
 }
