@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "release": {
-    "version": "0.7.6",
+    "version": "1.0.0",
     "channel": "stable",
-    "revision": "5995b1f0d2703f69582aa5def3db65cdea0967fc",
-    "source": "https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc",
-    "route": "/docs/releases/0.7.6/components/index"
+    "revision": "a9633b399cf7318ecd934aaef192263119373692",
+    "source": "https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692",
+    "route": "/docs/releases/1.0.0/components/index"
   },
   "components": [
     {
@@ -16,10 +16,10 @@
       "entries": [
         {
           "package": "@saga-a2ui/components",
-          "version": "0.7.6",
+          "version": "1.0.0",
           "import": "@saga-a2ui/components/faithful-card",
           "role": "Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/components/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/components/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "CONTENT_POLICY_ELEMENT_ID",
@@ -95,10 +95,10 @@
         },
         {
           "package": "@saga-a2ui/react",
-          "version": "0.7.6",
+          "version": "1.0.0",
           "import": "@saga-a2ui/react/faithful-card",
           "role": "React rendering, catalog entry and trusted settings provider",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCard",
@@ -121,10 +121,10 @@
         },
         {
           "package": "@saga-a2ui/lit",
-          "version": null,
+          "version": "1.0.0",
           "import": "@saga-a2ui/lit/faithful-card",
           "role": "Lit rendering, catalog entry and content view",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "CONTENT_VIEW_REQUEST",
@@ -150,10 +150,10 @@
         },
         {
           "package": "@saga-a2ui/react-mcp-stack",
-          "version": "0.7.6",
+          "version": "1.0.1",
           "import": "@saga-a2ui/react-mcp-stack/faithful-card",
           "role": "Starts a FaithfulCard application in React over MCP Apps",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react-mcp-stack/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react-mcp-stack/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCardApp",
@@ -185,10 +185,10 @@
         },
         {
           "package": "@saga-a2ui/lit-mcp-stack",
-          "version": null,
+          "version": "1.0.1",
           "import": "@saga-a2ui/lit-mcp-stack/faithful-card",
           "role": "Starts a FaithfulCard application in Lit over MCP Apps",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit-mcp-stack/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit-mcp-stack/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCardApp",
@@ -230,17 +230,29 @@
         "language": "ts",
         "code": "const body = {\n  id: 'note-body',\n  component: 'FaithfulCard',\n  contractVersion: 1,\n  markdown: { path: 'body' },\n} as const;"
       },
-      "route": "/docs/releases/0.7.6/components/faithful-card",
+      "route": "/docs/releases/1.0.0/components/faithful-card",
       "usage": [
         {
           "label": "Style the FaithfulCard",
-          "route": "/docs/releases/0.7.6/guides/faithful-card-styling"
+          "route": "/docs/releases/1.0.0/guides/faithful-card-styling"
+        },
+        {
+          "label": "Install the React stack and start a card application",
+          "route": "/docs/releases/1.0.0/guides/react-consumers"
+        },
+        {
+          "label": "Choose a stack and install the published packages",
+          "route": "/docs/releases/1.0.0/guides/getting-started"
         }
       ],
       "qualification": [
         {
-          "statement": "Host-fixture tests render the card in both renderers, directly and through each stack's start.",
-          "route": "/docs/releases/0.7.6/guides/faithful-card-styling#qualification"
+          "statement": "Both renderers render the card directly and through each stack's start in the local host-fixture tests.",
+          "route": "/docs/releases/1.0.0/guides/faithful-card-styling#qualification"
+        },
+        {
+          "statement": "Ansari Faithful Answers serves its answers as a FaithfulCard in Claude and ChatGPT.",
+          "route": null
         }
       ]
     },
@@ -252,19 +264,19 @@
       "entries": [
         {
           "package": "@saga-a2ui/core",
-          "version": "0.7.6",
+          "version": "1.0.0",
           "import": "@saga-a2ui/core/actions/action-button-schema",
           "role": "Renderer-neutral contract of the control: a strict schema with no action property",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/core/src/actions/action-button-schema.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/core/src/actions/action-button-schema.ts",
           "exports": { "values": ["ActionButtonApi"], "types": [] },
           "stylesheet": null
         },
         {
           "package": "@saga-a2ui/react",
-          "version": "0.7.6",
+          "version": "1.0.0",
           "import": "@saga-a2ui/react/actions",
           "role": "React control and action setup",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/react/src/actions/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/actions/index.ts",
           "exports": {
             "values": [
               "ActionButton",
@@ -285,10 +297,10 @@
         },
         {
           "package": "@saga-a2ui/lit",
-          "version": null,
+          "version": "1.0.0",
           "import": "@saga-a2ui/lit/actions",
           "role": "Lit control and action setup",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/packages/lit/src/actions/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit/src/actions/index.ts",
           "exports": {
             "values": [
               "ActionButton",
@@ -315,23 +327,82 @@
         "language": "ts",
         "code": "{\n  id: 'note-actions',\n  component: 'Row',\n  children: ['row-read', 'row-archive'],\n},\n{\n  id: 'row-read',\n  component: 'ActionButton',\n  child: 'row-read-label',\n},\n{\n  id: 'row-read-label',\n  component: 'Line',\n  kind: 'body',\n  text: 'Mark read',\n},\n{\n  id: 'row-archive',\n  component: 'ActionButton',\n  child: 'row-archive-label',\n},\n{\n  id: 'row-archive-label',\n  component: 'Line',\n  kind: 'body',\n  text: 'Archive',\n},"
       },
-      "route": "/docs/releases/0.7.6/components/action-button",
-      "usage": [],
-      "qualification": []
+      "route": "/docs/releases/1.0.0/components/action-button",
+      "usage": [
+        {
+          "label": "Change a component and trace allowed and denied requests",
+          "route": "/docs/releases/1.0.0/guides/actions"
+        },
+        {
+          "label": "Component definition, template and instance",
+          "route": "/docs/releases/1.0.0/guides/getting-started#component-definition-template-and-instance"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "The notes application runs with Lit controls and, through a React consumer, with React controls.",
+          "route": "/docs/releases/1.0.0/guides/actions#what-each-renderer-and-server-has-shown"
+        },
+        {
+          "statement": "In Claude and ChatGPT, in-card server requests are allowed or refused for the signed-in account.",
+          "route": null
+        }
+      ]
+    },
+    {
+      "id": "saga-attribution",
+      "name": "SagaAttribution",
+      "summary": "A removable one-line credit, Built with saga a2ui, for an application with its own catalog. It carries no card, Markdown parser or components package.",
+      "renderers": ["React"],
+      "entries": [
+        {
+          "package": "@saga-a2ui/react",
+          "version": "1.0.0",
+          "import": "@saga-a2ui/react/attribution",
+          "role": "React credit component and its stylesheet",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/attribution/index.ts",
+          "exports": {
+            "values": ["DEFAULT_ATTRIBUTION", "SagaAttribution"],
+            "types": ["SagaAttributionProps"]
+          },
+          "stylesheet": "@saga-a2ui/react/attribution.css"
+        }
+      ],
+      "preview": {
+        "caption": "The credit rendered in an application's own footer, using the host link seam.",
+        "source": "docs/react-consumers.md",
+        "from": "import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';",
+        "to": "<footer><SagaAttribution links={links} /></footer>",
+        "language": "tsx",
+        "code": "import {SagaAttribution, startA2uiView, type HostLinks} from '@saga-a2ui/react-mcp-stack';\nimport '@saga-a2ui/react-mcp-stack/attribution.css';\n\nlet links: HostLinks | undefined;\nstartA2uiView({\n  // ...\n  actions: (host) => {\n    links = host.links; // asks the host to open a link; ends with the view\n    return undefined;\n  },\n});\n\n// Wherever the application renders its footer:\n<footer><SagaAttribution links={links} /></footer>"
+      },
+      "route": "/docs/releases/1.0.0/components/saga-attribution",
+      "usage": [
+        {
+          "label": "Removable credit",
+          "route": "/docs/releases/1.0.0/guides/react-consumers#removable-credit"
+        }
+      ],
+      "qualification": [
+        {
+          "statement": "The hosted tic-tac-toe example shows the credit in Claude and ChatGPT and opens its links through the host.",
+          "route": null
+        }
+      ]
     }
   ],
   "excluded": [
-    {
-      "name": "SagaAttribution",
-      "reason": "`@saga-a2ui/react/attribution` is not an export of the packages at this revision. The credit component first appears in a later release."
-    },
     {
       "name": "Typed surfaces",
       "reason": "`Surface`, `openSurface` and the stack's `defineSurface` compose and bind a surface. They are APIs, not components an application places in a layout."
     },
     {
       "name": "Layout and basic components",
-      "reason": "Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward. The SDK does not document them as its own."
+      "reason": "Row, Column, List and the other basic components come from the upstream A2UI v0.9 catalog that the renderer packages forward (`basicCatalog`, `ColumnApi`, `ListApi`, `RowApi`). The SDK does not document them as its own."
+    },
+    {
+      "name": "Lynx",
+      "reason": "No Lynx package exists. The packages guide records that the Lynx delivery chain was retired."
     }
   ]
 }
