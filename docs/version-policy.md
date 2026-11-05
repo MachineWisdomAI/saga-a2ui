@@ -30,6 +30,18 @@ indicator in the PR or any commit still takes precedence. Pass the same body
 through `--body-file` locally; CI reads it from the pull-request event. This is a
 reviewed version decision, not permission to publish or to hide a breaking change.
 
+Before 1.0, a PR body may instead contain the standalone footer
+`Version-Bump: major` to take every unit to 1.0.0. This is the reviewed first-major
+step; a breaking indicator alone stays minor before 1.0. It moves every unit,
+whatever their patch numbers and even when the PR changes only version values, and
+keeps the prerelease channel reset to its first counter: `0.11.17-rc.1` and
+`0.11.11-rc.1` both become `1.0.0-rc.1`. `feat`, `fix`, and `!` do not change that
+result. The updater refuses the footer once any unit's baseline major is 1 or
+higher, refuses it together with `Version-Bump: patch`, and refuses it on a release
+promotion. Sibling pins mirror the new exact version, and `check` validates the
+result as for any other increment. Afterwards, the promotion title below turns
+`1.0.0-rc.1` into `1.0.0`.
+
 Every versioned unit shares one major.minor; patch numbers may differ. A minor or
 major increment (before 1.0, `feat` and `feat!`) therefore applies to every unit,
 while a patch increment applies only to the units the PR touched. Prerelease
