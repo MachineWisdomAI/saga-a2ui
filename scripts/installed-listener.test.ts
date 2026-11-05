@@ -291,7 +291,20 @@ describe('the application listener installed from the packed packages and run ou
         path.join(views(), 'playback-view', 'playback.html'),
         'utf8',
       );
-      expect(playback.text).toBe(built_);
+      // The served player document is the built document plus exactly one admitted-origin meta that
+      // names the configured media origin in canonical form. Nothing else differs, and the meta sits
+      // after the leading charset declaration so a content policy embedded later keeps its place.
+      const admittedMeta = `<meta name="saga-media-origin" content="${listener.origin}">`;
+      const metaCount =
+        playback.text.split('<meta name="saga-media-origin"').length - 1;
+      expect(metaCount).toBe(1);
+      expect(playback.text.split(admittedMeta)).toHaveLength(2);
+      expect(playback.text.replace(admittedMeta, '')).toBe(built_);
+      const charset = /<meta\s+charset=[^>]*>/i.exec(playback.text);
+      expect(charset).not.toBeNull();
+      expect(playback.text.indexOf(admittedMeta)).toBe(
+        (charset?.index ?? -1) + (charset?.[0].length ?? 0),
+      );
       expect(playback.csp.connectDomains).toEqual([listener.origin]); // the media origin and nothing else
       const subscriptions = await read(
         listener.subscriptionsUrl,

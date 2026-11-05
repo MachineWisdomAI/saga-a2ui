@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createContentPolicy } from '@saga-a2ui/components/faithful-card';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
 import { PLAYBACK_RESULT_META, RECIPIENT_KEY_META } from './playback.js';
+import { embedMediaOrigin } from './playback-server.js';
 import {
   callToolOverHttp,
   createRecipientKey,
@@ -20,7 +21,8 @@ import {
 // the valid authored action nor widens what it may reach.
 
 const IMAGE_ORIGIN = 'https://images.example.com';
-// The episode view needs a head to carry its policy; the playback resource is served verbatim.
+// The episode view needs a head to carry its policy; the playback resource gets no policy, only
+// its admitted media origin.
 const VIEW_HTML =
   '<!doctype html><html><head><title>view</title></head><body></body></html>';
 let harness: PlaybackHarness | undefined;
@@ -96,7 +98,11 @@ describe.each(['standard', 'strict'] as const)(
         },
       );
       const [content] = (response.body as ResourceContents).result.contents;
-      expect(content?.text).toBe(VIEW_HTML);
+      // As built, plus the one admitted media origin and no content policy of its own.
+      expect(content?.text).toBe(
+        embedMediaOrigin(VIEW_HTML, new URL(h.listener.url).origin),
+      );
+      expect(content?.text).not.toContain('Content-Security-Policy');
       expect(content?._meta.ui.csp.resourceDomains).toEqual([]);
       expect(JSON.stringify(content?._meta)).not.toContain(IMAGE_ORIGIN);
       expect(content?._meta.ui.csp.connectDomains).toEqual([

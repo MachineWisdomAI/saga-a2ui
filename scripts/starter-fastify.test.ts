@@ -192,7 +192,7 @@ qualifyStarter('lit-fastify', ({ built, start, rawCall, allowedToken }) => {
         '2.1.1',
       );
       expect(starter.dependencies?.['@modelcontextprotocol/server']).toBe(
-        '2.3.1',
+        '2.4.0',
       );
       // The installed copies are the declared ones, and satisfy the peer ranges the adapter declares.
       const adapter = readManifest(

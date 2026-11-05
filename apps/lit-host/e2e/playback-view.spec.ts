@@ -971,7 +971,7 @@ test.describe('revocation and expiry through the built player', () => {
 });
 
 test.describe('where the built player may send the capability', () => {
-  test('a media URL on an undeclared origin is blocked by the resource policy: nothing arrives there, nothing plays', async ({
+  test('a media URL on an undeclared origin is refused by the view before any request: nothing arrives there, nothing plays', async ({
     page,
   }) => {
     const { startRecorder } =
@@ -990,7 +990,7 @@ test.describe('where the built player may send the capability', () => {
 
       await expect(host.view.getByTestId('play-root')).toHaveAttribute(
         'data-state',
-        'media-failed',
+        'unavailable', // the view refused the destination itself; the server's grant was never used
       );
       expect(elsewhere.requests).toEqual([]); // not even a preflight reached the undeclared destination
       expect(host.harness.playback.mediaReads).toEqual([]);
