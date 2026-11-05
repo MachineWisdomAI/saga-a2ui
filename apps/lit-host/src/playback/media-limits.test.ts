@@ -139,6 +139,49 @@ describe('readBoundedBody: a body past the limit', () => {
     expect(stream.cancelled()).toBe(true);
   });
 
+  it('refuses, and cancels, on a crossing chunk far larger than the limit, which the read cannot bound', async () => {
+    // The check follows the read: the upstream's chunk is already allocated when its size is
+    // known, so the limit refuses it but does not cap it.
+    const crossing = 1024 * 1024;
+    let cancelled = false;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += 1;
+          // 60 accepted bytes, then one chunk of 1 MiB against a limit of 100; the stream could
+          // go on, and the read must not ask it to.
+          controller.enqueue(
+            new Uint8Array(pulled === 1 ? 60 : crossing).fill(7),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+
+    await expect(
+      readBoundedBody(new Response(body), 100),
+    ).rejects.toBeInstanceOf(MediaTooLargeError);
+
+    expect(pulled).toBe(2);
+    expect(cancelled).toBe(true);
+  });
+
+  it('refuses a first chunk past a one-byte limit and cancels the rest', async () => {
+    const stream = counted(Number.MAX_SAFE_INTEGER, 1024 * 1024);
+
+    await expect(readBoundedBody(stream.response, 1)).rejects.toBeInstanceOf(
+      MediaTooLargeError,
+    );
+
+    // That one chunk of 1 MiB was delivered whole before it could be refused.
+    expect(stream.pulled()).toBe(1);
+    expect(stream.cancelled()).toBe(true);
+  });
+
   it('carries sizes only in its message, never the bytes', async () => {
     const stream = counted(10, 100);
     const error = await readBoundedBody(stream.response, 50).catch(

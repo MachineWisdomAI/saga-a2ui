@@ -10,13 +10,15 @@
  * What each number does and does not bound:
  *
  * - The body limit is a cap on the response the player accepts: the bytes it counts, and the bytes
- *   it will ever hand to the decoder. It is not a cap on the memory the read uses (see
- *   `readBoundedBody`).
+ *   it will ever hand to the decoder. It is not a cap on the memory the read uses: an accepted body
+ *   can peak near twice the limit, and a refused read can hold one upstream chunk of any size
+ *   (see `readBoundedBody`).
  * - The decoded limit is checked after the platform has decoded, because Web Audio decodes in one
  *   step and reports no size first. It keeps an oversized result from being played or retained; it
  *   cannot stop the decoder from allocating it. A compressed or low-sample-rate body can decode to
  *   tens or hundreds of times its size, so the body limit bounds what the decoder is given, not
- *   what it produces. See "Decoded audio: the residual risk" in `docs/authorized-playback.md`.
+ *   what it produces. No finite pre-decode upper bound is enforced across the formats and channel
+ *   layouts the platform supports. See "Decoded audio: the residual risk" in `docs/authorized-playback.md`.
  */
 
 /** The most bytes one episode body may be, as stored, as sent and as received (64 MiB). */
@@ -51,12 +53,19 @@ function declaredLength(headers: Headers): number | undefined {
  * Reads a response body into one buffer, accepting at most `maxBytes` of it.
  *
  * The limit is on the response: the read never accepts, returns or hands on more than `maxBytes`.
- * It is not a limit on this function's memory. The chunks are kept as they arrive and copied once
- * into the result, so at the moment of that copy the read holds the chunks and the result together:
- * up to twice `maxBytes` plus per-chunk bookkeeping. A refused body holds at most the chunks
- * accepted so far plus the one that carried the total past the limit, and none of it is copied.
- * The peak is brief and bounded by the limit, and a deployment that sizes memory from `maxBytes`
- * should count two times it.
+ * It is not a limit on this function's memory, and the two cases differ:
+ *
+ * - An accepted body: the chunks are kept as they arrive and copied once into the result, so at the
+ *   moment of that copy the read holds the chunks and the result together. The peak can approach
+ *   twice `maxBytes` plus per-chunk bookkeeping.
+ * - A refused body: the size of a chunk is known only after `reader.read()` has returned it, so
+ *   the check cannot run first. The read can hold the bytes accepted so far plus the one upstream
+ *   chunk that carried the total past the limit, plus bookkeeping, and then cancels. This function
+ *   does not bound that crossing chunk: with `maxBytes` of 1, an already allocated 1 MiB chunk is
+ *   held, and then refused. Its size is the upstream's to bound, not the read's. Nothing is copied.
+ *
+ * A deployment that sizes memory from `maxBytes` should count two times it for an accepted body,
+ * and should not read `maxBytes` as a cap on what one refused read can briefly hold.
  *
  * Three checks, in order, each before the next costs anything:
  *
