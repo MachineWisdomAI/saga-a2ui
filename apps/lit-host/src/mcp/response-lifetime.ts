@@ -81,6 +81,49 @@ function declaresEventStream(args: readonly unknown[]): boolean {
 }
 
 /**
+ * Whatever answers a request before its body has fully arrived (a refusal, a missing route, an
+ * authentication failure) leaves a remainder nobody wants, and a sender that stalls must not hold
+ * the connection for it. After the answer is sent, the rest is read and discarded for a short window
+ * and up to a byte cap; a body still unfinished then is dropped together with its connection. A body
+ * that does finish in time keeps the connection usable. Call it first for every request, before
+ * anything can answer.
+ *
+ * The listener goes ahead of Node's own `finish` handling on purpose: that handling dumps a request
+ * nobody is reading, and a dumped body is discarded by the parser without ever reaching a `data`
+ * listener, so the byte cap could not see it and a body that completed at once would end the drain
+ * unchecked. Reading from here keeps the remainder countable.
+ */
+export function closeUnfinishedBodyAfterAnswer(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  res.prependOnceListener('finish', () => {
+    if (req.complete || req.destroyed || res.destroyed) return;
+    let discarded = 0;
+    const settle = () => {
+      clearTimeout(timer);
+      req.off('data', onData);
+      req.off('end', settle);
+      req.off('close', settle);
+    };
+    const drop = () => {
+      settle();
+      req.socket.destroySoon();
+    };
+    const onData = (chunk: Buffer | string) => {
+      discarded += chunk.length;
+      if (discarded > 1024 * 1024) drop();
+    };
+    const timer = setTimeout(drop, 500);
+    timer.unref();
+    req.on('data', onData);
+    req.on('end', settle);
+    req.on('close', settle);
+    req.resume();
+  });
+}
+
+/**
  * Connects one request's lifetime to its response, once, when the request is admitted. The caller
  * keeps writing responses as before; this only observes the transport and enforces the deadline.
  */
