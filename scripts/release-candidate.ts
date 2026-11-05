@@ -1247,5 +1247,16 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  process.exitCode = main(process.argv.slice(2));
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    // An unexpected failure (a pack, a write, a path the command was given) is reported like any
+    // other output: its message can carry a path or text from a candidate record, so its control
+    // characters are written out (SECURITY.md invariant 6) before Node would print it raw.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `release-candidate: ${error instanceof Error ? error.name : 'Error'}: ${terminalValue(message)}`,
+    );
+    process.exitCode = 1;
+  }
 }

@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { terminalText } from './terminal-text.mjs';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 
 // Orchestrate established analyzers only; no custom source analysis or automatic fixing.
 const args = process.argv.slice(2);
@@ -73,9 +73,7 @@ try {
       result.status === null ||
       result.status > 1;
     if (failed) {
-      const message = terminalText(
-        `${name} analyzer execution failed: ${result.error?.message ?? result.signal ?? `exit ${result.status}`}`,
-      );
+      const message = `${name} analyzer execution failed: ${terminalValue(String(result.error?.message ?? result.signal ?? `exit ${result.status}`))}`;
       console.error(message);
       if (process.env.GITHUB_ACTIONS === 'true')
         console.log(
@@ -106,7 +104,7 @@ try {
     console.log('No relevant lint inputs; no analyzers started.');
 } catch (error) {
   console.error(
-    terminalText(`Lint analyzer execution failed: ${error.message}`),
+    `Lint analyzer execution failed: ${terminalValue(error.message)}`,
   );
   process.exitCode = 2;
 }

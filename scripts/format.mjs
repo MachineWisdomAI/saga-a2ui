@@ -130,7 +130,7 @@ async function main() {
     try {
       ({ text: input, identity } = readSelected(file, root));
     } catch (error) {
-      console.error(terminalText(error.message));
+      console.error(terminalValue(error.message));
       process.exitCode = 1;
       continue;
     }
@@ -141,7 +141,7 @@ async function main() {
         try {
           replaceSelected(file, formatted, identity);
         } catch (error) {
-          console.error(terminalText(error.message));
+          console.error(terminalValue(error.message));
           process.exitCode = 1;
         }
       }

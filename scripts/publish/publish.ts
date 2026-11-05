@@ -55,7 +55,7 @@ import {
 } from './record.js';
 import { loadReleaseInput, type LoadedReleaseInput } from './release-input.js';
 import { redactSecrets, secretKinds } from './secrets.js';
-import { terminalText } from '../terminal-text.mjs';
+import { terminalText, terminalValue } from '../terminal-text.mjs';
 import type { Evidence, PublicationTarget } from './target.js';
 
 // `saga publish check|prepare` (CLI3 #66, CLI4 #67): validates a built application, its deployed
@@ -1045,19 +1045,22 @@ function report(record: PublicationRecord, request: PublishRequest): string {
     '',
   ];
   for (const finding of record.findings) {
-    lines.push(`  ${mark[finding.status]} ${finding.id}: ${finding.summary}`);
+    lines.push(
+      `  ${mark[finding.status]} ${terminalValue(finding.id)}: ${terminalValue(finding.summary)}`,
+    );
     if (finding.status !== 'pass') {
       if (finding.detail !== undefined)
-        lines.push(`          ${finding.detail}`);
+        lines.push(`          ${terminalValue(finding.detail)}`);
       if (finding.repair !== undefined)
-        lines.push(`          Repair: ${finding.repair}`);
+        lines.push(`          Repair: ${terminalValue(finding.repair)}`);
     }
   }
   lines.push('', 'Pending handoff (this tool does not do these):');
-  for (const item of record.handoff) lines.push(`  - ${item.summary}`);
+  for (const item of record.handoff)
+    lines.push(`  - ${terminalValue(item.summary)}`);
   lines.push(
     '',
-    `Deployment identity: ${record.endpoint.deploymentIdentity.status}. ${record.endpoint.deploymentIdentity.basis}`,
+    `Deployment identity: ${record.endpoint.deploymentIdentity.status}. ${terminalValue(record.endpoint.deploymentIdentity.basis)}`,
   );
   return `${lines.join('\n')}\n`;
 }
@@ -1099,7 +1102,7 @@ export const publicationTool: PublicationTool = {
         return EXIT_INTERRUPTED;
       }
       io.stderr(
-        `saga publish: ${error instanceof Error ? error.message : String(error)}\nNothing was prepared; fix the problem named above and rerun.\n`,
+        `saga publish: ${terminalValue(error instanceof Error ? error.message : String(error))}\nNothing was prepared; fix the problem named above and rerun.\n`,
       );
       return EXIT_NOT_READY;
     }
@@ -1118,7 +1121,7 @@ export const publicationTool: PublicationTool = {
       });
     } catch (error) {
       io.stderr(
-        `saga publish handoff ${request.action}: ${error instanceof Error ? error.message : String(error)}\nRead the record with \`handoff status\` before deciding again.\n`,
+        `saga publish handoff ${request.action}: ${terminalValue(error instanceof Error ? error.message : String(error))}\nRead the record with \`handoff status\` before deciding again.\n`,
       );
       return EXIT_NOT_READY;
     }
@@ -1197,7 +1200,7 @@ async function execute(
   const target = targetFor(request.target, io);
   if (target === undefined) {
     io.stderr(
-      `saga publish: the ${request.target} target is not supported; the supported targets are ${TARGET_NAMES.join(' and ')}.\n`,
+      `saga publish: the ${terminalValue(request.target)} target is not supported; the supported targets are ${TARGET_NAMES.join(' and ')}.\n`,
     );
     return 2;
   }
@@ -1213,14 +1216,14 @@ async function execute(
   );
   if (!loaded.ok) {
     io.stderr(
-      `saga publish: ${loaded.problem}\nNothing was prepared; fix the release input and rerun.\n`,
+      `saga publish: ${terminalValue(loaded.problem)}\nNothing was prepared; fix the release input and rerun.\n`,
     );
     return EXIT_NOT_READY;
   }
   const unusable = target.inputProblem(loaded.loaded.input);
   if (unusable !== null) {
     io.stderr(
-      `saga publish: ${unusable}\nNothing was prepared; complete the release input and rerun.\n`,
+      `saga publish: ${terminalValue(unusable)}\nNothing was prepared; complete the release input and rerun.\n`,
     );
     return EXIT_NOT_READY;
   }
@@ -1250,7 +1253,7 @@ async function execute(
       !fs.statSync(path.dirname(destination)).isDirectory()
     ) {
       io.stderr(
-        `saga publish: the parent directory ${path.dirname(destination)} does not exist; create it first or choose a path inside an existing directory.\n`,
+        `saga publish: the parent directory ${terminalValue(path.dirname(destination))} does not exist; create it first or choose a path inside an existing directory.\n`,
       );
       return EXIT_NOT_READY;
     }
@@ -1276,11 +1279,11 @@ async function execute(
         );
         return EXIT_INTERRUPTED;
       }
-      io.stderr(`saga publish: ${(error as Error).message}\n`);
+      io.stderr(`saga publish: ${terminalValue((error as Error).message)}\n`);
       return EXIT_NOT_READY;
     }
     io.stdout(
-      `\nWrote ${request.out}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${target.archiveFile} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`,
+      `\nWrote ${terminalValue(request.out)}/${RECORD_FILE}${archive === null ? ' (no package: a check failed)' : ` and ${target.archiveFile} (sha256 ${record.artifact?.sha256 ?? ''})`}.\n`,
     );
   }
   io.stdout('Nothing was deployed, uploaded, submitted or published.\n');

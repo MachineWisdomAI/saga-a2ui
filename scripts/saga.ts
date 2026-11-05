@@ -12,7 +12,7 @@ import type { PluginValidator } from './publish/claude-plugin.js';
 import type { HandoffAction, HandoffRequest } from './publish/handoff.js';
 import type { PublicationTool, PublishRequest } from './publish/publish.js';
 import { DEMO_TEMPLATE } from './qualified-starters.js';
-import { terminalText } from './terminal-text.mjs';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 import {
   ExportInterrupted,
   TemplateError,
@@ -224,7 +224,8 @@ function parseCommandLine(argv: readonly string[]): Command {
       },
     });
   } catch (error) {
-    return { kind: 'usage', message: (error as Error).message };
+    // The parser's message quotes the offending argument.
+    return { kind: 'usage', message: terminalValue((error as Error).message) };
   }
   if (parsed.values.help) return { kind: 'help' };
   const [command, ...rest] = parsed.positionals;
@@ -235,7 +236,7 @@ function parseCommandLine(argv: readonly string[]): Command {
       message:
         command === undefined
           ? 'Say what to do: init, demo or publish.'
-          : `Unknown command "${command}"; the commands are init, demo and publish.`,
+          : `Unknown command "${terminalValue(command)}"; the commands are init, demo and publish.`,
     };
   const publishOnly = PUBLISH_OPTIONS.find(
     (name) => parsed.values[name] !== undefined,
@@ -291,7 +292,7 @@ function parsePublish(values: ParsedValues, rest: readonly string[]): Command {
       message:
         action === undefined
           ? 'Say what to publish: check, prepare or handoff.'
-          : `Unknown publish command "${action}"; the commands are check, prepare and handoff.`,
+          : `Unknown publish command "${terminalValue(action)}"; the commands are check, prepare and handoff.`,
     };
   const handoffOnly = HANDOFF_OPTIONS.find(
     (name) => values[name] !== undefined,
@@ -304,7 +305,7 @@ function parsePublish(values: ParsedValues, rest: readonly string[]): Command {
   if (extra.length > 0)
     return {
       kind: 'usage',
-      message: `saga publish ${action} takes options only, not "${extra[0]}".`,
+      message: `saga publish ${action} takes options only, not "${terminalValue(extra[0] as string)}".`,
     };
   if (values['a2ui-stack'] !== undefined || values.server !== undefined)
     return {
@@ -364,12 +365,12 @@ function parseHandoff(values: ParsedValues, rest: readonly string[]): Command {
       message:
         action === undefined
           ? `Say what to do with the handoff: ${HANDOFF_ACTION_NAMES.join(', ')}.`
-          : `Unknown handoff command "${action}"; the commands are ${HANDOFF_ACTION_NAMES.join(', ')}.`,
+          : `Unknown handoff command "${terminalValue(action)}"; the commands are ${HANDOFF_ACTION_NAMES.join(', ')}.`,
     };
   if (extra.length > 0)
     return {
       kind: 'usage',
-      message: `saga publish handoff ${action} takes options only, not "${extra[0]}".`,
+      message: `saga publish handoff ${action} takes options only, not "${terminalValue(extra[0] as string)}".`,
     };
   if (values['a2ui-stack'] !== undefined || values.server !== undefined)
     return {
@@ -433,18 +434,20 @@ function newDirectoryTarget(cwd: string, directory: string): string {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
       throw new TemplateError(
-        `The parent directory ${parent} does not exist; create it first or choose a path inside an existing directory.`,
+        `The parent directory ${terminalValue(parent)} does not exist; create it first or choose a path inside an existing directory.`,
       );
     throw error;
   }
   if (!fs.statSync(realParent).isDirectory())
-    throw new TemplateError(`The parent ${parent} is not a directory.`);
+    throw new TemplateError(
+      `The parent ${terminalValue(parent)} is not a directory.`,
+    );
   return path.join(realParent, path.basename(requested));
 }
 
 function nextSteps(directory: string, sdkVersion: string): string {
   const steps = [
-    `cd ${shellWord(directory)}`,
+    `cd ${terminalValue(shellWord(directory))}`,
     'npm install',
     'npm run build',
     'npm start',
@@ -482,7 +485,7 @@ async function createStarter(
     sdkVersion,
     signal: environment.signal,
   });
-  return `Created a ${pair.stack} starter on ${pair.server} in ${directory} (SDK build ${sdkVersion}).\nNothing was installed and no command was run.\n\n${nextSteps(directory, sdkVersion)}`;
+  return `Created a ${pair.stack} starter on ${pair.server} in ${terminalValue(directory)} (SDK build ${sdkVersion}).\nNothing was installed and no command was run.\n\n${nextSteps(directory, sdkVersion)}`;
 }
 
 /**
@@ -504,12 +507,12 @@ async function createDemonstration(
     await createDirectoryInterruptibly(target, staged.files, {
       signal: environment.signal,
     });
-    return `Created the ${pair.stack} on ${pair.server} demonstration in ${directory} (SDK build ${staged.sdkVersion}).
+    return `Created the ${pair.stack} on ${pair.server} demonstration in ${terminalValue(directory)} (SDK build ${staged.sdkVersion}).
 It is a local-only application with synthetic data and fixed, public development credentials, not a starter;
 \`saga init\` creates a project of your own. Nothing was installed and no command was run.
 
 Next:
-  cd ${shellWord(directory)}
+  cd ${terminalValue(shellWord(directory))}
   npm install --omit=dev
   npm start
 `;
@@ -529,7 +532,7 @@ async function create(
   );
   if (pair === undefined) {
     environment.stderr(
-      `saga ${kind}: ${stack} on ${server} is not a supported pair.\n\nSupported pairs:\n${pairLines(offered)}\n`,
+      `saga ${kind}: ${terminalValue(stack)} on ${terminalValue(server)} is not a supported pair.\n\nSupported pairs:\n${pairLines(offered)}\n`,
     );
     return EXIT_REFUSED;
   }
@@ -564,7 +567,9 @@ async function create(
       );
       return EXIT_INTERRUPTED;
     }
-    environment.stderr(`saga ${kind}: ${(error as Error).message}\n`);
+    environment.stderr(
+      `saga ${kind}: ${terminalValue((error as Error).message)}\n`,
+    );
     return EXIT_REFUSED;
   }
 }
@@ -588,7 +593,7 @@ async function loadPublicationTool(
     return await support.load();
   } catch (error) {
     environment.stderr(
-      `saga publish: the publication tooling could not be loaded (${(error as Error).message}), so nothing was ${what}.\n`,
+      `saga publish: the publication tooling could not be loaded (${terminalValue((error as Error).message)}), so nothing was ${what}.\n`,
     );
     return undefined;
   }
@@ -626,7 +631,9 @@ async function publish(
       publishIo(environment.publication as PublicationSupport, environment),
     );
   } catch (error) {
-    environment.stderr(`saga publish: ${(error as Error).message}\n`);
+    environment.stderr(
+      `saga publish: ${terminalValue((error as Error).message)}\n`,
+    );
     return EXIT_REFUSED;
   }
 }
@@ -648,7 +655,9 @@ async function handoff(
       publishIo(environment.publication as PublicationSupport, environment),
     );
   } catch (error) {
-    environment.stderr(`saga publish handoff: ${(error as Error).message}\n`);
+    environment.stderr(
+      `saga publish handoff: ${terminalValue((error as Error).message)}\n`,
+    );
     return EXIT_REFUSED;
   }
 }

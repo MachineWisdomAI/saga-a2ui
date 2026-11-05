@@ -255,5 +255,15 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url))
-  process.exitCode = main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    process.exitCode = main();
+  } catch (error) {
+    // A workflow that cannot be read or listed: the message can carry a file name, so its control
+    // characters are written out (SECURITY.md invariant 6) before Node would print it raw.
+    console.error(
+      `check-action-pins: ${terminalValue(error instanceof Error ? error.message : String(error))}`,
+    );
+    process.exitCode = 1;
+  }
+}
