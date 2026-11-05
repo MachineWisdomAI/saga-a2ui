@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/react-mcp-stack",
   "private": false,
-  "description": "The React and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition, so an application installs one stack plus React and writes only its own decisions",
+  "description": "saga a2ui React stack: build an agentic app with React and MCP Apps from one install",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": [
@@ -34,8 +34,8 @@
     "zod": "4.6.7"
   },
   "peerDependencies": {
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",

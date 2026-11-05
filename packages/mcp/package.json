@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/mcp",
   "private": false,
-  "description": "MCP and MCP Apps delivery for SAGA applications: separate server, view and policy exports",
+  "description": "saga a2ui for MCP and MCP Apps: serve views, tools and content policy to Claude, ChatGPT and other MCP hosts",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {

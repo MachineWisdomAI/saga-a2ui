@@ -8,7 +8,7 @@ The React stack for an MCP Apps view: it connects one React renderer to one deli
 - `/content-policy`: `createContentPolicy` and `embedContentPolicy`, for the server that states the policy the card application reads from its document.
 - `/server`: `createServerBudgets`, `registerPublicOperation`, `registerProtectedOperation`, `operationViewFromHtml`, `viewUriForMajor`, `viewUriForHtml`, `attachRequestLifetime`, and the types `OperationView` and `RequestLifetime`. Node only; no browser entry imports it.
 
-The main entry does not import `@saga-a2ui/components`, so an own-catalog bundle contains neither FaithfulCard nor Markdown. The package still declares the components package, so one install makes the `/faithful-card` and `/content-policy` entries work. React and React DOM are peers, both exactly 19.3.1.
+The main entry does not import `@saga-a2ui/components`, so an own-catalog bundle contains neither FaithfulCard nor Markdown. The package still declares the components package, so one install makes the `/faithful-card` and `/content-policy` entries work. React and React DOM 19 are peers, from 19.3.1.
 
 Requires Node >=22.12.0 and a TypeScript-aware bundler; exports are TypeScript source. Apache-2.0, with dependency licenses retained separately.
 

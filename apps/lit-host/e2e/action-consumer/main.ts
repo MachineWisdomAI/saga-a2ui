@@ -46,7 +46,7 @@ import {
 // and Button, plus the opt-in ActionButton), two app elements so that two mounts can be compared,
 // and a trace the browser spec reads. It uses only the public exports of the SDK packages.
 
-export const CATALOG_ID = 'https://saga-a2ui.local/catalogs/action-consumer/v1';
+export const CATALOG_ID = 'https://saga-a2ui.dev/catalogs/action-consumer/v1';
 export const SURFACE_ID = 'actions';
 
 /** A function the layout must never be able to reach through an ActionButton. */

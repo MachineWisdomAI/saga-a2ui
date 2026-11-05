@@ -11,7 +11,7 @@ import {
   startA2uiView,
   StartError,
   StartFailure,
-  z,
+  z3,
   type ActionBinding,
   type ActionButtonActivation,
   type AppendResult,
@@ -61,7 +61,7 @@ import {
 const CATALOG_ID = 'urn:test:stack-own';
 const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+  schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
 };
 const Line: ReactCatalogComponent = createComponentImplementation(
   LineApi,
@@ -74,7 +74,7 @@ const catalog = new Catalog<ReactCatalogComponent>(CATALOG_ID, 'v0.9', [
 const layout = defineSurface({
   surfaceId: 'own',
   catalogId: CATALOG_ID,
-  data: z.object({ label: z.string() }),
+  data: z3.object({ label: z3.string() }),
   initial: { label: 'Waiting' },
   root: { component: 'ActionButton', bind: {}, props: { child: 'label' } },
   components: [{ id: 'label', component: 'Line', text: { path: '/label' } }],

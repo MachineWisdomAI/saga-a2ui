@@ -97,6 +97,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'readingProfile',
       'startA2uiView',
       'z',
+      'z3',
     ]);
     expect(Object.keys(card).sort()).toEqual([
       'FaithfulCardApp',

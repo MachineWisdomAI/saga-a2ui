@@ -12,7 +12,7 @@ import {
   startA2uiView,
   StartError,
   StartFailure,
-  z,
+  z3,
   type ActionBinding,
   type ActionButtonActivation,
   type AppendResult,
@@ -61,7 +61,7 @@ import { html, nothing } from 'lit';
 const CATALOG_ID = 'urn:test:lit-stack-own';
 const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+  schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
 };
 class LineElement extends A2uiLitElement<typeof LineApi> {
   protected readonly api = LineApi;
@@ -87,7 +87,7 @@ const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
 const layout = defineSurface({
   surfaceId: 'own',
   catalogId: CATALOG_ID,
-  data: z.object({ label: z.string() }),
+  data: z3.object({ label: z3.string() }),
   initial: { label: 'Waiting' },
   root: {
     component: 'Column',
@@ -136,8 +136,8 @@ export function startOwn(
         });
       },
       onToolResult: (result, running) => {
-        const shown = z
-          .object({ label: z.string() })
+        const shown = z3
+          .object({ label: z3.string() })
           .safeParse(result.structuredContent);
         if (shown.success) void running.surface.update(shown.data);
       },

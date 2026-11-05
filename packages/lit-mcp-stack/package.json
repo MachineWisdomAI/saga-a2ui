@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/lit-mcp-stack",
   "private": false,
-  "description": "The Lit and MCP Apps stack for SAGA A2UI: starts a view for an application's own catalog, and a FaithfulCard application from one validated definition",
+  "description": "saga a2ui Lit stack: build an agentic app with Lit and MCP Apps from one install",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,

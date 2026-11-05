@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/core",
   "private": false,
-  "description": "Renderer-independent SAGA A2UI processing: version-specific decoding, validated message cases and the message session, and the renderer-independent action runtime (local and server actions, prerequisites, bounded hooks, resource ownership) at /actions",
+  "description": "saga a2ui core: decode and validate A2UI messages, define surfaces, and run actions, independent of any renderer",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {

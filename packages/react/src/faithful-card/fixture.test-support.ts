@@ -46,7 +46,7 @@ import {
 // adapter records what it was asked and answers as the test decides.
 
 export const CATALOG_ID =
-  'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
+  'https://saga-a2ui.dev/catalogs/react-faithful-card/v1';
 export const SURFACE_ID = 'cards';
 
 type ChildReference =

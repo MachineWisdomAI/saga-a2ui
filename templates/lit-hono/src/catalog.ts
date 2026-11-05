@@ -4,7 +4,7 @@ import {
   basicCatalog,
   Catalog,
   CommonSchemas,
-  z,
+  z3,
   type LitComponentApi,
 } from '@saga-a2ui/lit-mcp-stack';
 import { html, nothing } from 'lit';
@@ -17,10 +17,10 @@ import { CATALOG_ID } from './surface.js';
 
 const LineApi = {
   name: 'Line',
-  schema: z
+  schema: z3
     .object({
       text: CommonSchemas.DynamicString,
-      kind: z.enum(['title', 'body']),
+      kind: z3.enum(['title', 'body']),
     })
     .strict(),
 };

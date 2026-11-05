@@ -294,10 +294,10 @@ describe('the seven owned packages, packed', () => {
         /^@saga-a2ui\/|lit|react|markdown/.test(dependency),
       ),
     ).toEqual(['@saga-a2ui/core']);
-    // The React peers are exact, and the Lit package has none.
+    // The React peers start at 19.3.1, and the Lit package has none.
     expect(sdk.manifests.react?.peerDependencies).toMatchObject({
-      react: '19.3.1',
-      'react-dom': '19.3.1',
+      react: '^19.3.1',
+      'react-dom': '^19.3.1',
     });
     expect(Object.keys(sdk.manifests.lit?.peerDependencies ?? {})).toEqual([
       '@saga-a2ui/components',
@@ -646,15 +646,15 @@ describe('the installed consumers', () => {
       react: '19.3.1',
       'react-dom': '19.3.1',
     });
-    // The packed react package declares the same upstream pair and the same React peers, so a consumer cannot resolve another.
+    // The packed react package declares the same upstream pair and the same React peers.
     const manifest = prepared.react.sdk.manifests.react!;
     expect(manifest.dependencies).toMatchObject({
       '@a2ui/react': '0.13.0',
       '@a2ui/web_core': '0.13.0',
     });
     expect(manifest.peerDependencies).toMatchObject({
-      react: '19.3.1',
-      'react-dom': '19.3.1',
+      react: '^19.3.1',
+      'react-dom': '^19.3.1',
     });
     expect(
       manifest.peerDependenciesMeta?.['@saga-a2ui/components']?.optional,
