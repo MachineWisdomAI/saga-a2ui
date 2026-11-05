@@ -6,6 +6,7 @@ import {
   connectPlaybackView,
   type PlaybackViewState,
 } from './playback/playback-view.js';
+import { admittedMediaOrigin } from './playback/playback.js';
 import { createWebAudioPlayer } from './playback/web-audio-player.js';
 import { PlayerPage } from './react/play-control.js';
 
@@ -35,6 +36,8 @@ const connection = await connectPlaybackView({
   // The host window is the only permitted peer; the transport checks `event.source`.
   transport: new PostMessageTransport(window.parent, window.parent),
   player: createWebAudioPlayer(),
+  // The one media origin the served document admits; a grant naming another origin is refused.
+  mediaOrigin: admittedMediaOrigin(document),
   show(state: PlaybackViewState) {
     current = state;
     for (const notify of [...subscribers]) notify();

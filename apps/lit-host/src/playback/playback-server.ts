@@ -21,6 +21,8 @@ import type { ViewSessionLabeler } from '../mcp/subscriptions-server.js';
 import type { EntitlementDecision, MediaService } from './media-service.js';
 import { ZodError } from 'zod';
 import {
+  canonicalMediaOrigin,
+  MEDIA_ORIGIN_META_NAME,
   MEDIA_PATH_PREFIX,
   ModelPlaybackSchema,
   OPEN_TOOL_NAME,
@@ -63,7 +65,10 @@ export interface PlaybackBackend {
 }
 
 export interface PlaybackServerOptions {
-  /** The built, immutable view document. Served verbatim; never combined with request data. */
+  /**
+   * The built, immutable view document. Served as built plus the one `saga-media-origin` meta
+   * (`embedMediaOrigin`); never combined with request data.
+   */
   readonly viewHtml: string;
   readonly backend: PlaybackBackend;
   /** Issues the capability the media service checks later. Shared across requests by the listener. */
@@ -87,6 +92,36 @@ const viewCsp = (mediaOrigin: string) =>
     frameDomains: [],
     baseUriDomains: [],
   }) as const;
+
+// The head's opening tag and, when it comes first, the charset declaration. The charset must stay
+// the first element of the head (a content policy embedded later is placed right after it), so the
+// admitted origin goes after it.
+const HEAD_START = /<head(?:\s[^>]*)?>(?:\s*<meta\s+charset=[^>]*>)?/i;
+const DOCTYPE = /^\s*<!doctype[^>]*>/i;
+
+/**
+ * Returns the player document with the one admitted media origin written into its head as
+ * `<meta name="saga-media-origin">`. The origin is the application's own configuration, the same
+ * value the grant URL and the resource's `connectDomains` use; nothing from a request reaches the
+ * document, so every caller is served the same bytes. The view reads it back before it will send
+ * a capability anywhere (`admittedMediaOrigin`).
+ */
+export function embedMediaOrigin(
+  viewHtml: string,
+  mediaOrigin: string,
+): string {
+  const origin = canonicalMediaOrigin(mediaOrigin);
+  if (origin === undefined)
+    throw new Error('The media origin must be a plain http or https origin.');
+  // A canonical origin holds no quote, ampersand or angle bracket, so it needs no escaping.
+  const meta = `<meta name="${MEDIA_ORIGIN_META_NAME}" content="${origin}">`;
+  if (HEAD_START.test(viewHtml))
+    return viewHtml.replace(HEAD_START, (m) => `${m}${meta}`);
+  const doctype = DOCTYPE.exec(viewHtml)?.[0];
+  return doctype === undefined
+    ? `${meta}${viewHtml}`
+    : `${doctype}${meta}${viewHtml.slice(doctype.length)}`;
+}
 
 const failure = (text: string) => ({
   isError: true as const,
@@ -128,6 +163,11 @@ export function createPlaybackServer(
     },
     { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
   );
+  // One canonical origin builds the grant URL, the resource policy and the document's admission.
+  const mediaOrigin = canonicalMediaOrigin(options.mediaOrigin);
+  if (mediaOrigin === undefined)
+    throw new Error('The media origin must be a plain http or https origin.');
+  const viewHtml = embedMediaOrigin(options.viewHtml, mediaOrigin);
 
   // The input is a strict object, so a forged `accountId` is rejected instead of dropped.
   // `registerAppTool` also writes the legacy flat `ui/resourceUri` key that older hosts read.
@@ -207,7 +247,7 @@ export function createPlaybackServer(
             episodeId: shown.episodeId,
             title: shown.title,
             viewSession: options.labelViewSession(identity.signInId),
-            mediaUrl: `${options.mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
+            mediaUrl: `${mediaOrigin}${MEDIA_PATH_PREFIX}${shown.episodeId}`,
             capability: issued.capability,
             expiresAt: issued.expiresAt,
           });
@@ -282,8 +322,8 @@ export function createPlaybackServer(
         {
           uri: PLAYBACK_VIEW_URI,
           mimeType: RESOURCE_MIME_TYPE,
-          text: options.viewHtml,
-          _meta: { ui: { csp: viewCsp(options.mediaOrigin) } },
+          text: viewHtml,
+          _meta: { ui: { csp: viewCsp(mediaOrigin) } },
         },
       ],
     }),
