@@ -119,6 +119,32 @@ describe('opening a link through the host', () => {
     await expect(pending).resolves.toBe('unavailable');
   });
 
+  it('settles as soon as the signal aborts, without waiting for a host that never answers', async () => {
+    let held = false;
+    const app = await connected({ openLinks: {} }, () => {
+      held = true;
+      // The host never answers: the request stays outstanding for the whole test.
+      return new Promise<{ isError?: boolean }>(() => undefined);
+    });
+    const lifetime = new AbortController();
+    const pending = hostLinksFromApp(app, lifetime.signal).open(
+      'https://docs.example.com/',
+    );
+    await expect.poll(() => held).toBe(true);
+    lifetime.abort();
+    await expect(pending).resolves.toBe('unavailable');
+  });
+
+  it('answers a request that settles before the signal aborts with its own outcome', async () => {
+    const app = await connected({ openLinks: {} }, async () => ({}));
+    const lifetime = new AbortController();
+    await expect(
+      hostLinksFromApp(app, lifetime.signal).open('https://docs.example.com/'),
+    ).resolves.toBe('opened');
+    // Aborting afterwards changes nothing about the answer already given.
+    lifetime.abort();
+  });
+
   it('reports the capability as unavailable before the view has connected', async () => {
     const app = new App(
       { name: 'unconnected', version: '0.0.0' },

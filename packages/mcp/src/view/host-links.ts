@@ -1,5 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import type { HostLinks } from '@saga-a2ui/core/host-links';
+import { untilEnded } from './until-ended.js';
 
 /**
  * Opens validated links through the upstream MCP Apps `ui/open-link` request, and only when the
@@ -9,7 +10,8 @@ import type { HostLinks } from '@saga-a2ui/core/host-links';
  *
  * Outcomes: `unavailable` without the capability or once `signal` has aborted (also when it aborts
  * while a request is outstanding, so a view that has ended hears of no late result), `denied` when
- * the host answers with `isError`, `failed` when the request rejects, `opened` otherwise.
+ * the host answers with `isError`, `failed` when the request rejects, `opened` otherwise. The
+ * request is not cancelled on abort (the bridge offers no way to); its late answer is dropped.
  */
 export function hostLinksFromApp(app: App, signal?: AbortSignal): HostLinks {
   // A function, not a local: the signal can abort while a request is awaited.
@@ -19,7 +21,9 @@ export function hostLinksFromApp(app: App, signal?: AbortSignal): HostLinks {
       if (ended() || app.getHostCapabilities()?.openLinks === undefined)
         return 'unavailable';
       try {
-        const result = await app.openLink({ url });
+        // Raced against the view's lifetime: the bridge cannot cancel the request, so a host that
+        // never answers must not leave this call (and the link control waiting on it) pending.
+        const result = await untilEnded(app.openLink({ url }), signal);
         if (ended()) return 'unavailable';
         return result.isError === true ? 'denied' : 'opened';
       } catch {
