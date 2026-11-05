@@ -270,7 +270,7 @@ const messageText = (request: Heard | undefined): string =>
 test.describe('the framework credit', () => {
   const CREDIT = 'Built with saga-a2ui';
   const TUTORIAL =
-    'https://docs.saga-a2ui.dev/docs/releases/0.11.0-rc.1/guides/build-tic-tac-toe-with-react';
+    'https://docs.saga-a2ui.dev/docs/releases/1.0.0/guides/build-tic-tac-toe-with-react';
 
   /** A host that opens links, recording each destination it was asked for. */
   async function hostOpeningLinks(page: Page): Promise<string[]> {

@@ -3,15 +3,15 @@ title: 'Build tic-tac-toe with React'
 description: 'Build a React tic-tac-toe game that you play inside Claude or ChatGPT, starting from the published npm packages.'
 ---
 
-> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/build-tic-tac-toe-with-react.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/build-tic-tac-toe-with-react.md) at source revision [`a9633b3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/LICENSE).
+> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/build-tic-tac-toe-with-react.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/docs/build-tic-tac-toe-with-react.md) at source revision [`15591e3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/LICENSE).
 
 Build a React game that you play inside Claude or ChatGPT. You click a square to place X; the assistant plays O. A local server checks every move and keeps the board up to date.
 
 You’ll create an app in your own directory, install saga from npm, and open its first card in the host you choose. Then you’ll add the game and a list of moves. Vite generates the project configuration. Each lesson explains an application change, shows what to look for in the host, and provides complete files for comparison.
 
-![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](https://media.githubusercontent.com/media/MachineWisdomAI/saga-a2ui/a9633b399cf7318ecd934aaef192263119373692/docs/images/tic-tac-toe-board.png)
+![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](https://media.githubusercontent.com/media/MachineWisdomAI/saga-a2ui/15591e35b1287486ea789f49cd5ead998ed03b89/docs/images/tic-tac-toe-board.png)
 
-A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/a2f1f6203a2a6fdabb25a3ca66a8c546ec909872/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/b4eaeb909a460f94e44c411f8e3ad4091014e5c4/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
 
 ## Before you start
 
@@ -137,7 +137,7 @@ The assistant calls the same `play_move` tool. That call returns to the conversa
 
 When the host reopens a card, the board reads its game before enabling any squares. If a move's reply is lost, the board also reads the game to check whether that move landed. A confirmed move gets its turn message without playing the square again. An unconfirmed message is not resent automatically: the host may already have received it.
 
-![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](https://raw.githubusercontent.com/MachineWisdomAI/saga-a2ui/a9633b399cf7318ecd934aaef192263119373692/diagrams/tic-tac-toe-turn-loop.svg)
+![A board click and the assistant’s tool call both reach play_move; the board sends a conversation message after X and reads the game while waiting for O.](https://raw.githubusercontent.com/MachineWisdomAI/saga-a2ui/15591e35b1287486ea789f49cd5ead998ed03b89/diagrams/tic-tac-toe-turn-loop.svg)
 
 The app owns the game rules, storage, React components, and action definitions. saga validates the operation inputs and results, connects the view to the host, and supplies the action and conversation APIs. `src/surface.ts` describes the layout; `src/catalog.tsx` implements its components in React; `src/actions.ts` gives the buttons their behavior.
 

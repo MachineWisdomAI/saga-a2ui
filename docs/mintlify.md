@@ -118,6 +118,13 @@ A generated component page or catalog is corrected by editing `release.json` and
 files from the generator. Remove a released guide by deleting its page and navigation entry and moving
 its source to `exclusions`.
 
+## Retire a release
+
+The site lists only the releases a reader should choose between, normally the current stable one.
+To retire a release, remove its entry from `docs.json` and delete its directory under
+`docs/releases/` in a reviewed pull request; Git history keeps the snapshot. Before retiring one,
+make sure no published page of a remaining release links into it.
+
 ## Heading anchors
 
 Mintlify's heading ids differ from GitHub's: it keeps `@`, `/`, `+` and a typographic apostrophe and
