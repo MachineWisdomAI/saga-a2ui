@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "0.11.11-rc.1",
+    "@saga-a2ui/core": "0.11.12-rc.1",
     "markdown-it": "15.0.3",
     "zod": "4.6.7"
   },
