@@ -143,14 +143,17 @@ function validated(options: McpFetchAppOptions): {
 
 /** The error body of the official handler, so a refusal reads the same wherever it is made. */
 function jsonRpcError(
-  status: 400 | 413 | 408,
+  status: 400 | 413,
   code: number,
   message: string,
 ): Response {
+  // No `Connection: close`: a Node listener would then destroy the socket while the client is still
+  // sending the refused body, and the client would see a write error instead of this answer. The
+  // listener discards the unread rest under its own bounds (`@hono/node-server` stops after 64 MiB
+  // or 500 ms and closes the socket).
   return Response.json(
     { jsonrpc: '2.0', error: { code, message }, id: null },
-    // A refused body may still be arriving: ask the listener not to keep the connection for it.
-    { status, headers: { connection: 'close' } },
+    { status },
   );
 }
 
