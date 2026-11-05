@@ -89,6 +89,13 @@ challenge, timeout, HTTP status, network error, unusable answer).
 The same holds for a failure nobody anticipated: every error the command raises is caught and
 reported through that redactor (exit code 1), never rethrown to a caller that prints it raw.
 
+After redaction, the last step before a terminal or CI log is `terminalText`
+(`scripts/terminal-text.mjs`). A server name, tool name, file name or analyzer report is chosen by
+someone else, so its control characters (escape sequences, carriage returns, the bidirectional
+overrides) are written out as visible escapes such as `\x1b`, and a line that begins with `::` is
+defanged so it is not read as a GitHub Actions workflow command. Ordinary text, line breaks and
+tabs are unchanged.
+
 ## The Claude connector dossier (CLI4)
 
 Claude's directory takes a remote MCP server as a *connector*, submitted by its URL in the developer
@@ -254,7 +261,15 @@ directory by its identity, and a path replaced or renamed under it is refused wi
 nothing changed or removed in the directory now at the path. Where the system names no open directory (macOS),
 the command's temporary file is removed only while its name still shows the file it wrote; after a replacement
 it can stay behind, in the directory that was moved, as an ignored dot-file. A record that was altered, has a missing event or holds other files is refused and
-never repaired.
+never repaired. So is a record larger than any this command writes, before an event is parsed: more than
+1000 events, a first event over 16 MiB, a later event over 16 KiB, events together over 24 MiB, or an event nested
+more than 64 levels deep (the limits are in `bounded-read.ts`). The directory listing is also bounded: it is
+refused once it holds more than 1000 visible events or more than 2000 entries in total, counting the ignored
+dot-files. The command applies the same limits to what it writes, before anything is staged or linked: a `begin`
+whose authority references make the first event too large, or an event that would take the record past the
+event count, size, nesting or total limit, is refused with nothing recorded (and a directory `begin` created
+is removed again). A record that already holds 1000 events accepts no further event; begin a new record for
+further work.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,

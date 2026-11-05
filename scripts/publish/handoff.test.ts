@@ -14,6 +14,14 @@ import {
   type Options,
   type Run,
 } from './harness.js';
+import {
+  MAX_HANDOFF_BEGIN_BYTES,
+  MAX_HANDOFF_EVENT_BYTES,
+  MAX_HANDOFF_EVENTS,
+  MAX_HANDOFF_JSON_DEPTH,
+  MAX_HANDOFF_RECORD_BYTES,
+  handoffEventRefusal,
+} from './bounded-read.js';
 import { staleness } from './previous.js';
 import { ARCHIVE_FILES, RECORD_FILE, sha256 } from './record.js';
 
@@ -1898,5 +1906,227 @@ describe('the command line', () => {
     expect((await s.run(['status', '--handoff', 'missing'])).err).toMatch(
       /does not exist/,
     );
+  });
+});
+
+describe('a handoff directory larger than any record this command writes', () => {
+  const eventPath = (cwd: string, seq: number): string =>
+    path.join(cwd, HANDOFF, `${String(seq).padStart(6, '0')}.json`);
+  /** Replaces the first event with itself plus `extra` inside the pinned release; the record has one event, so no chain link depends on it. */
+  async function singleEvent(
+    extra: unknown,
+  ): Promise<{ readonly s: Session; readonly first: string }> {
+    const { s } = await begun();
+    const first = eventPath(s.cwd, 1);
+    const event = JSON.parse(fs.readFileSync(first, 'utf8'));
+    event.release.padding = extra;
+    fs.writeFileSync(first, `${JSON.stringify(event, null, 2)}\n`);
+    return { s, first };
+  }
+
+  it('reads a record with a large pinned release and nested evidence, as before', async () => {
+    const nested = Array.from({ length: 40 }).reduce<unknown>(
+      (inner) => ({ inner }),
+      'x'.repeat(1024 * 1024),
+    );
+    const { s } = await singleEvent(nested);
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('refuses a record of more events than this command writes, before reading any of them', async () => {
+    const { s } = await begun();
+    for (let seq = 2; seq <= 1001; seq += 1)
+      fs.writeFileSync(eventPath(s.cwd, seq), '{}');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses a record that cannot be listed in bounded work: very many ignored temporary files', async () => {
+    const { s } = await begun();
+    for (let n = 0; n < 2001; n += 1)
+      fs.writeFileSync(path.join(s.cwd, HANDOFF, `.tmp-${n}`), '');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses an event over its size without allocating it', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024 + 1);
+    const begin = await statusOf(s);
+    expect(begin.code).toBe(1);
+    expect(begin.err).toMatch(/larger than 16777216 bytes/);
+
+    const { s: later } = await submitted();
+    fs.truncateSync(eventPath(later.cwd, 2), 16 * 1024 + 1);
+    const run = await statusOf(later);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/000002\.json is not an event.*larger than 16384/);
+  });
+
+  it('refuses a record whose events add up to more than a record this command writes', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024);
+    for (let seq = 2; seq <= 600; seq += 1) {
+      fs.writeFileSync(eventPath(s.cwd, seq), '');
+      fs.truncateSync(eventPath(s.cwd, seq), 16 * 1024);
+    }
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 25165824 bytes of events/);
+  });
+
+  it('refuses an event nested deeper than any event is, whatever its size', async () => {
+    const depth = 200_000;
+    const { s, first } = await singleEvent('');
+    const event = fs.readFileSync(first, 'utf8');
+    fs.writeFileSync(
+      first,
+      event.replace(
+        '"padding": ""',
+        `"padding": ${'['.repeat(depth)}${']'.repeat(depth)}`,
+      ),
+    );
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('does not count brackets inside strings as nesting', async () => {
+    const { s } = await singleEvent('[{'.repeat(500) + '\\"[');
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('reads a record of exactly the most events, and records no event after it', async () => {
+    const { s } = await begun();
+    let tip = sha256(fs.readFileSync(eventPath(s.cwd, 1)));
+    for (let seq = 2; seq <= 1000; seq += 1) {
+      const bytes = `${JSON.stringify(
+        {
+          format: 'saga-publication-handoff/1',
+          seq,
+          previousSha256: tip,
+          recordedAt: '2026-10-21T09:05:00.000Z',
+          type: 'submission-attempt',
+        },
+        null,
+        2,
+      )}\n`;
+      fs.writeFileSync(eventPath(s.cwd, seq), bytes);
+      tip = sha256(Buffer.from(bytes));
+    }
+    expect((await statusOf(s)).err).not.toMatch(/more than|altered/);
+    const run = await s.run([
+      'void-attempt',
+      '--handoff',
+      HANDOFF,
+      '--inspected',
+      'the portal',
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/already holds 1000 events/);
+    expect(fs.existsSync(eventPath(s.cwd, 1001))).toBe(false);
+  });
+});
+
+describe('a handoff event this command would write that it could not read back', () => {
+  const bytes = (size: number): Uint8Array => new Uint8Array(size).fill(0x20);
+  const nested = (depth: number): Uint8Array =>
+    Buffer.from(`${'['.repeat(depth)}${']'.repeat(depth)}`);
+
+  it('admits ordinary events, and events exactly at each limit', () => {
+    expect(handoffEventRefusal(1, bytes(2000), 0)).toBeUndefined();
+    expect(handoffEventRefusal(2, bytes(400), 2000)).toBeUndefined();
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES), 0),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES), 2000),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(
+        MAX_HANDOFF_EVENTS,
+        bytes(400),
+        MAX_HANDOFF_RECORD_BYTES - 400,
+      ),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH), 2000),
+    ).toBeUndefined();
+  });
+
+  it('refuses a first event, a later event, a count, a total and a depth over the limits the reader refuses by', () => {
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES + 1), 0),
+    ).toMatch(/larger than 16777216 bytes/);
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES + 1), 2000),
+    ).toMatch(/larger than 16384 bytes/);
+    expect(
+      handoffEventRefusal(MAX_HANDOFF_EVENTS + 1, bytes(400), 2000),
+    ).toMatch(/more than 1000 events/);
+    expect(
+      handoffEventRefusal(2, bytes(400), MAX_HANDOFF_RECORD_BYTES - 399),
+    ).toMatch(/together would be larger than 25165824 bytes/);
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH + 1), 2000),
+    ).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('refuses a begin whose authority references together are over the first event limit, and records nothing', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(
+      /larger than 16777216 bytes.*Nothing was recorded/s,
+    );
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+
+    const ordinary = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(ordinary.code, ordinary.out + ordinary.err).toBe(0);
+    expect((await statusOf(s)).code).toBe(0);
+  });
+
+  it('leaves an existing empty directory empty when its begin is refused', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    fs.mkdirSync(path.join(cwd, HANDOFF));
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(fs.readdirSync(path.join(cwd, HANDOFF))).toEqual([]);
   });
 });

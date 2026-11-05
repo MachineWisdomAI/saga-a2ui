@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 
 // Orchestrate established analyzers only; no custom source analysis or automatic fixing.
 const args = process.argv.slice(2);
@@ -53,21 +54,39 @@ try {
       (workflowsOnly || file.startsWith('.github/workflows/')) &&
       /\.ya?ml$/.test(file),
   );
+  // Opaque analyzer output cannot be split into its values, so a file name holding a line feed
+  // would start a line of its own in it, and one holding a tab would look like a column break.
+  // Every line is therefore written with the analyzer's name in front of it, and a tab is written
+  // out: no line of the analyzer's can pass for the trusted `NAME: N ms; exit N` line below or
+  // for any other line this tool writes, while the lines and their indentation stay readable.
+  function analyzerLines(name, output) {
+    const lines = terminalText(output ?? '')
+      .replace(/\t/g, '\\t')
+      .split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    return lines.map((line) => `${name} | ${line}\n`).join('');
+  }
   function analyze(name, command, parameters) {
     const start = performance.now();
     const result = spawnSync(command, parameters, {
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
+      // The output below is written out control character by control character, so colour codes
+      // would only make it harder to read.
+      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: undefined },
     });
-    process.stdout.write(result.stdout ?? '');
-    process.stderr.write(result.stderr ?? '');
+    // Analyzer output repeats repository file names, which anyone who can change the repository
+    // chooses: it is attributed and written out before it reaches a terminal or CI log
+    // (SECURITY.md invariant 6).
+    process.stdout.write(analyzerLines(name, result.stdout));
+    process.stderr.write(analyzerLines(name, result.stderr));
     const failed =
       result.error ||
       result.signal ||
       result.status === null ||
       result.status > 1;
     if (failed) {
-      const message = `${name} analyzer execution failed: ${result.error?.message ?? result.signal ?? `exit ${result.status}`}`;
+      const message = `${name} analyzer execution failed: ${terminalValue(String(result.error?.message ?? result.signal ?? `exit ${result.status}`))}`;
       console.error(message);
       if (process.env.GITHUB_ACTIONS === 'true')
         console.log(
@@ -97,6 +116,8 @@ try {
   if (!code.length && !workflows.length)
     console.log('No relevant lint inputs; no analyzers started.');
 } catch (error) {
-  console.error(`Lint analyzer execution failed: ${error.message}`);
+  console.error(
+    `Lint analyzer execution failed: ${terminalValue(error.message)}`,
+  );
   process.exitCode = 2;
 }

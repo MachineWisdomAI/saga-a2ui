@@ -15,6 +15,55 @@ export const PLAYBACK_VIEW_URI = 'ui://saga-a2ui/playback-view.html';
 export const MEDIA_PATH_PREFIX = '/playback/media/';
 
 /**
+ * The name of the `<meta>` element in the served player document that carries the one media
+ * origin the application admits. The view reads its admitted origin there, from the resource the
+ * application itself serves, and never from a Play result: a Play result travels through the host
+ * and is not trusted to name where the capability goes.
+ */
+export const MEDIA_ORIGIN_META_NAME = 'saga-media-origin';
+
+/**
+ * Reduces a configured media origin to its canonical `scheme://host[:port]` form, or `undefined`
+ * when it is not a plain `http:` or `https:` origin (a path other than `/`, credentials, a query or
+ * a fragment all make it unusable). Used by the server to build the document and by the view to
+ * read it back, so both sides compare the same serialization.
+ */
+export function canonicalMediaOrigin(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    if (url.username !== '' || url.password !== '') return undefined;
+    if (url.pathname !== '/' || url.search !== '' || url.hash !== '')
+      return undefined;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The part of a document the view needs to find its admitted origin. */
+export interface MediaOriginSource {
+  querySelector(
+    selector: string,
+  ): { getAttribute(name: string): string | null } | null;
+}
+
+/**
+ * The origin the served player document admits, or `undefined` when it carries none or an unusable
+ * one. A view without an admitted origin accepts no media URL, so it never sends a capability.
+ */
+export function admittedMediaOrigin(
+  source: MediaOriginSource,
+): string | undefined {
+  return canonicalMediaOrigin(
+    source
+      .querySelector(`meta[name="${MEDIA_ORIGIN_META_NAME}"]`)
+      ?.getAttribute('content'),
+  );
+}
+
+/**
  * `_meta` key on the view's `tools/call` that carries the view's public recipient key (a JWK).
  * The arguments stay `{ episodeId }`; the key is request metadata, not business input.
  */

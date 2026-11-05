@@ -124,11 +124,32 @@ export interface MediaService {
   acquire(request: MediaRequest, scope: BoundedScope): Promise<MediaOutcome>;
 }
 
-export interface MediaServiceOptions {
+/** The finite bounds on what the service keeps for as long as it lives. */
+export interface MediaRetentionLimits {
+  /**
+   * Most capabilities held at once. When the table is full, capabilities past their expiry go
+   * first, then the one issued longest ago: its holder simply plays again. Default 1,024.
+   */
+  readonly maxGrants?: number;
+  /**
+   * Most spent proof identifiers held at once. A spent identifier is what makes a proof
+   * single-use, so none is forgotten while its proof could still be accepted (until its `iat`
+   * plus the maximum age and the clock tolerance, inclusive): when the table is full of
+   * identifiers that are still needed, a new proof is refused until room returns (at most
+   * {@link PROOF_MAX_RETENTION_SECONDS} after the identifier was spent). Default 4,096.
+   */
+  readonly maxProofs?: number;
+}
+
+export interface MediaServiceOptions extends MediaRetentionLimits {
   readonly store: MediaStore;
   readonly entitlement: EntitlementLookup;
-  /** Capability lifetime from issue. Expiry is measured on this service's clock, never the client's. */
+  /**
+   * Capability lifetime from issue: a whole number of seconds from 1 to
+   * {@link MAX_CAPABILITY_TTL_SECONDS}. Expiry is measured on this service's clock, never the client's.
+   */
   readonly ttlSeconds?: number;
+  /** Must return finite seconds; a reading that is not is a fault of the service and issues or accepts nothing. */
   readonly nowSeconds?: () => number;
   /**
    * The most bytes one episode may be. A store that returns more makes the acquisition fail as a
@@ -139,23 +160,89 @@ export interface MediaServiceOptions {
 }
 
 const DEFAULT_TTL_SECONDS = 60;
+/** The longest a capability may live. A longer setting is a mistake, not a policy. */
+export const MAX_CAPABILITY_TTL_SECONDS = 3_600;
+const DEFAULT_MAX_GRANTS = 1_024;
+const DEFAULT_MAX_PROOFS = 4_096;
 /** A proof older than this, or dated further ahead than the tolerance, is refused. */
 const PROOF_MAX_AGE_SECONDS = 60;
 const PROOF_CLOCK_TOLERANCE_SECONDS = 5;
+/**
+ * A verified proof is accepted while `iat - tolerance <= now <= iat + maxAge + tolerance`, both
+ * ends inclusive. The identifier of a spent proof must outlive that whole interval, so its
+ * retention runs from the proof's own `iat`, not from the moment it was first used: a proof dated
+ * ahead of the clock stays acceptable for longer after its first use than one dated now.
+ */
+const PROOF_ACCEPTED_AFTER_ISSUE_SECONDS =
+  PROOF_MAX_AGE_SECONDS + PROOF_CLOCK_TOLERANCE_SECONDS;
+/**
+ * The longest a spent identifier is held after its first use: the worst-case future `iat`
+ * (the tolerance), the accepted interval, and the one second that makes the last accepted second
+ * inclusive. The proof table makes room again within this time.
+ */
+const PROOF_MAX_RETENTION_SECONDS =
+  PROOF_CLOCK_TOLERANCE_SECONDS + PROOF_ACCEPTED_AFTER_ISSUE_SECONDS + 1;
 const REFUSED: MediaOutcome = { kind: 'refused' };
+
+// Formats and sizes of everything a caller can make the service keep or parse. With the entry
+// limits they bound the retained bytes: a grant is at most a few hundred bytes, a spent proof
+// identifier at most 64.
+const CAPABILITY_FORMAT = /^[A-Za-z0-9_-]{43}$/;
+const EPISODE_FORMAT = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const THUMBPRINT_FORMAT = /^[A-Za-z0-9_-]{43}$/;
+const PROOF_ID_FORMAT = /^[A-Za-z0-9._~-]{1,64}$/;
+const MAX_ACCOUNT_ID_BYTES = 256;
+/** Real proofs are under a kilobyte; this stops a signed envelope of any size reaching the parser. */
+const MAX_PROOF_CHARS = 4_096;
 
 const sha256Base64Url = (value: string) =>
   createHash('sha256').update(value).digest('base64url');
 
+const isSafeSeconds = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  Math.abs(value) <= Number.MAX_SAFE_INTEGER;
+
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+
+/**
+ * Why a capability lifetime setting is unusable, or `undefined` when it is usable. The listener asks
+ * this before it opens its port, so a bad setting never starts a host.
+ */
+export function capabilityTtlProblem(ttlSeconds: unknown): string | undefined {
+  return ttlSeconds === undefined ||
+    (typeof ttlSeconds === 'number' &&
+      Number.isSafeInteger(ttlSeconds) &&
+      ttlSeconds >= 1 &&
+      ttlSeconds <= MAX_CAPABILITY_TTL_SECONDS)
+    ? undefined
+    : `The capability ttl must be a whole number of seconds from 1 to ${MAX_CAPABILITY_TTL_SECONDS}`;
+}
+
 export function createMediaService(options: MediaServiceOptions): MediaService {
+  const ttlProblem = capabilityTtlProblem(options.ttlSeconds);
+  if (ttlProblem !== undefined) throw new TypeError(ttlProblem);
+  const maxGrants = options.maxGrants ?? DEFAULT_MAX_GRANTS;
+  const maxProofs = options.maxProofs ?? DEFAULT_MAX_PROOFS;
+  if (!isCount(maxGrants) || !isCount(maxProofs))
+    throw new TypeError(
+      'The media service retention limits must be positive whole numbers',
+    );
   const ttlSeconds = options.ttlSeconds ?? DEFAULT_TTL_SECONDS;
-  const nowSeconds =
-    options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
+  const clock = options.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
+  const nowSeconds = (): number => {
+    const reading: unknown = clock();
+    if (!isSafeSeconds(reading))
+      throw new Error('The media service clock returned an unusable time.');
+    return reading;
+  };
   const maxBytes = assertByteLimit(
     'maxBytes',
     options.maxBytes ?? MAX_MEDIA_BODY_BYTES,
   );
-  // Keyed by the capability's hash, so the table never holds the usable value itself.
+  // Keyed by the capability's hash, so the table never holds the usable value itself. A Map keeps
+  // insertion order, which is the deterministic eviction order: oldest issue first.
   const grants = new Map<
     string,
     CapabilityGrant & { readonly expiresAt: number }
@@ -171,11 +258,30 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
 
   return {
     issue(grant) {
+      if (
+        !grant.accountId ||
+        Buffer.byteLength(grant.accountId) > MAX_ACCOUNT_ID_BYTES ||
+        !EPISODE_FORMAT.test(grant.episodeId) ||
+        !THUMBPRINT_FORMAT.test(grant.recipientThumbprint)
+      )
+        throw new TypeError(
+          'The capability grant is not in a recordable form.',
+        );
       const now = nowSeconds();
       forgetExpired(now);
+      // Room for the new grant: the oldest issues go first.
+      for (const hash of grants.keys()) {
+        if (grants.size < maxGrants) break;
+        grants.delete(hash);
+      }
       const capability = randomBytes(32).toString('base64url');
-      const expiresAt = now + ttlSeconds;
-      grants.set(sha256Base64Url(capability), { ...grant, expiresAt });
+      const expiresAt = Math.ceil(now + ttlSeconds);
+      grants.set(sha256Base64Url(capability), {
+        accountId: grant.accountId,
+        episodeId: grant.episodeId,
+        recipientThumbprint: grant.recipientThumbprint,
+        expiresAt,
+      });
       return { capability, expiresAt };
     },
 
@@ -184,6 +290,11 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
       const now = nowSeconds();
       forgetExpired(now);
       if (request.capability === undefined || request.proof === undefined)
+        return REFUSED;
+      if (
+        !CAPABILITY_FORMAT.test(request.capability) ||
+        request.proof.length > MAX_PROOF_CHARS
+      )
         return REFUSED;
       const capabilityHash = sha256Base64Url(request.capability);
       const grant = grants.get(capabilityHash);
@@ -214,11 +325,22 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
             grant.recipientThumbprint
         )
           return REFUSED;
-        const { jti } = payload;
-        if (jti === undefined || usedProofs.has(jti)) return REFUSED;
+        const { jti, iat } = payload;
+        if (
+          typeof jti !== 'string' ||
+          !PROOF_ID_FORMAT.test(jti) ||
+          typeof iat !== 'number' ||
+          usedProofs.has(jti)
+        )
+          return REFUSED;
+        // Forgetting a spent identifier early would let its proof be used again, so a full table
+        // refuses the new proof instead; room returns as the oldest identifiers age out.
+        if (usedProofs.size >= maxProofs) return REFUSED;
+        // The verified `iat` fixes the last second this proof can be accepted (rounded up, so a
+        // fractional `iat` never shortens it); the identifier is forgotten the second after.
         usedProofs.set(
           jti,
-          now + PROOF_MAX_AGE_SECONDS + PROOF_CLOCK_TOLERANCE_SECONDS,
+          Math.ceil(iat) + PROOF_ACCEPTED_AFTER_ISSUE_SECONDS + 1,
         );
       } catch {
         return REFUSED;

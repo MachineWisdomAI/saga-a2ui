@@ -23,6 +23,7 @@ import {
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
 import {
+  capabilityTtlProblem,
   createMediaService,
   type MediaStore,
 } from '../playback/media-service.js';
@@ -303,6 +304,11 @@ export async function startEpisodeListener(
     options.playback === undefined
       ? undefined
       : snapshotResource('Playback resource', options.playback.resource);
+  const ttlProblem = capabilityTtlProblem(
+    options.playback?.capabilityTtlSeconds,
+  );
+  if (ttlProblem !== undefined)
+    throw new ListenerConfigurationError(ttlProblem);
   const answerStreaming =
     options.answer?.responseMode === 'event-stream'
       ? resolveStreamingPolicy(options.answer.streaming)

@@ -257,6 +257,11 @@ async function rig(
     withContentConsent?: boolean;
     /** The view's body limit, when a test needs one smaller than the shipped default. */
     maxMediaBytes?: number;
+    /**
+     * The media origin the view is told to admit. Defaults to the listener's own, as the served
+     * document would carry it; `null` models a document that carries none.
+     */
+    mediaOrigin?: string | null;
   } = {},
 ): Promise<Rig> {
   const harness = await startPlaybackHarness(
@@ -332,6 +337,10 @@ async function rig(
     app,
     transport: viewSide,
     player,
+    mediaOrigin:
+      options.mediaOrigin === undefined
+        ? new URL(harness.listener.url).origin
+        : (options.mediaOrigin ?? undefined),
     show: (state) => {
       states.push(state);
       consentLog.push(`show:${state.kind}`);
@@ -978,7 +987,8 @@ describe('Play when the browser cannot play audio', () => {
 describe('Play when the media origin redirects', () => {
   // Decision: the media service never redirects, so the player treats any redirect as a failed
   // acquisition. Following one would carry the capability and the proof headers to a destination
-  // the application never declared.
+  // the application never declared. Here the application admits the redirecting origin itself, so
+  // the first hop is allowed and only the redirect is under test.
   it('does not follow a redirect to another destination: the capability and proof reach nobody else', async () => {
     const elsewhere = await startRecorder();
     const redirecting = await startRecorder((req, res) => {
@@ -992,6 +1002,7 @@ describe('Play when the media origin redirects', () => {
     });
     try {
       const r = await rig({
+        mediaOrigin: redirecting.origin,
         tamperGrant: (grant) => ({
           ...grant,
           mediaUrl: `${redirecting.origin}/playback/media/ep-1`,
@@ -1009,6 +1020,128 @@ describe('Play when the media origin redirects', () => {
     } finally {
       await Promise.all([redirecting.close(), elsewhere.close()]);
     }
+  });
+});
+
+describe('Play when the grant names a media origin the application did not admit', () => {
+  // Decision: the grant arrives through the host and does not choose where the capability goes.
+  // The view admits one origin, taken from the document the application served, and refuses any
+  // other URL before a proof is signed or a request sent, whatever the host's own policy does.
+  // These tests run in Node, where no resource policy applies: only the view's own check is under
+  // test.
+  const settle = (ms: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const EP1_PATH = '/playback/media/ep-1';
+
+  it('sends neither the capability nor a proof to a foreign origin that preserves every other field', async () => {
+    const mallory = await startRecorder();
+    try {
+      const r = await rig({
+        tamperGrant: (grant) => ({
+          ...grant,
+          mediaUrl: `${mallory.origin}/playback/media/ep-1`,
+        }),
+      });
+      await r.select(EP1);
+
+      const { urls } = await fetchedUrls(async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('unavailable');
+        await settle(100);
+      });
+
+      expect(mallory.requests).toEqual([]); // not even a preflight
+      expect(mediaFetches(urls)).toEqual([]);
+      expect(r.harness.playback.mediaReads).toEqual([]);
+      expect(r.player.calls).not.toContain('start');
+      expect(r.last()).toMatchObject({ requestOutcome: 'unknown' }); // the server did issue a capability
+    } finally {
+      await mallory.close();
+    }
+  });
+
+  it.each([
+    ['another scheme', (o: URL) => `https://${o.host}${EP1_PATH}`],
+    ['another port', (o: URL) => `http://${o.hostname}:1${EP1_PATH}`],
+    [
+      'another host for the same server',
+      (o: URL) => `http://localhost:${o.port}${EP1_PATH}`,
+    ],
+    [
+      'a lookalike host that ends with the admitted one',
+      (o: URL) => `http://${o.hostname}.example:${o.port}${EP1_PATH}`,
+    ],
+    [
+      'the admitted origin as credentials for another host',
+      (o: URL) => `http://${o.host}@mallory.example${EP1_PATH}`,
+    ],
+    [
+      'credentials on the admitted origin',
+      (o: URL) => `http://user:secret@${o.host}${EP1_PATH}`,
+    ],
+    ['a query', (o: URL) => `${o.origin}${EP1_PATH}?next=elsewhere`],
+    ['an empty query', (o: URL) => `${o.origin}${EP1_PATH}?`],
+    ['a fragment', (o: URL) => `${o.origin}${EP1_PATH}#x`],
+    ['an encoded path', (o: URL) => `${o.origin}/playback/media/%65p-1`],
+    ['a trailing slash', (o: URL) => `${o.origin}${EP1_PATH}/`],
+    [
+      'a path that climbs out of the prefix',
+      (o: URL) => `${o.origin}/playback/media/../media/ep-1`,
+    ],
+    ['a leading space', (o: URL) => ` ${o.origin}${EP1_PATH}`],
+    ['no origin at all', () => EP1_PATH],
+  ])(
+    'refuses a media URL with %s before signing or fetching',
+    async (_name, mediaUrl) => {
+      // The grant the server really issued names the admitted origin; only its URL is rewritten.
+      const tampered = await rig({
+        tamperGrant: (grant) => ({
+          ...grant,
+          mediaUrl: mediaUrl(new URL(String(grant.mediaUrl))),
+        }),
+      });
+      await tampered.select(EP1);
+
+      const { urls } = await fetchedUrls(async () => {
+        tampered.view.play();
+        await expect.poll(() => tampered.last()?.kind).toBe('unavailable');
+        await settle(100);
+      });
+
+      expect(mediaFetches(urls)).toEqual([]);
+      expect(tampered.harness.playback.mediaReads).toEqual([]);
+      expect(tampered.player.calls).not.toContain('start');
+    },
+  );
+
+  it('fetches nothing when the served document carried no usable origin', async () => {
+    const r = await rig({ mediaOrigin: null });
+    await r.select(EP1);
+
+    const { urls } = await fetchedUrls(async () => {
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('unavailable');
+      await settle(100);
+    });
+
+    expect(mediaFetches(urls)).toEqual([]);
+    expect(r.harness.playback.mediaReads).toEqual([]);
+    expect(r.player.calls).not.toContain('start');
+  });
+
+  it('control: the admitted origin and the selected episode’s exact path still play', async () => {
+    const r = await rig();
+    await r.select(EP1);
+
+    const { urls } = await fetchedUrls(async () => {
+      r.view.play();
+      await expect.poll(() => r.last()?.kind).toBe('playing');
+    });
+
+    expect(mediaFetches(urls)).toEqual([
+      `${new URL(r.harness.listener.url).origin}${EP1_PATH}`,
+    ]);
+    expect(r.player.started).toHaveLength(1);
   });
 });
 

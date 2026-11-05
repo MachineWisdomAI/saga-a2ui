@@ -5,6 +5,7 @@ import {
   type HostContext,
   type ToolInput,
   type ToolResult,
+  type ToolResultRefused,
 } from '@saga-a2ui/mcp/view';
 import type { HostConnection } from './host-connection.js';
 import { StartFailure, type ErrorPhase } from './start-failure.js';
@@ -44,6 +45,11 @@ export interface RunViewOptions {
   ) => void;
   /** Called for each delivered result once the view is ready (the held one at that moment). */
   readonly onToolResult: (result: ToolResult) => void;
+  /**
+   * Called in place of `onToolResult` for a result over the delivery's admission budget, at the
+   * point that result would have been delivered. Names the limit; carries nothing of the result.
+   */
+  readonly onToolResultRefused?: (refusal: ToolResultRefused) => void;
   /** Called for the tool call that is starting, once the view is ready and before the held result. */
   readonly onToolInput?: (input: ToolInput) => void;
   readonly onError?: (error: unknown, phase: ErrorPhase) => void;
@@ -97,6 +103,9 @@ export function runView(options: RunViewOptions): RunningView {
       ? {}
       : { readyWhen: options.readyWhen }),
     onToolResult: options.onToolResult,
+    ...(options.onToolResultRefused === undefined
+      ? {}
+      : { onToolResultRefused: options.onToolResultRefused }),
     ...(options.onToolInput === undefined
       ? {}
       : { onToolInput: options.onToolInput }),

@@ -28,7 +28,7 @@ function fixture(t) {
   git('config', 'user.email', 'fixture@example.invalid');
   git('config', 'user.name', 'Tooling fixture');
   mkdirSync(join(root, 'scripts'));
-  for (const name of ['git-hooks.mjs', 'format.mjs']) {
+  for (const name of ['git-hooks.mjs', 'format.mjs', 'terminal-text.mjs']) {
     try {
       cpSync(join(source, 'scripts', name), join(root, 'scripts', name));
     } catch {
@@ -132,6 +132,7 @@ test('linked worktrees share the installed hook but use their own source, index 
     'add',
     'scripts/git-hooks.mjs',
     'scripts/format.mjs',
+    'scripts/terminal-text.mjs',
     'package.json',
     '.prettierrc.json',
     '.prettierignore',
