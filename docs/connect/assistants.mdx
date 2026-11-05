@@ -79,11 +79,11 @@ These steps follow the Mintlify instructions for search servers. The SDK reposit
 
 ## Choose a release
 
-The site holds more than one release, and search can return pages from several of them. Name the release you use in the question and check the page path in each result: release pages are under `/docs/releases/VERSION/`.
+Each release's pages are under `/docs/releases/VERSION/`, and the site lists the current release. Name the release you use in the question and check the page path in each result.
 
-The search tool also takes an optional `version` argument. Use the exact version name from the site's version selector, for example `1.0.0`. In the recorded checks, the filtered search returned only that release's pages, plus this page, which belongs to every release. Other spellings, such as `v1.0.0`, returned no results. Without the argument, pages of every release can appear, and a result list does not say which release is stable.
+The search tool also takes an optional `version` argument. Use the exact version name from the site's version selector, for example `1.0.0`. The filtered search returns that release's pages, plus this page, which belongs to every release. Other spellings, such as `v1.0.0`, return no results.
 
-- Stable documentation is the default release of the site. A prerelease is labeled **Prerelease** in the selector and on its pages.
+- Stable documentation is the default release of the site. When the site lists a prerelease, it is labeled **Prerelease** in the selector and on its pages.
 - Development `main` is never published as a release. A page documents the version and source revision named in its first paragraph.
 - Read the page itself, not only the snippet. A snippet can come from a different release than the one you asked about.
 
