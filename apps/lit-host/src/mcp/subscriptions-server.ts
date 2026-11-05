@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   type OperationOutcome,
   type RequestLifetime,
@@ -81,10 +82,13 @@ interface PublishedAccount {
 export function createSubscriptionsServer(
   options: SubscriptionsServerOptions,
 ): McpServer {
-  const server = new McpServer({
-    name: 'saga-a2ui-subscriptions-demo',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-a2ui-subscriptions-demo',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   registerProtectedOperation(
     server,

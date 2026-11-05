@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
@@ -60,10 +61,13 @@ export function createStatusServer({
   view,
   lifetime,
 }: StatusServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-status',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-status',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerPublicOperation(
     server,
     {
@@ -113,10 +117,13 @@ export function createAccountServer({
   lifetime,
   authorize,
 }: AccountServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-starter-account',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-starter-account',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerProtectedOperation(
     server,
     {

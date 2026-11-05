@@ -7,6 +7,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   valueOrThrow,
   viewUriForHtml,
@@ -148,7 +149,10 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
     html,
     csp: CLOSED_VIEW_CSP,
   };
-  const server = new McpServer({ name: 'pack1-notes', version: '0.0.0' });
+  const server = new McpServer(
+    { name: 'pack1-notes', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   registerProtectedOperation(
     server,
