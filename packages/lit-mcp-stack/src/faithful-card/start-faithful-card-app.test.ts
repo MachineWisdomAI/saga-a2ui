@@ -254,6 +254,30 @@ describe('startFaithfulCardApp', () => {
     expect((errors[0]![0] as Error).message).toBe('the map broke');
   });
 
+  it('refuses a result over the delivery budget before the reader sees it: reported, the answer cleared, the problem text shown, and the next answer shown', async () => {
+    const reader = vi.fn(readStructuredAnswer);
+    const errors: Array<[unknown, string]> = [];
+    const view = await start(
+      { onError: (error, phase) => errors.push([error, phase]) },
+      {},
+      definitionReading(reader),
+    );
+    await view.ready;
+    await host!.bridge.sendToolResult(answer('Shown'));
+    await vi.waitFor(() => expect(cardText()).toContain('Shown'));
+    expect(reader).toHaveBeenCalledTimes(1);
+
+    await host!.bridge.sendToolResult(answer('x'.repeat(5 * 1024 * 1024)));
+    await vi.waitFor(() => expect(status()).toBe(TEXTS.problem));
+    expect(cardText()).toBe('');
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(errors.map(([, phase]) => phase)).toEqual(['result']);
+    expect((errors[0]![0] as Error).message).toMatch(/larger than/);
+
+    await host!.bridge.sendToolResult(answer('Again'));
+    await vi.waitFor(() => expect(cardText()).toContain('Again'));
+  });
+
   it('presents an equal answer again as a new presentation', async () => {
     const seen: CardViewState[] = [];
     const view = await start({
