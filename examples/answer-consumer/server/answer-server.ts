@@ -3,7 +3,7 @@ import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerPublicOperation,
-  viewUriForHtml,
+  viewUriForMajor,
 } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 import { fixtureAnswers, type AnswerFunction } from '../src/answer-function.js';
@@ -47,7 +47,7 @@ export function createAnswerServer(
     input: AnswerInput,
     output: AnswerOutput,
     view: {
-      uri: viewUriForHtml(html, 'mcp.html'),
+      uri: viewUriForMajor('mcp.html', 1),
       title: 'Answer view',
       html,
       csp: CLOSED_VIEW_CSP,

@@ -1,6 +1,6 @@
 ---
 feature_name: semantic_view_versioning
-status: draft
+status: approved
 module_blueprints: []
 dependencies: [reusable_mcp_connector, view_composition]
 date_added: 2026-10-31
@@ -14,14 +14,13 @@ This is the 1.0 identity contract. Version 1 is the first line.
 
 ## Status
 
-- Design: draft, awaiting owner approval. This revision narrows the 31 October draft (`04a8cc632a551c373953bba23f4120b7b267ff0c`) to the 1.0 identity change.
-- Implementation: not started.
-- Acceptance: a compatible redeploy behind a real host is still to be observed.
+- Design: approved on 5 November 2026 at [`c9c44aaa01f3547f1bc3fbcd30273235d61d6f35`](https://github.com/MachineWisdomAI/saga-a2ui/blob/c9c44aaa01f3547f1bc3fbcd30273235d61d6f35/blueprints/features/semantic_view_versioning.blueprint.md) by the delivery coordinator under authority delegated by the owner for the 1.0 release. It narrows the 31 October draft (`04a8cc632a551c373953bba23f4120b7b267ff0c`) to the 1.0 identity change. Later edits to this file record status and the implementation choices noted under "Where it lands".
+- Implementation: implemented in [PR #357](https://github.com/MachineWisdomAI/saga-a2ui/pull/357); the landed commit is recorded after merge.
 - Predecessor: [retained view resources](retained_view_resources.blueprint.md), rejected at its proposed revision `a0b581285ffa917f32ef5998159d2921adcdc077`. No part of it was implemented or approved.
 
 ## Why the address must stop following the bytes
 
-Today `operationViewFromHtml` (`packages/mcp/src/server/operation-view.ts`) sets the view's URI to `viewUriForHtml(html, filename)` (`view-identity.ts`): the filename with the first 32 hex digits of the document's SHA-256 inserted, such as `ui://views/answer.<digest>.html`. Any change to the document is a new address. An application that writes its release into the document therefore changes the address on every deploy, even when nothing about the contract changed.
+Before 1.0, `operationViewFromHtml` (`packages/mcp/src/server/operation-view.ts`) set the view's URI to `viewUriForHtml(html, filename)` (`view-identity.ts`): the filename with the first 32 hex digits of the document's SHA-256 inserted, such as `ui://views/answer.<digest>.html`. Any change to the document was a new address. An application that writes its release into the document therefore changed the address on every deploy, even when nothing about the contract changed.
 
 That breaks new Claude conversations after a deploy. In the [Ansari deployment trials](https://github.com/iaser-ai/ansari/issues/335#issuecomment-6523633269), Claude web called the tool 31 to 95 seconds after a deploy using a tool descriptor it had obtained before the deploy. It read the card address that descriptor named, the server no longer served it and answered `-32602`, and Claude showed "Unable to reach". New conversations after that window rendered.
 
@@ -88,11 +87,11 @@ The same function is exported from `@saga-a2ui/mcp/server` and from both stacks'
 | --- | --- |
 | `packages/mcp/src/server/view-identity.ts` | Add `viewUriForMajor`. Share the filename check with `viewUriForHtml`. |
 | `packages/mcp/src/server/operation-view.ts` | Take `major`; derive `uri` from `viewUriForMajor(filename, major)`. |
-| `packages/mcp/src/server/operation.ts` | Reject a duplicate view address on one server, if the MCP server does not already. |
+| `packages/mcp/src/server/operation.ts` | No change: the MCP server already throws when a second resource is registered at an address. A test pins that refusal. |
 | `packages/mcp/src/server/index.ts`, `packages/lit-mcp-stack/src/server/index.ts`, `packages/react-mcp-stack/src/server/index.ts` | Export `viewUriForMajor`; update each `exports.test.ts`. |
-| `apps/lit-host/src/mcp/content-resource.ts` | Pass a major. Its comment describes byte identity and changes with it. |
-| `scripts/publish/publish.ts`, `scripts/candidate-rehearsal.ts` | These confirm a deployment serves the build by computing the fingerprint address. They read the major-line address instead and compare the served bytes with the build. The publish release input states each view's major. |
-| `examples/`, `scripts/fixtures/`, `docs/getting-started.md`, `docs/react-consumers.md`, `docs/tic-tac-toe/`, `docs/development-reference.md`, `scripts/publish/README.md` | Pass `major: 1`; replace the fingerprint explanation with the compatibility rule and its obligation. Committed release snapshots under `docs/releases/` are not edited. |
+| `apps/lit-host/src/mcp/content-resource.ts` | Pass major 1, and put a digest of the embedded content policy in the filename (`ui://views/view.<policy digest>.v1.html`), so a Strict and a Standard policy never share an address. |
+| `scripts/publish/publish.ts`, `scripts/candidate-rehearsal.ts` | These confirm a deployment serves the build. They accept the file's major-line address (or its digest address) and compare the bytes served there with the build. The release input is unchanged: the bytes, not a declared major, identify the build. |
+| `templates/`, `examples/`, `scripts/fixtures/`, `docs/getting-started.md`, `docs/react-consumers.md`, `docs/tic-tac-toe/`, `docs/development-reference.md`, `scripts/publish/README.md` | Pass `major: 1`; replace the fingerprint explanation with the compatibility rule and its obligation. Committed release snapshots under `docs/releases/` are not edited. |
 
 The release notes for 1.0 state the migration: pass `major: 1`, keep any build stamp, and bump the major only for an incompatible change.
 
@@ -114,6 +113,5 @@ The fingerprint tests in `apps/lit-host/src/mcp/content-resource.test.ts` and `s
 
 - A view that is already mounted when its major changes is not replaced or told to stop by this design. Nothing in the 1.0 identity change depends on it.
 - Retained documents for earlier addresses, manifests, historical resource dispatchers, and CDN or storage provisioning remain rejected.
-- First-display and sandbox-loading failures in a host are a separate boundary. A stable address does not repair them.
 
 No implementation, merge, release or deployment is authorized by this draft.

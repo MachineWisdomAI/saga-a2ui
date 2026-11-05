@@ -140,7 +140,7 @@ describe('the update and rollback rehearsal', () => {
       );
       expect(record.stages[index]!.consumers.own!.served).toMatchObject({
         isTheBuiltPage: true,
-        uri: record.stages[index]!.consumers.own!.page.uri,
+        uri: 'ui://views/own.v1.html',
       });
       expect(record.stages[index]!.observed).toHaveLength(
         REHEARSED_TITLES.length,

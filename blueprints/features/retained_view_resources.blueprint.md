@@ -13,7 +13,7 @@ date_added: 2026-10-30
 - Design: rejected. Keeping old HTML available does not establish compatibility with the current tool result/action contract.
 - Implementation: not started.
 - Acceptance: not applicable to this rejected proposal.
-- Replacement: [Semantic view versioning](semantic_view_versioning.blueprint.md), draft awaiting human design approval.
+- Replacement: [Semantic view versioning](semantic_view_versioning.blueprint.md), approved at `c9c44aaa01f3547f1bc3fbcd30273235d61d6f35`.
 
 The rejected proposal is preserved in Git at `a0b581285ffa917f32ef5998159d2921adcdc077`. Its artifact manifests, promotion-order retention, trimming, withdrawal ledger and historical resource delivery are not implementation requirements. Its former flow diagrams were removed from the current proposal because they describe the rejected architecture.
 

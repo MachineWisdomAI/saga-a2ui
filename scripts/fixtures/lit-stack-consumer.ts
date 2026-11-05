@@ -44,7 +44,7 @@ import {
   operationViewFromHtml,
   registerProtectedOperation,
   registerPublicOperation,
-  viewUriForHtml,
+  viewUriForMajor,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/lit-mcp-stack/server';
@@ -218,12 +218,13 @@ export function composeServerSide(page: string): {
     view: operationViewFromHtml({
       html: served,
       filename: 'answer.html',
+      major: 1,
       title: 'Answer',
       csp: { resourceDomains: [...created.policy.resource.resourceDomains] },
     }),
     operationMs: createServerBudgets({ operationMs: 2_000 }).forRoute()
       .operationMs,
-    uri: viewUriForHtml(served, 'answer.html'),
+    uri: viewUriForMajor('answer.html', 1),
   };
 }
 export {

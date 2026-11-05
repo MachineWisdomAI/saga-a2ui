@@ -20,7 +20,7 @@ import {
 import { contentResource } from '../apps/lit-host/src/mcp/content-resource.js';
 import { SUBSCRIPTIONS_VIEW_URI } from '../apps/lit-host/src/mcp/subscriptions.js';
 import { PLAYBACK_VIEW_URI } from '../apps/lit-host/src/playback/playback.js';
-import { createServerBudgets, viewUriForHtml } from '@saga-a2ui/mcp/server';
+import { createServerBudgets } from '@saga-a2ui/mcp/server';
 import { createEpisodeServer } from '../apps/lit-host/src/mcp/server.js';
 import { fileURLToPath } from 'node:url';
 
@@ -186,7 +186,9 @@ describe('candidate identity', () => {
           sha256: string;
         };
         const actual = await served(created.policy);
-        expect(actual.uri).toBe(viewUriForHtml(actual.bytes, 'view.html'));
+        expect(actual.uri).toMatch(
+          /^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/,
+        );
         expect(actual.uri).not.toBe((await served(DEFAULT_CONTENT_POLICY)).uri);
         expect(identity.uri).toBe(actual.uri);
         expect(identity.bytes).toBe(actual.bytes.length);
@@ -224,10 +226,7 @@ describe('candidate identity', () => {
           }
         ).resources;
         expect(resources.map((resource) => resource.uri)).toEqual([
-          viewUriForHtml(
-            contentResource(viewHtml, DEFAULT_CONTENT_POLICY).html,
-            'view.html',
-          ),
+          contentResource(viewHtml, DEFAULT_CONTENT_POLICY).uri,
           SUBSCRIPTIONS_VIEW_URI,
           PLAYBACK_VIEW_URI,
         ]);

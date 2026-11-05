@@ -43,7 +43,7 @@ import {
   operationViewFromHtml,
   registerProtectedOperation,
   registerPublicOperation,
-  viewUriForHtml,
+  viewUriForMajor,
   type BudgetSettings,
   type LifetimeCause,
   type OperationOutcome,
@@ -206,12 +206,13 @@ export function composeServerSide(html: string): {
     view: operationViewFromHtml({
       html: served,
       filename: 'answer.html',
+      major: 1,
       title: 'Answer',
       csp: { resourceDomains: [...created.policy.resource.resourceDomains] },
     }),
     operationMs: createServerBudgets({ operationMs: 2_000 }).forRoute()
       .operationMs,
-    uri: viewUriForHtml(served, 'answer.html'),
+    uri: viewUriForMajor('answer.html', 1),
   };
 }
 // The remaining server entry names an application's MCP server composes with its own server object.

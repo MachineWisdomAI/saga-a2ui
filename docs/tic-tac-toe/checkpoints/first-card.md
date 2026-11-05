@@ -291,6 +291,7 @@ export function prepareBoardViews(html: string): OperationView {
   return operationViewFromHtml({
     html,
     filename: 'welcome.html',
+    major: 1,
     title: 'Tic-tac-toe',
   });
 }

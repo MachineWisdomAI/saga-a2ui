@@ -11,6 +11,7 @@ export {
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  viewUriForMajor,
   type BudgetSettings,
   type LifetimeCause,
   type OperationOutcome,

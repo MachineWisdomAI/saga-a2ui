@@ -432,7 +432,7 @@ export function prepareBoardViews(html: unknown): BoardViews {
   if (typeof html !== 'string' || !html.includes(VIEW_MARKER))
     throw new ViewArtifactMissing();
   const board = (filename: string, title: string): OperationView =>
-    operationViewFromHtml({ html, filename, title });
+    operationViewFromHtml({ html, filename, major: 1, title });
   return Object.freeze({
     newGame: board('new-game.html', 'Tic-tac-toe board (new game)'),
     showGame: board('show-game.html', 'Tic-tac-toe board (show game)'),

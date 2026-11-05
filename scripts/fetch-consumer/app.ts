@@ -30,6 +30,7 @@ export function createConsumerApp(settings: ConsumerSettings): McpFetchApp {
   const view = operationViewFromHtml({
     html: `<!doctype html><title>${VIEW_MARKER}</title>`,
     filename: 'counter.html',
+    major: 1,
     title: 'Counter',
   });
   return createMcpFetchApp({

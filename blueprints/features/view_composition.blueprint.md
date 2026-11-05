@@ -129,7 +129,7 @@ After `ready`, a throwing callback is reported to `onError(error, phase)`, which
 Each stack's convenience entries export exactly these sets, re-exporting existing owners, so browser imports reach no server module and server imports reach no browser code:
 
 - `content-policy`: `createContentPolicy`, `embedContentPolicy`; types `ContentPolicy`, `CreatePolicyResult`, `PolicyConfiguration`, `PolicyFailure`.
-- `server`: `attachRequestLifetime`, `createServerBudgets`, `operationViewFromHtml`, `registerPublicOperation`, `viewUriForHtml`; types `OperationView`, `RequestLifetime`.
+- `server`: `attachRequestLifetime`, `createServerBudgets`, `operationViewFromHtml`, `registerPublicOperation`, `viewUriForHtml`, `viewUriForMajor`; types `OperationView`, `RequestLifetime`.
 - Card entry: `FaithfulCardApp`, `CardContent`, `CardResultOutcome`, `startFaithfulCardApp`, `RunningView`, `StartFailure`; React also exposes `/faithful-card.css` (Lit styles its card internally); React `useHostLink`, `HostLink`, `HostLinkOutcome`; Lit `bindHostLink`, `HostLinkBinding`, `HostLinkOutcome`; both `readingProfile` and `ReadingProfile`.
 
 The main entry exports `startA2uiView`, `defineSurface`, `SurfaceLayout`, `z`, the renderer's action helpers and catalog types, plus `readingProfile`, `ReadingProfile` and delivery callback types. Its browser module graph exports nothing card-specific and does not import components. The stack's package manifest still declares components for its separate card entry.

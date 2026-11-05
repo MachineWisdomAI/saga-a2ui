@@ -542,9 +542,9 @@ describe('the React card consumer built from the packed SDK packages', () => {
       }
     }, 180_000);
 
-    // Derived here from the requirement (SHA-256 of the served bytes), not by the package's own function.
-    const identityOf = (html: string, filename = 'neutral.html'): string =>
-      `ui://views/${filename.slice(0, -5)}.${sha256(html).slice(0, 32)}.html`;
+    // The address names the file and the contract major, never the page bytes.
+    const addressOf = (filename = 'neutral.html'): string =>
+      `ui://views/${filename.slice(0, -5)}.v1.html`;
     const open: { host?: TestHost } = {};
     afterEach(async () => {
       await open.host?.close();
@@ -653,7 +653,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
         'font-src data: https://fonts.example.com https://fonts.example.com:8443',
       ],
     ] as const)(
-      'serves %s with the exact document restrictions, the identity of those bytes and every result linked to it',
+      'serves %s with the exact document restrictions at its address and every result linked to it',
       async (name, images, fonts) => {
         const { pages } = await prepared();
         const reading = await serve(
@@ -663,7 +663,7 @@ describe('the React card consumer built from the packed SDK packages', () => {
           'harbor.html',
         );
         expect(reading.mimeType).toBe('text/html;profile=mcp-app');
-        expect(reading.uri).toBe(identityOf(reading.html, 'harbor.html'));
+        expect(reading.uri).toBe(addressOf('harbor.html'));
         expect(reading.linked).toEqual([reading.uri, reading.uri, reading.uri]); // distinct answers reuse one resource
 
         const policies = [
@@ -718,9 +718,10 @@ describe('the React card consumer built from the packed SDK packages', () => {
       120_000,
     );
 
-    it('gives a document with any change a different resource and an unchanged document the same one', async () => {
+    it('keeps one resource per file across a rebuild, an answer and a policy, and serves the current page there', async () => {
       const { pages } = await prepared();
       const standard = await serve(pages.neutral, POLICIES.standardEmpty);
+      expect(standard.uri).toBe(addressOf());
       expect(
         (
           await serve(pages.neutral, POLICIES.standardEmpty, [
@@ -729,16 +730,16 @@ describe('the React card consumer built from the packed SDK packages', () => {
           ])
         ).uri,
       ).toBe(standard.uri); // an answer is never part of the document
-      const identities = new Set([
-        standard.uri,
-        (await serve(pages.neutral, POLICIES.strictEmpty)).uri, // level
-        (await serve(pages.neutral, POLICIES.standardListed)).uri, // origin lists
-        (
-          await serve(pages.neutral, {
-            level: 'standard',
-            fontOrigins: ['https://fonts.example.com'],
-          })
-        ).uri, // a font origin alone
+      const rebuilt = await serve(
+        pages.neutral.replace('</body>', '<!-- rebuilt --></body>'),
+        POLICIES.standardEmpty,
+      );
+      expect(rebuilt.uri).toBe(standard.uri); // a rebuild keeps the address
+      expect(rebuilt.html).toContain('<!-- rebuilt --></body>');
+      const strict = await serve(pages.neutral, POLICIES.strictEmpty);
+      expect(strict.uri).toBe(standard.uri); // the major, not the policy, names the line
+      expect(strict.html).not.toBe(standard.html); // and the page read there carries the current policy
+      expect(
         (
           await serve(
             pages.harbor,
@@ -746,16 +747,8 @@ describe('the React card consumer built from the packed SDK packages', () => {
             undefined,
             'harbor.html',
           )
-        ).uri, // brand: tokens, artwork and font bytes
-        (
-          await serve(
-            pages.neutral.replace('</body>', '<!-- rebuilt --></body>'),
-            POLICIES.standardEmpty,
-          )
-        ).uri, // one changed byte
-      ]);
-      expect(identities.size).toBe(6);
-      expect(standard.uri).toBe(identityOf(standard.html));
+        ).uri,
+      ).toBe(addressOf('harbor.html')); // another file is another resource
     }, 180_000);
 
     it('refuses a policy configuration that does not validate, before serving anything', async () => {
