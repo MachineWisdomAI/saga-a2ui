@@ -708,6 +708,8 @@ describe('Fetch MCP hosting request lifetime', () => {
     const response = await answeredWithin(app, probe.request, 2_000);
     expect(response?.status).toBe(413);
     expect(lifetimes).toHaveLength(0);
+    // The listener, not this answer, decides when to drop a connection whose body is still arriving.
+    expect(response?.headers.get('connection')).toBeNull();
   });
 
   it('refuses a body that grows past the limit and releases the stream', async () => {
