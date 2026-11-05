@@ -12,6 +12,7 @@ import {
   connectPlaybackView,
   type PlaybackViewState,
 } from './playback/playback-view.js';
+import { admittedMediaOrigin } from './playback/playback.js';
 import { createWebAudioPlayer } from './playback/web-audio-player.js';
 
 // Composition root of the player view (built into one HTML resource by vite.playback-view.config.ts).
@@ -100,6 +101,8 @@ const connection = await connectPlaybackView({
   // The host window is the only permitted peer; the transport checks `event.source`.
   transport: new PostMessageTransport(window.parent, window.parent),
   player: createWebAudioPlayer(),
+  // The one media origin the served document admits; a grant naming another origin is refused.
+  mediaOrigin: admittedMediaOrigin(document),
   // The card's consent belongs to its content view; the controller says when a selection ends.
   ...(contentConsent ? { contentConsent } : {}),
   show(state: PlaybackViewState) {
