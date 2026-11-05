@@ -1,4 +1,4 @@
-import { defineSurface, z } from '@saga-a2ui/lit-mcp-stack';
+import { defineSurface, z3 } from '@saga-a2ui/lit-mcp-stack';
 
 // The layout of the starter surface: its data and its components. The layout gives the markup its
 // IDs and its structure and nothing else: it names no action, no handler and no function. Which
@@ -13,7 +13,7 @@ export const CLEAR_ID = 'clear';
 export const starterSurface = defineSurface({
   surfaceId: 'starter',
   catalogId: CATALOG_ID,
-  data: z.object({ headline: z.string() }),
+  data: z3.object({ headline: z3.string() }),
   initial: { headline: '' },
   root: {
     component: 'Column',

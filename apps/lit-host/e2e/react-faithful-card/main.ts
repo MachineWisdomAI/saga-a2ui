@@ -60,7 +60,7 @@ import { createRoot, type Root } from 'react-dom/client';
 // element that ends the first view's consent in the same commit as the first press.
 
 export const CATALOG_ID =
-  'https://saga-a2ui.local/catalogs/react-faithful-card/v1';
+  'https://saga-a2ui.dev/catalogs/react-faithful-card/v1';
 export const SURFACE_ID = 'cards';
 export const SECOND_SURFACE_ID = 'cards-b';
 

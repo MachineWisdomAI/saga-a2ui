@@ -5,7 +5,7 @@ import {
   CommonSchemas,
   defineSurface,
   startA2uiView,
-  z,
+  z3,
   type LitComponentApi,
 } from '@saga-a2ui/lit-mcp-stack';
 import { html, nothing } from 'lit';
@@ -15,7 +15,7 @@ import { runConversationProbe } from './probe.js';
 // except the page-level hook in probe.ts.
 const LineApi = {
   name: 'Line',
-  schema: z.object({ text: CommonSchemas.DynamicString }).strict(),
+  schema: z3.object({ text: CommonSchemas.DynamicString }).strict(),
 };
 class LineElement extends A2uiLitElement<typeof LineApi> {
   protected readonly api = LineApi;
@@ -40,7 +40,7 @@ const catalog = new Catalog<LitComponentApi>(CATALOG_ID, 'v0.9', [
 const layout = defineSurface({
   surfaceId: 'conversation-probe',
   catalogId: CATALOG_ID,
-  data: z.object({ label: z.string() }),
+  data: z3.object({ label: z3.string() }),
   initial: { label: 'Waiting' },
   root: { component: 'ActionButton', bind: {}, props: { child: 'label' } },
   components: [{ id: 'label', component: 'Line', text: { path: '/label' } }],
