@@ -12,6 +12,7 @@ import {
   MAX_HANDOFF_JSON_DEPTH,
   MAX_HANDOFF_RECORD_BYTES,
   exceedsJsonDepth,
+  handoffEventRefusal,
   readBounded,
 } from './bounded-read.js';
 import { readPreviousOutput, staleness } from './previous.js';
@@ -239,6 +240,8 @@ type ReadRecord =
       readonly events: readonly HandoffEvent[];
       readonly tipSha256: string;
       readonly identity: fs.BigIntStats;
+      /** The bytes of all the events read, which the next event is added to before it is admitted. */
+      readonly bytes: number;
     }
   | { readonly ok: false; readonly problem: string };
 
@@ -352,7 +355,7 @@ function readRecord(directory: string): ReadRecord {
       ok: false,
       problem: `${directory} was replaced while the record was being read; nothing was read from it that can be trusted.`,
     };
-  return { ok: true, events, tipSha256: tip, identity: stat };
+  return { ok: true, events, tipSha256: tip, identity: stat, bytes: total };
 }
 
 /**
@@ -380,6 +383,8 @@ function listEvents(
   return { names };
 }
 
+/** An event this command would write that its own reader would refuse; the text names the limit and is safe to show. */
+class Oversized extends Error {}
 class Raced extends Error {}
 class Interrupted extends Error {}
 class Replaced extends Error {}
@@ -391,6 +396,18 @@ function isDirectoryAt(directory: string, identity: fs.BigIntStats): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Admits an event only if `readRecord` would read it back: the same count, size, depth and
+ * record-total limits, applied to the serialized bytes before anything is staged or linked.
+ */
+function admit(seq: number, content: Buffer, recordBytes: number): void {
+  const refusal = handoffEventRefusal(seq, content, recordBytes);
+  if (refusal !== undefined)
+    throw new Oversized(
+      `${refusal}, which is more than a record this command can read back.`,
+    );
 }
 
 /** The directory held open by its identity: a rename or replacement of its path afterwards does not change which directory this is. */
@@ -418,11 +435,26 @@ const OPEN_DIRECTORY =
 function appendEvent(
   directory: string,
   bound: fs.BigIntStats,
-  previous: { readonly seq: number; readonly tipSha256: string | null },
+  previous: {
+    readonly seq: number;
+    readonly tipSha256: string | null;
+    /** The bytes of the events already in the record. */
+    readonly bytes: number;
+  },
   body: EventBody,
   now: Date,
   signal: AbortSignal | undefined,
 ): void {
+  const seq = previous.seq + 1;
+  const event = {
+    format: HANDOFF_FORMAT,
+    seq,
+    previousSha256: previous.tipSha256,
+    recordedAt: now.toISOString(),
+    ...body,
+  };
+  const content = Buffer.from(`${JSON.stringify(event, null, 2)}\n`);
+  admit(seq, content, previous.bytes);
   let handle: number;
   try {
     handle = fs.openSync(directory, OPEN_DIRECTORY);
@@ -438,14 +470,6 @@ function appendEvent(
     const through = fs.existsSync(`/proc/self/fd/${handle}`)
       ? `/proc/self/fd/${handle}`
       : directory;
-    const seq = previous.seq + 1;
-    const event = {
-      format: HANDOFF_FORMAT,
-      seq,
-      previousSha256: previous.tipSha256,
-      recordedAt: now.toISOString(),
-      ...body,
-    };
     const staged = path.join(
       through,
       `.${eventFile(seq)}.tmp-${randomBytes(6).toString('hex')}`,
@@ -453,7 +477,7 @@ function appendEvent(
     const written = fs.openSync(staged, 'wx');
     let ours: fs.BigIntStats;
     try {
-      fs.writeFileSync(written, `${JSON.stringify(event, null, 2)}\n`);
+      fs.writeFileSync(written, content);
       ours = fs.fstatSync(written, { bigint: true });
     } finally {
       fs.closeSync(written);
@@ -1272,7 +1296,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
     appendEvent(
       directory,
       ours,
-      { seq: 0, tipSha256: null },
+      { seq: 0, tipSha256: null, bytes: 0 },
       body,
       io.now(),
       io.signal,
@@ -1329,6 +1353,12 @@ function failedAppend(error: unknown, io: HandoffIo, action: string): number {
       `saga publish handoff ${action}: interrupted; nothing was recorded.\n`,
     );
     return EXIT_INTERRUPTED;
+  }
+  if (error instanceof Oversized) {
+    io.stderr(
+      `saga publish handoff ${action}: ${error.message} Nothing was recorded.\n`,
+    );
+    return EXIT_REFUSED;
   }
   if (error instanceof Replaced) {
     io.stderr(
@@ -1422,7 +1452,7 @@ export async function runHandoff(
     appendEvent(
       path.resolve(io.cwd, request.handoff as string),
       read.identity,
-      { seq: last.seq, tipSha256: read.tipSha256 },
+      { seq: last.seq, tipSha256: read.tipSha256, bytes: read.bytes },
       decision.body,
       io.now(),
       io.signal,

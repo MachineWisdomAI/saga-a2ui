@@ -256,8 +256,13 @@ the command's temporary file is removed only while its name still shows the file
 it can stay behind, in the directory that was moved, as an ignored dot-file. A record that was altered, has a missing event or holds other files is refused and
 never repaired. So is a record larger than any this command writes, before an event is parsed: more than
 1000 events, a first event over 16 MiB, a later event over 16 KiB, events together over 24 MiB, or an event nested
-more than 64 levels deep (the limits are in `bounded-read.ts`). A record that already holds 1000 events accepts no
-further event; begin a new record for further work.
+more than 64 levels deep (the limits are in `bounded-read.ts`). The directory listing is also bounded: it is
+refused once it holds more than 1000 visible events or more than 2000 entries in total, counting the ignored
+dot-files. The command applies the same limits to what it writes, before anything is staged or linked: a `begin`
+whose authority references make the first event too large, or an event that would take the record past the
+event count, size, nesting or total limit, is refused with nothing recorded (and a directory `begin` created
+is removed again). A record that already holds 1000 events accepts no further event; begin a new record for
+further work.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,

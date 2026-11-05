@@ -115,3 +115,26 @@ export function exceedsJsonDepth(data: Uint8Array, limit: number): boolean {
   }
   return false;
 }
+
+/**
+ * Why a handoff event of `content` bytes, the `seq`-th of a record that already holds `recordBytes`,
+ * would make its record unreadable, or `undefined` when it would be read back. These are the limits
+ * the reader refuses by, applied to what is about to be written so that the command never creates
+ * a record it cannot read.
+ */
+export function handoffEventRefusal(
+  seq: number,
+  content: Uint8Array,
+  recordBytes: number,
+): string | undefined {
+  const limit = seq === 1 ? MAX_HANDOFF_BEGIN_BYTES : MAX_HANDOFF_EVENT_BYTES;
+  if (seq > MAX_HANDOFF_EVENTS)
+    return `the record would hold more than ${MAX_HANDOFF_EVENTS} events`;
+  if (content.length > limit)
+    return `the event would be larger than ${limit} bytes`;
+  if (recordBytes + content.length > MAX_HANDOFF_RECORD_BYTES)
+    return `the events together would be larger than ${MAX_HANDOFF_RECORD_BYTES} bytes`;
+  if (exceedsJsonDepth(content, MAX_HANDOFF_JSON_DEPTH))
+    return `the event would be nested deeper than ${MAX_HANDOFF_JSON_DEPTH} levels`;
+  return undefined;
+}

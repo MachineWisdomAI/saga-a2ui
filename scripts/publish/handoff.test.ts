@@ -14,6 +14,14 @@ import {
   type Options,
   type Run,
 } from './harness.js';
+import {
+  MAX_HANDOFF_BEGIN_BYTES,
+  MAX_HANDOFF_EVENT_BYTES,
+  MAX_HANDOFF_EVENTS,
+  MAX_HANDOFF_JSON_DEPTH,
+  MAX_HANDOFF_RECORD_BYTES,
+  handoffEventRefusal,
+} from './bounded-read.js';
 import { staleness } from './previous.js';
 import { ARCHIVE_FILES, RECORD_FILE, sha256 } from './record.js';
 
@@ -2021,5 +2029,104 @@ describe('a handoff directory larger than any record this command writes', () =>
     expect(run.code).toBe(1);
     expect(run.err).toMatch(/already holds 1000 events/);
     expect(fs.existsSync(eventPath(s.cwd, 1001))).toBe(false);
+  });
+});
+
+describe('a handoff event this command would write that it could not read back', () => {
+  const bytes = (size: number): Uint8Array => new Uint8Array(size).fill(0x20);
+  const nested = (depth: number): Uint8Array =>
+    Buffer.from(`${'['.repeat(depth)}${']'.repeat(depth)}`);
+
+  it('admits ordinary events, and events exactly at each limit', () => {
+    expect(handoffEventRefusal(1, bytes(2000), 0)).toBeUndefined();
+    expect(handoffEventRefusal(2, bytes(400), 2000)).toBeUndefined();
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES), 0),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES), 2000),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(
+        MAX_HANDOFF_EVENTS,
+        bytes(400),
+        MAX_HANDOFF_RECORD_BYTES - 400,
+      ),
+    ).toBeUndefined();
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH), 2000),
+    ).toBeUndefined();
+  });
+
+  it('refuses a first event, a later event, a count, a total and a depth over the limits the reader refuses by', () => {
+    expect(
+      handoffEventRefusal(1, bytes(MAX_HANDOFF_BEGIN_BYTES + 1), 0),
+    ).toMatch(/larger than 16777216 bytes/);
+    expect(
+      handoffEventRefusal(2, bytes(MAX_HANDOFF_EVENT_BYTES + 1), 2000),
+    ).toMatch(/larger than 16384 bytes/);
+    expect(
+      handoffEventRefusal(MAX_HANDOFF_EVENTS + 1, bytes(400), 2000),
+    ).toMatch(/more than 1000 events/);
+    expect(
+      handoffEventRefusal(2, bytes(400), MAX_HANDOFF_RECORD_BYTES - 399),
+    ).toMatch(/together would be larger than 25165824 bytes/);
+    expect(
+      handoffEventRefusal(2, nested(MAX_HANDOFF_JSON_DEPTH + 1), 2000),
+    ).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('refuses a begin whose authority references together are over the first event limit, and records nothing', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(
+      /larger than 16777216 bytes.*Nothing was recorded/s,
+    );
+    expect(fs.existsSync(path.join(cwd, HANDOFF))).toBe(false);
+
+    const ordinary = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      '--authority-ref',
+      AUTHORITY,
+    ]);
+    expect(ordinary.code, ordinary.out + ordinary.err).toBe(0);
+    expect((await statusOf(s)).code).toBe(0);
+  });
+
+  it('leaves an existing empty directory empty when its begin is refused', async () => {
+    const { app, cwd, out } = await prepared();
+    const s = session(cwd, app);
+    fs.mkdirSync(path.join(cwd, HANDOFF));
+    const many = Array.from({ length: 40_000 }, (_, n) => [
+      '--authority-ref',
+      `ticket-${n} ${'x'.repeat(480)}`,
+    ]).flat();
+    const run = await s.run([
+      'begin',
+      '--handoff',
+      HANDOFF,
+      '--prepared',
+      out,
+      ...many,
+    ]);
+    expect(run.code).toBe(1);
+    expect(fs.readdirSync(path.join(cwd, HANDOFF))).toEqual([]);
   });
 });
