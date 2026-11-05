@@ -3,9 +3,7 @@ title: 'Styling the FaithfulCard'
 description: 'The class names, custom properties and selectors an application may use to style the FaithfulCard in either renderer.'
 ---
 
-> Documents saga a2ui **0.7.6** (stable). This is the SDK guide [`docs/faithful-card-styling.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/docs/faithful-card-styling.md) at source revision [`5995b1f`](https://github.com/MachineWisdomAI/saga-a2ui/tree/5995b1f0d2703f69582aa5def3db65cdea0967fc). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/5995b1f0d2703f69582aa5def3db65cdea0967fc/LICENSE).
->
-> The Lit packages (`@saga-a2ui/lit`, `@saga-a2ui/lit-mcp-stack`) were first published to npm at 0.7.7-rc.1. Where this snapshot mentions them, it describes source at the pinned revision, not packages you can install at 0.7.6.
+> Documents saga a2ui **1.0.0** (stable). This is the SDK guide [`docs/faithful-card-styling.md`](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/docs/faithful-card-styling.md) at source revision [`a9633b3`](https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692). It is published as a snapshot: later source changes do not alter it. Licensed under [Apache-2.0](https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/LICENSE).
 
 A branded application styles the card with ordinary CSS, against the surface this document commits to. Both renderers (`@saga-a2ui/react/faithful-card` and `@saga-a2ui/lit/faithful-card`) emit the same surface, so one stylesheet serves either. Anything not listed here is not contract and may change in any release: the markup a renderer wraps around content, the stylesheet's own selectors, and every `data-testid` or `data-annotation` attribute.
 
@@ -66,6 +64,25 @@ Set any of these on the card or an ancestor. Each has a neutral fallback; unset 
 
 There is no typed bridge from a host's own CSS variables to these properties. An application maps a host's theme onto them itself. For a host that is read on a device rather than at a desk, both stacks export `readingProfile(context, hostName)` (from their main and `/faithful-card` entries), the one place that recognises such hosts. It answers `'device'` or `'desktop'` for the `hostContext` callback's arguments, and the application maps the answer onto its own tokens (for example a larger `--saga-card-font-size`) and onto a `data-reading-profile` attribute of its own. The card decides nothing from the profile, and the application never branches on a host name.
 
+For example, apply brand colours and a readable measure without depending on the renderer's internal markup:
+
+```css
+.brand-answer {
+  --saga-card-font-family: system-ui, sans-serif;
+  --saga-card-font-size: 1rem;
+  --saga-card-line-height: 1.6;
+  --saga-card-reading-width: 65ch;
+  --saga-card-text-color: #172026;
+  --saga-card-accent-color: #075b54;
+}
+
+.brand-answer[data-reading-profile='device'] {
+  --saga-card-font-size: 1.25rem;
+}
+```
+
+Place the card inside the application's `.brand-answer` element and set its `data-reading-profile` from the `hostContext` callback. The tokens inherit in both renderers, including through Lit's shadow roots. The second rule takes effect only when the application supplies that attribute; the SDK's reading profile does not apply CSS by itself. Test the resulting colours and scale with your own theme, content and target screens.
+
 ## The closing marker
 
 The final top-level block of the content carries `data-saga-closing="paragraph"` when, and only when, that block is a paragraph, whatever its words:
@@ -92,7 +109,7 @@ Re-run the classifier each time the card shows new content; the marker moves wit
 
 ## Reaching the card from a stylesheet
 
-- **React** renders into the page's own tree, so a page or component stylesheet applies. Import `@saga-a2ui/react/faithful-card.css` for the SDK's presentation, then add rules after it.
+- **React** renders into the page's own tree, so a page or component stylesheet applies. A stack application imports `@saga-a2ui/react-mcp-stack/faithful-card.css` for the SDK's presentation; a lower-level renderer integration imports `@saga-a2ui/react/faithful-card.css`. Add application rules after that stylesheet.
 - **Lit** renders the card inside shadow roots that the catalog and the A2UI surface create, so a page stylesheet cannot select into it. Pass constructable stylesheets as `styles` to `startFaithfulCardApp` of the Lit stack (or to `createFaithfulCardView` when composing the card yourself); each connected card adopts them into the root it lives in. Custom properties inherit through shadow roots and need no sheet.
 
 ## Qualification
@@ -105,4 +122,3 @@ This is the lower-level evidence. `apps/lit-host/e2e/card-styling.spec.ts` rende
 
 `apps/lit-host/e2e/card-app-stack.spec.ts` starts the card through `startFaithfulCardApp` of each stack, in the local host fixture's sandboxed iframe and over a real `AppBridge`, with the real definition and the application's chrome. It uses no private test hook. The probe page uses the same branded stylesheet and the same application classifier as the lower-level specification, and each stack receives the stylesheet the way an application would give it: the React page applies it as page CSS beside the stack's public `faithful-card.css`; the Lit page passes it as the start's `styles` option, which the stack hands to the card view that adopts it into the card's root. On both stacks the same cases assert the semantic DOM the stylesheet depends on (`strong`, `em`, `hr`, right-to-left direction, links, lists, the structural closing marker only on a final top-level paragraph, and the application's own attribution classification, which follows each answer), the computed styles of the paragraph, link, list, footer, emphasis, right-to-left emphasis, rule and strong-footer rules, a held result shown only after the application's font readiness work settles, the reset of image consent when an equal answer arrives again, and that the stack still reports the size.
 
-This is a local fixture result, not acceptance by any actual host.
