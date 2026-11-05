@@ -237,7 +237,7 @@ describe('what the guide must explain', () => {
       'Disposal, ownership and hand-off',
       'What each renderer and server has shown',
       'Hapi',
-      'What this guide does not show',
+      'Scope of this guide',
     ]) {
       expect(headings, required).toContain(required);
     }
@@ -299,7 +299,7 @@ describe('what the guide must explain', () => {
     );
     const section = guide.slice(
       guide.indexOf('### Hapi'),
-      guide.indexOf('## What this guide does not show'),
+      guide.indexOf('## Scope of this guide'),
     );
     if (hapi.length === 0) {
       expect(section).toContain('no qualified recipe');
@@ -313,13 +313,15 @@ describe('what the guide must explain', () => {
     }
   });
 
-  it('keeps Lynx as history and claims no pair, renderer or host the evidence does not show', () => {
+  it('keeps Lynx as history and claims no pair, renderer or host beyond the evidence', () => {
     const prose = guide.replace(/```[\s\S]*?```/g, '');
     for (const line of prose.split('\n').filter((one) => /lynx/i.test(one)))
       expect(line).toMatch(/retired|history/i);
-    expect(guide).toMatch(/not shown/i);
     expect(guide).toMatch(
-      /one React starter, `react-mcp` on Hono, and its generated recipe[^|]*\|\s*No other React pair, no authenticated React recipe/,
+      /one React starter, `react-mcp` on Hono, and its generated recipe/,
+    );
+    expect(guide).not.toMatch(
+      /\breact\b[^\n]*\b(express|fastify|hapi)\b[^\n]*\bqualified\b/i,
     );
     expect(guide).not.toMatch(/\bhapi\b[^\n]*\bis qualified\b/i);
   });

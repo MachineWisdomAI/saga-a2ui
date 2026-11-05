@@ -55,4 +55,4 @@ Enable the `nodejs_compat` compatibility flag. The MCP SDK, and the SDK's view i
 
 `scripts/fetch-consumer.test.ts` installs the packed packages in a clean directory outside the repository, builds one application composition, and runs it twice: as a Worker in the real `workerd` runtime (through Miniflare, with `nodejs_compat`), and behind a Node `http` listener. In both, an MCP client lists tools, calls an operation and reads its declared view, and requests with an unlisted Host, an unlisted Origin or another path run no application code. The unit tests in `packages/mcp/src/server/http/fetch-app.test.ts` cover route selection, Host and Origin rules (including an absent Origin and empty lists), JSON and SSE delivery, configuration errors, and lifetime release on factory failure and on closing before or after a transport connects.
 
-These results come from source and packed candidate packages. They are not an observation of a published package or a deployed host.
+These results come from source and packed candidate packages.

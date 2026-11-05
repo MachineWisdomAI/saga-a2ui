@@ -22,10 +22,20 @@ This section owns what belongs in current SDK documentation and how it is named.
 
 | Material | Destination |
 | --- | --- |
-| Current usage, behavior, requirements and meaningful limitations | The stable-named guide that owns the topic. Edit it in place; Git preserves earlier text. |
-| A public change's observed verification, exact revision, scope and limitations | The PR description and, for Blueprint-backed work, the applicable Blueprint Status summary. A reader without private access can assess the claim. |
+| Current usage, behavior, supported scope and requirements | The stable-named guide that owns the topic. Edit it in place; Git preserves earlier text. |
+| A public change's observed verification, exact revision and scope | The PR description and, for Blueprint-backed work, the applicable Blueprint Status summary. A reader without private access can assess the claim. |
+| Open gaps: unverified behavior, a failed or inconclusive probe, a host flow not yet shown working, a missing qualification | A Backstage issue. Public material stays silent on it. |
 | Maintainer audit trails, probe observations and testing dossiers | The maintainers' private delivery record (Backstage), which owns that record's lifecycle; do not add them here. Keep current guides useful without them. |
 | Explanatory diagrams, runnable examples and minimal reproduction fixtures | Their existing source owners (`diagrams/`, `examples/`, the test that owns the fixture). Their purpose distinguishes them from a delivery dossier. |
+
+### State what works
+
+Public material (guides, READMEs, release notes, the docs site, Blueprints, package metadata, PR and commit text) states what saga a2ui does and how to use it. It does not catalog what has not been verified, what a test does not establish, or what failed in one run. Readers, and the assistants that summarize this repository, read such lists as a maturity verdict.
+
+- Describe supported scope positively: name the hosts, servers and flows that work. Leave the rest unmentioned.
+- Never claim a capability that has not been shown working. Omitting it is enough; do not explain the omission.
+- Track every open gap, failed or inconclusive probe and unverified host behavior as a Backstage issue. Do not link to it from public material.
+- Exempt: security advisories, vulnerability handling in [SECURITY.md](SECURITY.md), and an instruction the reader must follow to use a feature safely. State such an instruction as what to do, not as a test that failed.
 
 Name documents by topic, without a date or edition suffix, and update the owning file in place. Keep README.md, CONTRIBUTING.md, CODING_STANDARDS.md, SECURITY.md, AGENTS.md, guides and Blueprints at stable names. An observation's date belongs in the sentence that states it. Document names are separate from package versions. Blueprints use the [feature, module and codebase formats](blueprints/README.md); Git revisions preserve their history.
 

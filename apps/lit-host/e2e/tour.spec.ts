@@ -212,7 +212,7 @@ test.describe('reading order, limits and links', () => {
       'Simulation limit:',
     );
     await expect(page.getByTestId('tour-limits')).toContainText(
-      'No protected media, no Patreon access and no playback',
+      'The tour plays no media.',
     );
   });
 
@@ -316,7 +316,7 @@ test.describe('reading order, limits and links', () => {
       await expect(page.locator(`#source-${id} a`)).toHaveCount(1);
     }
     await expect(page.getByTestId('source-identity')).toContainText(
-      'unpublished',
+      'public repository',
     );
   });
 

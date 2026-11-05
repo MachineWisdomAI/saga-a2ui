@@ -19,10 +19,7 @@
           },
           {
             "group": "Concepts and reference",
-            "pages": [
-              "docs/releases/0.7.6/guides/faithful-card-styling",
-              "docs/releases/0.7.6/guides/host-compatibility-observations"
-            ]
+            "pages": ["docs/releases/0.7.6/guides/faithful-card-styling"]
           },
           {
             "group": "Components",

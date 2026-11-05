@@ -79,18 +79,18 @@ A view is served as an MCP App resource whose address is `ui://views/<filename>.
 
 The application authenticates the request and its server decides what the account may see; SAGA carries the verified result. In the starter, `server/listener.ts` verifies the request, hands the result to the transport, and the operation reads it with `identityOf`. No tool argument can name an account, a prior call authorizes nothing, and two overlapping requests each see their own identity.
 
-**Synthetic versus real identity.** The demonstration's sign-in choices are fixed public development credentials printed in the source (`apps/lit-host/src/mcp/dev-auth.ts`). They prove nothing about a person, the page and the process say so, and the process refuses `NODE_ENV=production`. They are not a model for production. A real host uses its supported authentication through your own `OAuthTokenVerifier`, and a loopback run says nothing about it.
+**Synthetic versus real identity.** The demonstration's sign-in choices are fixed public development credentials printed in the source (`apps/lit-host/src/mcp/dev-auth.ts`). They identify no one, the page and the process say so, and the process refuses `NODE_ENV=production`. For production, authenticate through the host's supported authentication and your own `OAuthTokenVerifier`.
 
-**Evidence is several different things.** A claim is only as wide as the check that supports it:
+**What each local check shows.**
 
-| Evidence | It shows | It does not show |
-| --- | --- | --- |
-| Invocation | An action ran against an instance, with its prerequisites, hooks and outcome | That the control was visible, or that a host delivers the gesture |
-| Rendering | A view displayed content under a policy in the local host fixture | Rendering in ChatGPT, Claude or Alexa+ |
-| Authentication | A request with an accepted, refused or absent credential was admitted or refused | An OAuth or DCR flow, or any real identity provider |
-| Audio | The local audio clock advanced | Audio in a remote host |
+| Evidence | It shows |
+| --- | --- |
+| Invocation | An action ran against an instance, with its prerequisites, hooks and outcome |
+| Rendering | A view displayed content under a policy in the local host fixture |
+| Authentication | A request with an accepted, refused or absent credential was admitted or refused |
+| Audio | The local audio clock advanced |
 
-Named-host receipts exist for a few specific flows and are recorded in [host compatibility observations](host-compatibility.md). The starter, the demonstration and this guide have not been run in an actual assistant host.
+[Where SAGA runs](host-compatibility.md) describes the assistant hosts SAGA applications run in.
 
 ## Actions
 
@@ -102,24 +102,24 @@ The verified **non-playback** example is the notes application: `examples/pack1-
 - **Outcome hooks.** Success, failure and cancellation each have a hook that reports what that outcome establishes. A timeout or an unreadable reply is *unknown*, not "nothing happened".
 - **Application resource ownership.** A hold the application takes for a press is given back on every non-success end and handed to its owner only after the server confirms. The application owns it, not the binding.
 
-Two limits matter before you rely on a client-side control:
+Two rules for client-side controls:
 
-- **A client check does not authorize a protected server operation.** The server decides again for every protected request; a prerequisite only saves a request.
-- **Cancellation does not undo remote effects.** Closing a view stops the client waiting. It does not establish that the host forwarded cancellation or that the server stopped, and an applied write stays applied. Uncertain writes are not retried automatically.
+- **Authorize every protected operation on the server.** The server decides again for every protected request; a client prerequisite only saves a request.
+- **Treat cancellation as the client no longer waiting.** Closing a view stops the client waiting; server work stops only if it honors its own signal, and an applied write stays applied. Uncertain writes are not retried automatically.
 
 Defaults, kept separate: action work 30 seconds and each hook or cleanup 5 seconds; server operations 3 seconds inside a 10-second request budget that starts before authentication. Invalid explicit settings fail, and a stage never resets its parent's budget.
 
 ## What is implemented and what is not
 
-| Area | Implemented, qualified in source | Not done or not shown |
-| --- | --- | --- |
-| Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it | A registry or handler-name table, which do not exist |
-| Lit | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer checks cover the starter, demonstration and notes example | Starter and local fixture results do not establish every application or host combination; Windows is not qualified here |
-| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. Bounded notes observations in Claude/ChatGPT are recorded in [host compatibility](host-compatibility.md) | One generated React starter, `react-mcp` on Hono; no other React server pair and no React demonstration. Qualification of a particular application and host remains specific to its built artifact; no complete host matrix is claimed |
-| Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp`; `hono` qualified with `react-mcp` | No full matrix; `saga init` offers those six pairs; the standalone demonstration is the Lit and Node application only |
-| Lynx | Nothing. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence, with no delivery promise, no recipe and no adapter | Any current Lynx setup |
+| Area | Implemented, qualified in source |
+| --- | --- |
+| Shared action contract | `@saga-a2ui/core/actions`, with the opt-in Lit and React `ActionButton` controls; Play runs on it. Actions bind directly to rendered components, with no registry or handler-name table |
+| Lit | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer checks cover the starter, demonstration and notes example |
+| React | Published renderer and MCP stack: typed surfaces, actions and FaithfulCard applications; packed-consumer and browser checks cover own-catalog notes and branded answer cards. One generated React starter, `react-mcp` on Hono. Notes runs in Claude and ChatGPT are described in [where SAGA runs](host-compatibility.md) |
+| Server targets | `node`, `express`, `hono`, `fastify`, `hapi` qualified with `lit-mcp`; `hono` qualified with `react-mcp`. `saga init` offers those six pairs; the standalone demonstration is the Lit and Node application |
+| Lynx | Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are **historical** designs and evidence |
 
-A renderer is qualified by running its own lifecycle, not by declaring that it could: a type declaration that compiles is not a working setup claim, and no renderer is forced through a Lit-specific lifecycle (custom elements and `createA2uiAppElement`). React attaches through its own provider and hook; the shared contract is renderer-neutral.
+Each renderer is qualified by running its own lifecycle, and no renderer is forced through a Lit-specific lifecycle (custom elements and `createA2uiAppElement`). React attaches through its own provider and hook; the shared contract is renderer-neutral.
 
 <!-- react -->
 ### React applications

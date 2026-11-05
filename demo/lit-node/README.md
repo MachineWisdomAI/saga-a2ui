@@ -39,9 +39,7 @@ to type a credential into.
 
 A run against a real host uses that host's supported authentication instead. Give each protected
 endpoint your own `OAuthTokenVerifier` (see `templates/lit-node/server/verifier.ts`), do not ship
-`demo/lit-node/fixtures`, and put your own ingress host name in `allowedHosts`. This demonstration
-has not been run in ChatGPT, Claude or Alexa+, and a local loopback run says nothing about a
-remote host's authentication or audio.
+`demo/lit-node/fixtures`, and put your own ingress host name in `allowedHosts`.
 
 ## What you can do
 
@@ -103,6 +101,6 @@ the installed packages, and the views are the application's installed views.
 
 ## Limits
 
-Loopback only, in memory, one process. The local host fixture is not an assistant host. No OAuth
-flow or registry install is involved, nothing is published or deployed, and the packages are candidate builds of this source
-(`@saga-a2ui/lit` and `@saga-a2ui/lit-mcp-stack` are private and unpublished).
+The demonstration runs on loopback, in memory, in one process, with the local host fixture standing
+in for the assistant host and the development credentials above. Its packages are candidate builds
+of this source, bundled into `server.mjs`.

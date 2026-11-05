@@ -90,7 +90,7 @@ The card should say: **Your React app is connected. Next, build the board.** If 
 
 The card should show the same welcome message. OpenAI’s [connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt) cover account access and changes to these menus.
 
-Both hosts can occasionally show a display error on the first load. Use the card’s **Retry** or **Try again** button once if that happens. This recovers a failed initial display; turns should update the board automatically once the game is open.
+If the card shows a display error on its first load, use the card’s **Retry** or **Try again** button once. This recovers the initial display; turns should update the board automatically once the game is open.
 
 ## 3. Build and play the game
 
@@ -167,7 +167,7 @@ Try changing the board’s colours in `src/index.css`, or the status messages in
 | The card cannot share game context | The short turn message is not sent because the assistant cannot reliably identify the game. Check that the host supports context updates. |
 | Claude waits after your click | Send the turn message that the board placed in the composer and approve any pending tool call. |
 | A reopened board says “Checking the current game…” | The card is reading the live game instead of trusting its saved snapshot. If it reports a connection problem, check the server and tunnel; it keeps the squares disabled. |
-| The card reports unavailable, declined or unconfirmed messaging | Check the host's confirmation controls. A failed response does not establish whether the message arrived. Keep the exact card message and use **Show game ID** on the card to find its identifier when reporting the problem; repeated turn prompts can ask the assistant twice. |
+| The card reports unavailable, declined or unconfirmed messaging | Check the host's confirmation controls, and check the conversation before resending, because the message may have arrived. Keep the exact card message and use **Show game ID** on the card to find its identifier when reporting the problem; repeated turn prompts can ask the assistant twice. |
 | The board reports that the game is gone | Start a new game; the server restarted or the game expired. |
 
 The board should update after each confirmed turn. If it stalls, check for a pending host confirmation and make sure the server and tunnel are still running. You should not need to type another turn prompt or refresh the board.

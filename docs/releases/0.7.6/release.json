@@ -20,13 +20,6 @@
       "slug": "faithful-card-styling",
       "group": "Concepts and reference",
       "description": "The class names, custom properties and selectors an application may use to style the FaithfulCard in either renderer."
-    },
-    {
-      "source": "docs/2026-10-19_host-compatibility-observations_v1.md",
-      "slug": "host-compatibility-observations",
-      "group": "Concepts and reference",
-      "sidebarTitle": "Host observations",
-      "description": "A dated record of standalone probes in ChatGPT web, Claude web and the Alexa+ simulator, and what they do not establish."
     }
   ],
   "exclusions": [
@@ -53,6 +46,10 @@
     {
       "source": "docs/authorized-playback.md",
       "reason": "Describes the Lit reference application, which is not a published package at this release."
+    },
+    {
+      "source": "docs/2026-10-19_host-compatibility-observations_v1.md",
+      "reason": "A dated record of standalone probes that did not use the SAGA packages, not documentation of the published packages."
     },
     {
       "source": "docs/2026-10-21_react_play_acceptance_v1.md",
@@ -128,15 +125,10 @@
       ],
       "qualification": [
         {
-          "statement": "Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host.",
+          "statement": "Host-fixture tests render the card in both renderers, directly and through each stack's start.",
           "guide": "faithful-card-styling",
           "anchor": "qualification",
           "label": "Styling qualification"
-        },
-        {
-          "statement": "The dated host observations used standalone probes that did not use SAGA's React adapter or MCP adapter, so they do not qualify this component in a host.",
-          "guide": "host-compatibility-observations",
-          "label": "Host observations"
         }
       ]
     },
@@ -171,11 +163,7 @@
         "language": "ts"
       },
       "usage": [],
-      "qualification": [
-        {
-          "statement": "No guide of this release records a renderer or host qualification for this control."
-        }
-      ]
+      "qualification": []
     }
   ],
   "componentExclusions": [

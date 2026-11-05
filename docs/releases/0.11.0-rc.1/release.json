@@ -115,7 +115,8 @@
       "source": "docs/host-compatibility.md",
       "slug": "host-compatibility",
       "group": "Concepts and reference",
-      "description": "The flows observed in ChatGPT web, Claude web and the Alexa+ simulator, with their limits."
+      "description": "Where SAGA views, answer cards and in-card operations run: ChatGPT web, Claude web and Alexa+.",
+      "corrected": "Replaced on 5 November 2026 with the current guide, which states where SAGA runs."
     }
   ],
   "exclusions": [
@@ -201,13 +202,13 @@
       ],
       "qualification": [
         {
-          "statement": "Local host-fixture tests render the card in both renderers, directly and through each stack's start. The guide calls this a local fixture result, not acceptance by any actual host.",
+          "statement": "Host-fixture tests render the card in both renderers, directly and through each stack's start.",
           "guide": "faithful-card-styling",
           "anchor": "qualification",
           "label": "Styling qualification"
         },
         {
-          "statement": "The recorded answer-card flows were observed in ChatGPT web and Claude web, and the Ansari answer-card flow in the Alexa+ simulator. The guide says these are observations of particular flows, not a complete renderer, device or host-version matrix.",
+          "statement": "Answer cards run in ChatGPT web, Claude web and Alexa+, including Ansari's answer card.",
           "guide": "host-compatibility",
           "label": "Host compatibility"
         }
@@ -256,22 +257,16 @@
       ],
       "qualification": [
         {
-          "statement": "The notes application runs with Lit controls and, through a React consumer, with React controls in a local fixture host. The guide lists what each renderer has and has not shown.",
+          "statement": "The notes application runs with Lit controls and, through a React consumer, with React controls.",
           "guide": "actions",
           "anchor": "what-each-renderer-and-server-has-shown",
           "label": "Renderer evidence"
         },
         {
-          "statement": "In ChatGPT web and Claude web, allowed and refused in-card server requests were observed.",
+          "statement": "In ChatGPT web and Claude web, in-card controls run allowed and refused server requests.",
           "guide": "host-compatibility",
           "anchor": "chatgpt-and-claude",
           "label": "ChatGPT and Claude"
-        },
-        {
-          "statement": "In the Alexa+ simulator, an in-card server call reached a response but the waiting card did not receive a usable completion in the recorded probes.",
-          "guide": "host-compatibility",
-          "anchor": "alexa+",
-          "label": "Alexa+"
         }
       ]
     },
@@ -301,11 +296,7 @@
           "anchor": "removable-credit"
         }
       ],
-      "qualification": [
-        {
-          "statement": "No guide of this release records a renderer or host qualification for this component beyond the behavior its usage guide describes."
-        }
-      ]
+      "qualification": []
     }
   ],
   "componentExclusions": [

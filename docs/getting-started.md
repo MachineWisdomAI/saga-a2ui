@@ -22,7 +22,7 @@ If you are unsure, read the React track first. Its ideas carry over: the layout,
 - **Node and npm.** An application that installs the published packages needs Node 22.12.0 or newer. This repository's checkout needs 22.23.3 or newer (`.nvmrc`).
 - **A bundler that handles TypeScript source.** The packages export source rather than precompiled JavaScript.
 - **A checkout of this repository** for `saga init`, the candidate tarballs and the examples. Run `npm ci` in its root.
-- **An MCP host is optional while you build.** The demonstration and the examples have local stand-ins for one. The React tutorial uses Claude or ChatGPT from its first UI step; the Lit demonstration can run locally. See [host compatibility](host-compatibility.md) for other host behavior.
+- **An MCP host is optional while you build.** The demonstration and the examples have local stand-ins for one. The React tutorial uses Claude or ChatGPT from its first UI step; the Lit demonstration can run locally. See [where SAGA runs](host-compatibility.md) for assistant hosts.
 
 ## Install a published stack
 
@@ -185,7 +185,7 @@ A template directory existing does not add a pair, and a *qualified* template is
 
 ## Attach to an existing backend
 
-Attaching SAGA to a server you already run is a documented integration you make in your own source. **No command performs it, and the CLI never edits an existing application.** The recipes are in [Attach SAGA to an existing backend](attach-to-existing-backend.md). That document is generated from the same maintained, CI-qualified template files `saga init` copies, so an authentication or server snippet is the starter's own text, and a server that is not yet qualified has no recipe. To print the same snippets yourself:
+Attaching SAGA to a server you already run is a documented integration you make in your own source. **No command performs it, and the CLI never edits an existing application.** The recipes are in [Attach SAGA to an existing backend](attach-to-existing-backend.md). That document is generated from the same maintained, CI-qualified template files `saga init` copies, so an authentication or server snippet is the starter's own text, and each qualified server has its recipe. To print the same snippets yourself:
 
 ```sh repository
 npx tsx scripts/starter-snippets.ts

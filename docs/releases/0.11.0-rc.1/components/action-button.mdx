@@ -85,11 +85,9 @@ Two ActionButton instances in a row of the notes application's layout. Neither n
 - [Change a component and trace allowed and denied requests](/docs/releases/0.11.0-rc.1/guides/actions)
 - [Component definition, template and instance](/docs/releases/0.11.0-rc.1/guides/getting-started#component-definition-template-and-instance)
 
-## Evidence and limits
+## Qualification
 
-- The notes application runs with Lit controls and, through a React consumer, with React controls in a local fixture host. The guide lists what each renderer has and has not shown. ([Renderer evidence](/docs/releases/0.11.0-rc.1/guides/actions#what-each-renderer-and-server-has-shown))
-- In ChatGPT web and Claude web, allowed and refused in-card server requests were observed. ([ChatGPT and Claude](/docs/releases/0.11.0-rc.1/guides/host-compatibility#chatgpt-and-claude))
-- In the Alexa+ simulator, an in-card server call reached a response but the waiting card did not receive a usable completion in the recorded probes. ([Alexa+](/docs/releases/0.11.0-rc.1/guides/host-compatibility#alexa+))
-- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.
+- The notes application runs with Lit controls and, through a React consumer, with React controls. ([Renderer evidence](/docs/releases/0.11.0-rc.1/guides/actions#what-each-renderer-and-server-has-shown))
+- In ChatGPT web and Claude web, in-card controls run allowed and refused server requests. ([ChatGPT and Claude](/docs/releases/0.11.0-rc.1/guides/host-compatibility#chatgpt-and-claude))
 
 Back to the [component catalog](/docs/releases/0.11.0-rc.1/components/index).

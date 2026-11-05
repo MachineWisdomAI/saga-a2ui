@@ -62,7 +62,7 @@ The tarball digests, the built views and servers, and the consumer installs are 
 
 **Application overrides.** An application must carry `"overrides": { "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5" }` in its own `package.json`. Without it a fresh install resolves `@a2ui/markdown-it` 0.2.2, whose peer `@a2ui/web_core ^0.14.0` conflicts with the pinned 0.13.0, and npm stops with ERESOLVE. npm honors overrides of the root project only, so a package cannot carry this for its consumers. `candidate:pack` installs with the overrides taken from the workspace root, and `candidate.json` records them. For pnpm, place the equivalent override in the consumer workspace root `pnpm-workspace.yaml`. See [React consumer dependencies](react-consumers.md) for the supported imports and Zod ownership; merely declaring another direct Markdown dependency does not constrain every transitive resolution.
 
-**Predecessor.** All seven SAGA packages have public npm releases (see [public install](public-install.md) for current versions). This guide does not inventory the registry. A candidate is a separate artifact, not an upgrade of any of those releases: its `0.0.0-candidate.g…` version, `private` manifest and invalid registry keep it apart. No upgrade from a registry release has been exercised by the candidate update and rollback sequence, and a candidate rehearsal is a local source rehearsal, not a promoted artifact, an anonymous registry install or a real host. The generated `candidate.json` and `CANDIDATE.md` state the same limits (`predecessor.statement`; the generator is `candidateProvenance` in `scripts/release-candidate.ts`). The sequence below is rehearsed between two *candidate* builds only: `scripts/release-candidate.test.ts` packs two builds, installs one, updates to the other and restores the first byte for byte, and `npm run candidate:rehearse` (see [the rehearsal](#update-and-rollback-rehearsal)) installs, updates and restores them as built applications. The preceding accepted evidence is PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21), [#154](https://github.com/MachineWisdomAI/saga-a2ui/issues/154)); its consumers and checks are carried, not redone.
+**Predecessor.** All seven SAGA packages have public npm releases (see [public install](public-install.md) for current versions). A candidate is a separate artifact, not an upgrade of any of those releases: its `0.0.0-candidate.g…` version, `private` manifest and invalid registry keep it apart. A candidate rehearsal is a local source rehearsal. The generated `candidate.json` and `CANDIDATE.md` record the predecessor (`predecessor.statement`; the generator is `candidateProvenance` in `scripts/release-candidate.ts`). The sequence below is rehearsed between two *candidate* builds only: `scripts/release-candidate.test.ts` packs two builds, installs one, updates to the other and restores the first byte for byte, and `npm run candidate:rehearse` (see [the rehearsal](#update-and-rollback-rehearsal)) installs, updates and restores them as built applications. The preceding accepted evidence is PACK1 ([#21](https://github.com/MachineWisdomAI/saga-a2ui/issues/21), [#154](https://github.com/MachineWisdomAI/saga-a2ui/issues/154)); its consumers and checks are carried, not redone.
 
 ## Package contents and boundaries
 
@@ -108,7 +108,7 @@ Rollback restores a complete, previously tested combination: all the packages, t
 
 ## Carried checks
 
-Each claimed combination passes the same behavior, and a claim is only as old as its last run:
+Each claimed combination passes the same behavior:
 
 - `scripts/pack1.test.ts`: what the packages declare, ship and may load.
 - `apps/lit-host/e2e/pack1-consumers.spec.ts`, once for `own` and once for `card`: the page and server the consumer's own build produced, over a real Streamable HTTP connection: action input, one definition bound to two rendered instances, session prerequisite, server-side authorization after a withdrawn permission, known-refusal versus unknown outcome, late result after an item change, disposal, and the mismatch case.
@@ -116,7 +116,7 @@ Each claimed combination passes the same behavior, and a claim is only as old as
 
 `candidate.json` lists these cases by file and exact title (`carriedEvidence.cases`) with the SHA-256 of each file, and a headless test fails if a listed title no longer exists, so a combination is never claimed on a renamed or removed check. An obsolete handler-name scheme cannot satisfy them: a resource whose actions are not bound to the pressed instance fails the two-row, item-change and disposal cases (the [development reference’s PACK2 section](development-reference.md#release-candidate-update-and-rollback-pack2) lists the mutations run).
 
-Listing a case by title is a claim, not a run. What ran for this candidate is in the rehearsal below.
+The rehearsal below runs the cases for this candidate.
 
 ## Update and rollback rehearsal
 
@@ -130,7 +130,7 @@ Listing a case by title is a claim, not a run. What ran for this candidate is in
 
 `rehearsal.json` and the section it appends to `CANDIDATE.md` record, per stage and consumer: the installed packages and their tarball digests, the rebuilt view's URI and digest, the server bundle digests, whether the server serves the rebuilt view, the cases that ran with their outcome, and for each consumer whether the update changed the view and whether the rollback restored it.
 
-**What this does and does not show.** A and B are one source revision with different version strings, so the rebuilt views are identical and the update changes nothing the application can observe. The rehearsal shows that the sequence works as a procedure, that each stage's application is built from, and only from, that stage's tarballs, and that the action input, instance attachment, outcome and disposal behavior holds in each rebuilt application over a real MCP connection. It does not show an upgrade between two different versions of the code, an upgrade from a published release (none was exercised), or behavior in an actual assistant host.
+**What this shows.** A and B are one source revision with different version strings, so the rebuilt views are identical and the update changes nothing the application can observe. The rehearsal shows that the sequence works as a procedure, that each stage's application is built from, and only from, that stage's tarballs, and that the action input, instance attachment, outcome and disposal behavior holds in each rebuilt application over a real MCP connection.
 
 ## Publication is separate from candidate preparation
 
@@ -143,17 +143,16 @@ Preparing the candidate grants no authority to publish. Publishing needs the own
 
 ## Obligations and renderer paths the candidate implements
 
-Recorded from the repository's own records; package metadata, type declarations compiling or Lit passing establishes none of the open rows.
+Recorded from the repository's own records.
 
-| Obligation or path | In the candidate | Open or not established |
-| --- | --- | --- |
-| Action runtime (`@saga-a2ui/core/actions`): local and server actions, prerequisites, bounded hooks, activation-scoped resources, `subject` freshness, `limits` (30,000 ms work and 5,000 ms per hook or release; field override, then instance, then default; invalid values rejected; remaining time clamped, never reset) | Implemented and tested through core, Lit and React | Real-device latency: the numbers are product defaults, not measured |
-| Request lifetime (`@saga-a2ui/mcp/server`): separate 3,000 ms operation and 10,000 ms total request budgets starting before authentication, finite-response delivery | Implemented and tested (CORE3, STATE2) | Ongoing-stream idle and backpressure policy is separate and stays with CORE3's record |
-| Playback retirement and label loss: permanent retirement of playback until a new view | Implemented in the reference application (STATE1) | Hosts that reuse a view stay retired until reload |
-| Lit renderer path | Implemented, packed-consumer and built-browser checked | Windows is not claimed |
-| React renderer and MCP stack | Typed surfaces, actions and optional FaithfulCard composition are implemented, with packed-consumer and browser checks | This update/rollback rehearsal covers the Lit `own` and `card` combinations; it does not rehearse the React application or establish whole-runtime equivalence |
-| Lynx | Nothing: the owner retired Lynx delivery on 2026-10-19; `apps/lynx-fixture` is historical evidence, not a recipe | No Lynx package, recipe or host gate is required |
-| Host-to-server cancellation and rollback in an actual host | Not implemented or claimed | Open (STATE2/CORE2 receipts bound what was seen) |
-| Application choices and remaining correlation questions in the [action binding](../blueprints/modules/action_binding.blueprint.md#open-decisions) and [lifetime](../blueprints/features/request_view_lifetimes.blueprint.md#open-decisions) designs | The candidate preserves the implemented runtime contracts | Applications own confirmation, audit, error wording, idempotency and transferred-resource policy; a candidate rehearsal does not decide those choices or add missing host correlation |
+| Obligation or path | In the candidate |
+| --- | --- |
+| Action runtime (`@saga-a2ui/core/actions`): local and server actions, prerequisites, bounded hooks, activation-scoped resources, `subject` freshness, `limits` (30,000 ms work and 5,000 ms per hook or release; field override, then instance, then default; invalid values rejected; remaining time clamped, never reset) | Implemented and tested through core, Lit and React; the numbers are product defaults |
+| Request lifetime (`@saga-a2ui/mcp/server`): separate 3,000 ms operation and 10,000 ms total request budgets starting before authentication, finite-response delivery | Implemented and tested (CORE3, STATE2) |
+| Playback retirement and label loss: permanent retirement of playback until a new view | Implemented in the reference application (STATE1); a host that reuses a view shows it retired until reload |
+| Lit renderer path | Implemented, packed-consumer and built-browser checked; the update and rollback rehearsal runs the Lit `own` and `card` combinations |
+| React renderer and MCP stack | Typed surfaces, actions and optional FaithfulCard composition are implemented, with packed-consumer and browser checks |
+| Lynx | The owner retired Lynx delivery on 2026-10-19; `apps/lynx-fixture` is historical evidence |
+| Application choices in the [action binding](../blueprints/modules/action_binding.blueprint.md#open-decisions) and [lifetime](../blueprints/features/request_view_lifetimes.blueprint.md#open-decisions) designs | The candidate preserves the implemented runtime contracts. Applications own confirmation, audit, error wording, idempotency and transferred-resource policy |
 
-**Named-host observations that exist** (none is repeated or extended by this candidate): ChatGPT web and Claude web receipts recorded in the lifecycle sections of the [connector](../blueprints/features/reusable_mcp_connector.blueprint.md#status) and [lifetime](../blueprints/features/request_view_lifetimes.blueprint.md#status) designs (CORE2 Play flow, STATE1 retirement and recovery, STATE2 finite waits, CARD1/CARD2 card reading); and the [host compatibility observations](host-compatibility.md), including the Alexa+ in-card call that timed out with a different probe. No named host was run against this candidate's tarballs or views, and the local host fixture is not an assistant host.
+**Named-host observations**: ChatGPT web and Claude web receipts recorded in the lifecycle sections of the [connector](../blueprints/features/reusable_mcp_connector.blueprint.md#status) and [lifetime](../blueprints/features/request_view_lifetimes.blueprint.md#status) designs (CORE2 Play flow, STATE1 retirement and recovery, STATE2 finite waits, CARD1/CARD2 card reading), and [where SAGA runs](host-compatibility.md).

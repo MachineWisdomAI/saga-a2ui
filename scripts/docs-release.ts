@@ -39,6 +39,8 @@ export interface GuideSpec {
   readonly group: string;
   readonly description: string;
   readonly sidebarTitle?: string;
+  /** Set when the published page is a reviewed correction rather than the pinned revision's text: why it was corrected. */
+  readonly corrected?: string;
 }
 
 export interface ReleaseSpec {
@@ -273,15 +275,18 @@ function componentPage(
         ]
       : source.usage.map((link) => `- [${link.label}](${linkTo(spec, link)})`)),
     '',
-    '## Evidence and limits',
-    '',
-    ...source.qualification.map((item) =>
-      item.guide === undefined
-        ? `- ${item.statement}`
-        : `- ${item.statement} ([${item.label ?? 'Guide'}](${linkTo(spec, { guide: item.guide, anchor: item.anchor })}))`,
-    ),
-    '- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.',
-    '',
+    ...(source.qualification.length === 0
+      ? []
+      : [
+          '## Qualification',
+          '',
+          ...source.qualification.map((item) =>
+            item.guide === undefined
+              ? `- ${item.statement}`
+              : `- ${item.statement} ([${item.label ?? 'Guide'}](${linkTo(spec, { guide: item.guide, anchor: item.anchor })}))`,
+          ),
+          '',
+        ]),
     `Back to the [component catalog](${base}/components/index).`,
     '',
   ].join('\n');
@@ -538,12 +543,26 @@ async function generate(root: string, version: string): Promise<void> {
   console.log(`Wrote ${built.files.size} files for ${version}.`);
 }
 
+/** The release-relative pages that are reviewed corrections, which the pinned revision does not reproduce. */
+export function correctedPages(spec: ReleaseSpec): ReadonlySet<string> {
+  return new Set(
+    spec.guides
+      .filter((guide) => guide.corrected !== undefined)
+      .map((guide) => `guides/${guide.slug}.mdx`),
+  );
+}
+
 async function verifySource(root: string, version: string): Promise<number> {
   const spec = readSpec(root, version);
   const built = buildRelease(spec, gitTree(root, spec.revision));
   const directory = path.join(root, 'docs/releases', version);
+  const corrected = correctedPages(spec);
   let drift = 0;
   for (const [relative, content] of built.files) {
+    if (corrected.has(relative)) {
+      console.log(`CORRECTED ${version}/${relative}`);
+      continue;
+    }
     const target = path.join(directory, relative);
     const expected =
       relative === 'components/catalog.json'

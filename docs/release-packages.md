@@ -54,12 +54,13 @@ does not publish, tag, deploy or change repository visibility.
 Release packing retains the enrolled versions and exact sibling dependencies,
 ships Apache-2.0 `LICENSE` with every package, and includes the Markdown notices
 with components. Exports are TypeScript source and require a TypeScript-aware
-bundler. No precompiled JavaScript runtime is claimed. Both stacks pin their renderer and other SDK siblings to enrolled release versions.
+bundler. Both stacks pin their renderer and other SDK siblings to enrolled release versions.
 
 The existing `candidate:pack` remains a separate, nonpublishable qualification
 path: its copies always have `private: true`, commit-derived candidate versions
-and an invalid registry, even after source version enrollment. Candidate and
-local-CI rehearsal evidence is not evidence about release bytes (see
+and an invalid registry, even after source version enrollment. Qualify release
+bytes from the `release:pack` artifacts; candidate and local-CI rehearsals
+qualify the candidate (see
 [candidate installation, updates and rollback](candidate-update-and-rollback.md)).
 
 ## Release sequence

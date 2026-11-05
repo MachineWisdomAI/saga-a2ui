@@ -68,8 +68,8 @@ The bundled artwork uses Git LFS. If your checkout skipped LFS downloads, run
   names, `packed-refs`, a linked worktree's pointer); Git is never run there, because a repository
   can name programs in its own configuration and the release input chooses the directory. For the
   same reason none of those files is read through a symbolic link, so a link cannot make another
-  local file become `source.revision`, and `source.dirty` is always `null`: whether tracked files
-  differ from the commit is not established. `source.revision` is `null` when no readable
+  local file become `source.revision`, and `source.dirty` is always `null`: the record names the
+  commit only. `source.revision` is `null` when no readable
   repository is found.
 
 Any failed check leaves only `findings.json`: no package that could be mistaken for a complete one.
@@ -282,9 +282,9 @@ one. What the host already holds for the old release stays as recorded, and a ve
 as observed for the earlier release. `attempt` and `record-listing` require `--prepared`, so readiness is
 never assumed.
 
-Not covered: submitting, verifying the publisher's authority or the host account, and observing an
-installation. Those are the publisher's and the host's, and a `verified-live` record is the maintainer's
-statement about a named host, not something this tool can check.
+Submitting, verifying the publisher's authority or the host account, and observing an installation
+belong to the publisher and the host. A `verified-live` record is the maintainer's statement about a
+named host.
 
 ## What is checked
 
@@ -426,8 +426,8 @@ keep in step. Tests replace only the lowest layer (the connector), never the rul
 
 ## Not covered here
 
-Portal automation and submission, upload retries (the handoff only records the maintainer's manual
-submission), a real ChatGPT or Claude web run, and the owner-only steps listed under "Pending handoff" in every report
-(publisher verification and authority, domain verification, reviewer accounts and credentials, the
-review walkthrough, the Claude policy acknowledgments). Local validators and fixture runs do not
-replace actual-host observation.
+The maintainer submits through the host's portal and the handoff records that submission. The
+owner performs the steps listed under "Pending handoff" in every report (publisher verification and
+authority, domain verification, reviewer accounts and credentials, the review walkthrough, the Claude
+policy acknowledgments). Observe the live app in ChatGPT or Claude web yourself, then record the
+listing with `record-listing`.

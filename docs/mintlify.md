@@ -112,8 +112,11 @@ Verify package versions on npm before adding a release, and put the finding in `
 6. Open a pull request. Merge it only after its Mintlify preview passes the checks below.
 
 An older release is not regenerated when a newer one is added, and newer source never changes it. A
-correction to a released page is an explicit, reviewed edit of that page; `verify-source` then reports
-that page as drift, and the pull request should say why.
+correction to a released guide page is an explicit, reviewed edit of that page, with a `corrected`
+reason on its `release.json` guide entry; `verify-source` and the reproduction test then skip that page.
+A generated component page or catalog is corrected by editing `release.json` and rebuilding those
+files from the generator. Remove a released guide by deleting its page and navigation entry and moving
+its source to `exclusions`.
 
 ## Heading anchors
 

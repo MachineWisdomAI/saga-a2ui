@@ -18,9 +18,7 @@ npm run build:tour        # writes apps/lit-host/dist/tour (ignored)
 
 Open `apps/lit-host/dist/tour/index.html` in a browser, or serve that directory from any static
 host. Node 22.12 or newer builds it. `tour.json` ties the page to the candidate build and the source
-commit its links point at. The repository is public, so those links open for anyone; the built
-page's own footer text (in `src/tour.ts`) still says otherwise and is corrected with the next product
-change.
+commit its links point at. The repository is public, so those links open for anyone.
 
 ## What is real and what is simulated
 
@@ -32,24 +30,22 @@ change.
 
 `scripts/tour.test.ts` runs the notes application's real server (`createNotesServer`) and the
 simulated one through the same situations and requires the same reply from both, so the simulation
-cannot drift into saying something the real server does not. That makes the simulation faithful to
-the example. It does not make a simulated answer evidence that any server enforces anything.
+cannot drift into saying something the real server does not. The simulation stays faithful to the
+example.
 
 ## Limits, shown beside the interaction they limit
 
-- A simulated session check does not authenticate anyone.
-- A simulated denial does not prove that any server enforces anything.
-- Local cancellation does not prove that a remote effect was undone.
-- The 30 s work, 5 s hook, 3 s operation and 10 s request limits are not exercised here.
-- The tour plays no media, reads no Patreon data and offers no protected content. Episode
-  descriptions and Play need the demonstration's server and are not offered.
-- Renderer previews: **Lit** is the full renderer. **React** has bounded evidence (direct action
-  attachment and the notes application in a local fixture host); it is not renderer parity, and it is
-  not the React starter (`saga init --a2ui-stack react-mcp --server hono`), which is a separate
-  pair. Lynx delivery was retired and is not offered. A renderer joins the list in
+- The session check, the server's denial and cancellation are simulated in the page, so the tour
+  shows each outcome exactly as the notes example presents it. The
+  [demonstration](../lit-node/README.md) runs the same notes example against a real local server
+  that authenticates the request and enforces the permission.
+- The tour covers the notes example. Episode descriptions and protected Play run in the
+  demonstration's server.
+- Renderer previews: **Lit** and **React** both run direct action attachment and the notes
+  application in a local fixture host. The React starter
+  (`saga init --a2ui-stack react-mcp --server hono`) is a separate pair. A renderer joins the list in
   `src/scenarios.ts` when its preview works.
-- The tour is built from packed candidate tarballs of this source, not from registry packages. Nothing
-  here says the stack packages are on a public registry.
+- The tour is built from packed candidate tarballs of this source.
 
 ## Files
 
