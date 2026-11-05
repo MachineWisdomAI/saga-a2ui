@@ -4,6 +4,7 @@ import {
   type McpFetchApp,
 } from '@saga-a2ui/lit-mcp-stack/server/http';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   operationViewFromHtml,
   registerPublicOperation,
 } from '@saga-a2ui/lit-mcp-stack/server';
@@ -34,10 +35,13 @@ export function createConsumerApp(settings: ConsumerSettings): McpFetchApp {
   return createMcpFetchApp({
     ...settings,
     createServer(lifetime) {
-      const server = new McpServer({
-        name: 'fetch-consumer',
-        version: '0.0.0',
-      });
+      const server = new McpServer(
+        {
+          name: 'fetch-consumer',
+          version: '0.0.0',
+        },
+        { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+      );
       registerPublicOperation(
         server,
         {

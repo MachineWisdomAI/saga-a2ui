@@ -1,6 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
-import { registerPublicOperation, viewUriForHtml } from '@saga-a2ui/mcp/server';
+import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
+  registerPublicOperation,
+  viewUriForHtml,
+} from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
 import { fixtureAnswers, type AnswerFunction } from '../src/answer-function.js';
 
@@ -26,7 +30,10 @@ export function createAnswerServer(
   html: string,
   answer: AnswerFunction = fixtureAnswers,
 ): McpServer {
-  const server = new McpServer({ name: 'answer-consumer', version: '0.0.0' });
+  const server = new McpServer(
+    { name: 'answer-consumer', version: '0.0.0' },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   registerPublicOperation(server, {
     name: 'answer_question',
     title: 'Answer a question',

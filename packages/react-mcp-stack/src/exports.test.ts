@@ -111,6 +111,7 @@ describe('@saga-a2ui/react-mcp-stack', () => {
       'embedContentPolicy',
     ]);
     expect(Object.keys(server).sort()).toEqual([
+      'DEFAULT_MAX_TOOL_INPUT_ELEMENTS',
       'attachRequestLifetime',
       'createServerBudgets',
       'operationViewFromHtml',
