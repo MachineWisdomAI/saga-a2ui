@@ -6,7 +6,7 @@ Each quoted block is copied from the file named above it; `scripts/guide-actions
 
 All seven SDK packages, including Lit and both stacks, are [published on npm](public-install.md). This runnable tutorial uses a source checkout and a *candidate*: matched locally packed tarballs that exercise the checkout together ([install and update](candidate-update-and-rollback.md)). The action APIs described here ship in the published 1.0 packages. The timeout values below are SDK defaults; choose application budgets for the work your backend performs.
 
-The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. Other renderers and servers are explained only as far as their own evidence goes ([evidence levels](#what-each-renderer-and-server-has-shown)).
+The runnable tutorial is the notes application (`examples/pack1-consumer`) on the Lit renderer and the Node-style MCP delivery the [setup guide](getting-started.md) qualifies. The React renderer and the other qualified servers are summarized in [what each renderer and server has shown](#what-each-renderer-and-server-has-shown).
 
 ## Run it first
 
@@ -415,7 +415,7 @@ The rules that connect them:
 - **No clock is a universal invocation timer.** The work deadline does not cover the hooks, and the hooks do not renew it. A new stage never resets its parent's bound, because every deadline is absolute from where its scope began.
 - **An invalid explicit limit fails** (`TypeError`) where it is supplied, even if another layer would have shadowed it. It is never replaced with a default. The traced test passes `0`, `NaN` and `-1`.
 - **There is no automatic retry**, and none is safe to assume. An uncertain write (a timeout, a lost connection, an unreadable reply) is reported as unknown.
-- **Cancellation and timeout do not establish rollback or server cancellation.** Aborting the signal ends the *client's wait*; the host may or may not forward cancellation, and server work must cooperate with its own signal. The traced deadline case sets a 150 ms work deadline and holds the server's archive open: the person sees `Archive status unknown`, the hold is given back, and then, when the server's backend is let go, `n-1` is archived anyway. The outcome was unknown, and it was applied.
+- **Cancellation and timeout end the client's wait and roll nothing back.** Aborting the signal ends the *client's wait*; server work stops when cancellation reaches it and it honors its own signal. The traced deadline case sets a 150 ms work deadline and holds the server's archive open: the person sees `Archive status unknown`, the hold is given back, and then, when the server's backend is let go, `n-1` is archived anyway. The outcome was unknown, and it was applied.
 
 The server side uses the same rule for its own waits: a stage that does not finish in time is dropped and its late answer discarded, but work that ignores its signal keeps running. The tool above answers such a case with `failure`, never `refusal`, because ending a wait undoes nothing.
 
@@ -439,7 +439,7 @@ The `subject` reader is what makes a *recycled row* safe. A list renderer may ke
 
 ## Disposal, ownership and hand-off
 
-**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The surface's action setup owns discovery and the bindings it creates. The stack cleans up that setup when the view ends. The application's `onTeardown` callback (`retire()` in the starter) releases application-owned resources; do not rely on it running after every renderer's binding cleanup. Host teardown, `dispose()` and page exit all use that path. Ending a binding stops the control reacting. It does **not** prove that work a server action started has stopped.
+**Disposal.** `binding.dispose()` is idempotent. It cancels an undecided press with cause `disposed`, detaches that binding's callable so later events do nothing, and ends its subscription after a final `disposed` state. It leaves other bindings of the same definition alone. The surface's action setup owns discovery and the bindings it creates. The stack cleans up that setup when the view ends. The application's `onTeardown` callback (`retire()` in the starter) releases application-owned resources; do not rely on it running after every renderer's binding cleanup. Host teardown, `dispose()` and page exit all use that path. Ending a binding stops the control reacting; work a server action started runs until it honors its own signal.
 
 **Ownership.** A resource is anything a press takes that someone must give back. The notes application's hold on a row is an application-owned resource, and it shows the whole contract:
 
@@ -472,13 +472,13 @@ end(token: number): void {
 
 ## What each renderer and server has shown
 
-Claim only what the evidence supports. The runnable tutorial stays on the qualified pair.
+The runnable tutorial uses the qualified pair.
 
-| | Shown | Not shown |
-| --- | --- | --- |
-| **Lit** | Action controls and typed surfaces: `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs | A Windows run; this tutorial itself makes no actual-host claim |
-| **React** | Action controls and typed surfaces: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host. Generated tooling: one React starter, `react-mcp` on Hono, and its generated recipe, qualified from packed tarballs | No other React pair, no authenticated React recipe and no actual-host run of the React starter. The application integration itself is implemented |
-| **Lynx** | Nothing current. Lynx delivery was retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history | Any Lynx setup |
+| | Shown |
+| --- | --- |
+| **Lit** | Action controls and typed surfaces: `ActionButton` and `createLitActions` from `@saga-a2ui/lit/actions`; the notes application and the starter run in it, installed from packed tarballs |
+| **React** | Action controls and typed surfaces: `ActionButton`, `createReactActions` (over `InstanceHostProvider` and `useActionSetup`) from `@saga-a2ui/react/actions`, and surfaces from `@saga-a2ui/react/a2ui`. The notes application runs through a React consumer in a local fixture host. Generated tooling: one React starter, `react-mcp` on Hono, and its generated recipe, qualified from packed tarballs |
+| **Lynx** | Retired on 2026-10-19; `apps/lynx-fixture` and the Lynx proposals in the Blueprints are history |
 
 On React the binding is the same definition and the same `bindAction`; only how the setup runs differs. The notes React consumer's setup is the application's own function, given to `createReactActions` from `@saga-a2ui/react-mcp-stack`. The renderer package owns that implementation and the stack re-exports it. The React stack (`@saga-a2ui/react-mcp-stack`) renders the surface inside the scope that call returns, which owns the provider, runs the setup and ends it all when the view ends: unmounting that root disposes every instance and binding beneath it. A setup that throws is reported to `onSetupError`, never left to blank the view.
 
@@ -524,11 +524,10 @@ files. `scripts/starter-hapi-lifecycle.test.ts` qualifies direct registration an
 overlapping-principal cases, including reused credential records. The built Lit view is exercised
 by the Hapi cases in `apps/lit-host/e2e/starter.spec.ts`.
 
-## What this guide does not show
+## Scope of this guide
 
-- It traces a loopback run against synthetic data. It shows no real identity provider, OAuth or DCR flow, and no run in ChatGPT, Claude or Alexa+. Named-host receipts are in the [host compatibility observations](host-compatibility.md).
-- Cancellation forwarding, rollback and gesture behavior in an actual host stay unobserved.
-- The prerequisites above are guide qualification code, not part of the notes application or an SDK export. The SDK has no promise-combinator, registry or tutorial dispatcher, and this guide adds none.
+- It traces a loopback run against synthetic data with the starter's development authentication. [Where SAGA runs](host-compatibility.md) covers assistant hosts.
+- The prerequisites above are guide qualification code, written for this guide rather than exported by the SDK. Actions bind directly to rendered components, with no promise-combinator, registry or tutorial dispatcher.
 - Package publication, deployment and visibility are separate decisions this guide does not make.
 
 ## Where to go next

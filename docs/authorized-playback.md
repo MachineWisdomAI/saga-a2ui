@@ -142,9 +142,9 @@ The media path answers a CORS preflight with `204` and rejects any method other 
 
 ## Limits
 
-- Recipient binding needs the host to forward `_meta` on the view's proxied `tools/call`, and media delivery needs iframe `fetch` with custom headers to reach the declared origin. A local host fixture tests dropped request metadata: Play fails closed as `unsupported`, with no entitlement check or protected fetch.
+- Recipient binding uses the host's forwarding of `_meta` on the view's proxied `tools/call`, and media delivery uses iframe `fetch` with custom headers to the declared origin. When a host drops the request metadata, Play fails closed as `unsupported`, with no entitlement check or protected fetch; the local host fixture tests that path.
 - The view admits one media origin, written into the served player document by the application (`<meta name="saga-media-origin">`, the same origin the grant and the resource's `connect-src` name). A grant whose media URL is not exactly that origin plus the selected episode's path is refused before any proof is signed or request sent, so the check does not depend on the host enforcing the resource's CSP. This binds the destination to what the application served; it does not pin DNS, and a host that rewrites the served document as well as the grant is outside it.
-- The built player fetches the whole body and never sends `Range`. Range handling is tested at the service's HTTP edge through the real listener, not through the player.
-- No shared cache is simulated. Cache safety rests on the `private, no-store` and `Vary` headers.
-- The synthetic entitlement lookup and storage are in memory. A real application owns how quickly a revocation takes effect; this service guarantees only that it asks on every request.
-- Headless Chromium shows that the audio clock advances, not that the sound is audible.
+- The built player fetches the whole body and never sends `Range`. Range handling is tested at the service's HTTP edge through the real listener.
+- Cache safety rests on the `private, no-store` and `Vary` headers.
+- The synthetic entitlement lookup and storage are in memory. The service asks on every request; a real application decides how quickly a revocation takes effect.
+- Headless Chromium checks that the audio clock advances.

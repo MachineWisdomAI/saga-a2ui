@@ -4,6 +4,8 @@
 
 **Reach users through their AI assistants and agents.**
 
+Write A2UI applications in TypeScript, not JSON. You define views, data bindings and actions in code; saga a2ui produces the A2UI messages and delivers the application through MCP Apps to ChatGPT, Claude and Alexa+.
+
 saga means Simple Agentic Apps. It combines robust foundations from [Google's A2UI project](https://a2ui.org/) with [Machine Wisdom](https://machine-wisdom.ai)'s production and safety expertise, designed to fit your existing API platform.
 
 [Framework website](https://saga-ai.dev/) · [Example applications and source](https://github.com/MachineWisdomAI/saga-a2ui-examples) · [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md)
@@ -73,7 +75,7 @@ React and Lit are both supported application paths. Their MCP stacks provide typ
 - [Build tic-tac-toe with React](docs/build-tic-tac-toe-with-react.md): build a game in your own app directory with npm packages, then play against Claude or ChatGPT. To try a finished, hosted version first, see the [hosted game and its source](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game).
 - [Build the notes application with Lit](docs/build-notes-with-lit.md): a view composed with the Lit stack, leading into the [action guide](docs/actions.md).
 
-To add the React stack to an application you already have, use the [React integration guide](docs/react-consumers.md). [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and five of the six generated starters use Lit, and one starter uses React on Hono; choose by framework and the workflow you need, rather than treating template availability as renderer maturity.
+To add the React stack to an application you already have, use the [React integration guide](docs/react-consumers.md). [Ansari Faithful Answers uses the React stack](docs/react-consumers.md#react-in-ansari-faithful-answers). The demo and five of the six generated starters use Lit, and one starter uses React on Hono; choose by framework and the workflow you need.
 
 For Hapi, the [integration map](templates/lit-hapi/README.md#existing-hapi-app-register-an-endpoint) shows how to reuse the [bridge](templates/lit-hapi/server/bridge.ts) in your own app, with a registration example, bridge-owned lifecycle handling and the application’s responsibilities.
 

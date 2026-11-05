@@ -165,7 +165,7 @@ Try changing the board’s colours in `src/index.css`, or the status messages in
 | The card cannot share game context | The short turn message is not sent because the assistant cannot reliably identify the game. Check that the host supports context updates. |
 | Claude waits after your click | Send the turn message that the board placed in the composer and approve any pending tool call. |
 | A reopened board says “Checking the current game…” | The card is reading the live game instead of trusting its saved snapshot. If it reports a connection problem, check the server and tunnel; it keeps the squares disabled. |
-| The card reports unavailable, declined or unconfirmed messaging | Check the host's confirmation controls. A failed response does not establish whether the message arrived. Keep the exact card message and use **Show game ID** on the card to find its identifier when reporting the problem; repeated turn prompts can ask the assistant twice. |
+| The card reports unavailable, declined or unconfirmed messaging | Check the host's confirmation controls, and check the conversation before resending, because the message may have arrived. Keep the exact card message and use **Show game ID** on the card to find its identifier when reporting the problem; repeated turn prompts can ask the assistant twice. |
 | The board reports that the game is gone | Start a new game; the server restarted or the game expired. |
 
 The board should update after each confirmed turn. If it stalls, check for a pending host confirmation and make sure the server and tunnel are still running. You should not need to type another turn prompt or refresh the board.

@@ -273,15 +273,18 @@ function componentPage(
         ]
       : source.usage.map((link) => `- [${link.label}](${linkTo(spec, link)})`)),
     '',
-    '## Evidence and limits',
-    '',
-    ...source.qualification.map((item) =>
-      item.guide === undefined
-        ? `- ${item.statement}`
-        : `- ${item.statement} ([${item.label ?? 'Guide'}](${linkTo(spec, { guide: item.guide, anchor: item.anchor })}))`,
-    ),
-    '- Package exports and tests establish a contract. Acceptance in a named assistant host is recorded only where a page above says so.',
-    '',
+    ...(source.qualification.length === 0
+      ? []
+      : [
+          '## Qualification',
+          '',
+          ...source.qualification.map((item) =>
+            item.guide === undefined
+              ? `- ${item.statement}`
+              : `- ${item.statement} ([${item.label ?? 'Guide'}](${linkTo(spec, { guide: item.guide, anchor: item.anchor })}))`,
+          ),
+          '',
+        ]),
     `Back to the [component catalog](${base}/components/index).`,
     '',
   ].join('\n');

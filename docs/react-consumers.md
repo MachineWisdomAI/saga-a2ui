@@ -15,7 +15,7 @@ The main entry is for an application's own catalog. Use its exported `z3`, A2UI'
 
 Two footprints follow, and they are different things. An own-catalog application's *installed tree* includes `@saga-a2ui/components` and `markdown-it` as declared dependencies of the stack; that is the correct install result. Its *emitted browser bundle* and runtime import graph exclude them, because the main entry imports nothing from components. The stack's `exports.test.ts` bundles each entry's module graph from workspace source to show this, and `scripts/pack1.test.ts` builds the own-catalog and card pages from the packed copies; `npm run test:pnpm-react` and `npm run candidate:verify` check the install, not the bundle.
 
-The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. The [host compatibility guide](host-compatibility.md) records the observed flows and remaining host limits; the generated React starter covers one server (`react-mcp` on Hono), and an application on another server or an existing React application integrates the stack directly, which is a working application path.
+The stack belongs to the public release set. See [public installation](public-install.md) for its exact-version recipe and registry availability, and [release preparation](release-packages.md) for exact-artifact checks. Both React and Lit implement the typed-surface and FaithfulCard application contracts. Their framework APIs and teardown mechanics differ. [Where SAGA runs](host-compatibility.md) describes the assistant hosts; the generated React starter covers one server (`react-mcp` on Hono), and an application on another server or an existing React application integrates the stack directly, which is a working application path.
 
 ## Add a message to the conversation
 
@@ -86,7 +86,7 @@ To remove the credit, delete the element; there is nothing to configure and no a
 
 Ansari Faithful Answers uses the React MCP stack for its answer-card application. The public [destination integration PR](https://github.com/iaser-ai/ansari/pull/323) records a candidate using `@saga-a2ui/react-mcp-stack@0.7.6-rc.1` and React/React DOM `19.3.1`, with clean public-package installation, application checks and browser validation. Its [view source](https://github.com/timeleft--/ansari/blob/e4ded0ec3e39afb33292e311c8fe3a0669c1bb41/apps/ansari-faithful-answers/src/view/main.tsx) uses the stack’s FaithfulCard application entry. This is a concrete application consumer alongside the SDK examples; it does not depend on a generated React starter.
 
-A prior React integration was also exercised in ChatGPT web, Claude web and the Alexa+ development simulator; [the recorded SDK integration](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) identifies that earlier candidate. Those observations are separate from the current destination PR, which remains a candidate, and from its version-specific installation and browser checks. The [host compatibility guide](host-compatibility.md) separately identifies demonstrated assistant-host flows and their limits. Neither adoption by Ansari nor a local browser pass establishes every host or all renderer features.
+An earlier React integration ran in ChatGPT web, Claude web and the Alexa+ development simulator; [the recorded SDK integration](https://github.com/MachineWisdomAI/saga-a2ui/pull/161) identifies that candidate. [Where SAGA runs](host-compatibility.md) describes the assistant-host flows SAGA applications use.
 
 ## Follow a complete React application
 
@@ -136,7 +136,7 @@ SAGA React owns A2UI 0.13.0 and explicitly depends on Zod 3.25.76. MCP Apps and 
 
 For custom A2UI schemas use the stack's `z3`. For MCP tool schemas use the application's Zod 4. Do not pass schemas between these interfaces, force a single Zod version globally, cast away the mismatch, or suppress it with `skipLibCheck`.
 
-An application that independently uses A2UI outside this SAGA integration owns that additional dependency combination and must qualify it separately; it is not covered by SAGA's installed-consumer tests.
+An application that also uses A2UI directly, outside this SAGA integration, owns that dependency combination and qualifies it in its own tests.
 
 ## Pin the compatible upstream Markdown package
 
