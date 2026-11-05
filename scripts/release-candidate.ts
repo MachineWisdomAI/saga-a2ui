@@ -7,6 +7,7 @@ import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { CATALOG_ID } from '../examples/pack1-consumer/src/notes-surface.js';
 import { sha256Hex, summarizeReceipt } from './candidate-identity.js';
 import { OwnedDirectory, UnsafePath } from './owned-filesystem.js';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 import {
   candidateVersion,
   createWorkDirectory,
@@ -1196,7 +1197,7 @@ function main(argv: string[]): number {
         `${JSON.stringify({ source, overrides }, null, 2)}\n`,
       );
       console.log(
-        `Private development tarballs in ${output}. Nothing published; application qualification has not run.`,
+        `Private development tarballs in ${terminalValue(output)}. Nothing published; application qualification has not run.`,
       );
       return 0;
     } finally {
@@ -1217,7 +1218,7 @@ function main(argv: string[]): number {
     const probe = (
       record.versionMismatch as { installProbe: { refused: boolean } }
     ).installProbe;
-    console.log(`candidate ${String(record.version)} written`);
+    console.log(`candidate ${terminalValue(String(record.version))} written`);
     if (
       !install.ok ||
       !install.treeValid ||
@@ -1233,8 +1234,9 @@ function main(argv: string[]): number {
   }
   if (command === 'verify') {
     const result = verifyCommand(rest);
-    for (const line of result.errors) console.error(line);
-    console.log(result.summary);
+    // A diagnostic can carry a path, a package name or text from a candidate record.
+    for (const line of result.errors) console.error(terminalText(line));
+    console.log(terminalText(result.summary));
     return result.exitCode;
   }
   console.error(USAGE);
@@ -1245,5 +1247,16 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  process.exitCode = main(process.argv.slice(2));
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    // An unexpected failure (a pack, a write, a path the command was given) is reported like any
+    // other output: its message can carry a path or text from a candidate record, so its control
+    // characters are written out (SECURITY.md invariant 6) before Node would print it raw.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `release-candidate: ${error instanceof Error ? error.name : 'Error'}: ${terminalValue(message)}`,
+    );
+    process.exitCode = 1;
+  }
 }

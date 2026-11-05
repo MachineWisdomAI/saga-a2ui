@@ -89,6 +89,13 @@ challenge, timeout, HTTP status, network error, unusable answer).
 The same holds for a failure nobody anticipated: every error the command raises is caught and
 reported through that redactor (exit code 1), never rethrown to a caller that prints it raw.
 
+After redaction, the last step before a terminal or CI log is `terminalText`
+(`scripts/terminal-text.mjs`). A server name, tool name, file name or analyzer report is chosen by
+someone else, so its control characters (escape sequences, carriage returns, the bidirectional
+overrides) are written out as visible escapes such as `\x1b`, and a line that begins with `::` is
+defanged so it is not read as a GitHub Actions workflow command. Ordinary text, line breaks and
+tabs are unchanged.
+
 ## The Claude connector dossier (CLI4)
 
 Claude's directory takes a remote MCP server as a *connector*, submitted by its URL in the developer

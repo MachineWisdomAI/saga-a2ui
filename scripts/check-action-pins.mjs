@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { terminalValue } from './terminal-text.mjs';
 import { fileURLToPath } from 'node:url';
 import {
   LineCounter,
@@ -244,7 +245,8 @@ function main() {
     console.error(
       'Workflow actions must be pinned to a reviewed full commit SHA:',
     );
-    for (const problem of problems) console.error(`  ${problem}`);
+    for (const problem of problems)
+      console.error(`  ${terminalValue(problem)}`);
     return 1;
   }
   console.log(
@@ -253,5 +255,15 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url))
-  process.exitCode = main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    process.exitCode = main();
+  } catch (error) {
+    // A workflow that cannot be read or listed: the message can carry a file name, so its control
+    // characters are written out (SECURITY.md invariant 6) before Node would print it raw.
+    console.error(
+      `check-action-pins: ${terminalValue(error instanceof Error ? error.message : String(error))}`,
+    );
+    process.exitCode = 1;
+  }
+}

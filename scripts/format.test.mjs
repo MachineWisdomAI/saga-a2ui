@@ -24,10 +24,8 @@ function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'saga-format-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, 'scripts'));
-  cpSync(
-    join(source, 'scripts', 'format.mjs'),
-    join(root, 'scripts', 'format.mjs'),
-  );
+  for (const name of ['format.mjs', 'terminal-text.mjs'])
+    cpSync(join(source, 'scripts', name), join(root, 'scripts', name));
   for (const name of ['package.json', '.prettierrc.json', '.prettierignore'])
     cpSync(join(source, name), join(root, name));
   symlinkSync(join(source, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -115,4 +113,43 @@ test('a path outside the checkout is refused before any Prettier configuration b
   assert.match(result.stderr, /link\/test\.ts: outside the checkout/);
   assert.equal(existsSync(marker), false, 'outside configuration was loaded');
   assert.equal(readFileSync(join(outside, 'test.ts'), 'utf8'), UNFORMATTED);
+});
+
+test('a repository file name is written out before it reaches the terminal or the CI log', (t) => {
+  const { root, run } = fixture(t);
+  const git = (...args) =>
+    spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  git('init', '-qb', 'main');
+  git('config', 'user.email', 'fixture@example.invalid');
+  git('config', 'user.name', 'Fixture');
+  writeFileSync(join(root, 'base.txt'), 'base');
+  git('add', 'base.txt');
+  git('commit', '-qm', 'base');
+  // Names are chosen by whoever changes the repository: an escape sequence that retitles the
+  // window and a line break followed by a GitHub Actions workflow command.
+  const hostile = 'bad\u001b]0;pwned\u0007\n::error::forged.ts';
+  writeFileSync(join(root, hostile), UNFORMATTED);
+  writeFileSync(join(root, 'plain.ts'), UNFORMATTED);
+  git('add', '--', hostile, 'plain.ts');
+  git('commit', '-qm', 'files');
+
+  const result = run('--check', 'HEAD~1', 'HEAD');
+  assert.equal(result.status, 1, result.stderr);
+  // eslint-disable-next-line no-control-regex
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/,
+  );
+  assert.ok(
+    result.stderr.includes(
+      'bad\\x1b]0;pwned\\x07\\n::error::forged.ts: formatting differs',
+    ),
+    result.stderr,
+  );
+  assert.doesNotMatch(result.stderr, /^::/m);
+  // An ordinary name is reported exactly as before.
+  assert.match(
+    result.stderr,
+    /^plain\.ts: formatting differs; run npm run format -- "plain\.ts"$/m,
+  );
 });

@@ -28,6 +28,7 @@ import {
   type TargetName,
 } from './record.js';
 import { secretKinds } from './secrets.js';
+import { terminalValue } from '../terminal-text.mjs';
 
 // `saga publish handoff` (CLI5 #68): the resumable record of one prepared release's trip through a
 // host directory's own submission flow. Preparing a package (CLI3, CLI4) submits nothing; this
@@ -805,7 +806,7 @@ function decideAttempt({ request, status, freshness }: Context): Decision {
       [
         `Recorded the start of a submission attempt (event ${eventFile(seq)}). This tool submits nothing: submit by hand, as the intended publisher, in the host's own flow.`,
         '',
-        `Host: ${begin.host.name}`,
+        `Host: ${terminalValue(begin.host.name)}`,
         `Guide: ${begin.host.guide}`,
         ...(begin.host.portal === null ? [] : [`Portal: ${begin.host.portal}`]),
         `Publisher: ${begin.release.application.publisher.name}. Authority recorded for it (not verified here): ${begin.authority.join('; ')}`,
@@ -1035,10 +1036,10 @@ function statusReport(
   const lines = [
     `saga publish handoff status (${begin.host.target}): ${begin.handoffId}`,
     '',
-    `Host: ${begin.host.name}`,
-    `Application: ${begin.release.application.name} ${begin.release.application.version}; publisher ${begin.release.application.publisher.name}`,
-    `Release: package ${begin.release.artifact?.file ?? ''} sha256 ${begin.release.artifact?.sha256 ?? ''}; source ${begin.release.source.revision ?? 'unknown'}${begin.release.source.dirty === true ? ' (modified)' : ''}; deployment identity ${begin.release.endpoint.deploymentIdentity.status}`,
-    `Authority references (recorded, not verified): ${begin.authority.join('; ')}`,
+    `Host: ${terminalValue(begin.host.name)}`,
+    `Application: ${terminalValue(begin.release.application.name)} ${terminalValue(begin.release.application.version)}; publisher ${terminalValue(begin.release.application.publisher.name)}`,
+    `Release: package ${terminalValue(begin.release.artifact?.file ?? '')} sha256 ${begin.release.artifact?.sha256 ?? ''}; source ${terminalValue(begin.release.source.revision ?? 'unknown')}${begin.release.source.dirty === true ? ' (modified)' : ''}; deployment identity ${begin.release.endpoint.deploymentIdentity.status}`,
+    `Authority references (recorded, not verified): ${begin.authority.map(terminalValue).join('; ')}`,
     '',
   ];
   const row = (label: string, value: string): void =>
@@ -1047,12 +1048,12 @@ function statusReport(
     'Preparation',
     stale
       ? `stale (was ready when recorded ${begin.recordedAt})`
-      : `ready (recorded ${begin.recordedAt}; ${begin.release.artifact?.file ?? ''} bound to ${begin.preparedRecordSha256.slice(0, 12)})`,
+      : `ready (recorded ${begin.recordedAt}; ${terminalValue(begin.release.artifact?.file ?? '')} bound to ${begin.preparedRecordSha256.slice(0, 12)})`,
   );
   row(
     'Submission',
     submission.state === 'submitted'
-      ? `submitted, reference ${submission.reference} (observed ${submission.observedAt})`
+      ? `submitted, reference ${terminalValue(submission.reference)} (observed ${submission.observedAt})`
       : submission.state === 'attempt-unresolved'
         ? `UNRESOLVED attempt since ${submission.startedAt}; the host may hold it`
         : 'not submitted',
@@ -1067,7 +1068,7 @@ function statusReport(
     'Live listing',
     listing.state === 'not-verified'
       ? 'not verified (neither a package, a submission nor an approval is a live listing)'
-      : `${listing.state} on ${listing.host} (${listing.evidence}; observed ${listing.observedAt})${stale && listing.state === 'verified-live' ? '; observed for the earlier release, so recheck it on the named host' : ''}`,
+      : `${listing.state} on ${terminalValue(listing.host)} (${terminalValue(listing.evidence)}; observed ${listing.observedAt})${stale && listing.state === 'verified-live' ? '; observed for the earlier release, so recheck it on the named host' : ''}`,
   );
   lines.push('');
   switch (freshness.kind) {
@@ -1083,12 +1084,12 @@ function statusReport(
       break;
     case 'stale':
       lines.push(
-        `Freshness: STALE. Changed since this record was begun: ${freshness.changes.join('; ')}.`,
+        `Freshness: STALE. Changed since this record was begun: ${freshness.changes.map(terminalValue).join('; ')}.`,
         'Readiness is invalidated: no new attempt or listing is recorded against this release. Rerun prepare and begin a new handoff; what the host already holds for the old release stays as recorded.',
       );
       break;
     case 'unusable':
-      lines.push(`Freshness: unknown. ${freshness.problem}`);
+      lines.push(`Freshness: unknown. ${terminalValue(freshness.problem)}`);
       break;
   }
   const next =
@@ -1172,13 +1173,13 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   );
   if (prepared.kind === 'missing') {
     io.stderr(
-      `saga publish handoff begin: ${prepared.problem} Pass the directory a \`saga publish prepare\` run wrote.\n`,
+      `saga publish handoff begin: ${terminalValue(prepared.problem)} Pass the directory a \`saga publish prepare\` run wrote.\n`,
     );
     return EXIT_REFUSED;
   }
   if (!prepared.intact) {
     io.stderr(
-      `saga publish handoff begin: the prepared output was altered or is incomplete: ${prepared.problem} Run prepare again.\n`,
+      `saga publish handoff begin: the prepared output was altered or is incomplete: ${terminalValue(prepared.problem)} Run prepare again.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1200,7 +1201,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   const parent = path.dirname(directory);
   if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
     io.stderr(
-      `saga publish handoff begin: the parent directory ${parent} does not exist; create it first or choose a path inside an existing directory.\n`,
+      `saga publish handoff begin: the parent directory ${terminalValue(parent)} does not exist; create it first or choose a path inside an existing directory.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1211,7 +1212,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
       fs.readdirSync(directory).some((name) => !name.startsWith('.')))
   ) {
     io.stderr(
-      `saga publish handoff begin: ${directory} ${existing.isDirectory() ? 'already holds files; resume a record there with `handoff status`, or choose a new directory' : 'is not a directory'}. Nothing was changed.\n`,
+      `saga publish handoff begin: ${terminalValue(directory)} ${existing.isDirectory() ? 'already holds files; resume a record there with `handoff status`, or choose a new directory' : 'is not a directory'}. Nothing was changed.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1231,7 +1232,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   }
   if (!fresh.ok) {
     io.stderr(
-      `saga publish handoff begin: the release could not be assessed again: ${fresh.problem}\nNothing was recorded.\n`,
+      `saga publish handoff begin: the release could not be assessed again: ${terminalValue(fresh.problem)}\nNothing was recorded.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1246,7 +1247,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   const changes = staleness(record, assessed);
   if (changes.length > 0) {
     io.stderr(
-      `saga publish handoff begin: the prepared output does not match the release as assessed now: ${changes.join('; ')}. Run prepare again and pass that directory. Nothing was recorded.\n`,
+      `saga publish handoff begin: the prepared output does not match the release as assessed now: ${changes.map(terminalValue).join('; ')}. Run prepare again and pass that directory. Nothing was recorded.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1256,7 +1257,7 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   const ours = statDirectory(directory);
   if (ours === undefined) {
     io.stderr(
-      `saga publish handoff begin: ${directory} could not be read after it was made. Nothing was recorded.\n`,
+      `saga publish handoff begin: ${terminalValue(directory)} could not be read after it was made. Nothing was recorded.\n`,
     );
     return EXIT_REFUSED;
   }
@@ -1307,9 +1308,9 @@ async function begin(request: HandoffRequest, io: HandoffIo): Promise<number> {
   }
   io.stdout(
     [
-      `Began a ${host.name} handoff ${(body as EventOf<'begin'>).handoffId} in ${request.handoff}.`,
-      `Pinned release: ${assessed.artifact.file} sha256 ${assessed.artifact.sha256}; contract ${assessed.endpoint.contractSha256 ?? 'not read'}; deployment identity ${assessed.endpoint.deploymentIdentity.status}.`,
-      `Publisher: ${assessed.application.publisher.name}; authority references recorded, not verified: ${authority.join('; ')}.`,
+      `Began a ${terminalValue(host.name)} handoff ${(body as EventOf<'begin'>).handoffId} in ${terminalValue(request.handoff as string)}.`,
+      `Pinned release: ${terminalValue(assessed.artifact.file)} sha256 ${assessed.artifact.sha256}; contract ${assessed.endpoint.contractSha256 ?? 'not read'}; deployment identity ${assessed.endpoint.deploymentIdentity.status}.`,
+      `Publisher: ${terminalValue(assessed.application.publisher.name)}; authority references recorded, not verified: ${authority.map(terminalValue).join('; ')}.`,
       'Preparation is recorded as ready. Nothing is submitted, in review or live.',
       "Next: `saga publish handoff attempt`, then submit by hand in the host's own flow.",
       'Nothing was deployed, uploaded, submitted or published.',
@@ -1415,7 +1416,9 @@ export async function runHandoff(
     return EXIT_USAGE;
   const read = readRecord(path.resolve(io.cwd, request.handoff as string));
   if (!read.ok) {
-    io.stderr(`saga publish handoff ${request.action}: ${read.problem}\n`);
+    io.stderr(
+      `saga publish handoff ${request.action}: ${terminalValue(read.problem)}\n`,
+    );
     return EXIT_REFUSED;
   }
   const status = deriveStatus(read.events);
@@ -1440,11 +1443,13 @@ export async function runHandoff(
     freshness,
   });
   if (decision.kind === 'refuse') {
-    io.stderr(`saga publish handoff ${request.action}: ${decision.message}\n`);
+    io.stderr(
+      `saga publish handoff ${request.action}: ${terminalValue(decision.message)}\n`,
+    );
     return EXIT_REFUSED;
   }
   if (decision.kind === 'unchanged') {
-    io.stdout(`${decision.message}\n`);
+    io.stdout(`${terminalValue(decision.message)}\n`);
     return 0;
   }
   const last = read.events[read.events.length - 1] as HandoffEvent;
