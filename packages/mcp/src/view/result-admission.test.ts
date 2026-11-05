@@ -150,6 +150,92 @@ describe('admitToolResult', () => {
       expect(exceeded(new Uint8Array(8), { maxBytes: 4096 })).toBeUndefined();
     });
 
+    describe('a view retains its whole backing buffer', () => {
+      const MiB8 = 8 * 1024 * 1024;
+      // The host schema and structuredClone keep the entire backing buffer of a view, so a tiny
+      // window over a large buffer costs the buffer, not just the visible length.
+      const tinyViews = (): [string, () => unknown][] => [
+        [
+          'one-byte Uint8Array',
+          () => new Uint8Array(new ArrayBuffer(MiB8), 0, 1),
+        ],
+        ['one-byte DataView', () => new DataView(new ArrayBuffer(MiB8), 0, 1)],
+        ['empty Uint8Array', () => new Uint8Array(new ArrayBuffer(MiB8), 0, 0)],
+        [
+          'one-element Float64Array at an offset',
+          () => new Float64Array(new ArrayBuffer(MiB8), 8, 1),
+        ],
+        [
+          'one-byte Uint8Array nested in a result',
+          () => ({
+            content: [],
+            structuredContent: {
+              d: new Uint8Array(new ArrayBuffer(MiB8), 4, 1),
+            },
+          }),
+        ],
+      ];
+
+      it('refuses a tiny slice over a large backing buffer under a small byte budget', () => {
+        for (const [name, make] of tinyViews())
+          expect(exceeded(make(), { maxBytes: 256 }), name).toBe('bytes');
+      });
+
+      it('charges the backing buffer together with the serialized view, exact at the boundary', () => {
+        const backing = 4096;
+        const view = (): Uint8Array =>
+          new Uint8Array(new ArrayBuffer(backing), 0, 1);
+        // Backing bytes plus the 38 bytes charged for each byte the view shows.
+        const cost = backing + 38;
+        expect(exceeded(view(), { maxBytes: cost })).toBeUndefined();
+        expect(exceeded(view(), { maxBytes: cost - 1 })).toBe('bytes');
+        const wide = new Uint8Array(new ArrayBuffer(backing), 0, 8);
+        const wideCost = backing + 8 * 38;
+        expect(exceeded(wide, { maxBytes: wideCost })).toBeUndefined();
+        expect(exceeded(wide, { maxBytes: wideCost - 1 })).toBe('bytes');
+        const data = new DataView(new ArrayBuffer(backing), 0, 1);
+        expect(exceeded(data, { maxBytes: cost })).toBeUndefined();
+        expect(exceeded(data, { maxBytes: cost - 1 })).toBe('bytes');
+      });
+
+      it('still admits a view that covers its buffer when the budget covers both costs', () => {
+        const whole = new Uint8Array(8);
+        expect(exceeded(whole, { maxBytes: 8 + 8 * 38 })).toBeUndefined();
+        expect(exceeded(whole, { maxBytes: 8 + 8 * 38 - 1 })).toBe('bytes');
+        expect(exceeded({ data: new Uint8Array(8) })).toBeUndefined();
+      });
+
+      it('counts a backing buffer shared by several views once', () => {
+        const backing = new ArrayBuffer(4096);
+        const views = [
+          new Uint8Array(backing, 0, 1),
+          new Uint8Array(backing, 1, 1),
+          new DataView(backing, 2, 1),
+        ];
+        // Three one-byte views at 38 bytes each, the brackets and two commas, and the one
+        // buffer.
+        const cost = 4096 + 3 * 38 + 4;
+        expect(smallestBudget(views)).toBe(cost);
+        expect(exceeded(views, { maxBytes: cost - 1 })).toBe('bytes');
+        // The buffer carried on its own as well is the same retained bytes, in either order: the
+        // buffer once, the view, and the brackets and comma, and never a second 4096. The walk
+        // takes the last item first; when the view is reached first, the buffer's own `{}` adds
+        // its two serialized bytes.
+        const both = 4096 + 38 + 3;
+        expect(smallestBudget([views[0], backing])).toBe(both);
+        expect(smallestBudget([backing, views[0]])).toBe(both + 2);
+      });
+
+      it('charges each distinct backing buffer', () => {
+        const pair = [
+          new Uint8Array(new ArrayBuffer(4096), 0, 1),
+          new Uint8Array(new ArrayBuffer(4096), 0, 1),
+        ];
+        // Two buffers, two one-byte views at 38 bytes, the brackets and a comma.
+        expect(smallestBudget(pair)).toBe(2 * 4096 + 2 * 38 + 3);
+      });
+    });
+
     it('refuses a string far past the budget without measuring it', () => {
       expect(exceeded('x'.repeat(10_000), { maxBytes: 100 })).toBe('bytes');
     });

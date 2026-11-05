@@ -16,7 +16,8 @@ export interface ToolResultLimits {
   /**
    * An upper bound on the UTF-8 length of the value's JSON text: exact for strings, property names
    * and structure, the most a number or literal can take, and a conservative charge for binary
-   * values (see {@link admitToolResult}).
+   * values: the serialized cost of each view plus the full length of each distinct backing buffer
+   * (see {@link admitToolResult}).
    */
   readonly maxBytes: number;
   /** Values visited (objects, arrays and primitives), counting a shared value each time. */
@@ -150,8 +151,10 @@ const LITERAL_BYTES = 5;
  * object of its elements (`{"0":1,"1":2}`), each at most a quoted index, a colon, a comma and a
  * number, 38 bytes for an element, so charging this much per byte of storage cannot underestimate
  * it for any element size. An `ArrayBuffer` is charged its length: its JSON text is `{}`, but the
- * bytes are retained. Neither is charged less than `EMPTY_OBJECT_BYTES`, the `{}` that an empty or
- * one-byte value still serializes to.
+ * bytes are retained. A view also keeps its ENTIRE backing buffer alive, however small the window
+ * it shows, so each distinct backing buffer is charged its full length once, in addition to the
+ * serialized cost of every view of it. Neither is charged less than `EMPTY_OBJECT_BYTES`, the `{}`
+ * that an empty or one-byte value still serializes to.
  */
 const BINARY_VIEW_BYTES_PER_BYTE = 38;
 /** The braces of `{}`, the least that a binary value's JSON text takes. */
@@ -197,6 +200,9 @@ export function admitToolResult(
   let nodes = 1;
   let bytes = 0;
   const pending: Pending[] = [{ value: root, depth: 0, contentList: false }];
+  // Backing buffers already charged. At most one entry per value visited, so the node budget
+  // bounds it.
+  const backings = new Set<ArrayBufferLike>();
 
   const refuse = (exceeded: ToolResultExceeded): ToolResultAdmission => ({
     ok: false,
@@ -213,6 +219,16 @@ export function admitToolResult(
     // refused unmeasured.
     if (text.length + 2 > limits.maxBytes - bytes) return false;
     return charge(jsonStringBytes(text));
+  };
+  /**
+   * Charges the whole length of a view's backing buffer, once however many views and buffers in
+   * the value share it; false when that crosses the limit. A host schema and `structuredClone`
+   * keep the entire buffer of a view, so the window the view shows is not what is retained.
+   */
+  const chargeBacking = (buffer: ArrayBufferLike): boolean => {
+    if (backings.has(buffer)) return true;
+    backings.add(buffer);
+    return charge(buffer.byteLength);
   };
   /** Counts and queues a child value; the limit it crossed, if any. */
   const queue = (
@@ -243,20 +259,29 @@ export function admitToolResult(
     }
     if (typeof value !== 'object') return refuse('unsupported');
     if (ArrayBuffer.isView(value)) {
+      // The view's own JSON text, and the whole backing buffer it keeps alive.
       if (
         !charge(
           Math.max(
             value.byteLength * BINARY_VIEW_BYTES_PER_BYTE,
             EMPTY_OBJECT_BYTES,
           ),
-        )
+        ) ||
+        !chargeBacking(value.buffer)
       )
         return refuse('bytes');
       continue;
     }
     if (value instanceof ArrayBuffer) {
-      if (!charge(Math.max(value.byteLength, EMPTY_OBJECT_BYTES)))
+      if (
+        !charge(
+          backings.has(value)
+            ? EMPTY_OBJECT_BYTES
+            : Math.max(value.byteLength, EMPTY_OBJECT_BYTES),
+        )
+      )
         return refuse('bytes');
+      backings.add(value);
       continue;
     }
     if (Array.isArray(value)) {
