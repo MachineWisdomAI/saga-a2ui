@@ -5,7 +5,9 @@
 /**
  * What happened to one request the host was asked to carry out.
  *
- * - `denied`: the host refused it (the person declined, a policy blocked it).
+ * - `denied`: the host refused it (the person declined, a policy blocked it), or the delivery
+ *   refused a payload over its size budget before sending anything. A delivery never truncates or
+ *   rewrites a message; the application decides what to send instead.
  * - `unavailable`: the host advertises no capability for the request, or the view has ended. That
  *   request was not sent.
  * - `failed`: the request could not complete (connection lost, timeout). Whether the host acted on
