@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import {
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerPublicOperation,
   type OperationOutcome,
   type RequestLifetime,
@@ -57,10 +58,13 @@ function toPublicEpisode(record: EpisodeRecord): PublicEpisode {
  * links to. No authentication, playback or other tools exist here: the data is public and synthetic.
  */
 export function createEpisodeServer(options: EpisodeServerOptions): McpServer {
-  const server = new McpServer({
-    name: 'saga-a2ui-episode-demo',
-    version: '0.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'saga-a2ui-episode-demo',
+      version: '0.0.0',
+    },
+    { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+  );
   const view = contentResource(
     options.viewHtml,
     options.contentPolicy,
