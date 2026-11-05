@@ -1,7 +1,7 @@
 {
   "name": "@saga-a2ui/components",
   "private": false,
-  "description": "Optional renderer-neutral SAGA components. FaithfulCard: a versioned Markdown content contract, a maintained-parser interpretation into restricted nodes, and transport-independent content policy and image consent",
+  "description": "saga a2ui components: FaithfulCard, a versioned Markdown answer card with safe links, content policy and image consent",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@a2ui/web_core": "0.13.0",
-    "@saga-a2ui/core": "0.11.13-rc.1",
+    "@saga-a2ui/core": "0.12.0-rc.1",
     "markdown-it": "15.0.3",
     "zod": "4.6.7"
   },
@@ -26,7 +26,7 @@
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.11.11-rc.1",
+  "version": "0.12.0-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

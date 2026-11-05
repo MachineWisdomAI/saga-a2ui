@@ -53,7 +53,7 @@ import { createRoot, type Root } from 'react-dom/client';
 // bundle is React's development build under Strict Mode, as in an application under development.
 
 export const CATALOG_ID =
-  'https://saga-a2ui.local/catalogs/react-action-consumer/v1';
+  'https://saga-a2ui.dev/catalogs/react-action-consumer/v1';
 export const SURFACE_ID = 'actions';
 
 declare const __REACT_ACTION_CONSUMER_IDENTITIES__: Record<string, string>;

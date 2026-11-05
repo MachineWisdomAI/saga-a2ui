@@ -184,8 +184,8 @@ describe('the React card consumer built from the packed SDK packages', () => {
     ]);
     expect(react.peerDependencies).toEqual({
       '@saga-a2ui/components': sdk.version,
-      react: '19.3.1',
-      'react-dom': '19.3.1',
+      react: '^19.3.1',
+      'react-dom': '^19.3.1',
     });
     expect(react.peerDependenciesMeta).toEqual({
       '@saga-a2ui/components': { optional: true },
@@ -218,8 +218,8 @@ describe('the React card consumer built from the packed SDK packages', () => {
         sdk.version,
       );
     expect(stack.peerDependencies).toEqual({
-      react: '19.3.1',
-      'react-dom': '19.3.1',
+      react: '^19.3.1',
+      'react-dom': '^19.3.1',
     });
   });
 

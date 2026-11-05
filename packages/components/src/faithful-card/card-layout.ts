@@ -27,7 +27,7 @@ export interface CardData {
 
 /** The catalog every card surface is opened over: the FaithfulCard entry alone. */
 export const FAITHFUL_CARD_CATALOG_ID =
-  'https://saga-a2ui.local/catalogs/faithful-card/v1';
+  'https://saga-a2ui.dev/catalogs/faithful-card/v1';
 
 /** The data a surface must hold to show `content`. */
 export function cardData(content: CardContent): CardData {

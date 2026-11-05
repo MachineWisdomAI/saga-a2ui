@@ -1,7 +1,7 @@
 import { CommonSchemas } from '@a2ui/web_core/v0_9'; // saga-boundary: integration-import the card's contract is typed by upstream's schemas
 import { z } from '@saga-a2ui/core/protocols/a2ui/zod3';
 
-export const ANSWER_CATALOG_ID = 'https://saga-a2ui.local/catalogs/answer/v1';
+export const ANSWER_CATALOG_ID = 'https://saga-a2ui.dev/catalogs/answer/v1';
 
 /**
  * Neutral contract of the answer card: what the view says, the question it answers and the answer,

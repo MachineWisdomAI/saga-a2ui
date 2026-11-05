@@ -389,8 +389,7 @@ describe('replacement', () => {
         version: 'v0.9',
         createSurface: {
           surfaceId: SURFACE_ID,
-          catalogId:
-            'https://saga-a2ui.local/catalogs/react-action-consumer/v1',
+          catalogId: 'https://saga-a2ui.dev/catalogs/react-action-consumer/v1',
         },
       },
       ...updateComponents(

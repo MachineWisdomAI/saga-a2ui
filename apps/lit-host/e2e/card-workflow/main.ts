@@ -46,7 +46,7 @@ import {
 // own element, view (trusted policy, host callback, consent scope), Archive environment and binding,
 // so interleaved instances can be observed without sharing anything but the catalog.
 
-const CATALOG_ID = 'https://saga-a2ui.local/catalogs/card-workflow/v1';
+const CATALOG_ID = 'https://saga-a2ui.dev/catalogs/card-workflow/v1';
 const SURFACE_ID = 'episodes';
 const IMAGE_HOST = 'images.example.com';
 
