@@ -49,4 +49,4 @@ export {
 export type { OutputLimits } from './output-budget.js';
 export { operationViewFromHtml } from './operation-view.js';
 export { DEFAULT_MAX_TOOL_INPUT_ELEMENTS } from './tool-input-limit.js';
-export { viewUriForHtml } from './view-identity.js';
+export { viewUriForHtml, viewUriForMajor } from './view-identity.js';

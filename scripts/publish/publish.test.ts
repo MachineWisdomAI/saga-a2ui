@@ -639,7 +639,9 @@ describe('inputs that must prevent a ready claim', () => {
     expect(
       record.findings.find((finding) => finding.id === 'endpoint.views')
         ?.detail,
-    ).toMatch(/does not serve view\.html/);
+    ).toMatch(
+      /serves ui:\/\/views\/view\.v1\.html with different bytes than view\.html/,
+    );
   });
 
   it('explains a filename mismatch when the endpoint serves the same bytes under another name', async () => {
@@ -658,12 +660,12 @@ describe('inputs that must prevent a ready claim', () => {
       /serves the bytes of nested\/view\.html as ui:\/\/views\/view\./,
     );
     expect(detail).toContain(
-      'Use the same relative filename in build.views and viewUriForHtml',
+      'Use the same relative filename in build.views and in the view',
     );
     expect(detail).toContain('build.views is relative to build.directory');
   });
 
-  it('rejects served bytes that disagree with a 32-character URI fingerprint', async () => {
+  it('rejects other bytes served at the major-line address of a built view', async () => {
     const { record } = await blocked(() => undefined, 'endpoint.views', {
       wire: editing('resources/read', (result) => {
         result.contents[0].text += '\n<!-- changed served bytes -->';
@@ -673,7 +675,7 @@ describe('inputs that must prevent a ready claim', () => {
       record.findings.find((finding) => finding.id === 'endpoint.views')
         ?.detail,
     ).toMatch(
-      /ui:\/\/views\/view\.[0-9a-f]{32}\.html names a digest that is not the digest of the bytes served/,
+      /serves ui:\/\/views\/view\.v1\.html with different bytes than view\.html/,
     );
   });
 

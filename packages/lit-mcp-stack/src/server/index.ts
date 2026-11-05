@@ -11,6 +11,7 @@ export {
   registerProtectedOperation,
   registerPublicOperation,
   viewUriForHtml,
+  viewUriForMajor,
   type OperationView,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';

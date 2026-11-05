@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
+import { viewUriForHtml, viewUriForMajor } from '@saga-a2ui/mcp/server';
 import type * as Pack1Server from '../examples/pack1-consumer/server/index.js';
 import { startTestHost } from '../packages/mcp/src/server/http-host.test-support.js';
 import { sha256Hex } from './candidate-identity.js';
@@ -282,12 +282,14 @@ export async function rehearseTransition(
         pageBytes.toString('utf8'),
         recipe.page,
       );
+      // The address names the view's major, so the bytes read there are what show the server serves this build.
+      const address = viewUriForMajor(recipe.page, 1);
       const isTheBuiltPage =
-        served.uri === viewUriForHtml(pageBytes, recipe.page) &&
+        served.uri === address &&
         Buffer.from(served.html, 'utf8').equals(pageBytes);
       if (!isTheBuiltPage)
         throw new Error(
-          `The ${stage.name} stage's ${consumer} server serves ${served.uri}, not the view it was rebuilt with (${viewUriForHtml(pageBytes, recipe.page)}). Rebuild the view from this install and restart the server so it serves that view.`,
+          `The ${stage.name} stage's ${consumer} server does not serve the view it was rebuilt with at ${address} (it names ${served.uri}). Rebuild the view from this install and restart the server so it serves that view.`,
         );
       built[consumer] = {
         installedPackages: identity.installedPackages,

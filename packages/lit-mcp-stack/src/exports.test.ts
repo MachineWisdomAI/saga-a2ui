@@ -118,6 +118,7 @@ describe('@saga-a2ui/lit-mcp-stack', () => {
       'registerProtectedOperation',
       'registerPublicOperation',
       'viewUriForHtml',
+      'viewUriForMajor',
     ]);
   });
 

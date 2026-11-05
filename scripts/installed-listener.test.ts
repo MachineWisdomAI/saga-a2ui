@@ -333,9 +333,7 @@ describe('the application listener installed from the packed packages and run ou
       if (uri === undefined)
         throw new Error('get_episode is not linked to a view');
       const episode = await read(listener.mcpUrl, DEV_TOKENS.alice, uri);
-      expect(uri).toBe(
-        `ui://views/view.${sha256(episode.text).slice(0, 32)}.html`,
-      );
+      expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/);
       const withoutPolicy = episode.text
         .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '')
         .replace(

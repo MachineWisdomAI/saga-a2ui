@@ -10,7 +10,7 @@ import {
   DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   valueOrThrow,
-  viewUriForHtml,
+  viewUriForMajor,
   type RequestLifetime,
 } from '@saga-a2ui/mcp/server';
 import { z } from 'zod';
@@ -144,7 +144,7 @@ export function createNotesServer(options: NotesServerOptions): McpServer {
     return valueOrThrow(result);
   }
   const view = {
-    uri: viewUriForHtml(html, options.filename),
+    uri: viewUriForMajor(options.filename, 1),
     title: 'Notes view',
     html,
     csp: CLOSED_VIEW_CSP,
