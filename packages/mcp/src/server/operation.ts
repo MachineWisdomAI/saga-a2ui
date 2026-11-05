@@ -13,6 +13,12 @@ import type {
 import type { z } from 'zod';
 import type { ViewCsp } from '../policy/index.js';
 import {
+  admitOutput,
+  outputLimitProblems,
+  resolveOutputLimits,
+  type OutputLimits,
+} from './output-budget.js';
+import {
   createServerBudgets,
   throwIfEnded,
   valueOrThrow,
@@ -139,6 +145,13 @@ interface Declaration<Input extends z.ZodObject, Output extends z.ZodObject> {
    * never extend the request.
    */
   readonly boundMs?: number;
+  /**
+   * Optional. The most this operation may return: combined text and structured size in bytes,
+   * nesting depth and value count. Omitted fields keep the SDK defaults (1 MiB, 32 levels, 100,000
+   * values). A result over any limit is answered with the declared `invalidOutput` text and
+   * nothing is serialized. Raise a limit only for an operation whose legitimate results need it.
+   */
+  readonly outputLimits?: OutputLimits;
 }
 
 /** Where an operation finds the request it serves. Absent, it runs under the SDK defaults. */
@@ -222,6 +235,7 @@ interface UncheckedDeclaration {
     readonly signInRequired?: unknown;
   };
   readonly boundMs?: number;
+  readonly outputLimits?: unknown;
   readonly handle?: unknown;
   readonly project?: unknown;
   readonly identity?: unknown;
@@ -273,6 +287,7 @@ function assertConfigured(
     !(typeof bound === 'number' && Number.isFinite(bound) && bound > 0)
   )
     problems.push('boundMs must be a finite positive number');
+  problems.push(...outputLimitProblems(declaration.outputLimits));
   if (problems.length > 0)
     throw new OperationConfigurationError(
       isText(declaration.name) ? String(declaration.name) : '(unnamed)',
@@ -285,11 +300,18 @@ const isThenable = (value: unknown): boolean =>
   value !== null &&
   isFunction((value as { then?: unknown }).then);
 
-/** A projection callback's answer, checked as the untrusted value it is. `data` is validated separately against the output contract. */
-const isProjection = (value: unknown): value is Projection =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as { text?: unknown }).text === 'string';
+/**
+ * A projection callback's answer, checked as the untrusted value it is, with `text` and `data` each
+ * read exactly once. `data` is validated separately against the output contract.
+ */
+function readProjection(
+  value: unknown,
+): { readonly text: string; readonly data: unknown } | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const text = (value as { text?: unknown }).text;
+  const data = (value as { data?: unknown }).data;
+  return typeof text === 'string' ? { text, data } : undefined;
+}
 
 const SDK_DEFAULTS = createServerBudgets();
 
@@ -334,7 +356,7 @@ function requestFor(
 async function execute<Found>(
   declaration: Pick<
     Declaration<z.ZodObject, z.ZodObject>,
-    'output' | 'boundMs'
+    'output' | 'boundMs' | 'outputLimits'
   > & { readonly failures: OperationFailures },
   ctx: ServerContext,
   lifetime: RequestLifetime,
@@ -382,13 +404,27 @@ async function execute<Found>(
         throwIfEnded(scope);
         // The callback is application code: a projection that is not the declared shape is a contract
         // break like invalid data, not a thrown fault and never something the SDK serializes.
-        if (!isProjection(projection))
+        // Each field is read once, so a getter cannot answer differently the second time.
+        const fields = readProjection(projection);
+        if (!fields) return failure(declaration.failures.invalidOutput);
+        // The result is bounded before the contract parses it, and again after, because a contract
+        // may transform what it accepts. Each check reads the value once into a copy: the contract
+        // parses the first copy and the transport receives the second, so what was measured is what
+        // is returned, whatever the application's own objects do later.
+        const admission = admitOutput(
+          resolveOutputLimits(declaration.outputLimits),
+        );
+        if (!admission.text(fields.text))
           return failure(declaration.failures.invalidOutput);
-        const parsed = declaration.output.safeParse(projection.data);
+        const input = admission.data(fields.data);
+        if (!input) return failure(declaration.failures.invalidOutput);
+        const parsed = declaration.output.safeParse(input.value);
         if (!parsed.success) return failure(declaration.failures.invalidOutput);
+        const output = admission.data(parsed.data);
+        if (!output) return failure(declaration.failures.invalidOutput);
         return {
-          content: [{ type: 'text' as const, text: projection.text }],
-          structuredContent: parsed.data,
+          content: [{ type: 'text' as const, text: fields.text }],
+          structuredContent: output.value as Record<string, unknown>,
         };
       },
       {
