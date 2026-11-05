@@ -14,6 +14,10 @@ import {
   type ViewFailureKind,
   type ToolResultView,
 } from './run-tool-result-view.js';
+import {
+  ToolResultRefused,
+  type ToolResultLimits,
+} from './result-admission.js';
 
 // The view lifecycle, exercised with a real `App` and `AppBridge` joined by an in-memory
 // transport. No renderer: the observable result is what the caller's callbacks receive, in which
@@ -73,6 +77,11 @@ interface RunOptions {
   readonly defaultErrorReporter?: boolean;
   /** The transport to use for the view side. Defaults to a linked in-memory pair to the host. */
   readonly connectHost?: boolean;
+  readonly resultLimits?: Partial<ToolResultLimits>;
+  /** Installs `onToolResultRefused`, which logs `refused:<limit>`. */
+  readonly withRefusal?: boolean;
+  /** Installs `onToolResultRefused` with this callback, after logging `refused:<limit>`. */
+  readonly onRefusal?: (refusal: ToolResultRefused) => void;
 }
 
 async function startRun(options: RunOptions = {}): Promise<Run> {
@@ -110,6 +119,14 @@ async function startRun(options: RunOptions = {}): Promise<Run> {
       ? (input: ToolInput) =>
           log.push(`input:${JSON.stringify(input.arguments)}`)
       : undefined,
+    resultLimits: options.resultLimits,
+    onToolResultRefused:
+      options.withRefusal || options.onRefusal
+        ? (refusal) => {
+            log.push(`refused:${refusal.exceeded}`);
+            options.onRefusal?.(refusal);
+          }
+        : undefined,
     onHostContext: (context, hostName) => {
       log.push(`context:${context?.theme ?? '-'}:${hostName ?? '-'}`);
       options.onHostContext?.(context, hostName, log);
@@ -639,5 +656,163 @@ describe('a throwing application callback', () => {
     await view.ready;
     await expect(view.dispose()).resolves.toBeUndefined();
     expect(app.transport).toBeUndefined();
+  });
+});
+
+describe('the admission budget for what the host delivers', () => {
+  const oversize = (text = 'x'.repeat(2048)) => result(text);
+  const small = { maxBytes: 1024 };
+
+  it('refuses an over-budget result that arrives before the view is ready: it is not held and never delivered', async () => {
+    const ready = gate();
+    const run = await startRun({
+      resultLimits: small,
+      withRefusal: true,
+      readyWhen: () => ready.promise,
+      onInitialized: (bridge) => void bridge.sendToolResult(oversize()),
+    });
+    await quiet();
+    expect(run.log).toEqual([]);
+    ready.resolve();
+    await run.view.ready;
+    expect(run.log).toEqual(['context:-:test-host', 'refused:bytes']);
+    expect(run.errors).toEqual([]);
+  });
+
+  it('lets the latest result decide while starting: a refusal is replaced by a later admitted result, and an admitted result by a later refusal', async () => {
+    const first = gate();
+    const replaced = await startRun({
+      resultLimits: small,
+      withRefusal: true,
+      readyWhen: () => first.promise,
+      onInitialized: (bridge) => {
+        void bridge.sendToolResult(oversize());
+        void bridge.sendToolResult(result('fits'));
+      },
+    });
+    await quiet();
+    first.resolve();
+    await replaced.view.ready;
+    expect(replaced.log).toEqual(['context:-:test-host', 'result:fits']);
+
+    const second = gate();
+    const refused = await startRun({
+      resultLimits: small,
+      withRefusal: true,
+      readyWhen: () => second.promise,
+      onInitialized: (bridge) => {
+        void bridge.sendToolResult(result('fits'));
+        void bridge.sendToolResult(oversize());
+      },
+    });
+    await quiet();
+    second.resolve();
+    await refused.view.ready;
+    expect(refused.log).toEqual(['context:-:test-host', 'refused:bytes']);
+  });
+
+  it('refuses an over-budget result after the view is ready, keeps the connection up and delivers the next admitted result', async () => {
+    const run = await startRun({ resultLimits: small, withRefusal: true });
+    await run.view.ready;
+    await run.bridge.sendToolResult(oversize());
+    await run.bridge.sendToolResult(result('fits'));
+    await expect
+      .poll(() => run.log.slice(1))
+      .toEqual(['refused:bytes', 'result:fits']);
+  });
+
+  it('reports a refusal as a result error when the caller installed no refusal handler', async () => {
+    const run = await startRun({ resultLimits: small });
+    await run.view.ready;
+    await run.bridge.sendToolResult(oversize());
+    await expect.poll(() => run.errors.length).toBe(1);
+    expect(run.errors[0]!.phase).toBe('result');
+    expect(run.errors[0]!.error).toBeInstanceOf(ToolResultRefused);
+    expect(String((run.errors[0]!.error as Error).message)).not.toContain(
+      'xxxx',
+    );
+    expect(run.log).toEqual(['context:-:test-host']);
+  });
+
+  it('refuses an over-budget tool input the same way: reported as an input error, never held or delivered', async () => {
+    const ready = gate();
+    const run = await startRun({
+      resultLimits: small,
+      withInput: true,
+      readyWhen: () => ready.promise,
+      onInitialized: (bridge) => {
+        void bridge.sendToolInput({
+          arguments: { question: 'x'.repeat(2048) },
+        });
+        void bridge.sendToolResult(result('answer'));
+      },
+    });
+    await quiet();
+    ready.resolve();
+    await run.view.ready;
+    expect(run.log).toEqual(['context:-:test-host', 'result:answer']);
+    expect(run.errors.map((e) => e.phase)).toEqual(['input']);
+  });
+
+  it('refuses a result with more values than the budget allows, however small its bytes', async () => {
+    const run = await startRun({
+      resultLimits: { maxNodes: 50 },
+      withRefusal: true,
+    });
+    await run.view.ready;
+    await run.bridge.sendToolResult({
+      content: [],
+      structuredContent: { items: Array.from({ length: 100 }, () => 1) },
+    });
+    await expect.poll(() => run.log.slice(1)).toEqual(['refused:nodes']);
+  });
+
+  it('delivers an ordinary result, and one at the byte budget, unchanged', async () => {
+    const run = await startRun({ resultLimits: { maxBytes: 4096 } });
+    await run.view.ready;
+    await run.bridge.sendToolResult(result('ordinary'));
+    // 4096 bytes of text plus the property names the walk also charges would be over: stay under.
+    await run.bridge.sendToolResult(result('y'.repeat(3000)));
+    await expect
+      .poll(() => run.log.slice(1).map((line) => line.slice(0, 15)))
+      .toEqual(['result:ordinary', `result:${'y'.repeat(8)}`]);
+    expect(run.errors).toEqual([]);
+  });
+
+  it('keeps the chosen budget when a refusal callback tries to raise the limits it was handed', async () => {
+    const attempts: string[] = [];
+    const run = await startRun({
+      resultLimits: small,
+      onRefusal: (refusal) => {
+        try {
+          (refusal.limits as { maxBytes: number }).maxBytes = 2 ** 30;
+          attempts.push('raised');
+        } catch {
+          attempts.push('refused');
+        }
+      },
+    });
+    await run.view.ready;
+    await run.bridge.sendToolResult(oversize());
+    await run.bridge.sendToolResult(oversize('z'.repeat(4096)));
+    await run.bridge.sendToolResult(result('fits'));
+    await expect
+      .poll(() => run.log.slice(1))
+      .toEqual(['refused:bytes', 'refused:bytes', 'result:fits']);
+    expect(attempts).toEqual(['refused', 'refused']);
+  });
+
+  it('refuses limits that are not positive whole numbers before connecting', () => {
+    const app = new App({ name: 'x', version: '0.0.0' }, {}, {});
+    const [transport] = InMemoryTransport.createLinkedPair();
+    expect(() =>
+      runToolResultView({
+        app,
+        transport,
+        resultLimits: { maxBytes: 0 },
+        onToolResult: () => undefined,
+        onTeardown: () => undefined,
+      }),
+    ).toThrow(RangeError);
   });
 });

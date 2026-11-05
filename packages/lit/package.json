@@ -24,7 +24,7 @@
     "lit": "^3.3.3"
   },
   "peerDependencies": {
-    "@saga-a2ui/components": "0.11.10-rc.1"
+    "@saga-a2ui/components": "0.11.11-rc.1"
   },
   "peerDependenciesMeta": {
     "@saga-a2ui/components": {
@@ -32,11 +32,11 @@
     }
   },
   "devDependencies": {
-    "@saga-a2ui/components": "0.11.10-rc.1",
+    "@saga-a2ui/components": "0.11.11-rc.1",
     "typescript": "^5.9.0",
     "vitest": "^5.0.4"
   },
-  "version": "0.11.10-rc.1",
+  "version": "0.11.11-rc.1",
   "engines": {
     "node": ">=22.12.0"
   },

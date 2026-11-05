@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deliveredResultFromToolResult } from './delivered-result.js';
+import { ToolResultRefused } from './result-admission.js';
 import type { ToolResult } from './run-tool-result-view.js';
 
 // A tool result is unchecked input from the host's bridge, so some of these are deliberately not
@@ -112,5 +113,84 @@ describe('deliveredResultFromToolResult', () => {
     expect(() => deliveredResultFromToolResult(malformed(value))).toThrow(
       TypeError,
     );
+  });
+});
+
+describe('deliveredResultFromToolResult admission', () => {
+  it('refuses a result over the byte budget before mapping or forwarding any of it', () => {
+    const big = {
+      content: [{ type: 'text', text: 'x'.repeat(5 * 1024 * 1024) }],
+    };
+    expect(() => deliveredResultFromToolResult(malformed(big))).toThrow(
+      ToolResultRefused,
+    );
+    const hidden = {
+      content: [{ type: 'text', text: 'ok' }],
+      structuredContent: { rows: 'y'.repeat(5 * 1024 * 1024) },
+    };
+    expect(() => deliveredResultFromToolResult(malformed(hidden))).toThrow(
+      /larger than 4194304 bytes/,
+    );
+  });
+
+  it('counts the serialized size: text whose raw bytes fit but whose JSON escapes do not is refused', () => {
+    const nul = {
+      content: [{ type: 'text', text: '\u0000'.repeat(4 * 1024 * 1024 - 19) }],
+    };
+    expect(() => deliveredResultFromToolResult(malformed(nul))).toThrow(
+      /larger than 4194304 bytes/,
+    );
+  });
+
+  it('refuses a result with more content blocks, values, depth or array items than the budget', () => {
+    const blocks = Array.from({ length: 1001 }, () => ({ type: 'x' }));
+    expect(() =>
+      deliveredResultFromToolResult(malformed({ content: blocks })),
+    ).toThrow(/content blocks/);
+    expect(() =>
+      deliveredResultFromToolResult(
+        malformed({
+          content: [],
+          structuredContent: Array.from({ length: 10_001 }, () => 0),
+        }),
+      ),
+    ).toThrow(/array with more than/);
+    let deep: unknown = 0;
+    for (let i = 0; i < 100; i += 1) deep = { deep };
+    expect(() =>
+      deliveredResultFromToolResult(
+        malformed({ content: [], structuredContent: deep }),
+      ),
+    ).toThrow(/nested deeper/);
+  });
+
+  it('maps a result inside caller-chosen limits and refuses it past them, leaving the defaults alone', () => {
+    const result = {
+      content: [{ type: 'text' as const, text: 'x'.repeat(500) }],
+    };
+    expect(() => deliveredResultFromToolResult(result)).not.toThrow();
+    expect(() =>
+      deliveredResultFromToolResult(result, { maxBytes: 100 }),
+    ).toThrow(ToolResultRefused);
+    expect(() =>
+      deliveredResultFromToolResult(result, { maxBytes: 0 }),
+    ).toThrow(RangeError);
+  });
+
+  it('still carries a large legitimate result, block for block', () => {
+    const text = 'z'.repeat(1024 * 1024);
+    const image = {
+      type: 'image' as const,
+      data: 'A'.repeat(1024 * 1024),
+      mimeType: 'image/png',
+    };
+    const delivered = deliveredResultFromToolResult({
+      content: [{ type: 'text', text }, image],
+      structuredContent: {
+        rows: Array.from({ length: 5000 }, (_, i) => ({ i })),
+      },
+    });
+    expect(delivered.content).toHaveLength(2);
+    expect(delivered.content[1]).toBe(image);
   });
 });

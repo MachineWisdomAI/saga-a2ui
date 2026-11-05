@@ -82,9 +82,9 @@ describe('candidate identity', () => {
       identity.packages.find((entry) => entry.role === role)?.version;
     expect(version('MCP Apps')).toBe('2.0.3');
     expect(['MCP client', 'MCP core', 'MCP server'].map(version)).toEqual([
-      '2.3.1',
-      '2.3.1',
-      '2.3.1',
+      '2.4.0',
+      '2.4.0',
+      '2.4.0',
     ]);
     expect(version('MCP Node integration')).toBe('2.1.1');
     expect(version('Zod (MCP seam, hoisted)')).toMatch(

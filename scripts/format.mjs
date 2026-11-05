@@ -14,6 +14,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import * as prettier from 'prettier';
+import { terminalText, terminalValue } from './terminal-text.mjs';
 
 // A selected path is read and replaced only as a regular file inside the checkout. A symbolic link
 // or special file is refused (formatting through one would read and rewrite whatever it points
@@ -27,11 +28,11 @@ function readSelected(file, root) {
   const inspected = lstatSync(absolute);
   if (inspected.isSymbolicLink() || !inspected.isFile())
     throw new Error(
-      `${file}: not a regular file; the formatter does not follow links or format special files`,
+      `${terminalValue(file)}: not a regular file; the formatter does not follow links or format special files`,
     );
   const parent = realpathSync(dirname(absolute));
   if (parent !== root && !parent.startsWith(`${root}${sep}`))
-    throw new Error(`${file}: outside the checkout`);
+    throw new Error(`${terminalValue(file)}: outside the checkout`);
   const handle = openSync(
     absolute,
     constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
@@ -43,7 +44,9 @@ function readSelected(file, root) {
       opened.dev !== inspected.dev ||
       opened.ino !== inspected.ino
     )
-      throw new Error(`${file}: changed while it was being read`);
+      throw new Error(
+        `${terminalValue(file)}: changed while it was being read`,
+      );
     return { text: readFileSync(handle, 'utf8'), identity: opened };
   } finally {
     closeSync(handle);
@@ -64,7 +67,9 @@ function replaceSelected(file, text, identity) {
       now.dev !== identity.dev ||
       now.ino !== identity.ino
     )
-      throw new Error(`${file}: replaced while it was being formatted`);
+      throw new Error(
+        `${terminalValue(file)}: replaced while it was being formatted`,
+      );
     renameSync(temporary, absolute);
   } catch (error) {
     rmSync(temporary, { force: true });
@@ -125,7 +130,7 @@ async function main() {
     try {
       ({ text: input, identity } = readSelected(file, root));
     } catch (error) {
-      console.error(error.message);
+      console.error(terminalValue(error.message));
       process.exitCode = 1;
       continue;
     }
@@ -136,13 +141,13 @@ async function main() {
         try {
           replaceSelected(file, formatted, identity);
         } catch (error) {
-          console.error(error.message);
+          console.error(terminalValue(error.message));
           process.exitCode = 1;
         }
       }
     } else if (!(await prettier.check(input, options))) {
       console.error(
-        `${file}: formatting differs; run npm run format -- ${JSON.stringify(file)}`,
+        `${terminalValue(file)}: formatting differs; run npm run format -- ${terminalValue(JSON.stringify(file))}`,
       );
       process.exitCode = 1;
     }
@@ -153,6 +158,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error.message);
+  console.error(terminalText(error.message));
   process.exitCode = 1;
 });
