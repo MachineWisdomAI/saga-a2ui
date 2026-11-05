@@ -3,8 +3,8 @@
   "release": {
     "version": "1.0.0",
     "channel": "stable",
-    "revision": "a9633b399cf7318ecd934aaef192263119373692",
-    "source": "https://github.com/MachineWisdomAI/saga-a2ui/tree/a9633b399cf7318ecd934aaef192263119373692",
+    "revision": "15591e35b1287486ea789f49cd5ead998ed03b89",
+    "source": "https://github.com/MachineWisdomAI/saga-a2ui/tree/15591e35b1287486ea789f49cd5ead998ed03b89",
     "route": "/docs/releases/1.0.0/components/index"
   },
   "components": [
@@ -19,7 +19,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/components/faithful-card",
           "role": "Renderer-neutral content contract, reader, Markdown interpretation, content policy and image consent",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/components/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/components/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "CONTENT_POLICY_ELEMENT_ID",
@@ -98,7 +98,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/react/faithful-card",
           "role": "React rendering, catalog entry and trusted settings provider",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/react/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCard",
@@ -124,7 +124,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/lit/faithful-card",
           "role": "Lit rendering, catalog entry and content view",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/lit/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "CONTENT_VIEW_REQUEST",
@@ -153,7 +153,7 @@
           "version": "1.0.1",
           "import": "@saga-a2ui/react-mcp-stack/faithful-card",
           "role": "Starts a FaithfulCard application in React over MCP Apps",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react-mcp-stack/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/react-mcp-stack/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCardApp",
@@ -188,7 +188,7 @@
           "version": "1.0.1",
           "import": "@saga-a2ui/lit-mcp-stack/faithful-card",
           "role": "Starts a FaithfulCard application in Lit over MCP Apps",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit-mcp-stack/src/faithful-card/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/lit-mcp-stack/src/faithful-card/index.ts",
           "exports": {
             "values": [
               "FaithfulCardApp",
@@ -267,7 +267,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/core/actions/action-button-schema",
           "role": "Renderer-neutral contract of the control: a strict schema with no action property",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/core/src/actions/action-button-schema.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/core/src/actions/action-button-schema.ts",
           "exports": { "values": ["ActionButtonApi"], "types": [] },
           "stylesheet": null
         },
@@ -276,7 +276,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/react/actions",
           "role": "React control and action setup",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/actions/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/react/src/actions/index.ts",
           "exports": {
             "values": [
               "ActionButton",
@@ -300,7 +300,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/lit/actions",
           "role": "Lit control and action setup",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/lit/src/actions/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/lit/src/actions/index.ts",
           "exports": {
             "values": [
               "ActionButton",
@@ -360,7 +360,7 @@
           "version": "1.0.0",
           "import": "@saga-a2ui/react/attribution",
           "role": "React credit component and its stylesheet",
-          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/a9633b399cf7318ecd934aaef192263119373692/packages/react/src/attribution/index.ts",
+          "source": "https://github.com/MachineWisdomAI/saga-a2ui/blob/15591e35b1287486ea789f49cd5ead998ed03b89/packages/react/src/attribution/index.ts",
           "exports": {
             "values": ["DEFAULT_ATTRIBUTION", "SagaAttribution"],
             "types": ["SagaAttributionProps"]
