@@ -59,6 +59,7 @@ import {
 } from './protected-request.js';
 import {
   bindResponseToLifetime,
+  closeUnfinishedBodyAfterAnswer,
   ListenerConfigurationError,
   mayAnswer,
   resolveStreamingPolicy,
@@ -354,6 +355,7 @@ export async function startEpisodeListener(
   }
 
   http.on('request', (req, res) => {
+    closeUnfinishedBodyAfterAnswer(req, res);
     let path = '/';
     try {
       path = new URL(req.url ?? '/', `http://${HOST}`).pathname;
