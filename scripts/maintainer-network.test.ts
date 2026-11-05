@@ -576,7 +576,13 @@ describe('remote schema identifiers', () => {
       { $id: 'javascript:alert(1)' },
     ],
     ['a percent-encoded scheme in $id', { $id: 'ja%76ascript:alert(1)' }],
+    ['a %u-encoded scheme in $id', { $id: '%u006Aavascript:alert(1)' }],
     ['credentials in $id', { $id: 'https://user:pw@peer.example.test/s' }],
+    ['two @ delimiters in the host of $id', { $id: 'http://a@b@evil.test/s' }],
+    [
+      'a control character in the host of $id',
+      { $id: 'https://peer.example\ttest/s' },
+    ],
     ['a colon in the first segment of a relative $id', { $id: 'a:b/c' }],
     ['a query in $id', { $id: 'https://peer.example.test/s?x=1' }],
     ['a backslash in $id', { $id: 'https://peer.example.test\\s' }],
@@ -617,6 +623,26 @@ describe('remote schema identifiers', () => {
     });
     expect(called).toEqual(['probe']);
     expect(outcome).toBe('admitted');
+  });
+
+  it('reads the property names of dependentRequired as data, not as identifier keywords', async () => {
+    const { outcome, called } = await call({
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      dependentRequired: { $id: ['name'], $ref: ['name'], $anchor: ['name'] },
+    });
+    expect(called).toEqual(['probe']);
+    expect(outcome).toBe('admitted');
+  });
+
+  it('still refuses an unsafe identifier written beside a dependentRequired map', async () => {
+    const { outcome, called } = await call({
+      type: 'object',
+      $id: 'a:b',
+      dependentRequired: { $id: ['name'] },
+    });
+    expect(outcome).toMatch(REFUSED);
+    expect(called).toEqual([]);
   });
 
   it('compiles no peer schema in a session, which lists with a raw request', async () => {

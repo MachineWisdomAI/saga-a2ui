@@ -443,7 +443,8 @@ export function isPlainSchemaReference(value: unknown): boolean {
 
 const REFERENCE_KEYWORDS = ['$id', '$ref', '$dynamicRef', '$schema'] as const;
 const ANCHOR_KEYWORDS = ['$anchor', '$dynamicAnchor'] as const;
-// Keywords whose value maps names to schemas, and whose value is data a schema only describes.
+// Keywords whose value maps names to schemas (SCHEMA_MAPS), and keywords whose value is data a schema
+// only describes (DATA_KEYWORDS; `dependentRequired` maps property names to lists of property names).
 const SCHEMA_MAPS = new Set([
   'properties',
   'patternProperties',
@@ -452,7 +453,13 @@ const SCHEMA_MAPS = new Set([
   'dependentSchemas',
   'dependencies',
 ]);
-const DATA_KEYWORDS = new Set(['enum', 'const', 'default', 'examples']);
+const DATA_KEYWORDS = new Set([
+  'enum',
+  'const',
+  'default',
+  'examples',
+  'dependentRequired',
+]);
 
 /** Whether every schema identifier, reference and anchor in a tool's JSON Schema is plain. */
 export function hasPlainSchemaIdentifiers(schema: unknown): boolean {
