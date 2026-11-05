@@ -30,7 +30,7 @@ import {
 //   npx tsx scripts/saga.ts demo --a2ui-stack lit-mcp --server node ./my-demo
 //   npx tsx scripts/saga.ts publish prepare --target chatgpt --release saga-publication.json --out ./publication
 //   npx tsx scripts/saga.ts publish prepare --target claude --release saga-publication.json --out ./publication
-//   npx tsx scripts/saga.ts publish handoff begin --handoff ./handoff --prepared ./publication --authority-ref 'owner agreement, ticket 12'
+//   npx tsx scripts/saga.ts publish handoff begin --handoff ./handoff --prepared ./publication --release saga-publication.json --authority-ref 'owner agreement, ticket 12'
 //
 // `init` and `demo` each create one new directory. Neither installs anything, runs a package manager,
 // hook or script of the output, or changes anything that already exists. `publish` (CLI3, CLI4) is the
@@ -122,7 +122,8 @@ const USAGE = `Usage: saga init --a2ui-stack <renderer>-mcp --server <target> <d
        saga demo --a2ui-stack <renderer>-mcp --server <target> <directory>
        saga publish check --target <chatgpt|claude> --release <saga-publication.json> [--against <directory>] [--invoke-fixture <calls.json>] [--bearer-env <name>]
        saga publish prepare --target <chatgpt|claude> --release <saga-publication.json> --out <directory> [--against <directory>] [--invoke-fixture <calls.json>] [--bearer-env <name>]
-       saga publish handoff <begin|status|attempt|confirm-submission|void-attempt|record-review|record-listing> --handoff <directory> [options]
+       saga publish handoff begin --handoff <directory> --prepared <directory> --release <saga-publication.json> --authority-ref <reference> [--invoke-fixture <calls.json>] [--bearer-env <name>]
+       saga publish handoff <status|attempt|confirm-submission|void-attempt|record-review|record-listing> --handoff <directory> [options]
 
 init creates <directory>, which must not exist yet, from the maintained starter for the pair.
 demo creates it from the standalone demonstration of the pair: a local-only application with
@@ -141,15 +142,18 @@ scope). It reads the endpoint without calling any tool unless --invoke-fixture i
 deploys, uploads and submits nothing. check writes nothing. A verdict other than ready exits 1.
 
 publish handoff keeps the resumable record of the manual submission that follows prepare, in
-<directory> (scripts/publish/README.md): begin pins a ready prepared release (--prepared) and the
-references to the intended publisher's authority (--authority-ref, at least once); attempt records
+<directory> (scripts/publish/README.md): begin assesses the release again (--release, as for
+check; the prepared record is not taken as evidence of readiness), then pins the ready prepared
+release (--prepared) it matches and the references to the intended publisher's authority
+(--authority-ref, at least once); attempt records
 that you are about to submit by hand and is refused while an earlier attempt is unsettled;
 confirm-submission (--reference) or void-attempt (--inspected) settles it; record-review (--state)
 and record-listing (--state, --host, --evidence, --prepared) record what the host reported and what
 you observed on a named host; status shows preparation, submission, review and the live listing
 apart, and with --prepared whether the release has changed. Times default to now; --observed-at
-gives the time the host showed it. These commands read local files only: they call no host and
-submit nothing.
+gives the time the host showed it. Apart from begin these commands read local files only: they
+call no host and submit nothing. begin reads the endpoint as check does, calls no tool unless
+--invoke-fixture is given, and submits nothing.
 `;
 
 type Creation = 'init' | 'demo';
@@ -371,15 +375,22 @@ function parseHandoff(values: ParsedValues, rest: readonly string[]): Command {
       kind: 'usage',
       message: '--a2ui-stack and --server belong to saga init and saga demo.',
     };
-  const prepareOnly =
-    (['target', 'release', 'out', 'against', 'bearer-env'] as const).find(
-      (name) => values[name] !== undefined,
-    ) ??
-    (values['invoke-fixture'] !== undefined ? 'invoke-fixture' : undefined);
+  const prepareOnly = (['target', 'out', 'against'] as const).find(
+    (name) => values[name] !== undefined,
+  );
   if (prepareOnly !== undefined)
     return {
       kind: 'usage',
-      message: `--${prepareOnly} belongs to saga publish check and prepare; a handoff takes its host and release from its record.`,
+      message: `--${prepareOnly} belongs to saga publish check and prepare; a handoff takes its host from its record.`,
+    };
+  // `begin` assesses the release again, so it alone takes the options of that assessment.
+  const assessOnly = (
+    ['release', 'bearer-env', 'invoke-fixture'] as const
+  ).find((name) => values[name] !== undefined);
+  if (assessOnly !== undefined && action !== 'begin')
+    return {
+      kind: 'usage',
+      message: `--${assessOnly} belongs to saga publish handoff begin, which assesses the release again; ${action} reads the record.`,
     };
   return {
     kind: 'handoff',
@@ -394,6 +405,9 @@ function parseHandoff(values: ParsedValues, rest: readonly string[]): Command {
       state: values.state,
       host: values.host,
       evidence: values.evidence,
+      release: values.release,
+      bearerEnv: values['bearer-env'],
+      invokeFixture: values['invoke-fixture'],
     },
   };
 }
@@ -616,7 +630,7 @@ async function publish(
   }
 }
 
-/** `publish handoff`: the resumable record of a manual submission. It reads and writes local files only. */
+/** `publish handoff`: the resumable record of a manual submission. Only `begin` reads the endpoint, to assess the release again; the other actions read and write local files only. */
 async function handoff(
   request: HandoffRequest,
   environment: Environment,
