@@ -255,6 +255,8 @@ async function rig(
     harnessOptions?: Parameters<typeof startPlaybackHarness>[1];
     /** Joins a description card's consent scope to the view, recording its calls beside every presented state. */
     withContentConsent?: boolean;
+    /** The view's body limit, when a test needs one smaller than the shipped default. */
+    maxMediaBytes?: number;
     /**
      * The media origin the view is told to admit. Defaults to the listener's own, as the served
      * document would carry it; `null` models a document that carries none.
@@ -353,6 +355,9 @@ async function rig(
           },
         }
       : {}),
+    ...(options.maxMediaBytes === undefined
+      ? {}
+      : { maxMediaBytes: options.maxMediaBytes }),
   });
   const actions = createInstanceHost({
     onSetupError: (error) => void setupErrors.push(error),
@@ -1229,6 +1234,147 @@ describe('Recovery after access ends between the grant and the media fetch', () 
       r.forwarded.filter((call) => call.name === 'play_episode'),
     ).toHaveLength(1);
     expect(r.harness.playback.entitlementChecks).toHaveLength(2); // one for Play, one for the single acquisition
+  });
+});
+
+/**
+ * Answers the view's media request with `make()` instead of the listener, so a test controls the
+ * headers and the stream. Every other request still reaches the real listener.
+ */
+async function withMediaResponse<T>(
+  make: () => Response,
+  run: () => Promise<T>,
+): Promise<T> {
+  const real = globalThis.fetch;
+  globalThis.fetch = ((input, init) =>
+    String(input instanceof Request ? input.url : input).includes(
+      '/playback/media/',
+    )
+      ? Promise.resolve(make())
+      : real(input, init)) as typeof fetch;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+/** A body that yields `chunks` chunks of `chunkBytes` and records how much was pulled and whether it was cancelled. */
+function countedBody(chunks: number, chunkBytes: number) {
+  const seen = { pulled: 0, cancelled: false };
+  const chunk = new Uint8Array(chunkBytes);
+  // A zero high-water mark: the stream is asked for a chunk only when the reader reads.
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (seen.pulled >= chunks) return controller.close();
+        seen.pulled += 1;
+        controller.enqueue(chunk.slice());
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { seen, body };
+}
+
+describe('a protected body past the byte limit is never buffered or decoded', () => {
+  it('refuses a body whose declared length is past the shipped limit, reading none of it', async () => {
+    const r = await rig();
+    await r.select(EP1);
+    const { seen, body } = countedBody(4, 16);
+
+    await withMediaResponse(
+      () =>
+        new Response(body, {
+          headers: { 'content-length': String(64 * 1024 * 1024 + 1) },
+        }),
+      async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('media-failed');
+      },
+    );
+
+    expect(seen.pulled).toBe(0);
+    expect(seen.cancelled).toBe(true);
+    expect(r.player.started).toHaveLength(0);
+    expect(kinds(r)).not.toContain('playing');
+    expect(r.player.calls.at(-1)).toBe('stop');
+  });
+
+  it('stops reading an endless body with no honest length at the limit', async () => {
+    const r = await rig({ maxMediaBytes: 4_096 });
+    await r.select(EP1);
+    const { seen, body } = countedBody(Number.MAX_SAFE_INTEGER, 1_024);
+
+    await withMediaResponse(
+      () => new Response(body),
+      async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('media-failed');
+      },
+    );
+
+    expect(seen.pulled).toBeLessThanOrEqual(6);
+    expect(seen.cancelled).toBe(true);
+    expect(r.player.started).toHaveLength(0);
+  });
+
+  it('counts the decoded bytes of an encoded body, not the small length it declares', async () => {
+    const r = await rig({ maxMediaBytes: 4_096 });
+    await r.select(EP1);
+    const { seen, body } = countedBody(Number.MAX_SAFE_INTEGER, 1_024);
+
+    await withMediaResponse(
+      () =>
+        new Response(body, {
+          headers: { 'content-length': '40', 'content-encoding': 'gzip' },
+        }),
+      async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('media-failed');
+      },
+    );
+
+    expect(seen.pulled).toBeLessThanOrEqual(6);
+    expect(r.player.started).toHaveLength(0);
+  });
+
+  it('offers a deliberate retry afterwards, and the retry plays a body within the limit', async () => {
+    const r = await rig({ maxMediaBytes: 4_096 });
+    await r.select(EP1);
+    const { body } = countedBody(Number.MAX_SAFE_INTEGER, 1_024);
+    await withMediaResponse(
+      () => new Response(body),
+      async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('media-failed');
+      },
+    );
+
+    r.view.play();
+    await expect.poll(() => r.last()?.kind).toBe('playing');
+    expect([
+      ...new Uint8Array(r.player.started[0] ?? new ArrayBuffer(0)),
+    ]).toEqual([...MEDIA_BYTES]);
+  });
+
+  it('plays a body of exactly the limit, delivered in several chunks', async () => {
+    const r = await rig({ maxMediaBytes: 4_096 });
+    await r.select(EP1);
+    const { body } = countedBody(4, 1_024);
+
+    await withMediaResponse(
+      () => new Response(body, { headers: { 'content-length': '4096' } }),
+      async () => {
+        r.view.play();
+        await expect.poll(() => r.last()?.kind).toBe('playing');
+      },
+    );
+
+    expect(r.player.started[0]?.byteLength).toBe(4_096);
   });
 });
 

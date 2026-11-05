@@ -12,6 +12,23 @@ const playerSource = new URL(
   '../src/playback/web-audio-player.ts',
   import.meta.url,
 );
+// The player imports its byte limits from this module. A blob URL cannot resolve a relative
+// import, so the harness transpiles both files and points the player at the limits module's own
+// blob URL. The player under test is still the real source, not a stand-in.
+const limitsSource = new URL(
+  '../src/playback/media-limits.ts',
+  import.meta.url,
+);
+const LIMITS_SPECIFIER = './media-limits.js';
+
+async function transpile(source: URL): Promise<string> {
+  return ts.transpileModule(await readFile(source, 'utf8'), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+}
 
 /** Loads the player module from its TypeScript source into a blank page and runs `scenario`. */
 async function inPage<T>(
@@ -19,12 +36,10 @@ async function inPage<T>(
   scenario: string,
   bytes: readonly number[],
 ): Promise<T> {
-  const transpiled = ts.transpileModule(await readFile(playerSource, 'utf8'), {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
+  const transpiled = await transpile(playerSource);
+  const limits = await transpile(limitsSource);
+  // Fails here, rather than as an unresolved import in the page, if the player's import changes.
+  expect(transpiled).toContain(`'${LIMITS_SPECIFIER}'`);
   // Records every context the player creates, so a scenario can hold one back from running.
   await page.addInitScript(() => {
     const Original = window.AudioContext;
@@ -40,9 +55,14 @@ async function inPage<T>(
   await page.goto('/');
   await page.mouse.click(5, 5); // user activation, so the audio context may run
   return page.evaluate(
-    async ({ code, scenarioSource, wav }) => {
+    async ({ code, limitsCode, specifier, scenarioSource, wav }) => {
+      const limitsUrl = URL.createObjectURL(
+        new Blob([limitsCode], { type: 'text/javascript' }),
+      );
       const url = URL.createObjectURL(
-        new Blob([code], { type: 'text/javascript' }),
+        new Blob([code.split(`'${specifier}'`).join(`'${limitsUrl}'`)], {
+          type: 'text/javascript',
+        }),
       );
       const { createWebAudioPlayer } = (await import(
         /* @vite-ignore */ url
@@ -68,7 +88,13 @@ async function inPage<T>(
       );
       return run(createWebAudioPlayer, fresh, settle);
     },
-    { code: transpiled, scenarioSource: scenario, wav: bytes },
+    {
+      code: transpiled,
+      limitsCode: limits,
+      specifier: LIMITS_SPECIFIER,
+      scenarioSource: scenario,
+      wav: bytes,
+    },
   ) as Promise<T>;
 }
 

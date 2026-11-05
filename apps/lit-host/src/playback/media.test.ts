@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEV_ACCOUNTS, DEV_TOKENS } from '../mcp/dev-auth.js';
+import {
+  MAX_DECODED_MEDIA_BYTES,
+  MAX_MEDIA_BODY_BYTES,
+} from './media-limits.js';
 import { captureOrdinaryLogs } from './ordinary-logs.js';
 import {
   acquireMedia,
@@ -672,6 +676,67 @@ describe('cache controls keep one user’s media from another through a shared c
       ).toLowerCase(),
     ).toContain('range');
     expect(h.playback.mediaReads).toEqual([]);
+  });
+});
+
+describe('the byte limit on a protected episode', () => {
+  // Decision: the service delivers at most `maxBytes` of an episode, whole or as a range. A store
+  // that returns more is a storage fault (the same 503 as any other), so the over-limit
+  // body is never sent, and neither a range of it nor its length leaves the service.
+  it('hands the store the limit it will enforce, so a store can refuse before loading', async () => {
+    const h = await harness({ mediaMaxBytes: MEDIA_BYTES.length });
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    await acquireWithFreshProof(key, grant);
+
+    expect(h.playback.mediaReadLimits).toEqual([MEDIA_BYTES.length]);
+  });
+
+  it('delivers an episode exactly at the limit, whole and as a range', async () => {
+    const h = await harness({ mediaMaxBytes: MEDIA_BYTES.length });
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    const whole = await acquireWithFreshProof(key, grant);
+    const partial = await acquireWithFreshProof(key, grant, 'bytes=2-5');
+
+    expect(whole.status).toBe(200);
+    expect([...whole.bytes]).toEqual([...MEDIA_BYTES]);
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get('content-range')).toBe(
+      `bytes 2-5/${MEDIA_BYTES.length}`,
+    );
+  });
+
+  for (const range of [undefined, 'bytes=0-3', 'bytes=99-', 'bytes=-4']) {
+    it(`answers a stored episode over the limit with a 503 that carries neither its bytes nor its length (Range ${range ?? 'absent'})`, async () => {
+      const h = await harness({ mediaMaxBytes: MEDIA_BYTES.length - 1 });
+      const key = await createRecipientKey();
+      const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+      const attempt = await acquireWithFreshProof(key, grant, range);
+
+      expect(attempt.status).toBe(503);
+      expect(attempt.headers.get('content-range')).toBeNull();
+      expect(attempt.headers.get('content-type')).not.toBe('audio/wav');
+      expect(
+        Buffer.from(attempt.bytes).includes(Buffer.from(MEDIA_BYTES)),
+      ).toBe(false);
+      expect(Buffer.from(attempt.bytes).toString('utf8')).not.toMatch(/\d{2,}/);
+    });
+  }
+
+  it('hands the store the shipped default when the application sets none', async () => {
+    const h = await harness();
+    const key = await createRecipientKey();
+    const grant = await playAndGetGrant(h, DEV_TOKENS.alice, key);
+
+    await acquireWithFreshProof(key, grant);
+
+    expect(h.playback.mediaReadLimits).toEqual([MAX_MEDIA_BODY_BYTES]);
+    expect(MAX_MEDIA_BODY_BYTES).toBe(64 * 1024 * 1024);
+    expect(MAX_DECODED_MEDIA_BYTES).toBe(512 * 1024 * 1024);
   });
 });
 
