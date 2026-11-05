@@ -6,7 +6,7 @@ You’ll create an app in your own directory, install saga from npm, and open it
 
 ![A tic-tac-toe game in progress, with X in the centre and bottom-right squares, O in both top corners, and a New game button below the board.](images/tic-tac-toe-board.png)
 
-A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/a2f1f6203a2a6fdabb25a3ca66a8c546ec909872/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
+A finished version of this game runs at `https://examples.saga-ai.dev/tic-tac-toe/mcp`, with no sign-in. To try it before you build, follow the [setup steps for Claude and ChatGPT](https://github.com/MachineWisdomAI/saga-a2ui-examples#use-the-hosted-game); its [source](https://github.com/MachineWisdomAI/saga-a2ui-examples/tree/b4eaeb909a460f94e44c411f8e3ad4091014e5c4/apps/tic-tac-toe/game) is maintained in the examples repository, shared by local development and the hosted Worker. This guide is how you build it yourself, with npm and Vite, and does not depend on the hosted game.
 
 ## Before you start
 
