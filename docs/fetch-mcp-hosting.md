@@ -6,6 +6,7 @@ The helper is introduced in `0.10.0-rc.1`. Check [public installation](public-in
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';
+import { DEFAULT_MAX_TOOL_INPUT_ELEMENTS } from '@saga-a2ui/react-mcp-stack/server';
 import { createMcpFetchApp } from '@saga-a2ui/react-mcp-stack/server/http';
 
 const app = createMcpFetchApp({
@@ -13,7 +14,10 @@ const app = createMcpFetchApp({
   allowedHosts: ['mcp.example.com'],
   allowedOrigins: ['mcp.example.com'],
   createServer(lifetime) {
-    const server = new McpServer({ name: 'my-app', version: '1.0.0' });
+    const server = new McpServer(
+      { name: 'my-app', version: '1.0.0' },
+      { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+    );
     // Register your operations here, passing { lifetime } to each registration.
     return server;
   },
@@ -27,7 +31,7 @@ Behind a Node listener, pass each incoming request to `app.fetch` through your f
 
 ## What you supply
 
-- `createServer(lifetime)` returns a fresh `McpServer` for each protocol request. Register operations with `registerPublicOperation` or `registerProtectedOperation`, passing `{ lifetime }`. Keep shared state, such as a game store, outside this callback. Do not subclass the server to finish the lifetime: the SDK attaches the existing request-lifetime closure, so the lifetime ends once when the server closes, with or without a connected transport. If your callback throws, the lifetime ends once and the request fails. The callback may return a promise, and the SDK waits for it only as long as the request budget allows: a callback that never settles ends the request when that budget is spent, with the same fixed failure as a throw. A server it returns after that point is closed and never serves a request, so construction work that ignores `lifetime.signal` still cannot hold a request open or leave a late server behind (it can still run to its end; stop it through the signal if you can).
+- `createServer(lifetime)` returns a fresh `McpServer` for each protocol request. Register operations with `registerPublicOperation` or `registerProtectedOperation`, passing `{ lifetime }`. Keep shared state, such as a game store, outside this callback. Give every server `maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS` (a finite limit on the array elements and object members of one tool call, 256 by default): the official server applies no limit unless it is set, and `maxRequestBodySize` bounds bytes, not structure. Do not subclass the server to finish the lifetime: the SDK attaches the existing request-lifetime closure, so the lifetime ends once when the server closes, with or without a connected transport. If your callback throws, the lifetime ends once and the request fails. The callback may return a promise, and the SDK waits for it only as long as the request budget allows: a callback that never settles ends the request when that budget is spent, with the same fixed failure as a throw. A server it returns after that point is closed and never serves a request, so construction work that ignores `lifetime.signal` still cannot hold a request open or leave a late server behind (it can still run to its end; stop it through the signal if you can).
 - `allowedHosts` and `allowedOrigins` are explicit lists of host names (without scheme or port). Entries are trimmed and de-duplicated. An empty list admits no Host, or no Origin, and the SDK adds no `localhost` entries. A request without an Origin header is not refused for that reason, as non-browser MCP clients send none; a request with an Origin must match your list. Missing or blank settings fail when you create the app, before any traffic. Reading these lists from environment variables or bindings stays in your application.
 - `path` is one exact route, `/mcp` unless stated. It is a literal path: no parameter, wildcard, query or trailing slash. Any other path answers `404` and runs no application code. A refused Host or Origin answers `403` before the factory runs, so no operation, and no backend effect, starts.
 - `responseMode` is `json` (the default) or `sse`. In `json` mode the official handler returns the terminal result for 2026-07-28 requests and drops progress sent before it; use `sse` if clients should receive progress. Older-protocol exchanges are always served by the official stateless fallback. Optional `budgets` take the same settings as `createServerBudgets`, and an invalid value fails when you create the app. `maxRequestBodySize` is passed to the official handler (4 MiB by default).

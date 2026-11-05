@@ -2,6 +2,7 @@ import { McpServer, type AuthInfo } from '@modelcontextprotocol/server';
 import { CLOSED_VIEW_CSP } from '@saga-a2ui/mcp/policy';
 import {
   createServerBudgets,
+  DEFAULT_MAX_TOOL_INPUT_ELEMENTS,
   registerProtectedOperation,
   registerPublicOperation,
   type BudgetSettings,
@@ -63,10 +64,13 @@ export function createRequestConsumer(
     buildServer() {
       const lifetime = instance.startRequest();
       lifetimes.push(lifetime);
-      const server = new McpServer({
-        name: 'request-consumer',
-        version: '0.0.0',
-      });
+      const server = new McpServer(
+        {
+          name: 'request-consumer',
+          version: '0.0.0',
+        },
+        { maxToolInputElements: DEFAULT_MAX_TOOL_INPUT_ELEMENTS },
+      );
       const view = (name: string) => ({
         uri: `ui://consumer/${name}.html`,
         title: `${name} view`,
