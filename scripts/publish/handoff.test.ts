@@ -1900,3 +1900,126 @@ describe('the command line', () => {
     );
   });
 });
+
+describe('a handoff directory larger than any record this command writes', () => {
+  const eventPath = (cwd: string, seq: number): string =>
+    path.join(cwd, HANDOFF, `${String(seq).padStart(6, '0')}.json`);
+  /** Replaces the first event with itself plus `extra` inside the pinned release; the record has one event, so no chain link depends on it. */
+  async function singleEvent(
+    extra: unknown,
+  ): Promise<{ readonly s: Session; readonly first: string }> {
+    const { s } = await begun();
+    const first = eventPath(s.cwd, 1);
+    const event = JSON.parse(fs.readFileSync(first, 'utf8'));
+    event.release.padding = extra;
+    fs.writeFileSync(first, `${JSON.stringify(event, null, 2)}\n`);
+    return { s, first };
+  }
+
+  it('reads a record with a large pinned release and nested evidence, as before', async () => {
+    const nested = Array.from({ length: 40 }).reduce<unknown>(
+      (inner) => ({ inner }),
+      'x'.repeat(1024 * 1024),
+    );
+    const { s } = await singleEvent(nested);
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('refuses a record of more events than this command writes, before reading any of them', async () => {
+    const { s } = await begun();
+    for (let seq = 2; seq <= 1001; seq += 1)
+      fs.writeFileSync(eventPath(s.cwd, seq), '{}');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses a record that cannot be listed in bounded work: very many ignored temporary files', async () => {
+    const { s } = await begun();
+    for (let n = 0; n < 2001; n += 1)
+      fs.writeFileSync(path.join(s.cwd, HANDOFF, `.tmp-${n}`), '');
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 1000 entries/);
+  });
+
+  it('refuses an event over its size without allocating it', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024 + 1);
+    const begin = await statusOf(s);
+    expect(begin.code).toBe(1);
+    expect(begin.err).toMatch(/larger than 16777216 bytes/);
+
+    const { s: later } = await submitted();
+    fs.truncateSync(eventPath(later.cwd, 2), 16 * 1024 + 1);
+    const run = await statusOf(later);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/000002\.json is not an event.*larger than 16384/);
+  });
+
+  it('refuses a record whose events add up to more than a record this command writes', async () => {
+    const { s, first } = await singleEvent('');
+    fs.truncateSync(first, 16 * 1024 * 1024);
+    for (let seq = 2; seq <= 600; seq += 1) {
+      fs.writeFileSync(eventPath(s.cwd, seq), '');
+      fs.truncateSync(eventPath(s.cwd, seq), 16 * 1024);
+    }
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/more than 25165824 bytes of events/);
+  });
+
+  it('refuses an event nested deeper than any event is, whatever its size', async () => {
+    const depth = 200_000;
+    const { s, first } = await singleEvent('');
+    const event = fs.readFileSync(first, 'utf8');
+    fs.writeFileSync(
+      first,
+      event.replace(
+        '"padding": ""',
+        `"padding": ${'['.repeat(depth)}${']'.repeat(depth)}`,
+      ),
+    );
+    const run = await statusOf(s);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/nested deeper than 64 levels/);
+  });
+
+  it('does not count brackets inside strings as nesting', async () => {
+    const { s } = await singleEvent('[{'.repeat(500) + '\\"[');
+    const run = await statusOf(s);
+    expect(run.code, run.out + run.err).toBe(0);
+  });
+
+  it('reads a record of exactly the most events, and records no event after it', async () => {
+    const { s } = await begun();
+    let tip = sha256(fs.readFileSync(eventPath(s.cwd, 1)));
+    for (let seq = 2; seq <= 1000; seq += 1) {
+      const bytes = `${JSON.stringify(
+        {
+          format: 'saga-publication-handoff/1',
+          seq,
+          previousSha256: tip,
+          recordedAt: '2026-10-21T09:05:00.000Z',
+          type: 'submission-attempt',
+        },
+        null,
+        2,
+      )}\n`;
+      fs.writeFileSync(eventPath(s.cwd, seq), bytes);
+      tip = sha256(Buffer.from(bytes));
+    }
+    expect((await statusOf(s)).err).not.toMatch(/more than|altered/);
+    const run = await s.run([
+      'void-attempt',
+      '--handoff',
+      HANDOFF,
+      '--inspected',
+      'the portal',
+    ]);
+    expect(run.code).toBe(1);
+    expect(run.err).toMatch(/already holds 1000 events/);
+    expect(fs.existsSync(eventPath(s.cwd, 1001))).toBe(false);
+  });
+});

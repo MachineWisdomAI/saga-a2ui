@@ -254,7 +254,10 @@ directory by its identity, and a path replaced or renamed under it is refused wi
 nothing changed or removed in the directory now at the path. Where the system names no open directory (macOS),
 the command's temporary file is removed only while its name still shows the file it wrote; after a replacement
 it can stay behind, in the directory that was moved, as an ignored dot-file. A record that was altered, has a missing event or holds other files is refused and
-never repaired.
+never repaired. So is a record larger than any this command writes, before an event is parsed: more than
+1000 events, a first event over 16 MiB, a later event over 16 KiB, events together over 24 MiB, or an event nested
+more than 64 levels deep (the limits are in `bounded-read.ts`). A record that already holds 1000 events accepts no
+further event; begin a new record for further work.
 
 **Changed inputs invalidate readiness.** Run `prepare` again for the current state, into a new directory,
 and pass it as `--prepared`. It is compared with the pinned release by the rule `--against` uses: the release input,

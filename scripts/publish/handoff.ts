@@ -3,6 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { sameDirectory } from '../starter-template.js';
+import {
+  FileBudget,
+  InputRefused,
+  MAX_HANDOFF_BEGIN_BYTES,
+  MAX_HANDOFF_EVENTS,
+  MAX_HANDOFF_EVENT_BYTES,
+  MAX_HANDOFF_JSON_DEPTH,
+  MAX_HANDOFF_RECORD_BYTES,
+  exceedsJsonDepth,
+  readBounded,
+} from './bounded-read.js';
 import { readPreviousOutput, staleness } from './previous.js';
 import {
   ARCHIVE_FILES,
@@ -235,7 +246,9 @@ type ReadRecord =
  * Reads a handoff directory back: a real directory holding only this tool's numbered events (a
  * temporary file from an interrupted write, named with a leading dot, is ignored), contiguous from
  * one, each in this format and naming the digest of the one before it. Anything else is refused,
- * not repaired: a damaged record is for a person to look at.
+ * not repaired: a damaged record is for a person to look at. A record larger than any this command
+ * writes is refused the same way: too many events, an event or the whole record over its size, or
+ * an event nested too deep, each found before that event is allocated or parsed.
  */
 function readRecord(directory: string): ReadRecord {
   let stat: fs.BigIntStats;
@@ -252,11 +265,28 @@ function readRecord(directory: string): ReadRecord {
       ok: false,
       problem: `${directory} is not a directory this command created.`,
     };
-  const names = fs
-    .readdirSync(directory)
-    .filter((name) => !name.startsWith('.'))
-    .sort();
+  const listed = listEvents(directory);
+  if ('problem' in listed) return { ok: false, problem: listed.problem };
+  const names = listed.names.sort();
   const events: HandoffEvent[] = [];
+  // Sizes first, from the directory: a record over its total is refused before one event is read.
+  let total = 0;
+  for (const name of names) {
+    try {
+      total += fs.statSync(path.join(directory, name)).size;
+    } catch {
+      return {
+        ok: false,
+        problem: `${name} cannot be read as an event of a handoff record.`,
+      };
+    }
+    if (total > MAX_HANDOFF_RECORD_BYTES)
+      return {
+        ok: false,
+        problem: `${directory} holds more than ${MAX_HANDOFF_RECORD_BYTES} bytes of events, which is more than a handoff record this command writes.`,
+      };
+  }
+  const budget = new FileBudget(MAX_HANDOFF_RECORD_BYTES);
   let tip: string | null = null;
   for (const [index, name] of names.entries()) {
     if (EVENT_FILE.exec(name)?.[1] !== String(index + 1).padStart(6, '0'))
@@ -264,7 +294,25 @@ function readRecord(directory: string): ReadRecord {
         ok: false,
         problem: `${directory} holds ${name}, which is not the next event of a handoff record; it is not one this command wrote, or an event is missing.`,
       };
-    const bytes = fs.readFileSync(path.join(directory, name));
+    let bytes: Buffer;
+    try {
+      bytes = readBounded(
+        path.join(directory, name),
+        index === 0 ? MAX_HANDOFF_BEGIN_BYTES : MAX_HANDOFF_EVENT_BYTES,
+        budget,
+      );
+    } catch (error) {
+      if (!(error instanceof InputRefused)) throw error;
+      return {
+        ok: false,
+        problem: `${name} is not an event this command wrote: ${error.message}`,
+      };
+    }
+    if (exceedsJsonDepth(bytes, MAX_HANDOFF_JSON_DEPTH))
+      return {
+        ok: false,
+        problem: `${name} is nested deeper than ${MAX_HANDOFF_JSON_DEPTH} levels, which no event of a handoff record is.`,
+      };
     let parsed: ReturnType<typeof EventSchema.safeParse>;
     try {
       parsed = EventSchema.safeParse(JSON.parse(bytes.toString('utf8')));
@@ -305,6 +353,31 @@ function readRecord(directory: string): ReadRecord {
       problem: `${directory} was replaced while the record was being read; nothing was read from it that can be trusted.`,
     };
   return { ok: true, events, tipSha256: tip, identity: stat };
+}
+
+/**
+ * The names in a record directory that are events (a leading dot marks an ignored temporary file),
+ * counted as they are listed so that a directory of very many entries is never held.
+ */
+function listEvents(
+  directory: string,
+): { readonly names: string[] } | { readonly problem: string } {
+  const names: string[] = [];
+  let entries = 0;
+  const handle = fs.opendirSync(directory);
+  try {
+    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+      entries += 1;
+      if (!entry.name.startsWith('.')) names.push(entry.name);
+      if (names.length > MAX_HANDOFF_EVENTS || entries > 2 * MAX_HANDOFF_EVENTS)
+        return {
+          problem: `${directory} holds more than ${MAX_HANDOFF_EVENTS} entries, which is more than a handoff record this command writes.`,
+        };
+    }
+  } finally {
+    handle.closeSync();
+  }
+  return { names };
 }
 
 class Raced extends Error {}
@@ -1323,6 +1396,12 @@ export async function runHandoff(
     return report.attention ? EXIT_REFUSED : 0;
   }
   if (!requireOption(io, request.action, neededBy(request))) return EXIT_USAGE;
+  if (read.events.length >= MAX_HANDOFF_EVENTS) {
+    io.stderr(
+      `saga publish handoff ${request.action}: the record already holds ${MAX_HANDOFF_EVENTS} events, the most this command reads back, so nothing was recorded. Begin a new record for further work.\n`,
+    );
+    return EXIT_REFUSED;
+  }
   const decision = decide({
     request,
     status,
