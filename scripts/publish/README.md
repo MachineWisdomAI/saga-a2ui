@@ -296,17 +296,19 @@ targets; the package rules are the ChatGPT target's (the Claude target's are abo
 tool rules differ: ChatGPT asks for three explicit hints, Claude for a title and a read-only or
 destructive annotation.
 
-- The build: every view exists inside the build directory, is a regular file, and has a
-  content-addressed `ui://views/<filename>.<fingerprint>.html` identity.
+- The build: every view exists inside the build directory and is a regular file. The endpoint
+  may address it on its contract major (`ui://views/<filename>.v<major>.html`, from
+  `operationViewFromHtml` or `viewUriForMajor`) or by its content digest
+  (`ui://views/<filename>.<fingerprint>.html`, from `viewUriForHtml`).
   Each `build.views` entry is relative to `build.directory` and must be the same filename the
-  application passes to `viewUriForHtml`: for example, `nested/answer.html` retains `nested/`
+  application passes to those functions: for example, `nested/answer.html` retains `nested/`
   in the resource URI. The build directory itself is not part of that name.
 - The endpoint: a public HTTPS URL (no local, internal or IP-literal host). Discovery performs
   `initialize`, `tools/list`, `resources/list` and `resources/read` and never `tools/call`. Each tool
   has a description and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint`. The
   endpoint serves every built view byte for byte as `text/html;profile=mcp-app` with a declared
   content security policy, every tool's view belongs to this build, and a served `ui://views/<filename>.<fingerprint>.html`
-  name matches its bytes. A deployment that serves a different build is the stale case.
+  name matches its bytes. A major-line address names no bytes, so the bytes read there must be the build's. A deployment that serves a different build is the stale case.
 - The deployment identity: `endpoint.expectedServer` (name and version) is compared with what the
   endpoint reports in `initialize`. Equal is `established`, different is a failure, and anything
   else stays `unknown` and explicit in the report and record.

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -251,8 +250,8 @@ describe('the answer consumer built from the packed SDK packages', () => {
         };
       })());
     // Derived here from the requirement (SHA-256 of the served bytes), not by the package's own function.
-    const identityOf = (bytes: Buffer | string): string =>
-      `ui://views/mcp.${createHash('sha256').update(bytes).digest('hex').slice(0, 32)}.html`;
+    // The view's address names its file and contract major, not its bytes.
+    const VIEW_ADDRESS = 'ui://views/mcp.v1.html';
     const open: { host?: TestHost } = {};
     afterEach(async () => {
       await open.host?.close();
@@ -313,7 +312,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       'links every result to the served page, which the host reads back byte for byte, over %s',
       async (_name, jsonResponse) => {
         const { bytes, createAnswerServer } = await prepared();
-        const expected = identityOf(bytes);
+        const expected = VIEW_ADDRESS;
         open.host = await startTestHost({
           jsonResponse,
           buildServer: () => createAnswerServer(bytes.toString('utf8')),
@@ -370,7 +369,7 @@ describe('the answer consumer built from the packed SDK packages', () => {
       120_000,
     );
 
-    it('gives a page with any changed byte a different resource, and the unchanged page the same one', async () => {
+    it('keeps the address when the page is rebuilt, and serves the rebuilt page there', async () => {
       const { bytes, createAnswerServer } = await prepared();
       const uriServing = async (html: string): Promise<string> => {
         open.host = await startTestHost({
@@ -382,19 +381,17 @@ describe('the answer consumer built from the packed SDK packages', () => {
           name: 'answer_question',
           arguments: { question: 'dates' },
         });
+        const uri = (result._meta as { ui: { resourceUri: string } }).ui
+          .resourceUri;
+        const { contents } = await client.readResource({ uri });
         await open.host.close();
-        return (result._meta as { ui: { resourceUri: string } }).ui.resourceUri;
+        const [content] = contents;
+        return `${uri}\n${content && 'text' in content ? content.text : ''}`;
       };
       const html = bytes.toString('utf8');
-      const original = await uriServing(html);
-      expect(await uriServing(html)).toBe(original);
-      const changed = await uriServing(
-        html.replace('</body>', '<!-- rebuilt --></body>'),
-      );
-      expect(changed).not.toBe(original);
-      expect(changed).toBe(
-        identityOf(html.replace('</body>', '<!-- rebuilt --></body>')),
-      );
+      const rebuilt = html.replace('</body>', '<!-- rebuilt --></body>');
+      expect(await uriServing(html)).toBe(`${VIEW_ADDRESS}\n${html}`);
+      expect(await uriServing(rebuilt)).toBe(`${VIEW_ADDRESS}\n${rebuilt}`);
     }, 120_000);
   });
 });

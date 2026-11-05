@@ -107,6 +107,7 @@ describe('package subpath exports', () => {
       'throwIfEnded',
       'valueOrThrow',
       'viewUriForHtml',
+      'viewUriForMajor',
     ]);
     expect(Object.keys(view).sort()).toEqual([
       'DEFAULT_TOOL_RESULT_LIMITS',

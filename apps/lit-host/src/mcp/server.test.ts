@@ -9,7 +9,6 @@ import {
   createContentPolicy,
   type ContentPolicy,
 } from '@saga-a2ui/components/faithful-card';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { EPISODE_TOOL_NAME } from './episode.js';
 import { startEpisodeListener, type EpisodeListener } from './listener.js';
 import type { EpisodeRecord } from './server.js';
@@ -145,8 +144,9 @@ describe('episode MCP server over streamable HTTP', () => {
 
     const { resources } = await client.listResources();
     expect(resources.map((resource) => resource.uri)).toContain(uri);
-    // The registered identity is the SDK byte identity of the document the resource serves.
-    expect(uri).toBe(viewUriForHtml(await readText(client, uri), 'view.html'));
+    // The registered address names the policy and the view's contract major, not the bytes.
+    expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/);
+    expect(await readText(client, uri)).toContain('<saga-app></saga-app>');
   });
 
   it('serves the same immutable HTML for every read, free of request data', async () => {
@@ -210,12 +210,7 @@ describe('episode MCP server over streamable HTTP', () => {
     const { contents } = await client.readResource({ uri });
     const defaultUri = (await servedIdentity(VIEW_HTML)).uri;
     expect(uri).not.toBe(defaultUri);
-    expect(uri).toBe(
-      viewUriForHtml(
-        contents[0] && 'text' in contents[0] ? contents[0].text : '',
-        'view.html',
-      ),
-    );
+    expect(uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/);
     expect(contents[0]?._meta).toEqual({
       ui: {
         csp: {
@@ -278,7 +273,7 @@ describe('episode MCP server over streamable HTTP', () => {
     ['a Strict policy', { level: 'strict' }],
     ['a font-origin policy', { fontOrigins: ['https://fonts.example.com'] }],
   ])(
-    'registers a new URI when the served document changes under %s, and the same URI for equal bytes',
+    'keeps the registered URI across a compatible rebuild under %s, and serves the rebuilt document there',
     async (_name, config) => {
       let policy: ContentPolicy | undefined;
       if (config !== undefined) {
@@ -294,12 +289,14 @@ describe('episode MCP server over streamable HTTP', () => {
       const css = await servedIdentity(withBody('b{margin:1px}', '1'), policy);
       const both = await servedIdentity(withBody('b{margin:1px}', '2'), policy);
 
-      expect(same.uri).toBe(base.uri);
       expect(same.text).toBe(base.text);
-      expect(new Set([base.uri, code.uri, css.uri, both.uri]).size).toBe(4);
-      // Each registered URI is the byte identity of the document its own resource serves.
-      for (const served of [base, code, css, both])
-        expect(served.uri).toBe(viewUriForHtml(served.text, 'view.html'));
+      expect(
+        new Set([base.uri, same.uri, code.uri, css.uri, both.uri]),
+      ).toEqual(new Set([base.uri]));
+      // Each build is read back at that one address with its own bytes, its stamp included.
+      expect(new Set([base.text, code.text, css.text, both.text]).size).toBe(4);
+      expect(code.text).toContain('<script>2</script>');
+      expect(css.text).toContain('b{margin:1px}');
     },
   );
 

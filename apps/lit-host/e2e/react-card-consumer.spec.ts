@@ -718,9 +718,7 @@ for (const brand of BRAND_NAMES) {
       expect(identity.builtPages[brand].sha256).toBe(
         createHash('sha256').update(pages[brand]).digest('hex'),
       );
-      expect(served.uri).toBe(
-        `ui://views/${brand}.${createHash('sha256').update(served.resource.html).digest('hex').slice(0, 32)}.html`,
-      );
+      expect(served.uri).toBe(`ui://views/${brand}.v1.html`);
       expect(identity.installedVersions).toMatchObject({
         react: '19.3.1',
         'react-dom': '19.3.1',

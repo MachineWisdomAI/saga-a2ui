@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   contentPolicyFromEmbedded,
   createContentPolicy,
+  embedContentPolicy,
   type ContentPolicy,
 } from '@saga-a2ui/components/faithful-card';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
 import { contentResource } from './content-resource.js';
 
-// The resource a host receives is built from the policy and nothing else: its identity, its
-// declared host metadata and the restrictions inside the document all come from one value.
+// The resource a host receives is built from the policy and the view: its address (the policy and
+// the view's contract major), its declared host metadata and the restrictions inside the document.
 
 const VIEW =
   '<!doctype html><html><head><meta charset="UTF-8" /><title>v</title></head><body><script>1</script></body></html>';
@@ -28,10 +28,11 @@ function embeddedJson(html: string): string | null {
 }
 
 describe('the content-policy resource', () => {
-  it('derives the identity of the default policy from the served document and declares no domains', () => {
+  it('addresses the default policy on the view major and declares no domains', () => {
     const resource = contentResource(VIEW, policyWith());
-    expect(resource.uri).toBe(viewUriForHtml(resource.html, 'view.html'));
-    expect(resource.uri).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
+    expect(resource.uri).toMatch(
+      /^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/,
+    );
     expect(resource.csp).toEqual({
       connectDomains: [],
       resourceDomains: [],
@@ -57,7 +58,7 @@ describe('the content-policy resource', () => {
     const b = contentResource(VIEW, policyWith(['cdn.example.org'])).uri;
     expect(a).toBe(same);
     expect(new Set([base, a, b]).size).toBe(3);
-    expect(a).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{32}\.html$/);
+    expect(a).toMatch(/^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/);
   });
 
   it('puts the policy-derived restrictions in the document before any script', () => {
@@ -264,22 +265,26 @@ describe('identity of the self-contained resource', () => {
     ],
   ];
 
-  it('is the SDK byte identity of the served document, for every policy', () => {
+  it('serves the exact policy-embedded document at its address, for every policy', () => {
     for (const [, policy] of POLICIES) {
-      const resource = contentResource(cardDocument(), policy);
-      expect(resource.uri).toBe(viewUriForHtml(resource.html, 'view.html'));
-      expect(resource.uri).toBe(
-        viewUriForHtml(Buffer.from(resource.html, 'utf8'), 'view.html'),
+      const resource = contentResource(
+        cardDocument({ code: 'stamp-1' }),
+        policy,
+      );
+      expect(resource.html).toBe(
+        embedContentPolicy(cardDocument({ code: 'stamp-1' }), policy),
+      );
+      expect(resource.uri).toMatch(
+        /^ui:\/\/views\/view\.[0-9a-f]{16}\.v1\.html$/,
       );
     }
   });
 
   it.each(POLICIES)(
-    'keeps the URI for equal bytes and changes it with the code, CSS, font or artwork under %s',
+    'keeps the address when the code, CSS, font or artwork is rebuilt under %s',
     (_name, policy) => {
       const base = identity(cardDocument(), policy);
-      expect(identity(cardDocument(), policy)).toBe(base);
-      const changed = [
+      const rebuilt = [
         identity(cardDocument({ code: '2' }), policy),
         identity(cardDocument({ css: 'body{margin:1px}' }), policy),
         identity(cardDocument({ font: 'BBBB' }), policy),
@@ -289,7 +294,7 @@ describe('identity of the self-contained resource', () => {
         ),
         identity(cardDocument({ code: '2', css: 'body{margin:1px}' }), policy),
       ];
-      expect(new Set([base, ...changed]).size).toBe(changed.length + 1);
+      expect(new Set([base, ...rebuilt])).toEqual(new Set([base]));
     },
   );
 
@@ -304,7 +309,7 @@ describe('identity of the self-contained resource', () => {
     ).toBe(uris[2]);
   });
 
-  it('does not depend on the answer: only the document bytes name the resource', () => {
+  it('does not depend on the answer: the same view and policy are the same resource', () => {
     // Two resources built from the same bytes are the same resource, however often it is built.
     const first = contentResource(cardDocument(), configured({}));
     const second = contentResource(cardDocument(), configured({}));

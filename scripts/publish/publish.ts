@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FetchLike } from '@modelcontextprotocol/client';
-import { viewUriForHtml } from '@saga-a2ui/mcp/server';
+import { viewUriForHtml, viewUriForMajor } from '@saga-a2ui/mcp/server';
 import {
   ExportInterrupted,
   TemplateError,
@@ -327,6 +327,22 @@ function declaredViewUri(
       : undefined;
 }
 
+/**
+ * Whether `uri` is an address of the built view: its content digest (`viewUriForHtml`) or its
+ * file's address on a contract major (`viewUriForMajor`, any major). A major-line address names no
+ * bytes, so the bytes read there are what show the deployment serves this build.
+ */
+function addresses(uri: string, view: BuiltView): boolean {
+  if (uri === view.uri) return true;
+  const major = /\.v([1-9][0-9]*)\.html$/.exec(uri);
+  if (major === null || !Number.isSafeInteger(Number(major[1]))) return false;
+  try {
+    return uri === viewUriForMajor(view.file, Number(major[1]));
+  } catch {
+    return false;
+  }
+}
+
 function viewFindings(
   snapshot: EndpointSnapshot,
   views: readonly BuiltView[],
@@ -336,8 +352,8 @@ function viewFindings(
   // When the read was partial, a view that was not seen is not proved absent; the partial read is reported as unknown by the caller.
   const partial = snapshot.truncated.length > 0;
   for (const view of built) {
-    const served = snapshot.resources.find(
-      (resource) => resource.uri === view.uri,
+    const served = snapshot.resources.find((resource) =>
+      addresses(resource.uri, view),
     );
     if (served === undefined) {
       if (!partial) {
@@ -347,7 +363,7 @@ function viewFindings(
         problems.push(
           sameBytes === undefined
             ? `The endpoint does not serve ${view.file} (${view.uri}); the deployed application is not this build, or this build is not deployed.`
-            : `The endpoint serves the bytes of ${view.file} as ${sameBytes.uri}, but this build expects ${view.uri}. Use the same relative filename in build.views and viewUriForHtml; build.views is relative to build.directory.`,
+            : `The endpoint serves the bytes of ${view.file} as ${sameBytes.uri}, but this build expects ${view.uri}. Use the same relative filename in build.views and in the view's address (operationViewFromHtml, viewUriForMajor or viewUriForHtml); build.views is relative to build.directory.`,
         );
       }
     } else if (served.sha256 !== view.sha256)
@@ -357,7 +373,7 @@ function viewFindings(
   }
   for (const tool of snapshot.tools) {
     const uri = declaredViewUri(tool);
-    if (uri !== undefined && !built.some((view) => view.uri === uri))
+    if (uri !== undefined && !built.some((view) => addresses(uri, view)))
       problems.push(
         `${tool.name} points to ${uri}, which is not a view of this build.`,
       );

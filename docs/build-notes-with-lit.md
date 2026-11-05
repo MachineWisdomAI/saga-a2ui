@@ -73,7 +73,7 @@ Both keep ordinary formatting and both retain server authorization and data-shar
 
 ### Rebuild and resource matching
 
-A view is served as an MCP App resource whose address is `ui://views/<filename>.<32-character-sha256-prefix>.html`, the SHA-256 of the exact bytes served. A view that embeds a policy has an address that depends on that policy, so **changing the policy or rebuilding the view changes the address**. Rebuild the view from the installed packages, restart the server so it serves the rebuilt view, and pair a server only with the view built beside it. A view that meets a result it does not understand shows that the view and its server are from different builds instead of rendering it. `npm run candidate:identity` prints the identities for a given policy.
+A view is served as an MCP App resource whose address is `ui://views/<filename>.v<major>.html`: the filename and the major version of the view's contract. **A compatible rebuild keeps the address**, so a host that kept a tool descriptor from before a deploy still reads the rebuilt view; raise the major only for an incompatible change. Rebuild the view from the installed packages, restart the server so it serves the rebuilt view, and pair a server only with the view built beside it. A view that meets a result it does not understand shows that the view and its server are from different builds instead of rendering it. `npm run candidate:identity` prints the identities for a given policy.
 
 ## Identity and the evidence behind it
 
