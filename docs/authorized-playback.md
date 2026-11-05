@@ -55,11 +55,34 @@ After the proof checks, the service asks the application's `checkEntitlement` ag
 
 Every refusal is the same `403` with the body `{"error":"forbidden"}`, so a caller cannot tell which check failed, and storage is not read. Only a caller who passed every check gets the `Range` header interpreted: one `bytes=` range is `206`, any other `bytes=` range is `416` with the total length and no body, and no range or another unit gets the whole body with `200`. Every answer that can carry bytes or a status is `Cache-Control: private, no-store` with `Vary: Origin, Range, x-saga-capability, x-saga-proof`, so a cache cannot answer one user with another's bytes.
 
-**Byte limits.** The service delivers at most `maxBytes` of an episode (64 MiB by default) and passes that limit to the store's `read` as a third argument, so a store that can learn a size first may refuse a larger episode instead of loading it. A body over the limit is a storage fault: the same `503` as any other, with no bytes, no range and no length. The view applies the same default to what it receives. A declared `Content-Length` over the limit is refused before any of the body is read. Otherwise the bytes are counted as they arrive, after the platform has decoded any `Content-Encoding`, and the read stops and cancels the response at the first byte past the limit, whatever the headers said. A refused body is a media failure and never reaches the player. Pass `maxMediaBytes` to `connectPlaybackView`, `mediaMaxBytes` to the listener's playback options and `maxDecodedBytes` to `createWebAudioPlayer` to change the limits. Web Audio decodes in one step, so the decoded size can be judged only once decoding has finished. An over-limit result is dropped before it is played, but the decoder has already allocated it, so the body limit is what bounds the work the decoder is given.
+**Byte limits.** The service delivers at most `maxBytes` of an episode (64 MiB by default) and passes that limit to the store's `read` as a third argument, so a store that can learn a size first may refuse a larger episode instead of loading it. A body over the limit is a storage fault: the same `503` as any other, with no bytes, no range and no length. The view applies the same default to what it receives. A declared `Content-Length` over the limit is refused before any of the body is read. Otherwise the bytes are counted as they arrive, after the platform has decoded any `Content-Encoding`, and the read stops and cancels the response at the first byte past the limit, whatever the headers said. A refused body is a media failure and never reaches the player. Pass `maxMediaBytes` to `connectPlaybackView`, `mediaMaxBytes` to the listener's playback options and `maxDecodedBytes` to `createWebAudioPlayer` to change the limits. The body limit is a limit on the response the view accepts, not on the memory the read uses: the read keeps the chunks and then copies them once, so at that moment it holds up to twice `maxMediaBytes`. Web Audio decodes in one step, so the decoded size can be judged only once decoding has finished. An over-limit result is dropped before it is played, but the decoder has already allocated it. [Decoded audio: the residual risk](#decoded-audio-the-residual-risk) states what that leaves.
 
 Revocation and expiry decide the next request only. A response that already passed every check finishes, and bytes the browser already received cannot be retracted.
 
 The media path answers any origin (`Access-Control-Allow-Origin: *`) because the sandboxed iframe sends `Origin: null`. That is safe only because nothing ambient authorizes a media request. The service never redirects, and the player fetches with `redirect: 'error'`, so the capability and proof headers never follow a redirect to another destination.
+
+## Decoded audio: the residual risk
+
+The decoded limit does not prevent the decoder's allocation. `decodeAudioData` allocates the whole decoded buffer in one step and reports no size first, so the player can check `length × channels × 4` bytes only after that memory exists. The check keeps an oversized result from being played or kept. The accepted risk is the allocation itself, and it is a reasoned figure, not a measurement.
+
+**How large it can be.** Web Audio decodes to 32-bit floats at the context's sample rate, here taken as 48 kHz. The decoded size is the body size times the expansion, where expansion is the decoded bytes per second (`48000 × channels × 4`) over the encoded bytes per second. For a body at the 64 MiB default:
+
+| Encoded audio | Expansion | Playing time | Decoded size |
+| --- | --- | --- | --- |
+| Uncompressed 16-bit PCM at 48 kHz | 2× | about 6 minutes (stereo) | 128 MiB |
+| Uncompressed 8-bit PCM at 8 kHz, mono | 24× | about 140 minutes | 1.5 GiB |
+| Stereo, 128 kbps | 24× | about 70 minutes | 1.5 GiB |
+| Stereo, 64 kbps | 48× | about 140 minutes | 3 GiB |
+| Mono, 8 kbps | 192× | about 18.6 hours | 12 GiB |
+| Stereo, 6 kbps | 512× | about 24.9 hours | 32 GiB |
+
+Expansion is not only compression: the decoder also resamples to the context rate, so even uncompressed audio at a low sample rate grows. A body that fits the body limit can therefore decode to far more than the decoded limit, and the decoder allocates that before the player sees the size. The body limit bounds what the decoder is given, not what it produces. The default decoded limit of 512 MiB admits about 23 minutes of stereo or 47 minutes of mono at 48 kHz. An application with longer episodes raises both limits together.
+
+**Who can cause it.** The bytes come from the application's own media store and reach only a listener who passed the capability, proof and entitlement checks. A failed allocation ends that one decode: Web Audio rejects it, or the browser stops the sandboxed view's renderer. The effect stays in that listener's own tab. It does not reach the server, another listener, stored data or a credential. The case that matters is a store that holds files the application's operator did not author, such as listener uploads.
+
+**What an application can do.** Set `maxMediaBytes` from the decoded size it can afford and the lowest bitrate it accepts: `maxMediaBytes ≤ decoded budget ÷ expansion`. The expansion is `48000 × channels × 4` over the bytes per second of that bitrate, as in the table. A store that holds only the operator's own encodes can use the defaults.
+
+**When to revisit.** Replace this disposition with a check before the decoder allocates, such as the duration and channel count read from the container header, or a decoder that reports its size first, when any of these holds: the store holds files the operator did not author; the supported episode length makes the table's decoded sizes unaffordable for the devices that play it; or a supported decoder that reports its size before allocating (for example WebCodecs) becomes acceptable to the application. The defaults are chosen for short-form episodes and are reviewed with the maximum supported episode size and the deployment's exposure.
 
 ## Player view states
 

@@ -6,6 +6,17 @@
  * Two numbers, because a body and its decoded audio are different quantities: a compressed or
  * heavily packed body can decode to many times its size. Neither is a promise about what a
  * deployment can afford; an application with longer episodes or tighter devices passes its own.
+ *
+ * What each number does and does not bound:
+ *
+ * - The body limit is a cap on the response the player accepts: the bytes it counts, and the bytes
+ *   it will ever hand to the decoder. It is not a cap on the memory the read uses (see
+ *   `readBoundedBody`).
+ * - The decoded limit is checked after the platform has decoded, because Web Audio decodes in one
+ *   step and reports no size first. It keeps an oversized result from being played or retained; it
+ *   cannot stop the decoder from allocating it. A compressed or low-sample-rate body can decode to
+ *   tens or hundreds of times its size, so the body limit bounds what the decoder is given, not
+ *   what it produces. See "Decoded audio: the residual risk" in `docs/authorized-playback.md`.
  */
 
 /** The most bytes one episode body may be, as stored, as sent and as received (64 MiB). */
@@ -37,7 +48,15 @@ function declaredLength(headers: Headers): number | undefined {
 }
 
 /**
- * Reads a response body into one buffer without ever holding more than `maxBytes`.
+ * Reads a response body into one buffer, accepting at most `maxBytes` of it.
+ *
+ * The limit is on the response: the read never accepts, returns or hands on more than `maxBytes`.
+ * It is not a limit on this function's memory. The chunks are kept as they arrive and copied once
+ * into the result, so at the moment of that copy the read holds the chunks and the result together:
+ * up to twice `maxBytes` plus per-chunk bookkeeping. A refused body holds at most the chunks
+ * accepted so far plus the one that carried the total past the limit, and none of it is copied.
+ * The peak is brief and bounded by the limit, and a deployment that sizes memory from `maxBytes`
+ * should count two times it.
  *
  * Three checks, in order, each before the next costs anything:
  *
