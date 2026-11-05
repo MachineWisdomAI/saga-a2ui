@@ -91,7 +91,7 @@ The view's Play action sends an episode ID in arguments and its recipient public
 
 This mapping has bounded Claude web and ChatGPT web observations on the migrated path. Both produced private grants and kept the capability and media URL out of the observed model-visible result. The earlier MCP Apps 1.7.5 runs failed to display the control and established no mapping; they remain historical evidence, not the current verdict. The later successful request observations do not establish successful audio, universal host behavior or remote cancellation. The host provider can still see data delivered through its infrastructure.
 
-The pinned MCP seam uses MCP Apps 2.0.3, split client/core/server 2.3.1, Node integration 2.1.1 and Zod 4.6.7. A2UI's upstream 0.13 schema boundary retains its own Zod 3 dependency. The original version-only migration produced type errors across transport, context and schemas; the current source performs that migration rather than hiding both versions behind a compatibility layer.
+The pinned MCP seam uses MCP Apps 2.0.3, split client/core/server 2.4.0, Node integration 2.1.1 and Zod 4.6.7. A2UI's upstream 0.13 schema boundary retains its own Zod 3 dependency. The original version-only migration produced type errors across transport, context and schemas; the current source performs that migration rather than hiding both versions behind a compatibility layer.
 
 ## Failure and recovery
 

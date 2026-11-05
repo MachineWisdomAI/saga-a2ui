@@ -25,7 +25,7 @@ apps/lit-host/src/mcp/listener.ts            # HTTP server outside the iframe
 
 The reusable action runtime (`@saga-a2ui/core/actions`) supplies direct bindings, asynchronous local actions, resource scopes and server actions. The original [v0.1.0 snapshot](https://github.com/MachineWisdomAI/saga-a2ui/tree/v0.1.0) (`dda384de`, 2026-10-18) did not use it for Play; the current source does (CORE2, [PR #133](https://github.com/MachineWisdomAI/saga-a2ui/pull/133)). The control opens its own instance on an action host and the application binds `play`, `pause` and `resume` to it; Play is an `Action.server` and Pause and Resume are local actions. The sections below describe the migrated path. The request bounds, the session-label rule and the player's lease ownership are application decisions that stay in `apps/lit-host`, as they did before the migration.
 
-The MCP integration uses `ext-apps` 2.0.3 and the split MCP SDK 2 packages (`client`, `core`, `server` 2.3.1; `node` 2.1.1). The listener uses `NodeStreamableHTTPServerTransport`; a handler reads verified identity from `ctx.http.authInfo` and request metadata from `ctx.mcpReq._meta`. Browser views use `App` and `PostMessageTransport`. These replace the old monolithic SDK imports without changing the capability/proof protocol below.
+The MCP integration uses `ext-apps` 2.0.3 and the split MCP SDK 2 packages (`client`, `core`, `server` 2.4.0; `node` 2.1.1). The listener uses `NodeStreamableHTTPServerTransport`; a handler reads verified identity from `ctx.http.authInfo` and request metadata from `ctx.mcpReq._meta`. Browser views use `App` and `PostMessageTransport`. These replace the old monolithic SDK imports without changing the capability/proof protocol below.
 
 ## One Play press
 

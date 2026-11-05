@@ -465,7 +465,7 @@ try {
     dependencies: {
       '@saga-a2ui/mcp':
         tarballs['@saga-a2ui/mcp'] ?? fail('mcp was not packed'),
-      '@modelcontextprotocol/server': '2.3.1',
+      '@modelcontextprotocol/server': '2.4.0',
       zod: '4.6.7',
     },
     development: BUILD_TOOLS,
