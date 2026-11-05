@@ -28,7 +28,7 @@ Install the stack, the React version it supports, and the MCP server and schema 
 npm install --save-exact --strict-peer-deps \
   @saga-a2ui/react-mcp-stack@0.11.0-rc.1 \
   react@19.3.1 react-dom@19.3.1 \
-  @modelcontextprotocol/server@2.3.1 zod@4.6.7
+  @modelcontextprotocol/server@2.4.0 zod@4.6.7
 ```
 
 Pin the build and lint tools to the versions used for this walkthrough. `vite-plugin-singlefile` is the addition that packages the React view for its host; the other tools belong to the generated React/TypeScript project.

@@ -794,7 +794,7 @@ export function candidateRecord(
       },
       upstream: {
         a2ui: '@a2ui/web_core 0.13.0, @a2ui/lit 0.13.0, @a2ui/react 0.13.0',
-        mcp: '@modelcontextprotocol/client, core, server 2.3.1; ext-apps 2.0.3',
+        mcp: '@modelcontextprotocol/client, core, server 2.4.0; ext-apps 2.0.3',
         zod: "zod 4.6.7 (MCP seam and components); zod 3.25.76 only as core's zod3 alias",
         react:
           'react and react-dom 19.3.1 (exact peers of @saga-a2ui/react only)',

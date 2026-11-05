@@ -19,6 +19,7 @@ import {
 import { runToolResultView, type ToolResult } from '@saga-a2ui/mcp/view'; // saga-boundary: integration-import the player view is not an A2UI surface, so neither stack entry starts it; the lifetime is runToolResultView's and none of its ordering is copied here
 import { CAPABILITY_HEADER, PROOF_HEADER } from './media-proof.js';
 import {
+  canonicalMediaOrigin,
   MEDIA_PATH_PREFIX,
   OpenedEpisodeSchema,
   HOST_CALL_SAFEGUARD_MS,
@@ -132,6 +133,12 @@ export interface PlaybackViewDependencies {
   readonly app: App;
   readonly transport: Transport;
   readonly player: AudioPlayer;
+  /**
+   * The one origin the application admits for media, read from the document the application served
+   * (`admittedMediaOrigin`), never from a Play result. A media URL on any other origin is refused
+   * before a proof is signed or a request sent. `undefined` admits nothing, so Play cannot fetch.
+   */
+  readonly mediaOrigin: string | undefined;
   /** Presents a state. Each call replaces everything shown before it. */
   readonly show: (state: PlaybackViewState) => void;
   /**
@@ -261,14 +268,16 @@ const STATES_THAT_BLOCK_PLAY: ReadonlySet<PlaybackViewState['kind']> = new Set([
  * The selection is cleared, the bindings are disposed, the player stops, and `session-changed`
  * stays: every later opener is ignored. Recovery is a new view or a reload, which pins its own label.
  *
- * Trust: the response is accepted only if it names the selected episode, the pinned sign-in and a
- * media URL for that same episode. The sign-in label is freshness only; the server authorizes every
+ * Trust: the response is accepted only if it names the selected episode, the pinned sign-in and the
+ * media URL for that same episode on the one origin the application admitted (`mediaOrigin`). The
+ * grant travels through the host, so it never chooses the destination of the capability. The sign-in label is freshness only; the server authorizes every
  * Play and every media acquisition. A retry never reuses saved authorization: it makes a new Play.
  */
 export async function connectPlaybackView(
   deps: PlaybackViewDependencies,
 ): Promise<PlaybackViewConnection> {
   const { app } = deps;
+  const admittedOrigin = canonicalMediaOrigin(deps.mediaOrigin);
   const owner = createPlayerOwner(deps.player);
   let selected: OpenedEpisode | undefined;
   let pinnedSession: string | undefined;
@@ -405,15 +414,16 @@ export async function connectPlaybackView(
       view.viewSession !== pinnedSession
     )
       return false;
-    try {
-      const url = new URL(view.mediaUrl);
-      return (
-        (url.protocol === 'https:' || url.protocol === 'http:') &&
-        url.pathname === `${MEDIA_PATH_PREFIX}${episode.episodeId}`
-      );
-    } catch {
-      return false;
-    }
+    // The one place a destination is admitted, before any proof is signed or request sent. The
+    // grant came through the host and does not choose where the capability goes: its URL must be
+    // exactly the admitted origin plus the selected episode's path. String equality also refuses
+    // credentials, a query, a fragment, a different scheme, host or port, and any path variant.
+    // A view with no admitted origin admits nothing.
+    return (
+      admittedOrigin !== undefined &&
+      view.mediaUrl ===
+        `${admittedOrigin}${MEDIA_PATH_PREFIX}${episode.episodeId}`
+    );
   };
 
   /**

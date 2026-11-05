@@ -543,7 +543,12 @@ export async function bundleConsumerEntry(
   );
   return {
     modules: chunks.flatMap((chunk) => Object.keys(chunk.modules)),
-    code: chunks.map((chunk) => chunk.code).join('\n'),
+    // The build keeps documentation comments, and a bundled package's own comments (for example the
+    // MCP client's usage example, which names a Node transport) say nothing about what the page
+    // loads, so the code the assertions read has them removed.
+    code: chunks
+      .map((chunk) => chunk.code.replace(/\/\*\*[\s\S]*?\*\//g, ''))
+      .join('\n'),
   };
 }
 
