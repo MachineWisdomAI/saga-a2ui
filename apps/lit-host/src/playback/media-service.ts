@@ -120,9 +120,10 @@ export interface MediaRetentionLimits {
   readonly maxGrants?: number;
   /**
    * Most spent proof identifiers held at once. A spent identifier is what makes a proof
-   * single-use, so none is forgotten before its proof would be refused as stale anyway: when the
-   * table is full of identifiers that are still needed, a new proof is refused until room returns
-   * (at most {@link PROOF_RETENTION_SECONDS}). Default 4,096.
+   * single-use, so none is forgotten while its proof could still be accepted (until its `iat`
+   * plus the maximum age and the clock tolerance, inclusive): when the table is full of
+   * identifiers that are still needed, a new proof is refused until room returns (at most
+   * {@link PROOF_MAX_RETENTION_SECONDS} after the identifier was spent). Default 4,096.
    */
   readonly maxProofs?: number;
 }
@@ -147,9 +148,21 @@ const DEFAULT_MAX_PROOFS = 4_096;
 /** A proof older than this, or dated further ahead than the tolerance, is refused. */
 const PROOF_MAX_AGE_SECONDS = 60;
 const PROOF_CLOCK_TOLERANCE_SECONDS = 5;
-/** How long a spent proof identifier must be remembered: until its proof would be refused as stale. */
-const PROOF_RETENTION_SECONDS =
+/**
+ * A verified proof is accepted while `iat - tolerance <= now <= iat + maxAge + tolerance`, both
+ * ends inclusive. The identifier of a spent proof must outlive that whole interval, so its
+ * retention runs from the proof's own `iat`, not from the moment it was first used: a proof dated
+ * ahead of the clock stays acceptable for longer after its first use than one dated now.
+ */
+const PROOF_ACCEPTED_AFTER_ISSUE_SECONDS =
   PROOF_MAX_AGE_SECONDS + PROOF_CLOCK_TOLERANCE_SECONDS;
+/**
+ * The longest a spent identifier is held after its first use: the worst-case future `iat`
+ * (the tolerance), the accepted interval, and the one second that makes the last accepted second
+ * inclusive. The proof table makes room again within this time.
+ */
+const PROOF_MAX_RETENTION_SECONDS =
+  PROOF_CLOCK_TOLERANCE_SECONDS + PROOF_ACCEPTED_AFTER_ISSUE_SECONDS + 1;
 const REFUSED: MediaOutcome = { kind: 'refused' };
 
 // Formats and sizes of everything a caller can make the service keep or parse. With the entry
@@ -289,17 +302,23 @@ export function createMediaService(options: MediaServiceOptions): MediaService {
             grant.recipientThumbprint
         )
           return REFUSED;
-        const { jti } = payload;
+        const { jti, iat } = payload;
         if (
           typeof jti !== 'string' ||
           !PROOF_ID_FORMAT.test(jti) ||
+          typeof iat !== 'number' ||
           usedProofs.has(jti)
         )
           return REFUSED;
         // Forgetting a spent identifier early would let its proof be used again, so a full table
         // refuses the new proof instead; room returns as the oldest identifiers age out.
         if (usedProofs.size >= maxProofs) return REFUSED;
-        usedProofs.set(jti, now + PROOF_RETENTION_SECONDS);
+        // The verified `iat` fixes the last second this proof can be accepted (rounded up, so a
+        // fractional `iat` never shortens it); the identifier is forgotten the second after.
+        usedProofs.set(
+          jti,
+          Math.ceil(iat) + PROOF_ACCEPTED_AFTER_ISSUE_SECONDS + 1,
+        );
       } catch {
         return REFUSED;
       }

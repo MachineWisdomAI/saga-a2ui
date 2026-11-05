@@ -58,7 +58,12 @@ async function setup(
   /** One acquisition with its own request scope, a fresh proof and the given `jti` (default: a UUID). */
   async function acquire(
     capability: string,
-    options: { episodeId?: string; jti?: string; proof?: string } = {},
+    options: {
+      episodeId?: string;
+      jti?: string;
+      proof?: string;
+      issuedAt?: number;
+    } = {},
   ) {
     const episodeId = options.episodeId ?? 'ep-1';
     const url = URL_FOR(episodeId);
@@ -68,7 +73,7 @@ async function setup(
         key,
         capability,
         url,
-        issuedAt: now,
+        issuedAt: options.issuedAt ?? now,
         ...(options.jti === undefined ? {} : { jti: options.jti }),
       }));
     return service.acquire(
@@ -229,6 +234,96 @@ describe('spent proofs are bounded without weakening replay protection', () => {
     expect((await h.acquire(again.capability, { jti: 'proof-d' })).kind).toBe(
       'delivered',
     );
+  });
+
+  // A proof is accepted from 5 seconds before its `iat` to 65 seconds after it, both ends
+  // inclusive, so its identifier must be remembered to the end of that interval whenever it was
+  // first used. The capability lives an hour here, so only the proof's own age can refuse a replay.
+  describe('a spent proof stays spent for as long as it could be accepted', () => {
+    /** Spends one proof, then replays the same signed proof at each offset from the first use. */
+    async function replayAt(issuedAtOffset: number, offsets: number[]) {
+      const h = await setup({ ttlSeconds: 3_600 });
+      const { capability } = h.issue();
+      const proof = await signMediaProof({
+        key: h.key,
+        capability,
+        url: URL_FOR('ep-1'),
+        issuedAt: START + issuedAtOffset,
+        jti: 'spent-once',
+      });
+      expect((await h.acquire(capability, { proof })).kind).toBe('delivered');
+      const outcomes: Record<number, string> = {};
+      for (const offset of offsets) {
+        h.setClock(START + offset);
+        outcomes[offset] = (await h.acquire(capability, { proof })).kind;
+      }
+      return { outcomes, reads: h.reads.length };
+    }
+
+    it('refuses a proof dated now at every second through the inclusive +65 boundary', async () => {
+      const offsets = [1, 30, 59, 60, 64, 65];
+      const { outcomes, reads } = await replayAt(0, offsets);
+      expect(offsets.map((offset) => outcomes[offset])).toEqual(
+        offsets.map(() => 'refused'),
+      );
+      expect(reads).toBe(1);
+    });
+
+    it('refuses a proof dated five seconds ahead through its inclusive boundary at +70', async () => {
+      const offsets = [64, 65, 66, 69, 70];
+      const { outcomes, reads } = await replayAt(5, offsets);
+      expect(offsets.map((offset) => outcomes[offset])).toEqual(
+        offsets.map(() => 'refused'),
+      );
+      expect(reads).toBe(1);
+    });
+
+    it('refuses the same proof after it has genuinely gone stale (the identifier is not needed then)', async () => {
+      // Beyond the last accepted second the signature check refuses it, whatever the table holds.
+      for (const [issuedAtOffset, first] of [
+        [0, 66],
+        [5, 71],
+      ] as const) {
+        const { outcomes, reads } = await replayAt(issuedAtOffset, [
+          first,
+          first + 600,
+        ]);
+        expect(Object.values(outcomes)).toEqual(['refused', 'refused']);
+        expect(reads).toBe(1);
+      }
+    });
+
+    it('returns room in a full table once the last second a proof could be accepted has passed', async () => {
+      const h = await setup({ maxProofs: 1, ttlSeconds: 3_600 });
+      const { capability } = h.issue();
+      // Dated five seconds ahead: acceptable until START + 70.
+      expect(
+        (await h.acquire(capability, { jti: 'ahead', issuedAt: START + 5 }))
+          .kind,
+      ).toBe('delivered');
+
+      // Still needed at +70, so a new proof is refused for lack of room.
+      h.setClock(START + 70);
+      expect((await h.acquire(capability, { jti: 'next' })).kind).toBe(
+        'refused',
+      );
+      // The second after, the identifier is forgotten and a new proof is accepted.
+      h.setClock(START + 71);
+      expect((await h.acquire(capability, { jti: 'next' })).kind).toBe(
+        'delivered',
+      );
+    });
+
+    it('accepts a new proof (new identifier) on the same capability at any time', async () => {
+      const h = await setup({ ttlSeconds: 3_600 });
+      const { capability } = h.issue();
+      for (const offset of [0, 0, 40, 66, 200]) {
+        h.setClock(START + offset);
+        expect((await h.acquire(capability, { jti: randomUUID() })).kind).toBe(
+          'delivered',
+        );
+      }
+    });
   });
 
   it('refuses a proof id that is not a short identifier, before it is retained or storage is read', async () => {
