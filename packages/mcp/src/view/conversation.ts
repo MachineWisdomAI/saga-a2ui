@@ -189,7 +189,7 @@ function snapshotData(
  * when it aborts while a request is outstanding, so a view that has ended hears of no late result
  * and nothing further is sent), `denied` when the host answers with `isError` or when the SDK
  * refuses the payload (above), `failed` when the request
- * rejects. The pinned bridge (`@modelcontextprotocol/ext-apps` 2.0.3) gives a context update
+ * rejects. The pinned bridge (`@modelcontextprotocol/ext-apps` 2.1.0) gives a context update
  * no way to answer `isError`, so a host's refusal of one arrives as a rejection and reads `failed`.
  */
 export function conversationFromApp(

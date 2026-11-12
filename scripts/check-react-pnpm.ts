@@ -439,7 +439,7 @@ try {
   writeApp(lower, {
     dependencies: {
       ...tarballs,
-      '@modelcontextprotocol/ext-apps': '2.0.3',
+      '@modelcontextprotocol/ext-apps': '2.1.0',
       ...REACT_STACK.peers,
       zod: '4.6.7',
     },

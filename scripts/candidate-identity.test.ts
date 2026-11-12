@@ -80,7 +80,7 @@ describe('candidate identity', () => {
     };
     const version = (role: string) =>
       identity.packages.find((entry) => entry.role === role)?.version;
-    expect(version('MCP Apps')).toBe('2.0.3');
+    expect(version('MCP Apps')).toBe('2.1.0');
     expect(['MCP client', 'MCP core', 'MCP server'].map(version)).toEqual([
       '2.4.0',
       '2.4.0',

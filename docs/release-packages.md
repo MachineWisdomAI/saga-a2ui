@@ -105,7 +105,7 @@ qualification directly, without a public RC.
 Verify the seven tarballs that would be published, not a candidate or an earlier
 build of different source. Evidence from another source revision or version
 identity is context, not qualification of these bytes. Use React and React DOM
-**19.3.1**, MCP Apps **2.0.3**, and Zod **4.6.7** for MCP schemas. Keep the
+**19.3.1**, MCP Apps **2.1.0**, and Zod **4.6.7** for MCP schemas. Keep the
 consumer-root overrides from [public installation](public-install.md#install-one-stack-plus-framework-peers). SAGA owns A2UI **0.13.0** and its
 Zod **3.25.76** context; do not add direct application A2UI dependencies or force
 a single Zod version. Follow [React consumer dependencies](react-consumers.md)
