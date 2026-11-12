@@ -264,7 +264,7 @@ describe('the seven owned packages, packed', () => {
         '2.4.0',
       );
     expect(range('mcp', 'dependencies', '@modelcontextprotocol/ext-apps')).toBe(
-      '2.0.3',
+      '2.1.0',
     );
     expect(range('components', 'dependencies', 'markdown-it')).toBe('15.0.3');
     // The optional component package is reachable from a renderer package only as an optional peer.
