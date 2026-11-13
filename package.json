@@ -48,7 +48,7 @@
   "devDependencies": {
     "@hapi/boom": "10.0.1",
     "@hapi/hapi": "21.4.12",
-    "@hono/node-server": "2.1.5",
+    "@hono/node-server": "2.1.6",
     "@vitejs/plugin-react": "6.1.2",
     "eslint": "10.13.0",
     "jsdom": "28.1.0",
@@ -63,7 +63,7 @@
   "overrides": {
     "@a2ui/markdown-it": "0.2.1",
     "dompurify": "3.4.17",
-    "@hono/node-server": "2.1.5"
+    "@hono/node-server": "2.1.6"
   },
   "engines": {
     "node": ">=22.23.3"
