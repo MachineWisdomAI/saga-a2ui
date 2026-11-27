@@ -19,7 +19,7 @@ saga's supported dependency combination needs compatibility and security overrid
 
 ```sh
 npm pkg set 'overrides.@a2ui/markdown-it=0.2.1' \
-  'overrides.dompurify=3.4.17' 'overrides.@hono/node-server=2.1.5'
+  'overrides.dompurify=3.4.17' 'overrides.@hono/node-server=2.1.6'
 ```
 
 Install the stack, the React version it supports, and the MCP server and schema libraries used by your operations:

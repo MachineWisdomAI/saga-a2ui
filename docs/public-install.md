@@ -48,7 +48,7 @@ At your application's root, preserve existing overrides and add the following. I
 ```json
 {
   "overrides": {
-    "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"
+    "@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.6"
   }
 }
 ```

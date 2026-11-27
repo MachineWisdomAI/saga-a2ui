@@ -80,7 +80,7 @@ it('exports unpublished tarballs and npm overrides without requiring built appli
   expect(recipe.overrides).toMatchObject({
     '@a2ui/markdown-it': '0.2.1',
     dompurify: '3.4.17',
-    '@hono/node-server': '2.1.5',
+    '@hono/node-server': '2.1.6',
   });
   // Packing alone must not claim the installed-application qualification record.
   expect(fs.existsSync(path.join(output, 'candidate.json'))).toBe(false);

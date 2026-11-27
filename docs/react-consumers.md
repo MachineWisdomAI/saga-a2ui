@@ -148,13 +148,13 @@ For pnpm, merge this into the destination root `pnpm-workspace.yaml` (preserve i
 overrides:
   '@a2ui/markdown-it': '0.2.1'
   dompurify: '3.4.17'
-  '@hono/node-server': '2.1.5'
+  '@hono/node-server': '2.1.6'
 ```
 
 For npm, use root `package.json`:
 
 ```json
-{"overrides": {"@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.5"}}
+{"overrides": {"@a2ui/markdown-it": "0.2.1", "dompurify": "3.4.17", "@hono/node-server": "2.1.6"}}
 ```
 
 Then regenerate and commit the destination's root lockfile. An override in a dependency's manifest is not inherited by consumers; a direct dependency pin in SAGA also does not constrain every transitive resolution. This is a required consumer setting until the supported upstream combination changes.

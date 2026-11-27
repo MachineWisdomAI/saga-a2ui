@@ -45,7 +45,7 @@ These are the files after [the first lesson](../1-first-card.md). Vite generates
   "overrides": {
     "@a2ui/markdown-it": "0.2.1",
     "dompurify": "3.4.17",
-    "@hono/node-server": "2.1.5"
+    "@hono/node-server": "2.1.6"
   }
 }
 ```
